@@ -25,6 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -285,23 +287,27 @@ type WakeCanceller interface {
 }
 
 type ServiceCore struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	db              *pgxpool.Pool
-	runtime         RuntimeBackend
-	slackClient     *slackclient.SlackClient
-	assistantTokens *assistanttokens.Manager
-	serverURL       *url.URL
-	telemetryLogger *telemetry.Logger
-	contextWindow   *openrouter.ContextWindowResolver
-	wakeCanceller   WakeCanceller
-	chatWriter      *chat.ChatMessageWriter
+	logger           *slog.Logger
+	tracer           trace.Tracer
+	db               *pgxpool.Pool
+	guardianPolicy   *guardian.Policy
+	encryptionClient *encryption.Client
+	runtime          RuntimeBackend
+	slackClient      *slackclient.SlackClient
+	assistantTokens  *assistanttokens.Manager
+	serverURL        *url.URL
+	telemetryLogger  *telemetry.Logger
+	contextWindow    *openrouter.ContextWindowResolver
+	wakeCanceller    WakeCanceller
+	chatWriter       *chat.ChatMessageWriter
 }
 
 func NewServiceCore(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
+	guardianPolicy *guardian.Policy,
+	encryptionClient *encryption.Client,
 	runtime RuntimeBackend,
 	slackClient *slackclient.SlackClient,
 	assistantTokens *assistanttokens.Manager,
@@ -310,17 +316,19 @@ func NewServiceCore(
 	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
 	return &ServiceCore{
-		logger:          logger,
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:              db,
-		runtime:         newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:     slackClient,
-		assistantTokens: assistantTokens,
-		serverURL:       serverURL,
-		telemetryLogger: telemetryLogger,
-		contextWindow:   contextWindow,
-		wakeCanceller:   nil,
-		chatWriter:      nil,
+		logger:           logger,
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:               db,
+		guardianPolicy:   guardianPolicy,
+		encryptionClient: encryptionClient,
+		runtime:          newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:      slackClient,
+		assistantTokens:  assistantTokens,
+		serverURL:        serverURL,
+		telemetryLogger:  telemetryLogger,
+		contextWindow:    contextWindow,
+		wakeCanceller:    nil,
+		chatWriter:       nil,
 	}
 }
 
@@ -1617,6 +1625,17 @@ func (s *ServiceCore) processEventTurn(
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
 ) error {
+	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
+		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID)
+		if err != nil {
+			return err
+		}
+		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
+			return fmt.Errorf("run assistant turn: %w", err)
+		}
+		return nil
+	}
+
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
 		return err
@@ -1804,7 +1823,15 @@ const assistantRuntimeTokenTTL = 60 * time.Minute
 
 const outputChannelAddendum = `## Output channel
 
-Your text responses are not delivered to the user. To communicate, call a tool (e.g. post a Slack message, send an email). If no suitable tool is available, the user will not see your reply.`
+Your text responses are not delivered to the user. To communicate, call a tool (e.g. post a Slack message, send an email). If no suitable tool is available, the user will not see your reply.
+
+## MCP authentication
+
+Two MCP authentication events may appear in this thread, each delivered as a <message-context> block with EventType and field lines.
+
+- EventType "assistant_mcp_auth_required" carries an AuthURL. Relay AuthURL to the user verbatim through an output tool (do not shorten, summarize, or rewrite it). Reference the MCP server using its MCPSlug rather than MCPServerID.
+
+- EventType "assistant_mcp_auth" reports the result. When Status is "success" and you still need that server, call mcp_force_reconnect with server_id set to the MCPServerID value, then continue your task. When Status is "failed", inform the user via an output tool and include the ErrorDescription if present.`
 
 func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
