@@ -137,6 +137,32 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		ResponseFormat: nil,
 		Reasoning:      req.Reasoning,
 		CacheControl:   req.CacheControl,
+		SessionID:      "",
+		User:           req.OrgID,
+		Metadata:       nil,
+		Trace:          nil,
+	}
+
+	if req.ChatID != uuid.Nil {
+		reqBody.SessionID = req.ChatID.String()
+	}
+
+	if req.UsageSource != "" {
+		reqBody.Metadata = map[string]string{"source": string(req.UsageSource)}
+	}
+
+	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
+		var parentSpanID string
+		if spanCtx.HasSpanID() {
+			parentSpanID = spanCtx.SpanID().String()
+		}
+		reqBody.Trace = &TraceConfig{
+			TraceID:        spanCtx.TraceID().String(),
+			TraceName:      "",
+			SpanName:       "",
+			GenerationName: "",
+			ParentSpanID:   parentSpanID,
+		}
 	}
 
 	// Add JSON schema if provided
