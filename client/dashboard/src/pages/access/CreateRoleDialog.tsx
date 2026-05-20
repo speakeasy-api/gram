@@ -365,10 +365,16 @@ export function CreateRoleDialog({
             const originalRule = grant.rules[editingRuleIndex];
             rules[editingRuleIndex] = draftRule;
             // Allow changed → clear deny exceptions (they were scoped to old allow)
+            const toSortedJSON = (s: Selector[] | null | undefined) =>
+              JSON.stringify(
+                [...(s ?? [])].sort((a, b) =>
+                  JSON.stringify(a).localeCompare(JSON.stringify(b)),
+                ),
+              );
             if (
               draftRule.effect === "allow" &&
-              JSON.stringify(originalRule?.selectors) !==
-                JSON.stringify(draftRule.selectors)
+              toSortedJSON(originalRule?.selectors) !==
+                toSortedJSON(draftRule.selectors)
             ) {
               rules = rules.filter((r) => r.effect !== "deny");
             }
