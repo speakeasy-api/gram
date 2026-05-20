@@ -30,7 +30,12 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
+import {
+  LogsRoot,
+  LogsMCPPage,
+  LogsRiskEventsPage,
+  LogsToolsPage,
+} from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -420,6 +425,11 @@ const ROUTE_STRUCTURE = {
         title: "MCP Servers",
         url: "mcp",
         component: LogsMCPPage,
+      },
+      riskEvents: {
+        title: "Risk Events",
+        url: "risk-events",
+        component: LogsRiskEventsPage,
       },
       agents: {
         title: "Agent Sessions",

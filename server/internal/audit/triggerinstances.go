@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -59,7 +60,7 @@ func (l *Logger) LogTriggerInstanceCreate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TriggerInstance})
 }
 
 type LogTriggerInstanceUpdateEvent struct {
@@ -111,7 +112,7 @@ func (l *Logger) LogTriggerInstanceUpdate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TriggerInstance})
 }
 
 type LogTriggerInstanceDeleteEvent struct {
@@ -150,7 +151,7 @@ func (l *Logger) LogTriggerInstanceDelete(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TriggerInstance})
 }
 
 type LogTriggerInstancePauseEvent struct {
@@ -189,7 +190,7 @@ func (l *Logger) LogTriggerInstancePause(ctx context.Context, dbtx repo.DBTX, ev
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TriggerInstance})
 }
 
 type LogTriggerInstanceResumeEvent struct {
@@ -228,7 +229,7 @@ func (l *Logger) LogTriggerInstanceResume(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TriggerInstance})
 }
 
 // LogWakeEvent is shared by wake:scheduled / wake:fired / wake:cancelled.
@@ -278,7 +279,7 @@ func (l *Logger) logWakeEvent(ctx context.Context, dbtx repo.DBTX, action Action
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AssistantWake})
 }
 
 func (l *Logger) LogWakeCancelled(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {

@@ -60,6 +60,9 @@ plog:
   - "go.sum"
   - "plog/**"
 
+webhooks-catalog:
+  - "server/internal/outbox/events/catalog_gen.yaml"
+
 # Subset of `server` that gates the prompt-injection risk report job.
 risk_accuracy:
   - ".github/scripts/risk-metrics-comment.*"

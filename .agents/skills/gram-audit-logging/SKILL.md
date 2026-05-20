@@ -26,6 +26,8 @@ Audit logging is how Gram records _who did what to which resource_. Every meanin
 
 **Atomicity.** Audit entries are written inside the same database transaction as the mutation they describe, so the state and the record of the state commit together or not at all.
 
+**Outbox event.** Every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`.
+
 ## Server
 
 Audit logging lives in `server/internal/audit/` with its management-API surface defined in `server/design/auditlogs/`. Callers are other services whose handlers emit events; the `auditlogs` Goa service reads them back.
@@ -40,7 +42,7 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 
 **Subject files.** One Go file per subject under `server/internal/audit/`, named after the subject in plural form (e.g. `remotemcpservers.go`, `toolsets.go`). Each file owns that subject's `Action*` constants, its `Log*Event` payload structs, and its `Log*` functions. Do not merge subjects into a shared file.
 
-**`Log*Event` and `Log*` naming.** One `Log<Verb>Event` struct plus one `Log<Verb>` function per action, declared in the subject file. `Log*` functions take `(ctx, dbtx repo.DBTX, event Log*Event) error` so the audit insert is atomic with the caller's mutation.
+**`Log*Event` and `Log*` naming.** One `Log<Verb>Event` struct plus one `Log<Verb>` function per action, declared in the subject file. `Log*` functions take `(ctx, dbtx repo.DBTX, event Log*Event) error` so the audit insert is atomic with the caller's mutation. Internally each `Log*` function constructs a `repo.InsertAuditLogParams` and then calls `l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.<Subject>})` — it does not call `repo.New(dbtx).InsertAuditLog` directly.
 
 **Subject identifier fields.** Event structs carry the subject's identifier as a URN type, not a raw `uuid.UUID`. Field name is `<Subject>URN` (e.g. `KeyURN urn.APIKey`, `McpServerURN urn.McpServer`), and the `Log*` function populates `SubjectID` from `event.<Subject>URN.ID.String()`. If no URN type exists yet, add one under `server/internal/urn/` before introducing the event struct — see `server/internal/urn/api_key.go` for the template.
 
@@ -57,19 +59,23 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 | `server/internal/audit/audittest/helpers.go`                         | Test helpers other packages use to assert audit events.                                                                                                                                                                |
 | `server/internal/audit/audittest/queries.sql`                        | SQLc queries backing the test helpers. Regenerates `server/internal/audit/audittest/repo/` via `mise run gen:sqlc-server`.                                                                                             |
 | `server/internal/audit/events.go`                                    | Top-level declarations shared across every subject.                                                                                                                                                                    |
+| `server/internal/audit/logger.go`                                    | `Logger` type, `auditEntry` struct, and the internal `l.log()` method that inserts the DB row then calls `appendToOutbox`.                                                                                             |
+| `server/internal/audit/outbox.go`                                    | `appendToOutbox` — translates the inserted audit row into an `AuditLogCreatedPayload` and publishes to the outbox under the subject-specific event def.                                                                |
 | `server/internal/auditapi/impl.go`                                   | Implementation of the `/rpc/auditlogs.*` Goa service (reads). Lives in its own package to keep the `audit` writer surface free of `auth/sessions` and `mv` so any service can call `audit.Log*` without import cycles. |
 | `server/internal/audit/queries.sql`                                  | SQLc queries for the audit log table. Regenerates `server/internal/audit/repo/` via `mise run gen:sqlc-server`.                                                                                                        |
 | `server/internal/auditapi/{setup_test,list_test,listfacets_test}.go` | Tests for the `auditlogs` management API.                                                                                                                                                                              |
+| `server/internal/outbox/events/audit_log.go`                         | Per-subject `*outbox.EventDef` vars (e.g. `events.Deployment`, `events.Project`). Add a new var here when introducing a new audited subject.                                                                           |
 
 ### Generated files
 
 Files under `server/gen/**` and any `repo/` subdirectory carry a `DO NOT EDIT` header.
 
-| Path                                                  | Generator                                                                                                                       |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `server/gen/auditlogs/`, `server/gen/http/auditlogs/` | `mise run gen:goa-server` from `server/design/auditlogs/design.go`.                                                             |
-| `server/internal/audit/audittest/repo/`               | `mise run gen:sqlc-server` from `server/internal/audit/audittest/queries.sql` (separate stanza in `server/database/sqlc.yaml`). |
-| `server/internal/audit/repo/`                         | `mise run gen:sqlc-server` from `server/internal/audit/queries.sql` (via the `audit` stanza in `server/database/sqlc.yaml`).    |
+| Path                                                               | Generator                                                                                                                       |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `server/gen/auditlogs/`, `server/gen/http/auditlogs/`              | `mise run gen:goa-server` from `server/design/auditlogs/design.go`.                                                             |
+| `server/internal/audit/audittest/repo/`                            | `mise run gen:sqlc-server` from `server/internal/audit/audittest/queries.sql` (separate stanza in `server/database/sqlc.yaml`). |
+| `server/internal/audit/repo/`                                      | `mise run gen:sqlc-server` from `server/internal/audit/queries.sql` (via the `audit` stanza in `server/database/sqlc.yaml`).    |
+| `server/internal/outbox/events/catalog_gen.go`, `catalog_gen.yaml` | `mise run gen:webhooks-server` from `server/cmd/gen-webhooks`. Run after adding a new event def to `audit_log.go`.              |
 
 ## Server-client contract
 
@@ -113,7 +119,7 @@ Use this when the subject already has a file but you're introducing a new verb.
 
 1. In the subject's file, add an `Action<Subject><Verb>` constant alongside the existing ones.
 2. Add a `Log<Subject><Verb>Event` struct with the fields the caller needs to supply. At minimum: `OrganizationID`, `ProjectID` (zero value for org-scoped subjects), `Actor`, `ActorDisplayName`, `ActorSlug`, plus the subject URN (`<Subject>URN urn.<Subject>`) and any additional display name / slug fields the subject needs. Updates additionally carry typed snapshot fields (`<Subject>SnapshotBefore` / `<Subject>SnapshotAfter` with concrete pointer types — e.g. `*types.<Subject>`).
-3. Add a `Log<Subject><Verb>` function that translates the event into `repo.InsertAuditLogParams`, passes any snapshots through `marshalAuditPayload` (which handles nil internally), calls `repo.New(dbtx).InsertAuditLog`, and wraps errors with `fmt.Errorf("log %s: %w", action, err)`.
+3. Add a `Log<Subject><Verb>` function that translates the event into `repo.InsertAuditLogParams`, passes any snapshots through `marshalAuditPayload` (which handles nil internally), then calls `l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.<Subject>})`. Do not call `repo.New(dbtx).InsertAuditLog` directly — `l.log` does that and also handles the outbox publication.
 4. Call the new function from the handler as described under "How to audit a handler in a service".
 
 No schema change, no codegen step — facet queries pick up the new action automatically.
@@ -123,8 +129,9 @@ No schema change, no codegen step — facet queries pick up the new action autom
 Use this when introducing an entirely new kind of resource that doesn't map onto any existing subject file.
 
 1. Add a `subjectType<Name>` constant to `events.go`.
-2. Create `server/internal/audit/<subject>.go` following the subject-file convention, and populate it with the `Action*` constants, `Log*Event` structs, and `Log*` functions.
-3. Call the new `Log*` functions from the owning service's handlers.
+2. Add a new `var <Subject> = outbox.NewEventDef[events.AuditLogCreatedPayload]("audit_log.<subject>_event_v1", "...")` to `server/internal/outbox/events/audit_log.go`. Use the `_v1` suffix. Then run `mise run gen:webhooks-server` to update `catalog_gen.go` and `catalog_gen.yaml`.
+3. Create `server/internal/audit/<subject>.go` following the subject-file convention, and populate it with the `Action*` constants, `Log*Event` structs, and `Log*` functions. Each `Log*` function passes `auditEntry{Params: entry, OutboxEvent: events.<Subject>}` to `l.log`.
+4. Call the new `Log*` functions from the owning service's handlers.
 
 ### How to update an existing action or subject
 
@@ -144,13 +151,14 @@ Use `audittest` helpers in the service's test package — do not query the audit
 
 ## Relevant mise tasks
 
-| Task                       | Purpose                                                                                                                                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mise run gen:goa-server`  | Regenerate `server/gen/auditlogs/**` whenever you edit `server/design/auditlogs/design.go`.                                                                                                                         |
-| `mise run gen:sdk`         | Regenerate the TypeScript SDK and CLI bindings after a Goa design change.                                                                                                                                           |
-| `mise run gen:sqlc-server` | Regenerate `server/internal/audit/repo/` and `audittest/repo/`. Run whenever you change `queries.sql` in either place. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
-| `mise run lint:server`     | `golangci-lint` including `exhaustruct` — keep struct literals complete when adding fields to `Log*Event`.                                                                                                          |
-| `mise run test:server`     | Runs the full server test suite. Takes the same arguments as `go test` (e.g. `./internal/audit/... ./internal/remotemcp/...`).                                                                                      |
+| Task                           | Purpose                                                                                                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mise run gen:goa-server`      | Regenerate `server/gen/auditlogs/**` whenever you edit `server/design/auditlogs/design.go`.                                                                                                                         |
+| `mise run gen:sdk`             | Regenerate the TypeScript SDK and CLI bindings after a Goa design change.                                                                                                                                           |
+| `mise run gen:sqlc-server`     | Regenerate `server/internal/audit/repo/` and `audittest/repo/`. Run whenever you change `queries.sql` in either place. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
+| `mise run gen:webhooks-server` | Regenerate `catalog_gen.go` and `catalog_gen.yaml` after adding a new event def to `server/internal/outbox/events/audit_log.go`.                                                                                    |
+| `mise run lint:server`         | `golangci-lint` including `exhaustruct` — keep struct literals complete when adding fields to `Log*Event`.                                                                                                          |
+| `mise run test:server`         | Runs the full server test suite. Takes the same arguments as `go test` (e.g. `./internal/audit/... ./internal/remotemcp/...`).                                                                                      |
 
 ## Maintaining this skill
 

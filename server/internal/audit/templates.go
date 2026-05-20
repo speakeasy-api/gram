@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -60,7 +61,7 @@ func (l *Logger) LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event Lo
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Template})
 }
 
 type LogTemplateUpdateEvent struct {
@@ -107,7 +108,7 @@ func (l *Logger) LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event Lo
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Template})
 }
 
 type LogTemplateDeleteEvent struct {
@@ -154,5 +155,5 @@ func (l *Logger) LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event Lo
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Template})
 }

@@ -6,6 +6,7 @@ flags.local.csv
 node_modules
 bin
 junit-report.xml
+report.md
 .mise-tasks/local
 .assets
 .vscode/*

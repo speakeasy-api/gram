@@ -21,13 +21,13 @@ type CreateRemoteSessionClientRequestBody struct {
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The user_session_issuer this client is paired with.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// Manual-path client_id supplied by the caller.
+	// client_id supplied by the caller.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// Manual-path client secret. Gram encrypts before persisting.
+	// client_secret supplied by the caller. Gram encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
-	// When true, Gram fires an outbound RFC 7591 DCR call against the issuer's
-	// registration_endpoint and ignores client_id and client_secret.
-	AutoRegister *bool `form:"auto_register,omitempty" json:"auto_register,omitempty" xml:"auto_register,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Omit to default
+	// to client_secret_basic.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 }
 
 // CloneClientFromOAuthProxyProviderRequestBody is the type of the
@@ -41,6 +41,9 @@ type CloneClientFromOAuthProxyProviderRequestBody struct {
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The user_session_issuer the new client is paired with.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// How the cloned client authenticates at the issuer's token endpoint. Omit to
+	// default to client_secret_basic.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 }
 
 // UpdateRemoteSessionClientRequestBody is the type of the
@@ -53,6 +56,8 @@ type UpdateRemoteSessionClientRequestBody struct {
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Re-pair with a different user_session_issuer.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Change how the client authenticates at the issuer's token endpoint.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 }
 
 // CreateRemoteSessionClientResponseBody is the type of the
@@ -73,8 +78,11 @@ type CreateRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	CreatedAt               string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt               string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CloneClientFromOAuthProxyProviderResponseBody is the type of the
@@ -95,8 +103,11 @@ type CloneClientFromOAuthProxyProviderResponseBody struct {
 	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	CreatedAt               string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt               string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionClientResponseBody is the type of the
@@ -117,8 +128,11 @@ type UpdateRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	CreatedAt               string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt               string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListRemoteSessionClientsResponseBody is the type of the
@@ -147,8 +161,11 @@ type GetRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	CreatedAt               string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt               string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateRemoteSessionClientUnauthorizedResponseBody is the type of the
@@ -1308,8 +1325,11 @@ type RemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	CreatedAt               string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt               string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateRemoteSessionClientResponseBody builds the HTTP response body from
@@ -1317,15 +1337,16 @@ type RemoteSessionClientResponseBody struct {
 // "remoteSessionClients" service.
 func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *CreateRemoteSessionClientResponseBody {
 	body := &CreateRemoteSessionClientResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		ClientID:              res.ClientID,
-		ClientIDIssuedAt:      res.ClientIDIssuedAt,
-		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		UserSessionIssuerID:     res.UserSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
 	}
 	return body
 }
@@ -1335,15 +1356,16 @@ func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *C
 // the "remoteSessionClients" service.
 func NewCloneClientFromOAuthProxyProviderResponseBody(res *types.RemoteSessionClient) *CloneClientFromOAuthProxyProviderResponseBody {
 	body := &CloneClientFromOAuthProxyProviderResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		ClientID:              res.ClientID,
-		ClientIDIssuedAt:      res.ClientIDIssuedAt,
-		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		UserSessionIssuerID:     res.UserSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
 	}
 	return body
 }
@@ -1353,15 +1375,16 @@ func NewCloneClientFromOAuthProxyProviderResponseBody(res *types.RemoteSessionCl
 // "remoteSessionClients" service.
 func NewUpdateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *UpdateRemoteSessionClientResponseBody {
 	body := &UpdateRemoteSessionClientResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		ClientID:              res.ClientID,
-		ClientIDIssuedAt:      res.ClientIDIssuedAt,
-		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		UserSessionIssuerID:     res.UserSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
 	}
 	return body
 }
@@ -1393,15 +1416,16 @@ func NewListRemoteSessionClientsResponseBody(res *remotesessionclients.ListRemot
 // "remoteSessionClients" service.
 func NewGetRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *GetRemoteSessionClientResponseBody {
 	body := &GetRemoteSessionClientResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		ClientID:              res.ClientID,
-		ClientIDIssuedAt:      res.ClientIDIssuedAt,
-		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		UserSessionIssuerID:     res.UserSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
 	}
 	return body
 }
@@ -2312,11 +2336,11 @@ func NewDeleteRemoteSessionClientGatewayErrorResponseBody(res *goa.ServiceError)
 // createRemoteSessionClient endpoint payload.
 func NewCreateRemoteSessionClientPayload(body *CreateRemoteSessionClientRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.CreateRemoteSessionClientPayload {
 	v := &remotesessionclients.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-		ClientID:              body.ClientID,
-		ClientSecret:          body.ClientSecret,
-		AutoRegister:          body.AutoRegister,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:     *body.UserSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientSecret:            body.ClientSecret,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2329,9 +2353,10 @@ func NewCreateRemoteSessionClientPayload(body *CreateRemoteSessionClientRequestB
 // service cloneClientFromOAuthProxyProvider endpoint payload.
 func NewCloneClientFromOAuthProxyProviderPayload(body *CloneClientFromOAuthProxyProviderRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.CloneClientFromOAuthProxyProviderPayload {
 	v := &remotesessionclients.CloneClientFromOAuthProxyProviderPayload{
-		OauthProxyProviderID:  *body.OauthProxyProviderID,
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
+		OauthProxyProviderID:    *body.OauthProxyProviderID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:     *body.UserSessionIssuerID,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2344,9 +2369,10 @@ func NewCloneClientFromOAuthProxyProviderPayload(body *CloneClientFromOAuthProxy
 // updateRemoteSessionClient endpoint payload.
 func NewUpdateRemoteSessionClientPayload(body *UpdateRemoteSessionClientRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.UpdateRemoteSessionClientPayload {
 	v := &remotesessionclients.UpdateRemoteSessionClientPayload{
-		ID:                  *body.ID,
-		ClientSecret:        body.ClientSecret,
-		UserSessionIssuerID: body.UserSessionIssuerID,
+		ID:                      *body.ID,
+		ClientSecret:            body.ClientSecret,
+		UserSessionIssuerID:     body.UserSessionIssuerID,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2403,11 +2429,19 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 	if body.UserSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
 	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
 	}
 	return
 }
@@ -2433,6 +2467,11 @@ func ValidateCloneClientFromOAuthProxyProviderRequestBody(body *CloneClientFromO
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
+	}
 	return
 }
 
@@ -2447,6 +2486,11 @@ func ValidateUpdateRemoteSessionClientRequestBody(body *UpdateRemoteSessionClien
 	}
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
 	}
 	return
 }

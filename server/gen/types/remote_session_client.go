@@ -24,6 +24,9 @@ type RemoteSessionClient struct {
 	ClientIDIssuedAt string
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string
-	CreatedAt             string
-	UpdatedAt             string
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string
+	CreatedAt               string
+	UpdatedAt               string
 }

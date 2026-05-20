@@ -1,8 +1,8 @@
-[**@gram-ai/elements v1.32.1**](README.md)
+[**@gram-ai/elements v1.33.0**](README.md)
 
 ***
 
-# @gram-ai/elements v1.32.1
+# @gram-ai/elements v1.33.0
 
 ## Interfaces
 
@@ -61,6 +61,7 @@
 - [ToolFallback](variables/ToolFallback.md)
 - [PRESETS](variables/PRESETS.md)
 - [MODELS](variables/MODELS.md)
+- [CREDITS\_EXHAUSTED\_MESSAGE](variables/CREDITS_EXHAUSTED_MESSAGE.md)
 
 ## Functions
 
@@ -76,6 +77,7 @@
 - [useRecordCassette](functions/useRecordCassette.md)
 - [useThreadId](functions/useThreadId.md)
 - [trackError](functions/trackError.md)
+- [describeStreamError](functions/describeStreamError.md)
 - [defineFrontendTool](functions/defineFrontendTool.md)
 
 ## References

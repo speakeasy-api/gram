@@ -38,6 +38,11 @@ type mockWorkOSFetcher struct {
 	// Track calls to CreateOrganization / CreateOrganizationMembership.
 	createdOrgs        []createdOrgRecord
 	createdMemberships []createdMembershipRecord
+
+	// Counters for reads. Steady-state logins (org already linked locally)
+	// must not hit either path; see TestE2E_Callback_LinkedOrgsSkipWorkOSReads.
+	getOrgCalls           int
+	ensureExternalIDCalls int
 }
 
 type createdOrgRecord struct {
@@ -53,6 +58,7 @@ func (m *mockWorkOSFetcher) ListUserMemberships(_ context.Context, userID string
 }
 
 func (m *mockWorkOSFetcher) GetOrganization(_ context.Context, orgID string) (*workos.Organization, error) {
+	m.getOrgCalls++
 	if org, ok := m.orgs[orgID]; ok {
 		return org, nil
 	}
@@ -64,6 +70,7 @@ func (m *mockWorkOSFetcher) EnsureUserExternalID(_ context.Context, _, _ string)
 }
 
 func (m *mockWorkOSFetcher) EnsureOrgExternalID(_ context.Context, _, _ string) error {
+	m.ensureExternalIDCalls++
 	return nil
 }
 
@@ -402,6 +409,76 @@ func TestE2E_Callback_ExistingUserWithDBOrgs(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	assert.Equal(t, orgEntry.ID, authCtx.ActiveOrganizationID, "should use DB org, not WorkOS ghost org")
+}
+
+// TestE2E_Callback_LinkedOrgsSkipWorkOSReads verifies the AGE-2324 fix:
+// when every WorkOS membership maps to a local org row already linked by
+// workos_id, the per-membership loop must skip both GetOrganization and
+// EnsureOrgExternalID. Each retained call is one cross-region round-trip per
+// org per login, so this is the load-bearing assertion for the latency win.
+func TestE2E_Callback_LinkedOrgsSkipWorkOSReads(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01LINKED_STEADY"
+		orgID1       = "org_01LINKED_A"
+		orgID2       = "org_01LINKED_B"
+		orgID3       = "org_01LINKED_C"
+	)
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_LA", UserID: workosUserID, OrganizationID: orgID1, Organization: "Linked A", RoleSlug: "admin"},
+				{ID: "om_LB", UserID: workosUserID, OrganizationID: orgID2, Organization: "Linked B", RoleSlug: "member"},
+				{ID: "om_LC", UserID: workosUserID, OrganizationID: orgID3, Organization: "Linked C", RoleSlug: "member"},
+			},
+		},
+		// Populate orgs so any errant GetOrganization would succeed — we want
+		// the assertion to fail on call count, not on a 404 masquerading as
+		// the fix.
+		orgs: map[string]*workos.Organization{
+			orgID1: {ID: orgID1, Name: "Linked A"},
+			orgID2: {ID: orgID2, Name: "Linked B"},
+			orgID3: {ID: orgID3, Name: "Linked C"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "linked@example.com",
+		OrganizationID: orgID1, // triggers inline SyncMembershipsFromWorkOS in Callback
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	require.NoError(t, inst.createTestUser(ctx, userInfo))
+	inst.setUserWorkosID(ctx, t, gramUserID, workosUserID)
+
+	wid1, wid2, wid3 := orgID1, orgID2, orgID3
+	for _, entry := range []MockOrganizationEntry{
+		{ID: orgid.FromWorkOSID(orgID1), Name: "Linked A", Slug: "linked-a", WorkosID: &wid1, UserWorkspaceSlugs: []string{"linked-a"}},
+		{ID: orgid.FromWorkOSID(orgID2), Name: "Linked B", Slug: "linked-b", WorkosID: &wid2, UserWorkspaceSlugs: []string{"linked-b"}},
+		{ID: orgid.FromWorkOSID(orgID3), Name: "Linked C", Slug: "linked-c", WorkosID: &wid3, UserWorkspaceSlugs: []string{"linked-c"}},
+	} {
+		require.NoError(t, inst.createTestOrganization(ctx, entry, gramUserID))
+	}
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	require.Equal(t, 0, fetcher.getOrgCalls, "linked-org steady-state must not call WorkOS GetOrganization")
+	require.Equal(t, 0, fetcher.ensureExternalIDCalls, "linked-org steady-state must not call WorkOS EnsureOrgExternalID")
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, orgid.FromWorkOSID(orgID1), authCtx.ActiveOrganizationID)
 }
 
 func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *testing.T) {

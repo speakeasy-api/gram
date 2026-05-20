@@ -9,7 +9,8 @@ const mockToolsetsSetUserSessionIssuer = vi.fn();
 const mockUserSessionIssuersCreate = vi.fn();
 const mockRemoteSessionIssuersDiscover = vi.fn();
 const mockRemoteSessionIssuersCreate = vi.fn();
-const mockRemoteSessionIssuersRegister = vi.fn();
+const mockRemoteSessionClientsCreate = vi.fn();
+const mockAuthedFetch = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -26,12 +27,18 @@ const mockClient = {
   remoteSessionIssuers: {
     discover: mockRemoteSessionIssuersDiscover,
     create: mockRemoteSessionIssuersCreate,
-    register: mockRemoteSessionIssuersRegister,
+  },
+  remoteSessionClients: {
+    create: mockRemoteSessionClientsCreate,
   },
 };
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mockClient,
+}));
+
+vi.mock("@/contexts/Fetcher", () => ({
+  useFetcher: () => ({ fetch: mockAuthedFetch }),
 }));
 
 vi.mock("@gram/client/react-query", () => ({
@@ -148,7 +155,17 @@ describe("useExternalMcpReleaseWorkflow", () => {
       discoveryWarnings: [],
     });
     mockRemoteSessionIssuersCreate.mockResolvedValue({ id: "rsi-1" });
-    mockRemoteSessionIssuersRegister.mockResolvedValue({ id: "rsc-1" });
+    mockRemoteSessionClientsCreate.mockResolvedValue({ id: "rsc-1" });
+    mockAuthedFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          client_id: "dcr-client-id",
+          client_secret: "dcr-client-secret",
+          token_endpoint_auth_method: "client_secret_basic",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
     mockToolsetsSetUserSessionIssuer.mockResolvedValue({});
   });
 
@@ -1094,14 +1111,23 @@ describe("useExternalMcpReleaseWorkflow", () => {
         undefined,
         undefined,
       );
-      expect(mockRemoteSessionIssuersRegister).toHaveBeenCalledWith(
+      expect(mockAuthedFetch).toHaveBeenCalledWith(
+        "/oauth/proxy-register",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining(
+            '"registration_endpoint":"https://idp.example/oauth/register"',
+          ),
+        }),
+      );
+      expect(mockRemoteSessionClientsCreate).toHaveBeenCalledWith(
         {
-          registerRemoteSessionIssuerForm: expect.objectContaining({
+          createRemoteSessionClientForm: expect.objectContaining({
             remoteSessionIssuerId: "rsi-1",
             userSessionIssuerId: "usi-1",
-            redirectUris: [
-              expect.stringContaining("/mcp/remote_login_callback"),
-            ],
+            clientId: "dcr-client-id",
+            clientSecret: "dcr-client-secret",
+            tokenEndpointAuthMethod: "client_secret_basic",
           }),
         },
         undefined,
@@ -1197,7 +1223,8 @@ describe("useExternalMcpReleaseWorkflow", () => {
       );
       expect(mockUserSessionIssuersCreate).not.toHaveBeenCalled();
       expect(mockRemoteSessionIssuersCreate).not.toHaveBeenCalled();
-      expect(mockRemoteSessionIssuersRegister).not.toHaveBeenCalled();
+      expect(mockAuthedFetch).not.toHaveBeenCalled();
+      expect(mockRemoteSessionClientsCreate).not.toHaveBeenCalled();
       expect(mockToolsetsSetUserSessionIssuer).not.toHaveBeenCalled();
     });
 

@@ -4,21 +4,32 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Form for creating a remote_session_client. Either supply client_id (manual path) or set auto_register=true (DCR path).
+ * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+ */
+export const CreateRemoteSessionClientFormTokenEndpointAuthMethod = {
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+} as const;
+/**
+ * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+ */
+export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
+  typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod
+>;
+
+/**
+ * Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
  */
 export type CreateRemoteSessionClientForm = {
   /**
-   * When true, Gram fires an outbound RFC 7591 DCR call against the issuer's registration_endpoint and ignores client_id and client_secret.
+   * client_id supplied by the caller.
    */
-  autoRegister?: boolean | undefined;
+  clientId: string;
   /**
-   * Manual-path client_id supplied by the caller.
-   */
-  clientId?: string | undefined;
-  /**
-   * Manual-path client secret. Gram encrypts before persisting.
+   * client_secret supplied by the caller. Gram encrypts before persisting.
    */
   clientSecret?: string | undefined;
   /**
@@ -26,17 +37,28 @@ export type CreateRemoteSessionClientForm = {
    */
   remoteSessionIssuerId: string;
   /**
+   * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+   */
+  tokenEndpointAuthMethod?:
+    | CreateRemoteSessionClientFormTokenEndpointAuthMethod
+    | undefined;
+  /**
    * The user_session_issuer this client is paired with.
    */
   userSessionIssuerId: string;
 };
 
 /** @internal */
+export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
+  z.ZodMiniEnum<typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod> = z
+    .enum(CreateRemoteSessionClientFormTokenEndpointAuthMethod);
+
+/** @internal */
 export type CreateRemoteSessionClientForm$Outbound = {
-  auto_register?: boolean | undefined;
-  client_id?: string | undefined;
+  client_id: string;
   client_secret?: string | undefined;
   remote_session_issuer_id: string;
+  token_endpoint_auth_method?: string | undefined;
   user_session_issuer_id: string;
 };
 
@@ -46,18 +68,20 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   CreateRemoteSessionClientForm
 > = z.pipe(
   z.object({
-    autoRegister: z.optional(z.boolean()),
-    clientId: z.optional(z.string()),
+    clientId: z.string(),
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
+    tokenEndpointAuthMethod: z.optional(
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
+    ),
     userSessionIssuerId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      autoRegister: "auto_register",
       clientId: "client_id",
       clientSecret: "client_secret",
       remoteSessionIssuerId: "remote_session_issuer_id",
+      tokenEndpointAuthMethod: "token_endpoint_auth_method",
       userSessionIssuerId: "user_session_issuer_id",
     });
   }),

@@ -79,7 +79,7 @@ func newTestCollectionsService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
 	auditLogger := audit.NewLogger()
 
-	svc := collections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, testenv.DefaultSiteURL(t))
+	svc := collections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, testenv.DefaultSiteURL(t))
 	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger)
 
 	return ctx, &testInstance{
