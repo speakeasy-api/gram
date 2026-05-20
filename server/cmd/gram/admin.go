@@ -72,10 +72,9 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_SSL_CERT_FILE"},
 		},
 		&cli.StringFlag{
-			Name:     "site-url",
-			Usage:    "The URL of the site",
-			EnvVars:  []string{"GRAM_SITE_URL"},
-			Required: true,
+			Name:    "site-url",
+			Usage:   "The URL of the site",
+			EnvVars: []string{"GRAM_SITE_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
