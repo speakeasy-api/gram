@@ -362,9 +362,20 @@ export function CreateRoleDialog({
           let rules = [...grant.rules];
           if (editingRuleIndex >= 0 && editingRuleIndex < rules.length) {
             // Editing existing rule — replace in place
+            const originalRule = grant.rules[editingRuleIndex];
             rules[editingRuleIndex] = draftRule;
             // Allow changed → clear deny exceptions (they were scoped to old allow)
-            if (draftRule.effect === "allow") {
+            const toSortedJSON = (s: Selector[] | null | undefined) =>
+              JSON.stringify(
+                [...(s ?? [])].sort((a, b) =>
+                  JSON.stringify(a).localeCompare(JSON.stringify(b)),
+                ),
+              );
+            if (
+              draftRule.effect === "allow" &&
+              toSortedJSON(originalRule?.selectors) !==
+                toSortedJSON(draftRule.selectors)
+            ) {
               rules = rules.filter((r) => r.effect !== "deny");
             }
           } else if (draftRule.effect === "deny") {
