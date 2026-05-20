@@ -49,7 +49,8 @@ INSERT INTO remote_session_clients (
     client_id_issued_at,
     client_secret_expires_at,
     token_endpoint_auth_method,
-    scope
+    scope,
+    audience
 )
 VALUES (
     $1,
@@ -60,7 +61,8 @@ VALUES (
     $6,
     $7,
     $8,
-    $9::text[]
+    $9::text[],
+    $10
 )
 RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, created_at, updated_at, deleted_at, deleted
 `
@@ -75,6 +77,7 @@ type CreateRemoteSessionClientParams struct {
 	ClientSecretExpiresAt   pgtype.Timestamptz
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
+	Audience                pgtype.Text
 }
 
 func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemoteSessionClientParams) (RemoteSessionClient, error) {
@@ -88,6 +91,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.ClientSecretExpiresAt,
 		arg.TokenEndpointAuthMethod,
 		arg.Scope,
+		arg.Audience,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -424,6 +428,7 @@ SELECT
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -446,6 +451,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ClientSecretEncrypted   pgtype.Text
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
+	ClientAudience          pgtype.Text
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -472,6 +478,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.ClientSecretEncrypted,
 		&i.TokenEndpointAuthMethod,
 		&i.ClientScope,
+		&i.ClientAudience,
 		&i.RemoteSessionIssuerID,
 		&i.UserSessionIssuerID,
 		&i.IssuerSlug,
@@ -721,6 +728,7 @@ SELECT
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -750,6 +758,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientSecretEncrypted   pgtype.Text
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
+	ClientAudience          pgtype.Text
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -779,6 +788,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ClientSecretEncrypted,
 			&i.TokenEndpointAuthMethod,
 			&i.ClientScope,
+			&i.ClientAudience,
 			&i.RemoteSessionIssuerID,
 			&i.UserSessionIssuerID,
 			&i.IssuerSlug,
@@ -976,8 +986,9 @@ SET
     user_session_issuer_id = COALESCE($3, user_session_issuer_id),
     token_endpoint_auth_method = COALESCE($4, token_endpoint_auth_method),
     scope = COALESCE($5::text[], scope),
+    audience = COALESCE($6, audience),
     updated_at = clock_timestamp()
-WHERE id = $6 AND project_id = $7 AND deleted IS FALSE
+WHERE id = $7 AND project_id = $8 AND deleted IS FALSE
 RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, created_at, updated_at, deleted_at, deleted
 `
 
@@ -987,6 +998,7 @@ type UpdateRemoteSessionClientParams struct {
 	UserSessionIssuerID     uuid.NullUUID
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
+	Audience                pgtype.Text
 	ID                      uuid.UUID
 	ProjectID               uuid.UUID
 }
@@ -998,6 +1010,7 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		arg.UserSessionIssuerID,
 		arg.TokenEndpointAuthMethod,
 		arg.Scope,
+		arg.Audience,
 		arg.ID,
 		arg.ProjectID,
 	)
