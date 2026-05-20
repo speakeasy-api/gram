@@ -15,9 +15,11 @@ import {
   HTTPToolDefinition,
   UpsertGlobalToolVariationForm,
 } from "@gram/client/models/components";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { invalidateTemplate, useDeployment } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
 
 export function ToolCard({
   tool,
@@ -116,11 +118,16 @@ export function ToolCard({
         {sourceName}
       </Badge>
       {tool.type === "http" &&
-        tool.tags.map((tag) => (
+        (tool.variation?.tags ?? tool.tags).map((tag) => (
           <Badge key={tag} variant="secondary" className="text-sm capitalize">
             {tag}
           </Badge>
         ))}
+      {tool.type === "http" && tool.variation?.tags !== undefined && (
+        <SimpleTooltip tooltip="Tags overridden">
+          <Pencil className="text-muted-foreground size-3" />
+        </SimpleTooltip>
+      )}
       {isPromptTool(tool) && (
         <Badge
           variant="secondary"

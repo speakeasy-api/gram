@@ -38283,6 +38283,11 @@ components:
                 summarizer:
                     type: string
                     description: The summarizer of the tool variation
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: The tags of the tool variation
                 title:
                     type: string
                     description: Display name override for the tool
