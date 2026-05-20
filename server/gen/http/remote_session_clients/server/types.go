@@ -2543,13 +2543,13 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 		}
 	}
 	for _, e := range body.Scope {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[\\x21\\x23-\\x5B\\x5D-\\x7E]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
 		if utf8.RuneCountInString(e) > 128 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
 		}
 	}
 	if body.Audience != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[\\x21-\\x7E]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
 	}
 	if body.Audience != nil {
 		if utf8.RuneCountInString(*body.Audience) > 512 {
@@ -2586,13 +2586,13 @@ func ValidateCloneClientFromOAuthProxyProviderRequestBody(body *CloneClientFromO
 		}
 	}
 	for _, e := range body.Scope {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[\\x21\\x23-\\x5B\\x5D-\\x7E]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
 		if utf8.RuneCountInString(e) > 128 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
 		}
 	}
 	if body.Audience != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[\\x21-\\x7E]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
 	}
 	if body.Audience != nil {
 		if utf8.RuneCountInString(*body.Audience) > 512 {
@@ -2620,13 +2620,13 @@ func ValidateUpdateRemoteSessionClientRequestBody(body *UpdateRemoteSessionClien
 		}
 	}
 	for _, e := range body.Scope {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[\\x21\\x23-\\x5B\\x5D-\\x7E]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
 		if utf8.RuneCountInString(e) > 128 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
 		}
 	}
 	if body.Audience != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[\\x21-\\x7E]+$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
 	}
 	if body.Audience != nil {
 		if utf8.RuneCountInString(*body.Audience) > 512 {

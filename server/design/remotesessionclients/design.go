@@ -11,18 +11,12 @@ func tokenEndpointAuthMethodEnum() {
 	Enum("client_secret_basic", "client_secret_post")
 }
 
-// scopePattern matches a single RFC 6749 §3.3 scope-token:
-// 1*( %x21 / %x23-5B / %x5D-7E ) — printable ASCII excluding space, ",
-// and \. Used as a per-element constraint on `scope` arrays so the
-// space-joined value sent upstream can be parsed back unambiguously and
-// can't smuggle whitespace or quotes into the authorize redirect.
-const scopePattern = `^[\x21\x23-\x5B\x5D-\x7E]+$`
+// scopePattern matches RFC 6749 §3.3 scope-token: printable ASCII
+// excluding space, double-quote, and backslash.
+const scopePattern = `^[!#-[\]-~]+$`
 
-// audiencePattern matches a non-empty run of printable ASCII with no
-// whitespace — broad enough for URI-shaped audiences (Auth0 style) and
-// bare-identifier audiences (custom IDPs) while rejecting control
-// characters and embedded whitespace at the API boundary.
-const audiencePattern = `^[\x21-\x7E]+$`
+// audiencePattern matches non-empty printable ASCII with no whitespace.
+const audiencePattern = `^[!-~]+$`
 
 func scopeAttribute(description string) {
 	Description(description)
