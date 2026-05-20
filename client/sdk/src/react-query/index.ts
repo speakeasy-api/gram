@@ -24,6 +24,7 @@ export * from "./chatGenerateTitle.js";
 export * from "./chatSessionsCreate.js";
 export * from "./chatSessionsRevoke.js";
 export * from "./chatSubmitFeedback.js";
+export * from "./checkMcpEndpointSlugAvailability.js";
 export * from "./checkMCPSlugAvailability.js";
 export * from "./cloneClientFromOAuthProxyProvider.js";
 export * from "./cloneEnvironment.js";

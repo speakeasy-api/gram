@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
@@ -236,8 +237,13 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	t.Helper()
 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
-	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                mcpServerID,
 		ProjectID:         projectID,
+		Name:              conv.ToPGText("test mcp server"),
+		Slug:              conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
 		EnvironmentID:     uuid.NullUUID{},
 		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
 		ToolsetID:         uuid.NullUUID{},
@@ -275,8 +281,13 @@ func seedToolsetMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance,
 func seedToolsetMCPEndpointOnDomain(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, toolset toolsetsrepo.Toolset, visibility string, customDomainID uuid.NullUUID) (slug string, mcpServer mcpserversrepo.McpServer) {
 	t.Helper()
 
-	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                mcpServerID,
 		ProjectID:         projectID,
+		Name:              conv.ToPGText("test mcp server"),
+		Slug:              conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
 		EnvironmentID:     uuid.NullUUID{},
 		RemoteMcpServerID: uuid.NullUUID{},
 		ToolsetID:         uuid.NullUUID{UUID: toolset.ID, Valid: true},

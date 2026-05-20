@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -136,12 +137,17 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
 	})
 
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
 	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:         projectID,
-		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:        "disabled",
+		ID:                    mcpServerID,
+		ProjectID:             projectID,
+		Name:                  conv.ToPGText("test mcp server"),
+		Slug:                  conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            "disabled",
 	})
 	require.NoError(t, err)
 
@@ -168,12 +174,17 @@ func seedOtherProjectMcpFrontend(t *testing.T, ctx context.Context, conn *pgxpoo
 		Url:           "https://other.example.com/mcp/" + uuid.NewString(),
 	})
 
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
 	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:         otherProject.ID,
-		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:        "disabled",
+		ID:                    mcpServerID,
+		ProjectID:             otherProject.ID,
+		Name:                  conv.ToPGText("test mcp server"),
+		Slug:                  conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            "disabled",
 	})
 	require.NoError(t, err)
 

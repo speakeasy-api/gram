@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -93,6 +96,11 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
+	name := strings.TrimSpace(payload.Name)
+	if name == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").Log(ctx, logger)
+	}
+
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
 		payload.RemoteMcpServerID,
@@ -103,6 +111,18 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.ToolsetID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").Log(ctx, logger)
+	}
+
+	// Generate the server ID up front so the slug can include its suffix and
+	// the row can be inserted in a single statement (no insert-then-update).
+	serverID, err := uuid.NewV7()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").Log(ctx, logger)
+	}
+
+	slug, err := computeServerSlug(name, serverID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").Log(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -118,13 +138,20 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
+		ID:                serverID,
 		ProjectID:         *authCtx.ProjectID,
+		Name:              conv.ToPGText(name),
+		Slug:              conv.ToPGText(slug),
 		EnvironmentID:     ids.EnvironmentID,
 		RemoteMcpServerID: ids.RemoteMcpServerID,
 		ToolsetID:         ids.ToolsetID,
 		Visibility:        string(payload.Visibility),
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "mcp server slug already in use").Log(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create mcp server").Log(ctx, logger)
 	}
 
@@ -135,6 +162,8 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		McpServerURN:     urn.NewMcpServer(server.ID),
+		McpServerName:    name,
+		McpServerSlug:    slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp server creation").Log(ctx, logger)
 	}
@@ -156,15 +185,34 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, err
 	}
 
-	serverID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").Log(ctx, s.logger)
+	idProvided := payload.ID != nil && *payload.ID != ""
+	slugProvided := payload.Slug != nil && *payload.Slug != ""
+	if !idProvided && !slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id or slug is required").Log(ctx, s.logger)
+	}
+	if idProvided && slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").Log(ctx, s.logger)
 	}
 
-	server, err := repo.New(s.db).GetMCPServerByID(ctx, repo.GetMCPServerByIDParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-	})
+	r := repo.New(s.db)
+
+	var server repo.McpServer
+	var err error
+	if idProvided {
+		serverID, parseErr := uuid.Parse(*payload.ID)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid mcp server id").Log(ctx, s.logger)
+		}
+		server, err = r.GetMCPServerByID(ctx, repo.GetMCPServerByIDParams{
+			ID:        serverID,
+			ProjectID: *authCtx.ProjectID,
+		})
+	} else {
+		server, err = r.GetMCPServerBySlug(ctx, repo.GetMCPServerBySlugParams{
+			Slug:      conv.ToPGText(*payload.Slug),
+			ProjectID: *authCtx.ProjectID,
+		})
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
@@ -265,7 +313,26 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").Log(ctx, logger)
 	}
 
+	// Resolve name: nil = leave existing; non-nil = trim and require non-empty.
+	name := existing.Name
+	if payload.Name != nil {
+		trimmed := strings.TrimSpace(*payload.Name)
+		if trimmed == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").Log(ctx, logger)
+		}
+		name = conv.ToPGText(trimmed)
+	}
+
+	// Always recompute slug from the post-update name so it tracks the name
+	// even when the name didn't change (idempotent).
+	slug, err := computeServerSlug(conv.FromPGTextOrEmpty[string](name), serverID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").Log(ctx, logger)
+	}
+
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
+		Name:              name,
+		Slug:              conv.ToPGText(slug),
 		EnvironmentID:     ids.EnvironmentID,
 		RemoteMcpServerID: ids.RemoteMcpServerID,
 		ToolsetID:         ids.ToolsetID,
@@ -274,6 +341,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		ProjectID:         *authCtx.ProjectID,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "mcp server slug already in use").Log(ctx, logger)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, logger)
 		}
@@ -289,6 +360,8 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		ActorDisplayName:        authCtx.Email,
 		ActorSlug:               nil,
 		McpServerURN:            urn.NewMcpServer(updated.ID),
+		McpServerName:           conv.FromPGTextOrEmpty[string](updated.Name),
+		McpServerSlug:           conv.FromPGTextOrEmpty[string](updated.Slug),
 		McpServerSnapshotBefore: beforeView,
 		McpServerSnapshotAfter:  afterView,
 	}); err != nil {
@@ -370,6 +443,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		McpServerURN:     urn.NewMcpServer(deleted.ID),
+		McpServerName:    conv.FromPGTextOrEmpty[string](deleted.Name),
+		McpServerSlug:    conv.FromPGTextOrEmpty[string](deleted.Slug),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log mcp server deletion").Log(ctx, logger)
 	}

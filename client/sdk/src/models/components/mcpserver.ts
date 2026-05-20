@@ -39,6 +39,10 @@ export type McpServer = {
    */
   id: string;
   /**
+   * A human-readable display name for the server
+   */
+  name?: string | undefined;
+  /**
    * The project ID this MCP server belongs to
    */
   projectId: string;
@@ -46,6 +50,10 @@ export type McpServer = {
    * The ID of the remote MCP server used as the backend
    */
   remoteMcpServerId?: string | undefined;
+  /**
+   * A URL-safe, project-unique slug derived server-side from the name and ID
+   */
+  slug?: string | undefined;
   /**
    * The ID of the toolset used as the backend
    */
@@ -75,8 +83,10 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       ),
       environment_id: z.optional(z.string()),
       id: z.string(),
+      name: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
+      slug: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),

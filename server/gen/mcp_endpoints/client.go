@@ -16,21 +16,23 @@ import (
 
 // Client is the "mcpEndpoints" service client.
 type Client struct {
-	CreateMcpEndpointEndpoint goa.Endpoint
-	GetMcpEndpointEndpoint    goa.Endpoint
-	ListMcpEndpointsEndpoint  goa.Endpoint
-	UpdateMcpEndpointEndpoint goa.Endpoint
-	DeleteMcpEndpointEndpoint goa.Endpoint
+	CreateMcpEndpointEndpoint                goa.Endpoint
+	GetMcpEndpointEndpoint                   goa.Endpoint
+	ListMcpEndpointsEndpoint                 goa.Endpoint
+	UpdateMcpEndpointEndpoint                goa.Endpoint
+	CheckMcpEndpointSlugAvailabilityEndpoint goa.Endpoint
+	DeleteMcpEndpointEndpoint                goa.Endpoint
 }
 
 // NewClient initializes a "mcpEndpoints" service client given the endpoints.
-func NewClient(createMcpEndpoint, getMcpEndpoint, listMcpEndpoints, updateMcpEndpoint, deleteMcpEndpoint goa.Endpoint) *Client {
+func NewClient(createMcpEndpoint, getMcpEndpoint, listMcpEndpoints, updateMcpEndpoint, checkMcpEndpointSlugAvailability, deleteMcpEndpoint goa.Endpoint) *Client {
 	return &Client{
-		CreateMcpEndpointEndpoint: createMcpEndpoint,
-		GetMcpEndpointEndpoint:    getMcpEndpoint,
-		ListMcpEndpointsEndpoint:  listMcpEndpoints,
-		UpdateMcpEndpointEndpoint: updateMcpEndpoint,
-		DeleteMcpEndpointEndpoint: deleteMcpEndpoint,
+		CreateMcpEndpointEndpoint:                createMcpEndpoint,
+		GetMcpEndpointEndpoint:                   getMcpEndpoint,
+		ListMcpEndpointsEndpoint:                 listMcpEndpoints,
+		UpdateMcpEndpointEndpoint:                updateMcpEndpoint,
+		CheckMcpEndpointSlugAvailabilityEndpoint: checkMcpEndpointSlugAvailability,
+		DeleteMcpEndpointEndpoint:                deleteMcpEndpoint,
 	}
 }
 
@@ -124,6 +126,29 @@ func (c *Client) UpdateMcpEndpoint(ctx context.Context, p *UpdateMcpEndpointPayl
 		return
 	}
 	return ires.(*types.McpEndpoint), nil
+}
+
+// CheckMcpEndpointSlugAvailability calls the
+// "checkMcpEndpointSlugAvailability" endpoint of the "mcpEndpoints" service.
+// CheckMcpEndpointSlugAvailability may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CheckMcpEndpointSlugAvailability(ctx context.Context, p *CheckMcpEndpointSlugAvailabilityPayload) (res bool, err error) {
+	var ires any
+	ires, err = c.CheckMcpEndpointSlugAvailabilityEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(bool), nil
 }
 
 // DeleteMcpEndpoint calls the "deleteMcpEndpoint" endpoint of the

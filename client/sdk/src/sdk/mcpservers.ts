@@ -55,10 +55,10 @@ export class McpServers extends ClientSDK {
    * getMcpServer mcpServers
    *
    * @remarks
-   * Get an MCP server by ID
+   * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
    */
   async get(
-    request: operations.GetMcpServerRequest,
+    request?: operations.GetMcpServerRequest | undefined,
     security?: operations.GetMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.McpServer> {
@@ -93,7 +93,7 @@ export class McpServers extends ClientSDK {
    * updateMcpServer mcpServers
    *
    * @remarks
-   * Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.
+   * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.
    */
   async update(
     request: operations.UpdateMcpServerRequest,

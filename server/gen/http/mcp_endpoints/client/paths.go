@@ -27,6 +27,11 @@ func UpdateMcpEndpointMcpEndpointsPath() string {
 	return "/rpc/mcpEndpoints.update"
 }
 
+// CheckMcpEndpointSlugAvailabilityMcpEndpointsPath returns the URL path to the mcpEndpoints service checkMcpEndpointSlugAvailability HTTP endpoint.
+func CheckMcpEndpointSlugAvailabilityMcpEndpointsPath() string {
+	return "/rpc/mcpEndpoints.checkSlugAvailability"
+}
+
 // DeleteMcpEndpointMcpEndpointsPath returns the URL path to the mcpEndpoints service deleteMcpEndpoint HTTP endpoint.
 func DeleteMcpEndpointMcpEndpointsPath() string {
 	return "/rpc/mcpEndpoints.delete"

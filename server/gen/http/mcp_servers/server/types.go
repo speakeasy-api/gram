@@ -16,6 +16,8 @@ import (
 // CreateMcpServerRequestBody is the type of the "mcpServers" service
 // "createMcpServer" endpoint HTTP request body.
 type CreateMcpServerRequestBody struct {
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
@@ -31,6 +33,9 @@ type CreateMcpServerRequestBody struct {
 type UpdateMcpServerRequestBody struct {
 	// The ID of the MCP server to update
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// A human-readable display name for the server. Omit to leave the existing
+	// name unchanged; if provided, must be non-empty.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
@@ -48,6 +53,10 @@ type CreateMcpServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
@@ -69,6 +78,10 @@ type GetMcpServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
@@ -96,6 +109,10 @@ type UpdateMcpServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
@@ -1040,6 +1057,10 @@ type McpServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
@@ -1060,6 +1081,8 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 	body := &CreateMcpServerResponseBody{
 		ID:                res.ID,
 		ProjectID:         res.ProjectID,
+		Name:              res.Name,
+		Slug:              res.Slug,
 		EnvironmentID:     res.EnvironmentID,
 		RemoteMcpServerID: res.RemoteMcpServerID,
 		ToolsetID:         res.ToolsetID,
@@ -1076,6 +1099,8 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 	body := &GetMcpServerResponseBody{
 		ID:                res.ID,
 		ProjectID:         res.ProjectID,
+		Name:              res.Name,
+		Slug:              res.Slug,
 		EnvironmentID:     res.EnvironmentID,
 		RemoteMcpServerID: res.RemoteMcpServerID,
 		ToolsetID:         res.ToolsetID,
@@ -1111,6 +1136,8 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 	body := &UpdateMcpServerResponseBody{
 		ID:                res.ID,
 		ProjectID:         res.ProjectID,
+		Name:              res.Name,
+		Slug:              res.Slug,
 		EnvironmentID:     res.EnvironmentID,
 		RemoteMcpServerID: res.RemoteMcpServerID,
 		ToolsetID:         res.ToolsetID,
@@ -1838,6 +1865,7 @@ func NewDeleteMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteMc
 // endpoint payload.
 func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.CreateMcpServerPayload {
 	v := &mcpservers.CreateMcpServerPayload{
+		Name:              *body.Name,
 		EnvironmentID:     body.EnvironmentID,
 		RemoteMcpServerID: body.RemoteMcpServerID,
 		ToolsetID:         body.ToolsetID,
@@ -1852,9 +1880,10 @@ func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *s
 
 // NewGetMcpServerPayload builds a mcpServers service getMcpServer endpoint
 // payload.
-func NewGetMcpServerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
+func NewGetMcpServerPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
 	v := &mcpservers.GetMcpServerPayload{}
 	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1880,6 +1909,7 @@ func NewListMcpServersPayload(remoteMcpServerID *string, toolsetID *string, sess
 func NewUpdateMcpServerPayload(body *UpdateMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.UpdateMcpServerPayload {
 	v := &mcpservers.UpdateMcpServerPayload{
 		ID:                *body.ID,
+		Name:              body.Name,
 		EnvironmentID:     body.EnvironmentID,
 		RemoteMcpServerID: body.RemoteMcpServerID,
 		ToolsetID:         body.ToolsetID,
@@ -1907,6 +1937,9 @@ func NewDeleteMcpServerPayload(id string, sessionToken *string, apikeyToken *str
 // ValidateCreateMcpServerRequestBody runs the validations defined on
 // CreateMcpServerRequestBody
 func ValidateCreateMcpServerRequestBody(body *CreateMcpServerRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
 	if body.Visibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
 	}
