@@ -1454,6 +1454,7 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		ClientIDIssuedAt:        v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		Audience:                v.Audience,
 		CreatedAt:               v.CreatedAt,
 		UpdatedAt:               v.UpdatedAt,
 	}
