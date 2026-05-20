@@ -1,9 +1,5 @@
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
 import { Loader2 } from "lucide-react";
@@ -181,7 +177,7 @@ export function NavGroupProvider({
       registerRef,
       containerRef,
     }),
-    [openGroup, hoveredItem, resolvedActive, registerRef],
+    [openGroup, setOpenGroup, hoveredItem, resolvedActive, registerRef],
   );
 
   return (
