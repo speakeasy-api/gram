@@ -28,6 +28,10 @@ export type RemoteSessionClientTokenEndpointAuthMethod = ClosedEnum<
  */
 export type RemoteSessionClient = {
   /**
+   * Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
+   */
+  audience?: string | undefined;
+  /**
    * The client_id used to identify this client at the issuer's token and authorization endpoints.
    */
   clientId: string;
@@ -49,6 +53,10 @@ export type RemoteSessionClient = {
    * The owning remote_session_issuer id.
    */
   remoteSessionIssuerId: string;
+  /**
+   * Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
+   */
+  scope?: Array<string> | undefined;
   /**
    * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
    */
@@ -74,6 +82,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    audience: z.optional(z.string()),
     client_id: z.string(),
     client_id_issued_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -89,6 +98,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
+    scope: z.optional(z.array(z.string())),
     token_endpoint_auth_method: z.optional(
       RemoteSessionClientTokenEndpointAuthMethod$inboundSchema,
     ),

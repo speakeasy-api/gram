@@ -27748,6 +27748,11 @@ components:
     CloneClientFromOAuthProxyProviderForm:
       type: object
       properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.
+          pattern: ^[!-~]+$
+          maxLength: 512
         oauth_proxy_provider_id:
           type: string
           description: The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.
@@ -27756,6 +27761,13 @@ components:
           type: string
           description: The remote_session_issuer the new client is registered with.
           format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.
         token_endpoint_auth_method:
           type: string
           description: How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -28265,6 +28277,11 @@ components:
     CreateRemoteSessionClientForm:
       type: object
       properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+          pattern: ^[!-~]+$
+          maxLength: 512
         client_id:
           type: string
           description: client_id supplied by the caller.
@@ -28275,6 +28292,13 @@ components:
           type: string
           description: The owning remote_session_issuer id.
           format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
         token_endpoint_auth_method:
           type: string
           description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -33764,6 +33788,9 @@ components:
     RemoteSessionClient:
       type: object
       properties:
+        audience:
+          type: string
+          description: Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
         client_id:
           type: string
           description: The client_id used to identify this client at the issuer's token and authorization endpoints.
@@ -33789,6 +33816,11 @@ components:
           type: string
           description: The owning remote_session_issuer id.
           format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+          description: Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
         token_endpoint_auth_method:
           type: string
           description: How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
@@ -36591,6 +36623,11 @@ components:
     UpdateRemoteSessionClientForm:
       type: object
       properties:
+        audience:
+          type: string
+          description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
+          pattern: ^[!-~]+$
+          maxLength: 512
         client_secret:
           type: string
           description: Rotate the client secret. Gram re-encrypts before persisting.
@@ -36598,6 +36635,13 @@ components:
           type: string
           description: The remote_session_client id.
           format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
         token_endpoint_auth_method:
           type: string
           description: Change how the client authenticates at the issuer's token endpoint.

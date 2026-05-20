@@ -11,6 +11,26 @@ func tokenEndpointAuthMethodEnum() {
 	Enum("client_secret_basic", "client_secret_post")
 }
 
+// scopePattern matches RFC 6749 §3.3 scope-token: printable ASCII
+// excluding space, double-quote, and backslash.
+const scopePattern = `^[!#-[\]-~]+$`
+
+// audiencePattern matches non-empty printable ASCII with no whitespace.
+const audiencePattern = `^[!-~]+$`
+
+func scopeAttribute(description string) {
+	Description(description)
+	Elem(func() {
+		Pattern(scopePattern)
+		MaxLength(128)
+	})
+}
+
+func audienceAttribute() {
+	Pattern(audiencePattern)
+	MaxLength(512)
+}
+
 var _ = Service("remoteSessionClients", func() {
 	Description("Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.")
 	Security(security.Session, security.ProjectSlug)
@@ -200,6 +220,10 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
 
 	Required("remote_session_issuer_id", "user_session_issuer_id", "client_id")
 })
@@ -217,6 +241,10 @@ var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProvi
 		Format(FormatUUID)
 	})
 	Attribute("token_endpoint_auth_method", String, "How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.", audienceAttribute)
 
 	Required("oauth_proxy_provider_id", "remote_session_issuer_id", "user_session_issuer_id")
 })
@@ -232,6 +260,10 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 		Format(FormatUUID)
 	})
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
+	})
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", audienceAttribute)
 
 	Required("id")
 })
@@ -261,6 +293,8 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)
+	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
+	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

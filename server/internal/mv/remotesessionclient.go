@@ -27,6 +27,8 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient) *types.RemoteSes
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   expiresAt,
 		TokenEndpointAuthMethod: conv.FromPGText[string](row.TokenEndpointAuthMethod),
+		Scope:                   row.Scope,
+		Audience:                conv.FromPGText[string](row.Audience),
 		CreatedAt:               row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:               row.UpdatedAt.Time.Format(time.RFC3339),
 	}

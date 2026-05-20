@@ -154,8 +154,19 @@ type Client struct {
 	IssuerURL             string
 	AuthorizationEndpoint string
 	TokenEndpoint         string
-	Scopes                []string
+	// ClientScope, when non-empty, overrides IssuerScopesSupported in the
+	// OAuth dance.
+	ClientScope           []string
+	IssuerScopesSupported []string
+	Audience              string
 	Passthrough           bool
+}
+
+func (c Client) resolveScopes() []string {
+	if len(c.ClientScope) > 0 {
+		return c.ClientScope
+	}
+	return c.IssuerScopesSupported
 }
 
 // ListClients returns the joined client + issuer rows linked to a user
@@ -183,7 +194,9 @@ func (m *ChallengeManager) ListClients(
 			IssuerURL:             r.IssuerUrl,
 			AuthorizationEndpoint: conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
 			TokenEndpoint:         conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			Scopes:                r.ScopesSupported,
+			ClientScope:           r.ClientScope,
+			IssuerScopesSupported: r.ScopesSupported,
+			Audience:              conv.FromPGTextOrEmpty[string](r.ClientAudience),
 			Passthrough:           r.Passthrough,
 		})
 	}
@@ -279,8 +292,11 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	q.Set("state", stateID)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
-	if len(client.Scopes) > 0 {
-		q.Set("scope", strings.Join(client.Scopes, " "))
+	if scopes := client.resolveScopes(); len(scopes) > 0 {
+		q.Set("scope", strings.Join(scopes, " "))
+	}
+	if client.Audience != "" {
+		q.Set("audience", client.Audience)
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
@@ -368,7 +384,8 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	}
 
 	authMethod := ResolveTokenEndpointAuthMethod(clientRow.TokenEndpointAuthMethod.String)
-	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, code)
+	audience := conv.FromPGTextOrEmpty[string](clientRow.Audience)
+	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").Log(ctx, logger)
 	}
@@ -465,6 +482,7 @@ func (m *ChallengeManager) exchangeCode(
 	externalClientID string,
 	clientSecret string,
 	authMethod TokenEndpointAuthMethod,
+	audience string,
 	code string,
 ) (tokenResponse, error) {
 	form := url.Values{}
@@ -473,6 +491,9 @@ func (m *ChallengeManager) exchangeCode(
 	form.Set("redirect_uri", state.RedirectURI)
 	form.Set("client_id", externalClientID)
 	form.Set("code_verifier", state.CodeVerifier)
+	if audience != "" {
+		form.Set("audience", audience)
+	}
 
 	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, authMethod, externalClientID, clientSecret)
 	if err != nil {
