@@ -5,11 +5,16 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Button, Icon } from "@speakeasy-api/moonshine";
+import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { Shield } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useRoutes } from "@/routes";
+import {
+  formatDateRangeLabel,
+  useDateRangeFilter,
+} from "@/components/observe/useDateRangeFilter";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import {
   CategoryScale,
@@ -36,6 +41,17 @@ ChartJS.register(
 );
 
 const RISK_TREND_CHART_ID = "risk-events-trend";
+const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
+  "15m",
+  "1h",
+  "4h",
+  "1d",
+  "2d",
+  "3d",
+  "7d",
+  "15d",
+  "30d",
+];
 
 const CHART_COLORS = {
   gridLine: "rgba(128, 128, 128, 0.2)",
@@ -97,19 +113,21 @@ export default function SecurityOverview() {
 
 function RiskOverviewShell({
   children,
-  days = 7,
+  rangeLabel,
+  controls,
 }: {
   children: ReactNode;
-  days?: number;
+  rangeLabel?: string;
+  controls?: ReactNode;
 }) {
   return (
     <Page.Section>
       <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
       <Page.Section.Description>
-        Risk analysis summary for policy findings{" "}
-        {days > 0 ? ` across the last ${days.toLocaleString()} days` : ""}
+        Risk analysis summary for policy findings
+        {rangeLabel && ` across ${rangeLabel}.`}
       </Page.Section.Description>
-      <Page.Section.CTA> {/* tbd */}</Page.Section.CTA>
+      <Page.Section.CTA>{controls ?? null}</Page.Section.CTA>
       <Page.Section.Body>
         <div className="space-y-8">{children}</div>
       </Page.Section.Body>
@@ -146,7 +164,32 @@ function NoPoliciesEmptyState() {
 }
 
 function SecurityOverviewContent() {
-  const overviewQuery = useRiskOverview();
+  const {
+    dateRange,
+    customRange,
+    customRangeLabel,
+    from,
+    to,
+    setDateRangeParam,
+    setCustomRangeParam,
+    clearCustomRange,
+  } = useDateRangeFilter();
+  const rangeLabel = useMemo(
+    () => formatDateRangeLabel(dateRange, customRangeLabel),
+    [dateRange, customRangeLabel],
+  );
+  const controls = (
+    <TimeRangePicker
+      preset={customRange ? null : dateRange}
+      customRange={customRange}
+      customRangeLabel={customRangeLabel}
+      availablePresets={RISK_OVERVIEW_PRESETS}
+      onPresetChange={setDateRangeParam}
+      onCustomRangeChange={setCustomRangeParam}
+      onClearCustomRange={clearCustomRange}
+    />
+  );
+  const overviewQuery = useRiskOverview({ from, to });
   const overview = overviewQuery.data;
 
   const topCategories = useMemo<BarDatum[]>(() => {
@@ -171,7 +214,7 @@ function SecurityOverviewContent() {
 
   if (overviewQuery.isLoading) {
     return (
-      <RiskOverviewShell>
+      <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         <div className="flex items-center justify-center py-20">
           <p className="text-muted-foreground text-sm">Loading...</p>
         </div>
@@ -181,7 +224,7 @@ function SecurityOverviewContent() {
 
   if (overviewQuery.error) {
     return (
-      <RiskOverviewShell>
+      <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16 text-center">
           <div className="bg-muted/50 mb-4 flex size-12 items-center justify-center rounded-full">
             <Icon
@@ -212,7 +255,7 @@ function SecurityOverviewContent() {
 
   return (
     <>
-      <RiskOverviewShell>
+      <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <MetricCard
             title="Messages Scanned"
