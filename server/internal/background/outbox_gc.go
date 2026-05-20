@@ -17,7 +17,7 @@ import (
 const (
 	outboxGCScheduleID            = "v1:outbox-gc-schedule"
 	outboxGCWorkflowID            = outboxGCScheduleID + "/scheduled"
-	outboxGCInterval              = 5 * time.Minute
+	outboxGCInterval              = 10 * time.Minute
 	outboxGCRetentionPeriod       = 7 * 24 * time.Hour
 	outboxGCBatchSize       int32 = 100
 )
@@ -65,7 +65,7 @@ func AddOutboxGCSchedule(ctx context.Context, temporalEnv *tenv.Environment) err
 		ID:                 outboxGCWorkflowID,
 		Workflow:           OutboxGCWorkflow,
 		TaskQueue:          string(temporalEnv.Queue()),
-		WorkflowRunTimeout: 2 * time.Minute,
+		WorkflowRunTimeout: 5 * time.Minute,
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
