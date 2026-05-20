@@ -1061,7 +1061,6 @@ export function CreateRoleDialog({
                 <>
                   {/* Resource picker */}
                   <ScopePickerPopover
-                    variant="panel"
                     resourceType={editingScopeDef.resourceType}
                     scope={editingScopeSlug!}
                     selectors={draftRule.selectors}

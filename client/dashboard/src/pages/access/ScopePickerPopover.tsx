@@ -1,10 +1,4 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -16,11 +10,8 @@ import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForO
 import {
   AlertTriangle,
   Check,
-  ChevronDown,
   ChevronRight,
   Info,
-  Maximize2,
-  Minimize2,
   Globe,
   Plus,
   Repeat,
@@ -58,9 +49,6 @@ interface ScopePickerPopoverProps {
   /** When editing a deny rule, pass the allow rule's selectors here.
    *  The picker will filter projects/servers/tools to only those covered by the allow. */
   allowSelectors?: Selector[] | null;
-  /** "popover" (default) = floating popover with trigger button.
-   *  "panel" = inline content that fills its parent container (for sheet slide panels). */
-  variant?: "popover" | "panel";
 }
 
 interface ServerTool {
@@ -150,19 +138,13 @@ export function ScopePickerPopover({
   isDeny: isDenyProp,
   allowedPanels,
   allowSelectors,
-  variant = "popover",
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   // Override for when user clicks a mode but selectors are still empty
   const [panelOverride, setPanelOverride] = useState<ActivePanel | null>(null);
   const [resourceSearch, setResourceSearch] = useState("");
 
-  // Explicit wheel handler for the resource list — the Popover portal renders
-  // outside the Sheet's scroll-lock region, so native CSS overflow scrolling
-  // is blocked. Directly setting scrollTop bypasses react-remove-scroll.
   const resourceListRef = useRef<HTMLDivElement>(null);
   const handleResourceWheel = useCallback((e: React.WheelEvent) => {
     if (resourceListRef.current) {
@@ -183,7 +165,6 @@ export function ScopePickerPopover({
     selectors !== null && selectors.length === 0 && panelOverride
       ? panelOverride
       : panelState.activePanel;
-  const label = panelState.label;
 
   // panelOverride persists until the user explicitly switches panels via
   // switchPanel(). The derivation above already ignores the override when
@@ -365,11 +346,7 @@ export function ScopePickerPopover({
   const isPanelAllowed = (panel: ActivePanel) =>
     !allowedPanels || allowedPanels.includes(panel);
 
-  const renderScopeOptions = ({
-    includeCollection,
-  }: {
-    includeCollection: boolean;
-  }) => (
+  const renderScopeOptions = () => (
     <div className="shrink-0 pb-1.5">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
@@ -415,7 +392,7 @@ export function ScopePickerPopover({
           onClick={() => switchPanel("tools")}
         />
       )}
-      {isMcpConnect && includeCollection && isPanelAllowed("collection") && (
+      {isMcpConnect && isPanelAllowed("collection") && (
         <ScopeOption
           label="Specific collections"
           description="Give access to a curated set of tools"
@@ -614,131 +591,27 @@ export function ScopePickerPopover({
   );
 
   const collectionPanel = (
-    <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col overflow-hidden">
-      <div className="border-border flex min-h-0 flex-1 flex-col overflow-y-auto border-y px-2 py-1">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="border-border flex min-h-0 flex-1 flex-col overflow-y-auto border-t px-2 py-1">
         <CollectionGroupPanel
           collectionGroups={collectionGroups}
           selectors={selectors ?? []}
           onChangeSelectors={onChangeSelectors}
-          onNavigate={() => setPopoverOpen(false)}
         />
       </div>
     </div>
   );
 
-  // Shared content used by both popover and panel variants
-  const pickerContent = (
-    <>
-      {renderScopeOptions({ includeCollection: variant === "popover" })}
+  return (
+    <div className="flex flex-1 flex-col overflow-y-auto px-1.5 pb-1.5">
+      {renderScopeOptions()}
       {resourceList}
       {projectPickerList}
       {activePanel === "tools" && (
-        <div
-          className={cn(
-            "flex flex-col",
-            variant === "popover"
-              ? "-mx-1.5 -mb-1.5 max-h-[min(420px,60vh)]"
-              : "min-h-0 flex-1",
-          )}
-        >
-          {customTabs(
-            variant === "popover" ? "max-h-[min(340px,50vh)]" : undefined,
-          )}
-          {variant === "popover" && (
-            <div className="bg-background border-border shrink-0 rounded-b-lg border-t">
-              <button
-                type="button"
-                onClick={() => {
-                  setPopoverOpen(false);
-                  setExpanded(true);
-                }}
-                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-b-lg px-3 py-2.5 text-xs transition-colors"
-              >
-                <Maximize2 className="h-3 w-3" />
-                Open in full screen
-              </button>
-            </div>
-          )}
-        </div>
+        <div className="flex min-h-0 flex-1 flex-col">{customTabs()}</div>
       )}
       {activePanel === "collection" && collectionPanel}
-    </>
-  );
-
-  // Panel variant: render inline, filling the parent container
-  if (variant === "panel") {
-    return (
-      <div className="flex flex-1 flex-col overflow-y-auto px-1.5 pb-1.5">
-        {pickerContent}
-      </div>
-    );
-  }
-
-  // Popover variant (default): trigger button + floating popover + fullscreen dialog
-  return (
-    <>
-      <Popover modal={false} open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="border-input bg-background hover:bg-background inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs shadow-xs transition-colors"
-          >
-            <span className="max-w-[120px] truncate">{label}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          sideOffset={8}
-          className={cn(
-            "p-1.5 transition-[width] duration-500",
-            activePanel === "tools"
-              ? "w-[680px]"
-              : activePanel === "collection"
-                ? "w-[360px]"
-                : activePanel === "servers" || activePanel === "projects"
-                  ? "w-96"
-                  : "w-64",
-          )}
-          style={{
-            transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
-          }}
-        >
-          {pickerContent}
-        </PopoverContent>
-      </Popover>
-
-      <Dialog
-        open={expanded}
-        onOpenChange={(open) => {
-          if (!open) setExpanded(false);
-        }}
-      >
-        <Dialog.Content className="flex h-[85vh] w-[90vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl [&>.absolute]:hidden">
-          <div className="bg-muted/50 border-border flex items-center justify-between border-b px-4 py-4">
-            <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
-              Configure Access
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setExpanded(false);
-                setPopoverOpen(true);
-              }}
-              className="text-muted-foreground hover:text-foreground inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm opacity-70 transition-opacity hover:opacity-100"
-            >
-              <Minimize2 className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="px-1.5 pt-1.5">
-              {renderScopeOptions({ includeCollection: false })}
-            </div>
-            {customTabs()}
-          </div>
-        </Dialog.Content>
-      </Dialog>
-    </>
+    </div>
   );
 }
 
