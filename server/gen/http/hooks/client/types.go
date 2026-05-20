@@ -179,6 +179,12 @@ type ClaudeResponseBody struct {
 	SystemMessage *string `form:"systemMessage,omitempty" json:"systemMessage,omitempty" xml:"systemMessage,omitempty"`
 	// Hook-specific output as JSON object
 	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
+	// Top-level block decision for UserPromptSubmit / PostToolUse / Stop /
+	// SubagentStop. Use 'block' to halt processing.
+	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
+	// Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude
+	// (PostToolUse/Stop).
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // CursorResponseBody is the type of the "hooks" service "cursor" endpoint HTTP
@@ -1392,6 +1398,8 @@ func NewClaudeHookResultOK(body *ClaudeResponseBody) *hooks.ClaudeHookResult {
 		SuppressOutput:     body.SuppressOutput,
 		SystemMessage:      body.SystemMessage,
 		HookSpecificOutput: body.HookSpecificOutput,
+		Decision:           body.Decision,
+		Reason:             body.Reason,
 	}
 
 	return v

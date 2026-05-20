@@ -1829,7 +1829,7 @@ Your text responses are not delivered to the user. To communicate, call a tool (
 
 Two MCP authentication events may appear in this thread, each delivered as a <message-context> block with EventType and field lines.
 
-- EventType "assistant_mcp_auth_required" carries an AuthURL. Relay AuthURL to the user verbatim through an output tool (do not shorten, summarize, or rewrite it). Reference the MCP server using its MCPSlug rather than MCPServerID.
+- EventType "assistant_mcp_auth_required" carries an AuthURL. Surface AuthURL to the user verbatim through an output tool (do not shorten, summarize, or rewrite it); follow any source-specific output preferences for whether the URL is shown directly, hidden behind a button, or delivered to a single recipient. Reference the MCP server using its MCPSlug rather than MCPServerID.
 
 - EventType "assistant_mcp_auth" reports the result. When Status is "success" and you still need that server, call mcp_force_reconnect with server_id set to the MCPServerID value, then continue your task. When Status is "failed", inform the user via an output tool and include the ErrorDescription if present.`
 
@@ -1842,11 +1842,14 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	if err != nil {
 		return "", fmt.Errorf("load assistant thread context: %w", err)
 	}
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 4)
 	if base != "" {
 		parts = append(parts, base)
 	}
 	parts = append(parts, outputChannelAddendum)
+	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
+		parts = append(parts, guidance)
+	}
 	if ctxBlock != "" {
 		parts = append(parts, ctxBlock)
 	}

@@ -87,12 +87,19 @@ func TestCursor_RequiresAuth(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
 
-	// Use a bare context without auth
+	// Use a bare context without auth. The handler returns a shaped JSON
+	// deny (permission=deny + user_message) instead of an error so the
+	// Cursor CLI surfaces the reason to the user.
 	ctx := t.Context()
-	_, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
 		HookEventName: "preToolUse",
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "deny", *result.Permission)
+	require.NotNil(t, result.UserMessage)
+	assert.Contains(t, *result.UserMessage, "unauthorized")
 }
 
 func TestBuildCursorTelemetryAttributes_BasicFields(t *testing.T) {

@@ -43,12 +43,19 @@ type GenerateChatTitleArgs struct {
 const (
 	defaultChatTitle       = "New Chat"
 	DefaultClaudeChatTitle = "Claude Code Session"
+	DefaultCoworkChatTitle = "Cowork Session"
+	DefaultClaudeAmbiguous = "Claude Session"
 	DefaultCursorChatTitle = "Cursor Session"
 	DefaultCodexChatTitle  = "Codex Session"
 )
 
 func isDefaultChatTitle(title string) bool {
-	return title == defaultChatTitle || title == DefaultClaudeChatTitle || title == DefaultCursorChatTitle || title == DefaultCodexChatTitle
+	return title == defaultChatTitle ||
+		title == DefaultClaudeChatTitle ||
+		title == DefaultCoworkChatTitle ||
+		title == DefaultClaudeAmbiguous ||
+		title == DefaultCursorChatTitle ||
+		title == DefaultCodexChatTitle
 }
 
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {
