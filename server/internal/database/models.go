@@ -1051,6 +1051,13 @@ type ProjectAllowedOrigin struct {
 	Deleted   bool
 }
 
+type ProjectMarketplaceSetting struct {
+	ProjectID       uuid.UUID
+	MarketplaceName pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type ProjectToolVariation struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
