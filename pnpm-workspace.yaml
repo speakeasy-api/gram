@@ -48,3 +48,5 @@ ignoredBuiltDependencies:
 
 overrides:
   glob@>=10.0 <10.5.0: 10.5.0
+  # Without this, @polar-sh/ui resolves Recharts v3 while Elements/Tremor stay on v2.
+  recharts: 2.15.4
