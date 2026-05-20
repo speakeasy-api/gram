@@ -33,6 +33,7 @@ export async function proxyRegisterUpstreamClient(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
+    ...(import.meta.env.DEV ? { credentials: "include" } : {}),
   });
 
   if (!response.ok) {
