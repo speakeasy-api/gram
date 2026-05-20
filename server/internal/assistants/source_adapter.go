@@ -141,6 +141,7 @@ type cronEventPayload struct {
 	Schedule          string `json:"schedule"`
 	FiredAt           string `json:"fired_at"`
 	TriggerInstanceID string `json:"trigger_instance_id"`
+	Note              string `json:"note,omitempty"`
 }
 
 type cronAdapter struct{}
@@ -181,6 +182,9 @@ func (cronAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) 
 		fmt.Fprintf(&b, "Scheduled run fired for schedule %q at %s. Execute the assistant's configured task for this tick.", payload.Schedule, payload.FiredAt)
 	} else {
 		fmt.Fprintf(&b, "Scheduled run fired at %s. Execute the assistant's configured task for this tick.", payload.FiredAt)
+	}
+	if payload.Note != "" {
+		fmt.Fprintf(&b, " Note: %s", payload.Note)
 	}
 	return b.String(), nil
 }

@@ -137,7 +137,8 @@ func (c slackTriggerConfig) Filter(event any) (bool, error) {
 }
 
 type cronTriggerConfig struct {
-	Schedule string `json:"schedule"`
+	Schedule string  `json:"schedule"`
+	Note     *string `json:"note,omitempty"`
 }
 
 func (c cronTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
@@ -572,6 +573,7 @@ type cronTriggerEvent struct {
 	Schedule          string `json:"schedule" cel:"schedule"`
 	FiredAt           string `json:"fired_at" cel:"fired_at"`
 	TriggerInstanceID string `json:"trigger_instance_id" cel:"trigger_instance_id"`
+	Note              string `json:"note,omitempty" cel:"note"`
 }
 
 type wakeTriggerEvent struct {
@@ -866,10 +868,15 @@ func newCronDefinition() Definition {
 			if !ok {
 				return nil, fmt.Errorf("invalid cron config")
 			}
+			note := ""
+			if cfg.Note != nil {
+				note = *cfg.Note
+			}
 			event := cronTriggerEvent{
 				Schedule:          cfg.Schedule,
 				FiredAt:           firedAt.UTC().Format(time.RFC3339Nano),
 				TriggerInstanceID: instance.ID.String(),
+				Note:              note,
 			}
 			rawPayload, err := json.Marshal(event)
 			if err != nil {
