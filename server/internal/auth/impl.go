@@ -208,7 +208,7 @@ func (w *cookieDomainWriter) WriteHeader(statusCode int) {
 	if len(cookies) > 0 {
 		headers.Del("Set-Cookie")
 		for _, c := range cookies {
-			if strings.HasPrefix(c, "gram_session=") {
+			if strings.HasPrefix(c, "gram_session=") || strings.HasPrefix(c, nonceBindingCookie+"=") {
 				c += "; Domain=" + w.domain
 			}
 			headers.Add("Set-Cookie", c)
@@ -1054,15 +1054,23 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 		returnAddress = "https://" + requestCtx.Host
 	}
 
-	// In local dev, if the login request came from the setup subdomain
-	// (detected via Referer host, since the Vite proxy rewrites Host),
-	// route the IDP callback through the setup origin so the nonce-binding
-	// cookie is scoped correctly.
-	if s.cfg.Environment == "local" && s.cfg.SetupSiteURL != "" {
+	// If the login request came from the setup subdomain, route the IDP
+	// callback through the setup origin so the nonce-binding cookie is
+	// scoped correctly.
+	if s.cfg.SetupSiteURL != "" {
 		if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx != nil {
 			setupURL, err := url.Parse(s.cfg.SetupSiteURL)
-			if err == nil && requestCtx.RefererHost == setupURL.Host {
-				returnAddress = strings.TrimRight(s.cfg.SetupSiteURL, "/")
+			if err == nil {
+				// In local dev the Vite proxy rewrites Host, so check
+				// Referer. In deployed envs (dev/prod) the Host header
+				// arrives unmodified.
+				host := requestCtx.Host
+				if s.cfg.Environment == "local" {
+					host = requestCtx.RefererHost
+				}
+				if host == setupURL.Host {
+					returnAddress = strings.TrimRight(s.cfg.SetupSiteURL, "/")
+				}
 			}
 		}
 	}
