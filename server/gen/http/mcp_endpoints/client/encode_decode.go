@@ -995,6 +995,248 @@ func DecodeUpdateMcpEndpointResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildCheckMcpEndpointSlugAvailabilityRequest instantiates a HTTP request
+// object with method and path set to call the "mcpEndpoints" service
+// "checkMcpEndpointSlugAvailability" endpoint
+func (c *Client) BuildCheckMcpEndpointSlugAvailabilityRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CheckMcpEndpointSlugAvailabilityMcpEndpointsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpEndpoints", "checkMcpEndpointSlugAvailability", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCheckMcpEndpointSlugAvailabilityRequest returns an encoder for
+// requests sent to the mcpEndpoints checkMcpEndpointSlugAvailability server.
+func EncodeCheckMcpEndpointSlugAvailabilityRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpEndpoints", "checkMcpEndpointSlugAvailability", "*mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		if p.CustomDomainID != nil {
+			values.Add("custom_domain_id", *p.CustomDomainID)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCheckMcpEndpointSlugAvailabilityResponse returns a decoder for
+// responses returned by the mcpEndpoints checkMcpEndpointSlugAvailability
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeCheckMcpEndpointSlugAvailabilityResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCheckMcpEndpointSlugAvailabilityResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body bool
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return body, nil
+		case http.StatusUnauthorized:
+			var (
+				body CheckMcpEndpointSlugAvailabilityUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			err = ValidateCheckMcpEndpointSlugAvailabilityUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return nil, NewCheckMcpEndpointSlugAvailabilityUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CheckMcpEndpointSlugAvailabilityForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			err = ValidateCheckMcpEndpointSlugAvailabilityForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return nil, NewCheckMcpEndpointSlugAvailabilityForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CheckMcpEndpointSlugAvailabilityBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			err = ValidateCheckMcpEndpointSlugAvailabilityBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return nil, NewCheckMcpEndpointSlugAvailabilityBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CheckMcpEndpointSlugAvailabilityNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			err = ValidateCheckMcpEndpointSlugAvailabilityNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return nil, NewCheckMcpEndpointSlugAvailabilityNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CheckMcpEndpointSlugAvailabilityConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			err = ValidateCheckMcpEndpointSlugAvailabilityConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return nil, NewCheckMcpEndpointSlugAvailabilityConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CheckMcpEndpointSlugAvailabilityUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			err = ValidateCheckMcpEndpointSlugAvailabilityUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return nil, NewCheckMcpEndpointSlugAvailabilityUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CheckMcpEndpointSlugAvailabilityInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			err = ValidateCheckMcpEndpointSlugAvailabilityInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return nil, NewCheckMcpEndpointSlugAvailabilityInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CheckMcpEndpointSlugAvailabilityInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+				}
+				err = ValidateCheckMcpEndpointSlugAvailabilityInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+				}
+				return nil, NewCheckMcpEndpointSlugAvailabilityInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CheckMcpEndpointSlugAvailabilityUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+				}
+				err = ValidateCheckMcpEndpointSlugAvailabilityUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+				}
+				return nil, NewCheckMcpEndpointSlugAvailabilityUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpEndpoints", "checkMcpEndpointSlugAvailability", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CheckMcpEndpointSlugAvailabilityGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			err = ValidateCheckMcpEndpointSlugAvailabilityGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
+			}
+			return nil, NewCheckMcpEndpointSlugAvailabilityGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpEndpoints", "checkMcpEndpointSlugAvailability", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteMcpEndpointRequest instantiates a HTTP request object with method
 // and path set to call the "mcpEndpoints" service "deleteMcpEndpoint" endpoint
 func (c *Client) BuildDeleteMcpEndpointRequest(ctx context.Context, v any) (*http.Request, error) {

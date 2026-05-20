@@ -1051,6 +1051,13 @@ type ProjectAllowedOrigin struct {
 	Deleted   bool
 }
 
+type ProjectMarketplaceSetting struct {
+	ProjectID       uuid.UUID
+	MarketplaceName pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type ProjectToolVariation struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
@@ -1131,6 +1138,8 @@ type RemoteSessionClient struct {
 	ClientIDIssuedAt        pgtype.Timestamptz
 	ClientSecretExpiresAt   pgtype.Timestamptz
 	TokenEndpointAuthMethod pgtype.Text
+	Scope                   []string
+	Audience                pgtype.Text
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz

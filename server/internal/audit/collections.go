@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -55,7 +56,7 @@ func (l *Logger) LogMcpCollectionCreate(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }
 
 type LogMcpCollectionUpdateEvent struct {
@@ -106,7 +107,7 @@ func (l *Logger) LogMcpCollectionUpdate(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }
 
 type LogMcpCollectionDeleteEvent struct {
@@ -144,7 +145,7 @@ func (l *Logger) LogMcpCollectionDelete(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }
 
 type LogMcpCollectionAttachServerEvent struct {
@@ -191,7 +192,7 @@ func (l *Logger) LogMcpCollectionAttachServer(ctx context.Context, dbtx repo.DBT
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }
 
 type LogMcpCollectionDetachServerEvent struct {
@@ -238,5 +239,5 @@ func (l *Logger) LogMcpCollectionDetachServer(ctx context.Context, dbtx repo.DBT
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }

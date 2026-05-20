@@ -9,10 +9,7 @@ import type { Gram } from "@gram/client";
 import type { QueryClient } from "@tanstack/react-query";
 import { fromPromise } from "xstate";
 
-import {
-  type ExternalMcpUserSessionOAuthConfig,
-  onboardExternalMcpToUserSessions,
-} from "@/lib/externalMcpUserSessions";
+import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 
 import { parseScopes } from "./machine-types";
 
@@ -52,20 +49,12 @@ export type DeleteEnvironmentInput = { envSlug: string };
 
 export type RegisterClientInput = {
   registrationEndpoint: string;
-  scopesSupported: string[];
-  tokenEndpointAuthMethodsSupported: string[];
 };
 
 export type RegisterClientOutput = {
   clientId: string;
   clientSecret: string;
   tokenAuthMethod: string | null;
-};
-
-export type ConfigureUserSessionsInput = {
-  toolsetSlug: string;
-  toolsetName: string;
-  oauth: ExternalMcpUserSessionOAuthConfig;
 };
 
 export type AuthedFetch = (
@@ -84,9 +73,6 @@ export type WizardServices = {
   >;
   registerClient: ReturnType<
     typeof fromPromise<RegisterClientOutput, RegisterClientInput>
-  >;
-  configureUserSessions: ReturnType<
-    typeof fromPromise<void, ConfigureUserSessionsInput>
   >;
 };
 
@@ -182,49 +168,16 @@ export function createWizardServices(
 
   const registerClient = fromPromise<RegisterClientOutput, RegisterClientInput>(
     async ({ input, signal }) => {
-      const response = await authedFetch("/oauth/proxy-register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          registration_endpoint: input.registrationEndpoint,
-          scopes_supported: input.scopesSupported,
-          token_endpoint_auth_methods_supported:
-            input.tokenEndpointAuthMethodsSupported,
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Registration failed (HTTP ${response.status})`);
-      }
-
-      const result = (await response.json()) as {
-        client_id?: string;
-        client_secret?: string;
-        token_endpoint_auth_method?: string;
-      };
-
-      if (!result.client_id) {
-        throw new Error("Upstream did not return a client_id");
-      }
-
+      const result = await proxyRegisterUpstreamClient(
+        authedFetch,
+        { registrationEndpoint: input.registrationEndpoint },
+        { signal },
+      );
       return {
-        clientId: result.client_id,
-        clientSecret: result.client_secret ?? "",
-        tokenAuthMethod: result.token_endpoint_auth_method ?? null,
+        clientId: result.clientId,
+        clientSecret: result.clientSecret,
+        tokenAuthMethod: result.tokenEndpointAuthMethod,
       };
-    },
-  );
-
-  const configureUserSessions = fromPromise<void, ConfigureUserSessionsInput>(
-    async ({ input, signal }) => {
-      await onboardExternalMcpToUserSessions({
-        client,
-        toolsetSlug: input.toolsetSlug,
-        toolsetName: input.toolsetName,
-        oauth: input.oauth,
-        options: { fetchOptions: { signal } },
-      });
     },
   );
 
@@ -234,7 +187,6 @@ export function createWizardServices(
     addOAuthProxy,
     deleteEnvironment,
     registerClient,
-    configureUserSessions,
   };
 }
 

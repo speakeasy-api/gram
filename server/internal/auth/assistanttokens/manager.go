@@ -46,6 +46,42 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+const mcpAuthFlowIssuer = "gram-assistants-mcp-auth-flow"
+
+type MCPAuthFlowInput struct {
+	OrgID         string
+	ProjectID     uuid.UUID
+	UserID        string
+	AssistantID   uuid.UUID
+	ThreadID      uuid.UUID
+	FlowID        string
+	ServerID      string
+	McpURL        string
+	ClientID      string
+	ClientSecret  string
+	RedirectURI   string
+	CodeVerifier  string
+	TokenEndpoint string
+	TTL           time.Duration
+}
+
+type MCPAuthFlowClaims struct {
+	OrgID         string `json:"org_id"`
+	ProjectID     string `json:"project_id"`
+	UserID        string `json:"user_id"`
+	AssistantID   string `json:"assistant_id"`
+	ThreadID      string `json:"thread_id"`
+	FlowID        string `json:"flow_id"`
+	ServerID      string `json:"server_id"`
+	McpURL        string `json:"mcp_url"`
+	ClientID      string `json:"client_id"`
+	ClientSecret  string `json:"client_secret,omitempty"`
+	RedirectURI   string `json:"redirect_uri"`
+	CodeVerifier  string `json:"code_verifier"`
+	TokenEndpoint string `json:"token_endpoint"`
+	jwt.RegisteredClaims
+}
+
 type GenerateInput struct {
 	OrgID       string
 	ProjectID   uuid.UUID
@@ -112,6 +148,94 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 		return "", fmt.Errorf("sign assistant token: %w", err)
 	}
 	return signed, nil
+}
+
+func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
+	now := time.Now()
+	ttl := input.TTL
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, MCPAuthFlowClaims{
+		OrgID:         input.OrgID,
+		ProjectID:     input.ProjectID.String(),
+		UserID:        input.UserID,
+		AssistantID:   input.AssistantID.String(),
+		ThreadID:      input.ThreadID.String(),
+		FlowID:        input.FlowID,
+		ServerID:      input.ServerID,
+		McpURL:        input.McpURL,
+		ClientID:      input.ClientID,
+		ClientSecret:  input.ClientSecret,
+		RedirectURI:   input.RedirectURI,
+		CodeVerifier:  input.CodeVerifier,
+		TokenEndpoint: input.TokenEndpoint,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    mcpAuthFlowIssuer,
+			Subject:   input.AssistantID.String(),
+			Audience:  nil,
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			NotBefore: nil,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ID:        input.FlowID,
+		},
+	})
+
+	signed, err := token.SignedString([]byte(m.jwtSecret))
+	if err != nil {
+		return "", fmt.Errorf("sign mcp auth flow token: %w", err)
+	}
+	return signed, nil
+}
+
+func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, error) {
+	tokenString = strings.TrimSpace(tokenString)
+	if tokenString == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	token, err := jwt.ParseWithClaims(tokenString, &MCPAuthFlowClaims{
+		OrgID:         "",
+		ProjectID:     "",
+		UserID:        "",
+		AssistantID:   "",
+		ThreadID:      "",
+		FlowID:        "",
+		ServerID:      "",
+		McpURL:        "",
+		ClientID:      "",
+		ClientSecret:  "",
+		RedirectURI:   "",
+		CodeVerifier:  "",
+		TokenEndpoint: "",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "",
+			Subject:   "",
+			Audience:  nil,
+			ExpiresAt: nil,
+			NotBefore: nil,
+			IssuedAt:  nil,
+			ID:        "",
+		},
+	}, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(m.jwtSecret), nil
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "invalid mcp auth flow token")
+	}
+
+	claims, ok := token.Claims.(*MCPAuthFlowClaims)
+	if !ok || !token.Valid {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "invalid mcp auth flow token")
+	}
+	if claims.Issuer != mcpAuthFlowIssuer {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "invalid mcp auth flow token issuer")
+	}
+	return claims, nil
 }
 
 func (m *Manager) Validate(tokenString string) (*Claims, error) {

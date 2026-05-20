@@ -20,6 +20,7 @@ type StubClient struct {
 	eventPages            [][]events.Event
 	eventCalls            []events.ListEventsOpts
 	userExternalIDUpdates []UserExternalIDUpdate
+	orgExternalIDUpdates  []OrgExternalIDUpdate
 	next                  int
 	nowFn                 func() time.Time
 }
@@ -27,6 +28,11 @@ type StubClient struct {
 type UserExternalIDUpdate struct {
 	WorkOSUserID string
 	ExternalID   string
+}
+
+type OrgExternalIDUpdate struct {
+	WorkOSOrgID string
+	ExternalID  string
 }
 
 type stubOrgState struct {
@@ -49,6 +55,7 @@ func NewStubClient() *StubClient {
 		eventPages:            nil,
 		eventCalls:            make([]events.ListEventsOpts, 0),
 		userExternalIDUpdates: make([]UserExternalIDUpdate, 0),
+		orgExternalIDUpdates:  make([]OrgExternalIDUpdate, 0),
 		next:                  1,
 		nowFn:                 time.Now,
 	}
@@ -118,6 +125,13 @@ func (s *StubClient) UserExternalIDUpdates() []UserExternalIDUpdate {
 	defer s.mut.Unlock()
 
 	return append([]UserExternalIDUpdate(nil), s.userExternalIDUpdates...)
+}
+
+func (s *StubClient) OrgExternalIDUpdates() []OrgExternalIDUpdate {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]OrgExternalIDUpdate(nil), s.orgExternalIDUpdates...)
 }
 
 func (s *StubClient) ListEvents(_ context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
@@ -282,6 +296,29 @@ func (s *StubClient) UpdateUserExternalID(_ context.Context, workosUserID, exter
 	defer s.mut.Unlock()
 
 	s.userExternalIDUpdates = append(s.userExternalIDUpdates, UserExternalIDUpdate{WorkOSUserID: workosUserID, ExternalID: externalID})
+	return nil
+}
+
+func (s *StubClient) UpdateOrganizationExternalID(_ context.Context, workosOrgID, externalID string) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(workosOrgID)
+	state.organization.ExternalID = externalID
+	s.orgExternalIDUpdates = append(s.orgExternalIDUpdates, OrgExternalIDUpdate{WorkOSOrgID: workosOrgID, ExternalID: externalID})
+	return nil
+}
+
+func (s *StubClient) EnsureOrgExternalID(_ context.Context, workosOrgID, gramOrgID string) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(workosOrgID)
+	if state.organization.ExternalID != "" && state.organization.ExternalID != gramOrgID {
+		return fmt.Errorf("workos org %s external_id mismatch: got %q, want %q", workosOrgID, state.organization.ExternalID, gramOrgID)
+	}
+	state.organization.ExternalID = gramOrgID
+	s.orgExternalIDUpdates = append(s.orgExternalIDUpdates, OrgExternalIDUpdate{WorkOSOrgID: workosOrgID, ExternalID: gramOrgID})
 	return nil
 }
 

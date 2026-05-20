@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // runWellKnown invokes the supplied xmcp well-known handler with the chi
@@ -258,6 +259,95 @@ func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithExternalOAuth(t *t
 	require.Equal(t, "https://test-oauth-server.example.com", metadata["issuer"])
 }
 
+// TestHandleWellKnownOAuthServerMetadata_IssuerGatedRemoteBackend verifies
+// the well-known authorization-server handler dispatches issuer-gated
+// remote-backed mcp_servers through mcp.Service.ServeGetAuthorizationServer
+// (previously a 404). The advertised issuer + endpoint URLs are rooted
+// at /x/mcp/<slug>, pointing MCP clients at the matching OAuth handler
+// family registered by xmcp.Attach.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGatedRemoteBackend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+
+	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+
+	expectedIssuer := "http://0.0.0.0/x/mcp/" + slug
+	require.Equal(t, expectedIssuer, metadata["issuer"])
+	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
+	require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
+	require.Equal(t, expectedIssuer+"/register", metadata["registration_endpoint"])
+	require.Equal(t, expectedIssuer+"/revoke", metadata["revocation_endpoint"])
+}
+
+// TestHandleWellKnownOAuthServerMetadata_IssuerGatedToolsetBackend mirrors
+// the remote-backed test for the toolset backend. The xmcp wellknown
+// handler branches on backend after the issuer check, so both backends
+// need their own coverage to catch a regression that swaps the branches.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGatedToolsetBackend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, _, _ := seedIssuerGatedToolsetMCPEndpoint(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "public")
+
+	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+
+	expectedIssuer := "http://0.0.0.0/x/mcp/" + slug
+	require.Equal(t, expectedIssuer, metadata["issuer"])
+	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
+}
+
+// TestHandleWellKnownOAuthServerMetadata_IssuerGatedRemoteBackend_DanglingIssuerFKReturnsNotFound
+// covers the race window where the user_session_issuer FK target has been
+// deleted between mcp_servers row resolution and metadata emission.
+// Symmetric to TestRequireUserSessionIssuer_DanglingFKReturnsNotFound but
+// exercises the wellknown surface rather than ServeMCP.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGatedRemoteBackend_DanglingIssuerFKReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, _, issuerID := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+
+	// Sanity check: well-known resolves cleanly before deletion.
+	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	_, err = usersessions_repo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessions_repo.DeleteUserSessionIssuerParams{
+		ID:        issuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	w, err = runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
+	require.Error(t, err, "dangling issuer FK must surface as a request-level error")
+	require.Contains(t, err.Error(), "user_session_issuer not found")
+	require.Empty(t, w.Body.String())
+}
+
 // ---------------------------------------------------------------------------
 // HandleWellKnownOAuthProtectedResourceMetadata
 // ---------------------------------------------------------------------------
@@ -424,4 +514,96 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithExterna
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
 	require.Equal(t, "http://0.0.0.0/x/mcp/"+slug, metadata["resource"])
+}
+
+// TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend
+// verifies the well-known protected-resource handler dispatches issuer-
+// gated remote-backed mcp_servers through the new mcp.Service.ServeGetProtectedResource
+// path instead of returning 404. The emitted resource URL is the runtime
+// URL the caller is actually addressing (`<baseURL>/x/mcp/<slug>`), and
+// authorization_servers points at the same root so discovery loops back
+// to the AS metadata.
+func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+
+	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+
+	expectedResource := "http://0.0.0.0/x/mcp/" + slug
+	require.Equal(t, expectedResource, metadata["resource"])
+
+	authServers, ok := metadata["authorization_servers"].([]any)
+	require.True(t, ok)
+	require.Equal(t, []any{expectedResource}, authServers)
+}
+
+// TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedToolsetBackend
+// is the toolset companion of the remote-backed test above.
+func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedToolsetBackend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, _, _ := seedIssuerGatedToolsetMCPEndpoint(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "public")
+
+	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+	require.Equal(t, "http://0.0.0.0/x/mcp/"+slug, metadata["resource"])
+}
+
+// TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend_OnCustomDomain
+// asserts that an issuer-gated mcp_endpoint registered against a custom
+// domain emits `https://<domain>/x/mcp/<slug>` as both resource and
+// authorization_servers entry. Catches a regression that would otherwise
+// emit the platform serverURL when the request arrived on a custom
+// domain — clients reject discovery responses whose host doesn't match
+// the resource they were directed to.
+func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend_OnCustomDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	domain := seedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, "xmcp-issuer-cd-"+uuid.NewString()[:8]+".example.com")
+	slug, _, _ := seedIssuerGatedRemoteMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
+
+	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+
+	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+
+	expectedResource := "https://" + domain.Domain + "/x/mcp/" + slug
+	require.Equal(t, expectedResource, metadata["resource"])
+	authServers, ok := metadata["authorization_servers"].([]any)
+	require.True(t, ok)
+	require.Equal(t, []any{expectedResource}, authServers)
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -50,7 +51,7 @@ func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, even
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomainV1})
 }
 
 type LogCustomDomainDeleteEvent struct {
@@ -88,5 +89,5 @@ func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, even
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomainV1})
 }

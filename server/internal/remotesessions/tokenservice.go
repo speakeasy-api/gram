@@ -42,6 +42,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// newTokenEndpointRequest assembles a request and handles encoding
+// credentials based on the configuration set by the client.
+func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) (*http.Request, error) {
+	if clientSecret != "" && method == TokenEndpointAuthMethodPost {
+		form.Set("client_secret", clientSecret)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("build token endpoint request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	if clientSecret != "" && method == TokenEndpointAuthMethodBasic {
+		req.SetBasicAuth(clientID, clientSecret)
+	}
+	return req, nil
+}
+
 // ErrNoValidToken signals "there is a remote-session requirement for
 // this toolset but the subject has no usable token." Callers (the MCP
 // runtime) surface this as a fresh auth challenge so the user can
@@ -185,19 +203,19 @@ func (m *ChallengeManager) refreshAccessToken(
 		}
 	}
 
+	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
+
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", refreshToken)
 	form.Set("client_id", client.ExternalClientID)
+	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
+		form.Set("audience", audience)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, client.TokenEndpoint.String, strings.NewReader(form.Encode()))
+	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {
 		return "", fmt.Errorf("new refresh request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	if clientSecret != "" {
-		req.SetBasicAuth(client.ExternalClientID, clientSecret)
 	}
 
 	resp, err := m.policy.PooledClient().Do(req)

@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -163,119 +162,6 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	}
 
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
-}
-
-// RegisterRemoteSessionIssuer performs an RFC 7591 Dynamic Client Registration
-// against an existing issuer's registration_endpoint and persists the issued
-// credentials as a new remote_session_client. The look-up, DCR call, insert,
-// and audit log all run inside a single transaction; any failure rolls back.
-func (s *Service) RegisterRemoteSessionIssuer(ctx context.Context, payload *gen.RegisterRemoteSessionIssuerPayload) (*types.RemoteSessionClient, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-
-	issuerID, err := uuid.Parse(payload.RemoteSessionIssuerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_issuer_id").Log(ctx, logger)
-	}
-
-	userIssuerID, err := uuid.Parse(payload.UserSessionIssuerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").Log(ctx, logger)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txRepo := repo.New(dbtx)
-
-	issuer, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:        issuerID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").Log(ctx, logger)
-	}
-
-	regEndpoint := conv.FromPGTextOrEmpty[string](issuer.RegistrationEndpoint)
-	if regEndpoint == "" {
-		return nil, oops.E(oops.CodeNotFound, nil, "issuer has no registration_endpoint configured").Log(ctx, logger)
-	}
-
-	clientName := conv.PtrValOrEmpty(payload.ClientName, "")
-
-	dcrResp, err := registerClientViaDCR(ctx, s.policy, dcrParams{
-		RegistrationEndpoint: regEndpoint,
-		Scopes:               issuer.ScopesSupported,
-		ClientName:           clientName,
-		RedirectURIs:         payload.RedirectUris,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "dynamic client registration failed").Log(ctx, logger)
-	}
-
-	var (
-		secretCiphertext pgtype.Text
-		issuedAt         pgtype.Timestamptz
-		expiresAt        pgtype.Timestamptz
-	)
-	if dcrResp.ClientSecret != "" {
-		encrypted, encErr := s.enc.Encrypt([]byte(dcrResp.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").Log(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(encrypted)
-	}
-	if dcrResp.ClientIDIssuedAt > 0 {
-		issuedAt = conv.ToPGTimestamptz(time.Unix(dcrResp.ClientIDIssuedAt, 0).UTC())
-	}
-	if dcrResp.ClientSecretExpiresAt > 0 {
-		expiresAt = conv.ToPGTimestamptz(time.Unix(dcrResp.ClientSecretExpiresAt, 0).UTC())
-	}
-
-	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:             *authCtx.ProjectID,
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
-		ClientID:              dcrResp.ClientID,
-		ClientSecretEncrypted: secretCiphertext,
-		ClientIDIssuedAt:      issuedAt,
-		ClientSecretExpiresAt: expiresAt,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)
-	}
-
-	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:       authCtx.Email,
-		ActorSlug:              nil,
-		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
-		ClientID:               created.ClientID,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log remote session client creation").Log(ctx, logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
-	}
-
-	return mv.BuildRemoteSessionClientView(created), nil
 }
 
 // UpdateRemoteSessionIssuer applies an optional patch to an existing

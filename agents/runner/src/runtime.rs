@@ -10,7 +10,7 @@ use agentkit_loop::{
     PromptCacheRetention, SessionConfig,
 };
 use agentkit_mcp::{
-    McpServerConfig, McpServerId, McpServerManager, McpTransportBinding,
+    McpError, McpServerConfig, McpServerId, McpServerManager, McpTransportBinding,
     StreamableHttpTransportConfig,
 };
 use agentkit_provider_openrouter::{OpenRouterConfig, OpenRouterProvider};
@@ -278,7 +278,8 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    let (mcp_cmd_tx, mcp_catalog) = build_thread_mcp(host, &bootstrap.mcp_servers, &tokens).await?;
+    let (mcp_cmd_tx, mcp_catalog, mcp_auth_notices) =
+        build_thread_mcp(host, &thread_id, &bootstrap.mcp_servers, &tokens).await?;
 
     let chat_id = bootstrap.chat_id.clone();
 
@@ -345,6 +346,9 @@ async fn spawn_thread(
         transcript.push(Item::text(ItemKind::System, &bootstrap.instructions));
     }
     transcript.extend(normalize_history(&bootstrap.history)?);
+    for notice in mcp_auth_notices {
+        transcript.push(Item::text(ItemKind::User, &notice));
+    }
 
     let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
         PathPolicy::new()
@@ -358,10 +362,7 @@ async fn spawn_thread(
 
     let mcp_server_ids: Vec<String> = bootstrap.mcp_servers.iter().map(|s| s.id.clone()).collect();
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(
-            Arc::clone(host),
-            mcp_server_ids,
-        ),
+        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host), mcp_server_ids),
     );
 
     let mcp_source = ClippedToolSource::new(mcp_catalog, host.spill_root.clone());
@@ -436,29 +437,56 @@ async fn spawn_thread(
 
 async fn build_thread_mcp(
     host: &Arc<RuntimeHost>,
+    thread_id: &str,
     servers: &[McpServer],
     tokens: &TokenRegistry,
-) -> Result<(mpsc::Sender<McpCmd>, CatalogReader), RunnerError> {
+) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, Vec<String>), RunnerError> {
     let mut manager = McpServerManager::new();
     let catalog = manager.source();
+    let mut auth_notices = Vec::new();
 
     for server in servers {
         let config = build_mcp_server_config(server, &host.http_client, tokens)?;
         let server_id = McpServerId::new(server.id.clone());
         manager.register_server(config);
-        let _ = connect_and_log(&mut manager, &server_id, "register").await;
+        if let Err(err) = connect_and_log(&mut manager, &server_id, "register").await
+            && err.auth_required
+        {
+            match host
+                .gram_client
+                .create_mcp_auth_flow(thread_id, &server.id, &server.url, tokens)
+                .await
+            {
+                Ok(flow) => auth_notices.push(format!(
+                    "<message-context>\nEventType: assistant_mcp_auth_required\nMCPServerID: {server_id}\nMCPSlug: {mcp_slug}\nAuthURL: {auth_url}\n</message-context>",
+                    server_id = flow.server_id,
+                    mcp_slug = flow.mcp_slug,
+                    auth_url = flow.auth_url,
+                )),
+                Err(flow_err) => tracing::warn!(
+                    server_id = %server_id,
+                    error = %flow_err,
+                    "failed to create assistant mcp auth flow"
+                ),
+            }
+        }
     }
 
     let (cmd_tx, cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
     tokio::spawn(run_mcp_actor(manager, cmd_rx));
-    Ok((cmd_tx, catalog))
+    Ok((cmd_tx, catalog, auth_notices))
+}
+
+struct McpConnectFailure {
+    message: String,
+    auth_required: bool,
 }
 
 async fn connect_and_log(
     manager: &mut McpServerManager,
     server_id: &McpServerId,
     action: &'static str,
-) -> Result<(), String> {
+) -> Result<(), McpConnectFailure> {
     match manager.connect_server(server_id).await {
         Ok(handle) => {
             tracing::info!(
@@ -470,8 +498,12 @@ async fn connect_and_log(
             Ok(())
         }
         Err(e) => {
+            let auth_required = matches!(e, McpError::AuthRequired(_));
             tracing::warn!(server_id = %server_id, error = %e, action, "mcp connect failed");
-            Err(e.to_string())
+            Err(McpConnectFailure {
+                message: e.to_string(),
+                auth_required,
+            })
         }
     }
 }
@@ -517,7 +549,9 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
                 if let Err(e) = manager.disconnect_server(&server_id).await {
                     tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
                 }
-                let result = connect_and_log(&mut manager, &server_id, "force_reconnect").await;
+                let result = connect_and_log(&mut manager, &server_id, "force_reconnect")
+                    .await
+                    .map_err(|err| err.message);
                 let _ = reply.send(result);
             }
         }
@@ -737,10 +771,14 @@ mod tests {
     async fn evict_thread_clears_seen_keys_with_prefix() {
         let host = empty_host();
         insert_thread(&host, "T", Some(Instant::now()));
-        host.seen
-            .insert("T:evt-1".to_string(), Arc::new(tokio::sync::Mutex::new(true)));
-        host.seen
-            .insert("T:evt-2".to_string(), Arc::new(tokio::sync::Mutex::new(true)));
+        host.seen.insert(
+            "T:evt-1".to_string(),
+            Arc::new(tokio::sync::Mutex::new(true)),
+        );
+        host.seen.insert(
+            "T:evt-2".to_string(),
+            Arc::new(tokio::sync::Mutex::new(true)),
+        );
         host.seen.insert(
             "other:evt-1".to_string(),
             Arc::new(tokio::sync::Mutex::new(true)),
