@@ -464,7 +464,6 @@ func (m *ChallengeManager) exchangeCode(
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
 	form.Set("redirect_uri", state.RedirectURI)
-	form.Set("client_id", externalClientID)
 	form.Set("code_verifier", state.CodeVerifier)
 	if audience != "" {
 		form.Set("audience", audience)
@@ -485,6 +484,7 @@ func (m *ChallengeManager) exchangeCode(
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("read token response body: %w", err)
 	}
+
 	if resp.StatusCode/100 != 2 {
 		return tokenResponse{}, fmt.Errorf("token endpoint %s: %s", resp.Status, string(body))
 	}

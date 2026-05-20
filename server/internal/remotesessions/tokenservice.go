@@ -42,9 +42,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// newTokenEndpointRequest assembles a request and handles encoding
-// credentials based on the configuration set by the client.
+// newTokenEndpointRequest places client_id/client_secret per the
+// registered auth method. With client_secret_basic, client_id is NOT
+// echoed in the form body — WorkOS-fronted token endpoints return
+// "unauthorized" when client_id appears in both Basic auth and the body.
 func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) (*http.Request, error) {
+	useBasic := clientSecret != "" && method == TokenEndpointAuthMethodBasic
+	if !useBasic {
+		form.Set("client_id", clientID)
+	}
 	if clientSecret != "" && method == TokenEndpointAuthMethodPost {
 		form.Set("client_secret", clientSecret)
 	}
@@ -54,7 +60,7 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	if clientSecret != "" && method == TokenEndpointAuthMethodBasic {
+	if useBasic {
 		req.SetBasicAuth(clientID, clientSecret)
 	}
 	return req, nil
@@ -208,7 +214,6 @@ func (m *ChallengeManager) refreshAccessToken(
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", refreshToken)
-	form.Set("client_id", client.ExternalClientID)
 	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
 		form.Set("audience", audience)
 	}

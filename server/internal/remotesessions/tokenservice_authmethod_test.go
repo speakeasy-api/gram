@@ -190,6 +190,7 @@ func TestResolveAccessToken_RefreshUsesClientSecretBasic(t *testing.T) {
 	require.Equal(t, "refreshed-access", tok)
 
 	require.Empty(t, spy.form.Get("client_secret"), "client_secret_basic must not echo secret in the body")
+	require.Empty(t, spy.form.Get("client_id"), "client_secret_basic must not duplicate client_id in the body — WorkOS rejects it")
 	require.True(t, strings.HasPrefix(spy.authHdr, "Basic "), "client_secret_basic uses Authorization: Basic")
 }
 

@@ -31,6 +31,7 @@ export async function proxyRegisterUpstreamClient(
   const response = await authedFetch("/oauth/proxy-register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(body),
     signal,
   });
