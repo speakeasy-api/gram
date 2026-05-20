@@ -1,3 +1,4 @@
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Type } from "@/components/ui/type";
@@ -17,103 +18,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRoutes } from "@/routes";
-import { Eye, EyeOff, Shield, ShieldOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useCallback, useMemo, useState } from "react";
+import { Shield, ShieldOff } from "lucide-react";
+import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  invalidateAllRiskListResults,
   useRiskApproveShadowMCPMutation,
   useRiskListPolicies,
   invalidateAllRiskListShadowMCPApprovals,
 } from "@gram/client/react-query/index.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
-import {
-  DETECTION_RULES,
-  RULE_CATEGORY_META,
-  type RuleCategory,
-} from "./policy-data";
-import { humanizeRuleId } from "./rule-ids";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { MetricCard } from "@/components/chart/MetricCard";
-import { Button as MoonshineButton, Icon } from "@speakeasy-api/moonshine";
-
-// DETECTION_RULES.id is the canonical rule_id the backend writes to
-// risk_results, so lookup maps key by it directly.
-const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
-const RULE_ID_TO_TITLE = new Map<string, string>();
-for (const [category, rules] of Object.entries(DETECTION_RULES)) {
-  for (const rule of rules) {
-    RULE_ID_TO_CATEGORY.set(rule.id, category as RuleCategory);
-    RULE_ID_TO_TITLE.set(rule.id, rule.title);
-  }
-}
-
-const SOURCE_TO_CATEGORY = new Map<string, RuleCategory>([
-  ["destructive_tool", "destructive_tool"],
-  ["shadow_mcp", "shadow_mcp"],
-  ["prompt_injection", "prompt_injection"],
-  ["cli_destructive", "cli_destructive"],
-]);
-
-function getCategoryForFinding(
-  source: string | undefined,
-  ruleId: string | undefined,
-): RuleCategory | null {
-  if (ruleId) {
-    const byRule = RULE_ID_TO_CATEGORY.get(ruleId);
-    if (byRule) return byRule;
-  }
-  if (source) {
-    return SOURCE_TO_CATEGORY.get(source) ?? null;
-  }
-  return null;
-}
-
-function getRuleTitleFallback(ruleId: string | undefined): string {
-  if (!ruleId) return "-";
-  return RULE_ID_TO_TITLE.get(ruleId) ?? humanizeRuleId(ruleId);
-}
-
-function CategoryLabel({
-  source,
-  ruleId,
-}: {
-  source?: string;
-  ruleId?: string;
-}) {
-  const category = getCategoryForFinding(source, ruleId);
-  if (category) {
-    return (
-      <span className="font-mono text-xs">
-        {RULE_CATEGORY_META[category].label}
-      </span>
-    );
-  }
-  // Unknown source: title-case it so the table cell still reads cleanly
-  // (e.g. a future "presidio_pro" source renders as "Presidio Pro").
-  return (
-    <span className="font-mono text-xs">
-      {source ? humanizeRuleId(source.replace(/_/g, "-")) : "-"}
-    </span>
-  );
-}
-
-// Renders a rule id with a tooltip-quality fallback when the dashboard
-// hasn't seen this rule before. The backend may roll out new gitleaks,
-// presidio, or prompt_injection rules independently of the dashboard, so
-// every snake_case id needs to display legibly without a code change.
-function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
-  if (!ruleId) return <span className="font-mono text-xs">-</span>;
-  const title = getRuleTitleFallback(ruleId);
-  return (
-    <span className="font-mono text-xs" title={ruleId}>
-      {title}
-    </span>
-  );
-}
+import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-ui";
 
 export default function SecurityOverview() {
   return (
@@ -127,48 +47,6 @@ export default function SecurityOverview() {
         </Page.Body>
       </Page>
     </RequireScope>
-  );
-}
-
-function MaskedMatch({ value }: { value: string | undefined }) {
-  const [revealed, setRevealed] = useState(false);
-
-  if (!value) return <span>-</span>;
-
-  if (!revealed) {
-    return (
-      <button
-        type="button"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
-        onClick={(e) => {
-          e.stopPropagation();
-          setRevealed(true);
-        }}
-      >
-        <EyeOff className="h-3 w-3" />
-        <span>Click to reveal</span>
-      </button>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="font-mono text-xs">
-        {value.length > 40
-          ? `${value.slice(0, 20)}...${value.slice(-10)}`
-          : value}
-      </span>
-      <button
-        type="button"
-        className="text-muted-foreground hover:text-foreground"
-        onClick={(e) => {
-          e.stopPropagation();
-          setRevealed(false);
-        }}
-      >
-        <Eye className="h-3 w-3" />
-      </button>
-    </span>
   );
 }
 
@@ -241,6 +119,7 @@ function SecurityOverviewContent() {
             queryClient.invalidateQueries({
               queryKey: ["risk", "results", "list"],
             });
+            invalidateAllRiskListResults(queryClient);
             invalidateAllRiskListShadowMCPApprovals(queryClient);
           },
           onError: (err) => {
@@ -315,15 +194,15 @@ function SecurityOverviewContent() {
           project
         </Page.Section.Description>
         <Page.Section.CTA>
-          <MoonshineButton
+          <Button
             variant="secondary"
             onClick={() => routes.policyCenter.goTo()}
           >
-            <MoonshineButton.Text>Manage Policies</MoonshineButton.Text>
-            <MoonshineButton.RightIcon>
+            <Button.Text>Manage Policies</Button.Text>
+            <Button.RightIcon>
               <Icon name="arrow-right" />
-            </MoonshineButton.RightIcon>
-          </MoonshineButton>
+            </Button.RightIcon>
+          </Button>
         </Page.Section.CTA>
         <Page.Section.Body>
           <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
@@ -363,15 +242,15 @@ function SecurityOverviewContent() {
         </Page.Section.Description>
 
         <Page.Section.CTA>
-          <MoonshineButton
+          <Button
             variant="secondary"
             onClick={() => routes.policyCenter.goTo()}
           >
-            <MoonshineButton.Text>Manage Policies</MoonshineButton.Text>
-            <MoonshineButton.RightIcon>
+            <Button.Text>Manage Policies</Button.Text>
+            <Button.RightIcon>
               <Icon name="arrow-right" />
-            </MoonshineButton.RightIcon>
-          </MoonshineButton>
+            </Button.RightIcon>
+          </Button>
         </Page.Section.CTA>
 
         <Page.Section.Body>
@@ -439,7 +318,7 @@ function SecurityOverviewContent() {
                 {chatSummaryQuery.hasNextPage && (
                   <div className="flex justify-center">
                     <Button
-                      variant="ghost"
+                      variant="tertiary"
                       size="sm"
                       disabled={chatSummaryQuery.isFetchingNextPage}
                       onClick={() => chatSummaryQuery.fetchNextPage()}
@@ -557,7 +436,7 @@ function SecurityOverviewContent() {
                                   reason="Only organization admins can exclude MCP servers from a policy."
                                 >
                                   <Button
-                                    variant="ghost"
+                                    variant="tertiary"
                                     size="sm"
                                     disabled={approveMutation.isPending}
                                     onClick={(e) => {
@@ -584,7 +463,7 @@ function SecurityOverviewContent() {
                 {resultsQuery.hasNextPage && (
                   <div className="flex justify-center">
                     <Button
-                      variant="ghost"
+                      variant="tertiary"
                       size="sm"
                       disabled={resultsQuery.isFetchingNextPage}
                       onClick={() => resultsQuery.fetchNextPage()}
