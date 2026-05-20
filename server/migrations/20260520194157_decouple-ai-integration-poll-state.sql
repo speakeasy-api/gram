@@ -13,10 +13,6 @@ ALTER TABLE "ai_integration_syncs"
   ADD COLUMN "last_poll_success_at" timestamptz,
   ADD COLUMN "consecutive_failures" integer NOT NULL DEFAULT 0;
 
--- Existing rows should preserve the old hourly cadence after the split.
-UPDATE "ai_integration_syncs"
-SET "next_poll_after" = "poll_watermark_at" + INTERVAL '1 hour';
-
 -- Future inserts use clock_timestamp() so newly-onboarded configs are
 -- immediately eligible to poll.
 ALTER TABLE "ai_integration_syncs"
