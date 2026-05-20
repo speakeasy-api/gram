@@ -8,7 +8,7 @@ use crate::http_layer::TokenRegistry;
 use crate::wire::ThreadBootstrap;
 
 const BOOTSTRAP_PATH: &str = "/rpc/assistants.getThreadBootstrap";
-const CREATE_MCP_AUTH_FLOW_PATH: &str = "/rpc/assistant-mcp-auth.create";
+const CREATE_MCP_AUTH_FLOW_PATH: &str = "/rpc/assistantMcpAuth.create";
 const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Lightweight client used by the runner to pull a per-thread bootstrap

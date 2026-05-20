@@ -56,8 +56,9 @@ type MCPAuthFlowInput struct {
 	ThreadID      uuid.UUID
 	FlowID        string
 	ServerID      string
-	McpSlug       string
+	McpURL        string
 	ClientID      string
+	ClientSecret  string
 	RedirectURI   string
 	CodeVerifier  string
 	TokenEndpoint string
@@ -72,8 +73,9 @@ type MCPAuthFlowClaims struct {
 	ThreadID      string `json:"thread_id"`
 	FlowID        string `json:"flow_id"`
 	ServerID      string `json:"server_id"`
-	McpSlug       string `json:"mcp_slug"`
+	McpURL        string `json:"mcp_url"`
 	ClientID      string `json:"client_id"`
+	ClientSecret  string `json:"client_secret,omitempty"`
 	RedirectURI   string `json:"redirect_uri"`
 	CodeVerifier  string `json:"code_verifier"`
 	TokenEndpoint string `json:"token_endpoint"`
@@ -163,8 +165,9 @@ func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 		ThreadID:      input.ThreadID.String(),
 		FlowID:        input.FlowID,
 		ServerID:      input.ServerID,
-		McpSlug:       input.McpSlug,
+		McpURL:        input.McpURL,
 		ClientID:      input.ClientID,
+		ClientSecret:  input.ClientSecret,
 		RedirectURI:   input.RedirectURI,
 		CodeVerifier:  input.CodeVerifier,
 		TokenEndpoint: input.TokenEndpoint,
@@ -200,8 +203,9 @@ func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, e
 		ThreadID:      "",
 		FlowID:        "",
 		ServerID:      "",
-		McpSlug:       "",
+		McpURL:        "",
 		ClientID:      "",
+		ClientSecret:  "",
 		RedirectURI:   "",
 		CodeVerifier:  "",
 		TokenEndpoint: "",
