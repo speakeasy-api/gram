@@ -633,3 +633,10 @@ RETURNING id, svix_app_id, webhooks_enabled;
 SELECT svix_app_id
 FROM organization_metadata
 WHERE id = @id AND svix_app_id IS NOT NULL;
+
+-- name: ListActiveRoleAssignmentsByOrganization :many
+SELECT user_id, role_urn
+FROM organization_role_assignments
+WHERE organization_id = @organization_id
+  AND user_id IS NOT NULL
+  AND deleted_at IS NULL;

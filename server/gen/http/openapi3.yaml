@@ -34189,6 +34189,50 @@ components:
                     description: Selector constraints. Null means unrestricted.
             required:
                 - scope
+        RoleSummary:
+            type: object
+            properties:
+                cost_per_user:
+                    type: number
+                    description: Average cost per user
+                    format: double
+                role_id:
+                    type: string
+                    description: Role identifier extracted from role URN
+                total_chats:
+                    type: integer
+                    description: Total chat sessions across all users
+                    format: int64
+                total_cost:
+                    type: number
+                    description: Total cost across all users with this role
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Sum of input tokens across all users
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Sum of output tokens across all users
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Sum of all tokens across all users
+                    format: int64
+                user_count:
+                    type: integer
+                    description: Number of users with this role
+                    format: int64
+            description: Aggregated usage summary for a role
+            required:
+                - role_id
+                - user_count
+                - total_cost
+                - cost_per_user
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
+                - total_chats
         ScopeDefinition:
             type: object
             properties:
@@ -34517,6 +34561,13 @@ components:
                     description: Cursor for pagination (user identifier from last item)
                 filter:
                     $ref: '#/components/schemas/SearchUsersFilter'
+                group_by:
+                    type: string
+                    description: Grouping dimension for results
+                    default: employee
+                    enum:
+                        - employee
+                        - role
                 limit:
                     type: integer
                     description: Number of items to return (1-1000)
@@ -34547,11 +34598,16 @@ components:
                 next_cursor:
                     type: string
                     description: Cursor for next page
+                roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleSummary'
+                    description: List of role usage summaries (populated when group_by=role)
                 users:
                     type: array
                     items:
                         $ref: '#/components/schemas/UserSummary'
-                    description: List of user usage summaries
+                    description: List of user usage summaries (populated when group_by=employee)
             description: Result of searching user usage summaries
             required:
                 - users

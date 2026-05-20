@@ -283,6 +283,7 @@ export * from "./riskpolicystatus.js";
 export * from "./riskresult.js";
 export * from "./role.js";
 export * from "./rolegrant.js";
+export * from "./rolesummary.js";
 export * from "./scopedefinition.js";
 export * from "./searchchatsfilter.js";
 export * from "./searchchatspayload.js";

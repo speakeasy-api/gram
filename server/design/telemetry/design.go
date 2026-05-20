@@ -691,6 +691,10 @@ var SearchUsersPayload = Type("SearchUsersPayload", func() {
 	Attribute("user_type", String, "Type of user identifier to group by", func() {
 		Enum("internal", "external")
 	})
+	Attribute("group_by", String, "Grouping dimension for results", func() {
+		Enum("employee", "role")
+		Default("employee")
+	})
 	Attribute("cursor", String, "Cursor for pagination (user identifier from last item)")
 	Attribute("sort", String, "Sort order", func() {
 		Enum("asc", "desc")
@@ -708,10 +712,35 @@ var SearchUsersPayload = Type("SearchUsersPayload", func() {
 var SearchUsersResult = Type("SearchUsersResult", func() {
 	Description("Result of searching user usage summaries")
 
-	Attribute("users", ArrayOf(UserSummaryType), "List of user usage summaries")
+	Attribute("users", ArrayOf(UserSummaryType), "List of user usage summaries (populated when group_by=employee)")
+	Attribute("roles", ArrayOf(RoleSummaryType), "List of role usage summaries (populated when group_by=role)")
 	Attribute("next_cursor", String, "Cursor for next page")
 
 	Required("users")
+})
+
+var RoleSummaryType = Type("RoleSummary", func() {
+	Description("Aggregated usage summary for a role")
+
+	Attribute("role_id", String, "Role identifier extracted from role URN")
+	Attribute("user_count", Int, "Number of users with this role")
+	Attribute("total_cost", Float64, "Total cost across all users with this role")
+	Attribute("cost_per_user", Float64, "Average cost per user")
+	Attribute("total_input_tokens", Int64, "Sum of input tokens across all users")
+	Attribute("total_output_tokens", Int64, "Sum of output tokens across all users")
+	Attribute("total_tokens", Int64, "Sum of all tokens across all users")
+	Attribute("total_chats", Int64, "Total chat sessions across all users")
+
+	Required(
+		"role_id",
+		"user_count",
+		"total_cost",
+		"cost_per_user",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"total_chats",
+	)
 })
 
 var UserSummaryType = Type("UserSummary", func() {

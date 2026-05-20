@@ -602,6 +602,26 @@ type ProjectSummary struct {
 	Tools []*ToolUsage
 }
 
+// Aggregated usage summary for a role
+type RoleSummary struct {
+	// Role identifier extracted from role URN
+	RoleID string
+	// Number of users with this role
+	UserCount int
+	// Total cost across all users with this role
+	TotalCost float64
+	// Average cost per user
+	CostPerUser float64
+	// Sum of input tokens across all users
+	TotalInputTokens int64
+	// Sum of output tokens across all users
+	TotalOutputTokens int64
+	// Sum of all tokens across all users
+	TotalTokens int64
+	// Total chat sessions across all users
+	TotalChats int64
+}
+
 // Filter criteria for searching chat sessions
 type SearchChatsFilter struct {
 	// Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -779,6 +799,8 @@ type SearchUsersPayload struct {
 	Filter *SearchUsersFilter
 	// Type of user identifier to group by
 	UserType string
+	// Grouping dimension for results
+	GroupBy string
 	// Cursor for pagination (user identifier from last item)
 	Cursor *string
 	// Sort order
@@ -790,8 +812,10 @@ type SearchUsersPayload struct {
 // SearchUsersResult is the result type of the telemetry service searchUsers
 // method.
 type SearchUsersResult struct {
-	// List of user usage summaries
+	// List of user usage summaries (populated when group_by=employee)
 	Users []*UserSummary
+	// List of role usage summaries (populated when group_by=role)
+	Roles []*RoleSummary
 	// Cursor for next page
 	NextCursor *string
 }

@@ -703,6 +703,39 @@ func (q *Queries) LinkRoleAssignmentsToUser(ctx context.Context, arg LinkRoleAss
 	return err
 }
 
+const listActiveRoleAssignmentsByOrganization = `-- name: ListActiveRoleAssignmentsByOrganization :many
+SELECT user_id, role_urn
+FROM organization_role_assignments
+WHERE organization_id = $1
+  AND user_id IS NOT NULL
+  AND deleted_at IS NULL
+`
+
+type ListActiveRoleAssignmentsByOrganizationRow struct {
+	UserID  pgtype.Text
+	RoleUrn string
+}
+
+func (q *Queries) ListActiveRoleAssignmentsByOrganization(ctx context.Context, organizationID string) ([]ListActiveRoleAssignmentsByOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listActiveRoleAssignmentsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveRoleAssignmentsByOrganizationRow
+	for rows.Next() {
+		var i ListActiveRoleAssignmentsByOrganizationRow
+		if err := rows.Scan(&i.UserID, &i.RoleUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationRoleAssignmentsByWorkOSUser = `-- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at
 FROM organization_role_assignments

@@ -66,6 +66,8 @@ type SearchUsersRequestBody struct {
 	Filter *SearchUsersFilterRequestBody `form:"filter,omitempty" json:"filter,omitempty" xml:"filter,omitempty"`
 	// Type of user identifier to group by
 	UserType *string `form:"user_type,omitempty" json:"user_type,omitempty" xml:"user_type,omitempty"`
+	// Grouping dimension for results
+	GroupBy *string `form:"group_by,omitempty" json:"group_by,omitempty" xml:"group_by,omitempty"`
 	// Cursor for pagination (user identifier from last item)
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Sort order
@@ -229,8 +231,10 @@ type SearchChatsResponseBody struct {
 // SearchUsersResponseBody is the type of the "telemetry" service "searchUsers"
 // endpoint HTTP response body.
 type SearchUsersResponseBody struct {
-	// List of user usage summaries
+	// List of user usage summaries (populated when group_by=employee)
 	Users []*UserSummaryResponseBody `form:"users" json:"users" xml:"users"`
+	// List of role usage summaries (populated when group_by=role)
+	Roles []*RoleSummaryResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -2885,6 +2889,26 @@ type HookSourceUsageResponseBody struct {
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 }
 
+// RoleSummaryResponseBody is used to define fields on response body types.
+type RoleSummaryResponseBody struct {
+	// Role identifier extracted from role URN
+	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// Number of users with this role
+	UserCount int `form:"user_count" json:"user_count" xml:"user_count"`
+	// Total cost across all users with this role
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
+	// Average cost per user
+	CostPerUser float64 `form:"cost_per_user" json:"cost_per_user" xml:"cost_per_user"`
+	// Sum of input tokens across all users
+	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`
+	// Sum of output tokens across all users
+	TotalOutputTokens int64 `form:"total_output_tokens" json:"total_output_tokens" xml:"total_output_tokens"`
+	// Sum of all tokens across all users
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Total chat sessions across all users
+	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
+}
+
 // ProjectSummaryResponseBody is used to define fields on response body types.
 type ProjectSummaryResponseBody struct {
 	// Earliest activity timestamp in Unix nanoseconds
@@ -3403,6 +3427,16 @@ func NewSearchUsersResponseBody(res *telemetry.SearchUsersResult) *SearchUsersRe
 		}
 	} else {
 		body.Users = []*UserSummaryResponseBody{}
+	}
+	if res.Roles != nil {
+		body.Roles = make([]*RoleSummaryResponseBody, len(res.Roles))
+		for i, val := range res.Roles {
+			if val == nil {
+				body.Roles[i] = nil
+				continue
+			}
+			body.Roles[i] = marshalTelemetryRoleSummaryToRoleSummaryResponseBody(val)
+		}
 	}
 	return body
 }
@@ -5627,6 +5661,9 @@ func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, se
 		UserType: *body.UserType,
 		Cursor:   body.Cursor,
 	}
+	if body.GroupBy != nil {
+		v.GroupBy = *body.GroupBy
+	}
 	if body.Sort != nil {
 		v.Sort = *body.Sort
 	}
@@ -5634,6 +5671,9 @@ func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, se
 		v.Limit = *body.Limit
 	}
 	v.Filter = unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
+	if body.GroupBy == nil {
+		v.GroupBy = "employee"
+	}
 	if body.Sort == nil {
 		v.Sort = "desc"
 	}
@@ -5953,6 +5993,11 @@ func ValidateSearchUsersRequestBody(body *SearchUsersRequestBody) (err error) {
 	if body.UserType != nil {
 		if !(*body.UserType == "internal" || *body.UserType == "external") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_type", *body.UserType, []any{"internal", "external"}))
+		}
+	}
+	if body.GroupBy != nil {
+		if !(*body.GroupBy == "employee" || *body.GroupBy == "role") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", *body.GroupBy, []any{"employee", "role"}))
 		}
 	}
 	if body.Sort != nil {
