@@ -22,9 +22,6 @@ export default function SwitchOrg({ gate = false }: SwitchOrgProps) {
   const { session } = useSessionData();
 
   const allOrgs = session?.organizations ?? [];
-  const otherOrgs = allOrgs.filter(
-    (org) => org.id !== session?.activeOrganizationId,
-  );
 
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
   const [isSwitching, setIsSwitching] = useState(false);
