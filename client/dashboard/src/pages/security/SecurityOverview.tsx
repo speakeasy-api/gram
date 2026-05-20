@@ -23,6 +23,7 @@ import {
   type ChartOptions,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import { Type } from "@/components/ui/type";
 
 ChartJS.register(
   CategoryScale,
@@ -94,6 +95,56 @@ export default function SecurityOverview() {
   );
 }
 
+function RiskOverviewShell({
+  children,
+  days = 7,
+}: {
+  children: ReactNode;
+  days?: number;
+}) {
+  return (
+    <Page.Section>
+      <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
+      <Page.Section.Description>
+        Risk analysis summary for policy findings{" "}
+        {days > 0 ? ` across the last ${days.toLocaleString()} days` : ""}
+      </Page.Section.Description>
+      <Page.Section.CTA> {/* tbd */}</Page.Section.CTA>
+      <Page.Section.Body>
+        <div className="space-y-8">{children}</div>
+      </Page.Section.Body>
+    </Page.Section>
+  );
+}
+
+function NoPoliciesEmptyState() {
+  const routes = useRoutes();
+  return (
+    <RiskOverviewShell>
+      <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+        <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+          <Shield className="text-muted-foreground size-6" />
+        </div>
+        <Type variant="subheading" className="mb-1">
+          Risk Analysis
+        </Type>
+        <Type small muted className="mb-4 max-w-md text-center">
+          Create a risk policy to begin scanning chat messages for leaked
+          secrets, sensitive data, and policy flags.
+        </Type>
+        <Button variant="primary" asChild>
+          <Link to={routes.policyCenter.href()}>
+            <Button.Text>Manage Policies</Button.Text>
+            <Button.RightIcon>
+              <Icon name="arrow-right" />
+            </Button.RightIcon>
+          </Link>
+        </Button>
+      </div>
+    </RiskOverviewShell>
+  );
+}
+
 function SecurityOverviewContent() {
   const overviewQuery = useRiskOverview();
   const overview = overviewQuery.data;
@@ -153,6 +204,10 @@ function SecurityOverviewContent() {
     return null;
   }
 
+  if (overview.activePolicies === 0) {
+    return <NoPoliciesEmptyState />;
+  }
+
   const hasFindings = overview.findings > 0;
 
   return (
@@ -184,19 +239,6 @@ function SecurityOverviewContent() {
             icon="shield-check"
           />
         </div>
-
-        {overview.activePolicies === 0 && (
-          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16 text-center">
-            <div className="bg-muted/50 mb-4 flex size-12 items-center justify-center rounded-full">
-              <Shield className="text-muted-foreground size-6" />
-            </div>
-            <p className="text-foreground text-sm font-medium">Risk Analysis</p>
-            <p className="text-muted-foreground mt-1 max-w-md text-sm">
-              Create a risk policy to begin scanning chat messages for leaked
-              secrets, sensitive data, and policy flags.
-            </p>
-          </div>
-        )}
       </RiskOverviewShell>
 
       {overview.activePolicies > 0 && (
@@ -236,34 +278,6 @@ function SecurityOverviewContent() {
         </RiskActivitySection>
       )}
     </>
-  );
-}
-
-function RiskOverviewShell({ children }: { children: ReactNode }) {
-  const routes = useRoutes();
-
-  return (
-    <Page.Section>
-      <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
-      <Page.Section.Description>
-        Risk analysis summary for policy findings across the last 7 days
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <div className="flex items-center gap-2">
-          <Button variant="primary" asChild>
-            <Link to={routes.policyCenter.href()}>
-              <Button.Text>Manage Policies</Button.Text>
-              <Button.RightIcon>
-                <Icon name="arrow-right" />
-              </Button.RightIcon>
-            </Link>
-          </Button>
-        </div>
-      </Page.Section.CTA>
-      <Page.Section.Body>
-        <div className="space-y-8">{children}</div>
-      </Page.Section.Body>
-    </Page.Section>
   );
 }
 
