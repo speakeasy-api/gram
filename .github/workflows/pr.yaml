@@ -49,6 +49,7 @@ jobs:
       sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
       risk_accuracy: ${{ steps.gates.outputs.risk_accuracy }}
       pi_classifier: ${{ steps.gates.outputs.pi_classifier }}
+      webhooks-catalog: ${{ steps.gates.outputs.webhooks-catalog }}
       elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
     steps:
       - name: Checkout source code
@@ -147,6 +148,13 @@ jobs:
             echo "Prompt-injection classifier image build will run."
           else
             echo "Prompt-injection classifier image build will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.webhooks-catalog }}" == "true" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "webhooks-catalog=true" >> $GITHUB_OUTPUT
+            echo "Webhooks catalog breaking-change check will run."
+          else
+            echo "Webhooks catalog breaking-change check will be skipped."
           fi
       - id: list-elements-examples
         name: List elements examples
@@ -499,6 +507,56 @@ jobs:
           dir-name: gram-clickhouse
           dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
           tag: ${{ steps.tag.outputs.tag }}
+
+  webhooks-catalog-breaking-changes:
+    name: Check webhooks catalog for breaking changes
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.webhooks-catalog == 'true' && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Fetch main branch
+        run: git fetch origin main
+
+      - name: Check for breaking changes
+        run: mise run lint:webhooks-server
+
+      - name: Post review comment on breaking changes
+        if: hashFiles('breaking-changes.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -n \
+            --arg commit_id "${{ github.event.pull_request.head.sha }}" \
+            --rawfile body breaking-changes.md \
+            '{
+              commit_id: $commit_id,
+              subject_type: "file",
+              path: "server/internal/outbox/events/catalog_gen.yaml",
+              body: $body
+            }' \
+            | gh api \
+                "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments" \
+                --method POST \
+                --input -
+
+      - name: Fail on breaking changes
+        if: hashFiles('breaking-changes.md') != ''
+        run: |
+          cat breaking-changes.md
+          exit 1
 
   server-build-lint:
     runs-on: blacksmith-16vcpu-ubuntu-2404
@@ -1606,6 +1664,7 @@ jobs:
       - elements-examples
       - atlas-lint
       - atlas-push
+      - webhooks-catalog-breaking-changes
     steps:
       - name: Check results
         env:
@@ -1646,9 +1705,32 @@ jobs:
             --repo ${{ github.repository }} \
             --add-label preview
 
+  svix-sync-webhooks:
+    name: Sync webhook event types to Svix
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: [server-build-lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      SVIX_OPENAPI_FILE: server/internal/outbox/events/catalog_gen.yaml
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+      - name: Upload event types to Svix (dev)
+        uses: svix/svix-event-type-import-action@4e3a9d81b05db38e57187434b6b291e1fef50250 # v1.2.0
+        with:
+          openapi-file: ${{ env.SVIX_OPENAPI_FILE }}
+          svix-api-key: ${{ secrets.SVIX_SYNC_KEY_US_DEV }}
+          replace-all: true
+      - name: Upload event types to Svix (prod)
+        uses: svix/svix-event-type-import-action@4e3a9d81b05db38e57187434b6b291e1fef50250 # v1.2.0
+        with:
+          openapi-file: ${{ env.SVIX_OPENAPI_FILE }}
+          svix-api-key: ${{ secrets.SVIX_SYNC_KEY_US_PROD }}
+          replace-all: true
+
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [docker-build-server, assistant-runtime-image]
+    needs: [docker-build-server, assistant-runtime-image, svix-sync-webhooks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Generate GitHub App Token

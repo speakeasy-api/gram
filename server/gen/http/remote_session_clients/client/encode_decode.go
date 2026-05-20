@@ -1486,15 +1486,16 @@ func DecodeDeleteRemoteSessionClientResponse(decoder func(*http.Response) goahtt
 // *RemoteSessionClientResponseBody.
 func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *RemoteSessionClientResponseBody) *types.RemoteSessionClient {
 	res := &types.RemoteSessionClient{
-		ID:                    *v.ID,
-		ProjectID:             *v.ProjectID,
-		RemoteSessionIssuerID: *v.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *v.UserSessionIssuerID,
-		ClientID:              *v.ClientID,
-		ClientIDIssuedAt:      *v.ClientIDIssuedAt,
-		ClientSecretExpiresAt: v.ClientSecretExpiresAt,
-		CreatedAt:             *v.CreatedAt,
-		UpdatedAt:             *v.UpdatedAt,
+		ID:                      *v.ID,
+		ProjectID:               *v.ProjectID,
+		RemoteSessionIssuerID:   *v.RemoteSessionIssuerID,
+		UserSessionIssuerID:     *v.UserSessionIssuerID,
+		ClientID:                *v.ClientID,
+		ClientIDIssuedAt:        *v.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		CreatedAt:               *v.CreatedAt,
+		UpdatedAt:               *v.UpdatedAt,
 	}
 
 	return res

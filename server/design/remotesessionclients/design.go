@@ -7,6 +7,10 @@ import (
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
+func tokenEndpointAuthMethodEnum() {
+	Enum("client_secret_basic", "client_secret_post")
+}
+
 var _ = Service("remoteSessionClients", func() {
 	Description("Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.")
 	Security(security.Session, security.ProjectSlug)
@@ -16,7 +20,7 @@ var _ = Service("remoteSessionClients", func() {
 	shared.DeclareErrorResponses()
 
 	Method("createRemoteSessionClient", func() {
-		Description("Register a remote_session_client. Two paths: manual (caller supplies client_id and optionally client_secret) or auto-DCR (auto_register=true triggers an outbound RFC 7591 registration against the issuer's registration_endpoint).")
+		Description("Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.")
 
 		Payload(func() {
 			Extend(CreateRemoteSessionClientForm)
@@ -185,7 +189,7 @@ var _ = Service("remoteSessionClients", func() {
 })
 
 var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func() {
-	Description("Form for creating a remote_session_client. Either supply client_id (manual path) or set auto_register=true (DCR path).")
+	Description("Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.")
 
 	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id.", func() {
 		Format(FormatUUID)
@@ -193,11 +197,11 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this client is paired with.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_id", String, "Manual-path client_id supplied by the caller.")
-	Attribute("client_secret", String, "Manual-path client secret. Gram encrypts before persisting.")
-	Attribute("auto_register", Boolean, "When true, Gram fires an outbound RFC 7591 DCR call against the issuer's registration_endpoint and ignores client_id and client_secret.")
+	Attribute("client_id", String, "client_id supplied by the caller.")
+	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
+	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 
-	Required("remote_session_issuer_id", "user_session_issuer_id")
+	Required("remote_session_issuer_id", "user_session_issuer_id", "client_id")
 })
 
 var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProviderForm", func() {
@@ -212,6 +216,7 @@ var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProvi
 	Attribute("user_session_issuer_id", String, "The user_session_issuer the new client is paired with.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("token_endpoint_auth_method", String, "How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 
 	Required("oauth_proxy_provider_id", "remote_session_issuer_id", "user_session_issuer_id")
 })
@@ -226,6 +231,7 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	Attribute("user_session_issuer_id", String, "Re-pair with a different user_session_issuer.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
 
 	Required("id")
 })
@@ -254,6 +260,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	Attribute("client_secret_expires_at", String, "Null when the secret does not expire.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

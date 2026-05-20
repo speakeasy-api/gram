@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -54,7 +55,7 @@ func (l *Logger) LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicy})
 }
 
 type LogRiskPolicyUpdateEvent struct {
@@ -106,7 +107,7 @@ func (l *Logger) LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicy})
 }
 
 type LogRiskPolicyDeleteEvent struct {
@@ -144,7 +145,7 @@ func (l *Logger) LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicy})
 }
 
 type LogRiskPolicyTriggerEvent struct {
@@ -182,5 +183,5 @@ func (l *Logger) LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RiskPolicy})
 }

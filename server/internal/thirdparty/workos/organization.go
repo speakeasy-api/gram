@@ -118,17 +118,21 @@ func (wc *Client) EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgI
 		return fmt.Errorf("workos org %s external_id mismatch: got %q, want %q", workosOrgID, org.ExternalID, gramOrgID)
 	}
 
-	_, err = wc.orgs.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	return wc.UpdateOrganizationExternalID(ctx, workosOrgID, gramOrgID)
+}
+
+func (wc *Client) UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error {
+	_, err := wc.orgs.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
 		Organization:     workosOrgID,
 		Name:             "",
 		Domains:          nil,
 		DomainData:       nil,
-		ExternalID:       gramOrgID,
+		ExternalID:       externalID,
 		StripeCustomerID: "",
 		Metadata:         nil,
 	})
 	if err != nil {
-		return fmt.Errorf("set workos org external_id: %w", err)
+		return fmt.Errorf("update organization external ID: %w", err)
 	}
 
 	return nil

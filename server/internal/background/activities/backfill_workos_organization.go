@@ -31,6 +31,7 @@ type WorkOSClient interface {
 	ListGlobalRoles(ctx context.Context) ([]workos.Role, error)
 	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
 	UpdateUserExternalID(ctx context.Context, workosUserID, externalID string) error
+	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
 }
 
 type BackfillWorkOSOrganizationParams struct {

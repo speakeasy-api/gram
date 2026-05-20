@@ -150,9 +150,8 @@ func createRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, iss
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,

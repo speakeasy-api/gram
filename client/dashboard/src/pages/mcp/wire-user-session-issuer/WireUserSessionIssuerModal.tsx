@@ -9,20 +9,45 @@ import {
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin } from "@/contexts/Auth";
+import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
+import { remoteLoginCallbackURL } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components";
+import {
+  invalidateAllRemoteSessionClients,
+  invalidateAllRemoteSessionIssuers,
+  invalidateAllToolset,
+  invalidateAllUserSessionIssuers,
+  useRemoteSessionClients,
+  useRemoteSessionIssuers,
+  useUserSessionIssuers,
+} from "@gram/client/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
+import { deriveMigrationDefaults } from "./defaults";
 import {
-  type ClientStrategy,
-  type MigrationFormState,
-  type MigrationParadigm,
-  type MigrationStep,
-  type MigrationStepKey,
-  remoteLoginCallbackURL,
-  useOAuthProxyMigration,
-} from "./useOAuthProxyMigration";
+  selectActiveIndex,
+  selectCanAdvance,
+  selectCurrentStep,
+  selectErrorStep,
+  selectIsComplete,
+  selectRunningStep,
+  selectSteps,
+  wireUserSessionIssuerMachine,
+  WireUserSessionIssuerContext,
+} from "./machine";
+import type {
+  ClientStrategy,
+  MigrationFormState,
+  MigrationParadigm,
+  MigrationStep,
+  MigrationStepKey,
+} from "./machine-types";
+import { createMigrationServices } from "./services";
 
 // Refresh-token lifetime options. Stored on the wire as hours so the
 // user_session_issuer payload stays a flat integer, but presented to the
@@ -40,8 +65,8 @@ const REFRESH_TOKEN_DURATION_OPTIONS: ReadonlyArray<{
 // WireUserSessionIssuerModal renders the admin workflow for porting an MCP
 // toolset off the legacy OAuth Proxy paradigm onto the user-session resource
 // chain. The shape of the chain depends on which proxy paradigm the toolset
-// is running today (see useOAuthProxyMigration). The driver lives in that
-// hook; this file is the presentation surface.
+// is running today. The xstate machine owns step progression; this file is the
+// presentation surface.
 export function WireUserSessionIssuerModal({
   isOpen,
   onClose,
@@ -51,10 +76,24 @@ export function WireUserSessionIssuerModal({
   onClose: () => void;
   toolset: Toolset;
 }) {
+  // Force a fresh machine after the close animation. While the modal is open,
+  // keep its generated slugs and in-flight state stable even if the parent
+  // refetches the toolset.
+  const [resetKey, setResetKey] = useState(0);
+  useEffect(() => {
+    if (isOpen) return;
+    const id = setTimeout(() => setResetKey((key) => key + 1), 200);
+    return () => clearTimeout(id);
+  }, [isOpen]);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="flex max-h-[85vh] max-w-2xl flex-col gap-0 p-0">
-        <WireUserSessionIssuerBody toolset={toolset} onClose={onClose} />
+        <WireUserSessionIssuerBody
+          key={resetKey}
+          toolset={toolset}
+          onClose={onClose}
+        />
       </Dialog.Content>
     </Dialog>
   );
@@ -67,9 +106,39 @@ function WireUserSessionIssuerBody({
   toolset: Toolset;
   onClose: () => void;
 }) {
-  const migration = useOAuthProxyMigration(toolset);
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const [defaults] = useState(() => deriveMigrationDefaults(toolset));
+  let paradigm: MigrationParadigm | null = "custom";
+  if (!defaults) {
+    paradigm = null;
+  } else if (defaults.proxyProvider.providerType === "gram") {
+    paradigm = "gram";
+  }
 
-  if (!migration.ready) {
+  const userIssuers = useUserSessionIssuers();
+  const remoteIssuers = useRemoteSessionIssuers();
+  const remoteClients = useRemoteSessionClients();
+
+  const { fetch: authedFetch } = useFetcher();
+  const provided = useMemo(
+    () =>
+      wireUserSessionIssuerMachine.provide({
+        actors: createMigrationServices(client, authedFetch),
+        actions: {
+          invalidateOnUserSessionIssuerCreate: () =>
+            invalidateAllUserSessionIssuers(queryClient),
+          invalidateOnRemoteSessionIssuerCreate: () =>
+            invalidateAllRemoteSessionIssuers(queryClient),
+          invalidateOnRemoteSessionClientCreate: () =>
+            invalidateAllRemoteSessionClients(queryClient),
+          invalidateOnToolsetLink: () => invalidateAllToolset(queryClient),
+        },
+      }),
+    [client, queryClient, authedFetch],
+  );
+
+  if (!defaults || !paradigm) {
     return (
       <>
         <Dialog.Header className="shrink-0 border-b px-6 py-4">
@@ -90,33 +159,83 @@ function WireUserSessionIssuerBody({
     );
   }
 
-  const {
-    paradigm,
-    steps,
-    currentStep,
-    isComplete,
-    form,
-    setForm,
-    runCurrentStep,
-    remoteSessionIssuer,
-  } = migration;
-  const runningStep = steps.find((s) => s.status === "running") ?? null;
-  const errorStep = steps.find((s) => s.status === "error") ?? null;
+  if (
+    userIssuers.isLoading ||
+    remoteIssuers.isLoading ||
+    remoteClients.isLoading
+  ) {
+    return (
+      <>
+        <Dialog.Header className="shrink-0 border-b px-6 py-4">
+          <Dialog.Title>Wire User Session Issuer</Dialog.Title>
+        </Dialog.Header>
+        <div className="flex flex-1 items-center justify-center px-6 py-10">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      </>
+    );
+  }
 
-  const advanceDisabled =
-    runningStep !== null ||
-    (currentStep?.key === "remoteSessionClient" &&
-      !canAdvanceClientStep(form, remoteSessionIssuer));
+  const existingUserSessionIssuer =
+    userIssuers.data?.result.items?.find(
+      (issuer) => issuer.slug === defaults.userSessionIssuerSlug,
+    ) ?? null;
 
-  // Active step index for the indicator. When the whole flow is complete we
-  // pin the indicator to the final step so it reads as "all done", not as
-  // "off the end".
-  const activeIndex = isComplete
-    ? steps.length - 1
-    : Math.max(
-        0,
-        steps.findIndex((s) => s.key === currentStep?.key),
-      );
+  const existingRemoteSessionIssuer =
+    remoteIssuers.data?.result.items?.find(
+      (issuer) => issuer.slug === defaults.remoteSessionIssuerSlug,
+    ) ?? null;
+
+  const existingRemoteSessionClient =
+    existingUserSessionIssuer && existingRemoteSessionIssuer
+      ? (remoteClients.data?.result.items?.find(
+          (client) =>
+            client.userSessionIssuerId === existingUserSessionIssuer.id &&
+            client.remoteSessionIssuerId === existingRemoteSessionIssuer.id,
+        ) ?? null)
+      : null;
+
+  return (
+    <WireUserSessionIssuerContext.Provider
+      logic={provided}
+      options={{
+        input: {
+          defaults,
+          paradigm,
+          toolsetSlug: toolset.slug,
+          existingUserSessionIssuer,
+          existingRemoteSessionIssuer,
+          existingRemoteSessionClient,
+          toolsetLinked: !!toolset.userSessionIssuerSlug,
+        },
+      }}
+    >
+      <WireUserSessionIssuerSteps toolset={toolset} onClose={onClose} />
+    </WireUserSessionIssuerContext.Provider>
+  );
+}
+
+function WireUserSessionIssuerSteps({
+  toolset,
+  onClose,
+}: {
+  toolset: Toolset;
+  onClose: () => void;
+}) {
+  const state = WireUserSessionIssuerContext.useSelector((s) => s);
+  const send = WireUserSessionIssuerContext.useActorRef().send;
+  const steps = selectSteps(state);
+  const currentStep = selectCurrentStep(state);
+  const isComplete = selectIsComplete(state);
+  const form = state.context.form;
+  const setForm = (patch: Partial<MigrationFormState>) =>
+    send({ type: "FORM", patch });
+  const remoteSessionIssuer = state.context.remoteSessionIssuer;
+  const runningStep = selectRunningStep(state);
+  const errorStep = selectErrorStep(state);
+  const advanceDisabled = !selectCanAdvance(state);
+
+  const activeIndex = selectActiveIndex(state);
   const activeStep = isComplete ? steps[steps.length - 1] : currentStep;
 
   return (
@@ -135,7 +254,9 @@ function WireUserSessionIssuerBody({
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <Stack gap={4}>
-          {activeIndex === 0 && <ParadigmSummary paradigm={paradigm} />}
+          {activeIndex === 0 && (
+            <ParadigmSummary paradigm={state.context.paradigm} />
+          )}
           {activeStep && (
             <StepHeading
               step={activeStep}
@@ -153,8 +274,8 @@ function WireUserSessionIssuerBody({
               step={currentStep}
               form={form}
               setForm={setForm}
-              proxyProviderSlug={migration.defaults.proxyProvider.slug}
-              issuerOriginGuess={migration.defaults.issuerOriginGuess}
+              proxyProviderSlug={state.context.defaults.proxyProvider.slug}
+              issuerOriginGuess={state.context.defaults.issuerOriginGuess}
               remoteSessionIssuer={remoteSessionIssuer}
             />
           ) : null}
@@ -170,7 +291,7 @@ function WireUserSessionIssuerBody({
         </Button>
         {!isComplete && (
           <Button
-            onClick={() => void runCurrentStep()}
+            onClick={() => send({ type: "SUBMIT" })}
             disabled={advanceDisabled}
           >
             <Button.Text>
@@ -206,26 +327,6 @@ function StepHeading({
       </Type>
     </Stack>
   );
-}
-
-// canAdvanceClientStep gates the primary button on the client step so we can
-// keep the per-strategy preconditions in one place: a strategy must be picked,
-// clone needs the callback-confirmation checkbox, manual needs at least a
-// client_id, register needs the issuer to advertise a registration endpoint.
-function canAdvanceClientStep(
-  form: MigrationFormState,
-  issuer: RemoteSessionIssuer | null,
-): boolean {
-  switch (form.clientStrategy) {
-    case "clone":
-      return form.cloneCallbackConfirmed;
-    case "register":
-      return !!issuer?.registrationEndpoint;
-    case "manual":
-      return form.manualClientId.trim().length > 0;
-    case null:
-      return false;
-  }
 }
 
 function primaryActionLabel(

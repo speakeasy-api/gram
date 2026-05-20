@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -54,7 +55,7 @@ func (l *Logger) LogProjectCreate(ctx context.Context, dbtx repo.DBTX, event Log
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Project})
 }
 
 type LogProjectUpdateEvent struct {
@@ -106,7 +107,7 @@ func (l *Logger) LogProjectUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Project})
 }
 
 type LogProjectDeleteEvent struct {
@@ -145,5 +146,5 @@ func (l *Logger) LogProjectDelete(ctx context.Context, dbtx repo.DBTX, event Log
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Project})
 }

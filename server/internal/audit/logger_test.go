@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/outbox"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -50,7 +50,7 @@ func TestLogger_OutboxEntrySnapshotsAreInlineJSON(t *testing.T) {
 
 	payload, err := auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
 		OrganizationID: orgID,
-		EventType:      string(outbox.EventTypeAuditLogCreated),
+		EventType:      string(events.Asset.EventType()),
 	})
 	require.NoError(t, err)
 
@@ -86,7 +86,7 @@ func TestLogger_WritesAuditLogAndOutboxEntry(t *testing.T) {
 
 	auditCountBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationWebhooksEnabled)
 	require.NoError(t, err)
-	outboxCountBefore, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(outbox.EventTypeAuditLogCreated))
+	outboxCountBefore, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationWebhooks.EventType()))
 	require.NoError(t, err)
 
 	err = logger.LogOrganizationWebhooksToggled(ctx, conn, audit.LogOrganizationWebhooksToggledEvent{
@@ -104,7 +104,7 @@ func TestLogger_WritesAuditLogAndOutboxEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, auditCountBefore+1, auditCountAfter)
 
-	outboxCountAfter, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(outbox.EventTypeAuditLogCreated))
+	outboxCountAfter, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationWebhooks.EventType()))
 	require.NoError(t, err)
 	require.Equal(t, outboxCountBefore+1, outboxCountAfter)
 }

@@ -258,9 +258,6 @@ SELECT *
 FROM organization_invitations
 WHERE token_hash = @token_hash;
 
--- name: ClearOrganizationWorkosID :exec
-UPDATE organization_metadata SET workos_id = NULL WHERE id = @organization_id;
-
 -- name: CreateOrganizationMetadata :exec
 INSERT INTO organization_metadata (id, name, slug)
 VALUES (@id, @name, @slug);
@@ -517,11 +514,35 @@ WHERE organization_id = @organization_id
   AND workos_user_id = @workos_user_id
 ORDER BY role_urn;
 
+-- name: LockOrganizationSlug :exec
+SELECT pg_advisory_xact_lock(hashtext(@slug));
+
+-- name: CreateOrganizationMetadataFromWorkOS :one
+-- Create a Gram organization row from a WorkOS organization event. The caller
+-- chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
+-- Slug is a Gram-owned initial value and is never updated by WorkOS sync.
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    workos_id,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    @id,
+    @name,
+    @slug,
+    @workos_id,
+    @workos_updated_at,
+    @workos_last_event_id
+)
+RETURNING *;
+
 -- name: UpsertOrganizationMetadataFromWorkOS :one
--- Upsert an organization row from a WorkOS organization event. Caller must
--- have already passed the row through ShouldProcessEvent. Sets workos_id and
--- the cursor columns; clears disabled_at so a deleted-then-recreated org
--- comes back online.
+-- Upsert a Gram organization row from a WorkOS organization event.
+-- The caller must only use this when WorkOS external_id is set and is the Gram
+-- org ID. Slug is a Gram-owned initial value chosen by the caller and is never
+-- updated by WorkOS sync after creation.
 INSERT INTO organization_metadata (
     id,
     name,
@@ -539,12 +560,24 @@ INSERT INTO organization_metadata (
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
-    slug = EXCLUDED.slug,
     workos_id = EXCLUDED.workos_id,
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
-    disabled_at = NULL,
     updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: UpdateOrganizationMetadataFromWorkOS :one
+-- Update an existing organization row from a WorkOS organization event. Caller
+-- must have already resolved the Gram organization and passed the row through
+-- ShouldProcessEvent. WorkOS does not own Gram slugs, so this only updates
+-- WorkOS-owned metadata and cursor columns.
+UPDATE organization_metadata
+SET name = @name,
+    workos_id = @workos_id,
+    workos_updated_at = @workos_updated_at,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE id = @id
 RETURNING *;
 
 -- name: ListOrganizationsForUser :many

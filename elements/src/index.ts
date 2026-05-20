@@ -38,6 +38,10 @@ export type { FrontendTool } from "./lib/tools";
 // Error Tracking
 export { trackError } from "./lib/errorTracking";
 export type { ErrorContext } from "./lib/errorTracking";
+export {
+  CREDITS_EXHAUSTED_MESSAGE,
+  describeStreamError,
+} from "./lib/streamErrorMessage";
 
 // Types
 export type {

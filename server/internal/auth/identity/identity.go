@@ -416,59 +416,8 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 	}
 
 	for _, m := range members {
-		org, err := r.workosClient.GetOrganization(ctx, m.OrganizationID)
-		if err != nil {
-			return nil, fmt.Errorf("get workos organization %q: %w", m.OrganizationID, err)
-		}
-
-		gramOrgID := r.resolveGramOrgID(ctx, m.OrganizationID, org.ExternalID)
-
-		slug := orgslug.Slugify(org.Name)
-		if slug == "" {
-			slug = m.OrganizationID
-		}
-		shouldCreateOrg := false
-		existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
-		switch {
-		case err == nil:
-			if !existingOrg.WorkosID.Valid {
-				if _, err := r.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
-					WorkosID:       pgtype.Text{String: m.OrganizationID, Valid: true},
-					OrganizationID: gramOrgID,
-				}); err != nil {
-					return nil, fmt.Errorf("set workos id for organization %q: %w", gramOrgID, err)
-				}
-			} else if existingOrg.WorkosID.String != m.OrganizationID {
-				return nil, fmt.Errorf("workos organization %q resolved to gram organization %q with different workos_id %q", m.OrganizationID, gramOrgID, existingOrg.WorkosID.String)
-			}
-		case errors.Is(err, pgx.ErrNoRows):
-			slug, err = orgslug.FindUnique(ctx, r.orgRepo, slug)
-			if err != nil {
-				return nil, fmt.Errorf("find unique slug for workos organization %q: %w", m.OrganizationID, err)
-			}
-			shouldCreateOrg = true
-		default:
-			return nil, fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)
-		}
-
-		if shouldCreateOrg {
-			if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:          gramOrgID,
-				Name:        org.Name,
-				Slug:        slug,
-				WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
-				Whitelisted: pgtype.Bool{Bool: false, Valid: false},
-			}); err != nil {
-				return nil, fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
-			}
-		}
-
-		if err := r.workosClient.EnsureOrgExternalID(ctx, m.OrganizationID, gramOrgID); err != nil {
-			r.logger.ErrorContext(ctx, "failed to sync org external_id to workos",
-				attr.SlogError(err),
-				attr.SlogWorkOSOrganizationID(m.OrganizationID),
-				attr.SlogOrganizationID(gramOrgID),
-			)
+		if err := r.upsertOrgFromMembership(ctx, m); err != nil {
+			return nil, err
 		}
 	}
 
@@ -493,14 +442,82 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 	return rows, nil
 }
 
-func (r *Resolver) resolveGramOrgID(ctx context.Context, workosOrgID, externalID string) string {
-	if existing, err := r.orgRepo.GetOrganizationByWorkosID(ctx, pgtype.Text{String: workosOrgID, Valid: true}); err == nil {
-		return existing.ID
+// upsertOrgFromMembership reconciles the local org row for one WorkOS
+// membership. Steady-state callers (local org already linked to this WorkOS
+// org) make zero WorkOS API calls. WorkOS reads happen only when the local
+// row is missing the link and we need the external_id or org name to create
+// or merge it. After any local mutation we push the gram org ID back to
+// WorkOS as external_id, the only place that link is authored — the
+// background webhook reconcile path sets workos_id locally but never writes
+// external_id remotely.
+func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member) error {
+	_, err := r.orgRepo.GetOrganizationByWorkosID(ctx, pgtype.Text{String: m.OrganizationID, Valid: true})
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, pgx.ErrNoRows):
+		// fall through to the create / link path below
+	default:
+		return fmt.Errorf("lookup org by workos id %q: %w", m.OrganizationID, err)
 	}
-	if externalID != "" {
-		return externalID
+
+	org, err := r.workosClient.GetOrganization(ctx, m.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("get workos organization %q: %w", m.OrganizationID, err)
 	}
-	return orgid.FromWorkOSID(workosOrgID)
+
+	gramOrgID := org.ExternalID
+	if gramOrgID == "" {
+		gramOrgID = orgid.FromWorkOSID(m.OrganizationID)
+	}
+
+	slug := orgslug.Slugify(org.Name)
+	if slug == "" {
+		slug = m.OrganizationID
+	}
+
+	existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
+	switch {
+	case err == nil:
+		if existingOrg.WorkosID.Valid {
+			// The initial lookup by workos_id missed, so the row's workos_id
+			// can only be a different WorkOS org pointing at the same gram ID
+			// — a real conflict.
+			return fmt.Errorf("workos organization %q resolved to gram organization %q with different workos_id %q", m.OrganizationID, gramOrgID, existingOrg.WorkosID.String)
+		}
+		if _, err := r.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+			WorkosID:       pgtype.Text{String: m.OrganizationID, Valid: true},
+			OrganizationID: gramOrgID,
+		}); err != nil {
+			return fmt.Errorf("set workos id for organization %q: %w", gramOrgID, err)
+		}
+	case errors.Is(err, pgx.ErrNoRows):
+		uniqueSlug, err := orgslug.FindUnique(ctx, r.orgRepo, slug)
+		if err != nil {
+			return fmt.Errorf("find unique slug for workos organization %q: %w", m.OrganizationID, err)
+		}
+		if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+			ID:          gramOrgID,
+			Name:        org.Name,
+			Slug:        uniqueSlug,
+			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
+			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+		}); err != nil {
+			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
+		}
+	default:
+		return fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)
+	}
+
+	if err := r.workosClient.EnsureOrgExternalID(ctx, m.OrganizationID, gramOrgID); err != nil {
+		r.logger.ErrorContext(ctx, "failed to sync org external_id to workos",
+			attr.SlogError(err),
+			attr.SlogWorkOSOrganizationID(m.OrganizationID),
+			attr.SlogOrganizationID(gramOrgID),
+		)
+	}
+
+	return nil
 }
 
 // GetUserInfo returns cached user info, falling back to a DB lookup on cache miss.

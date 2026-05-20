@@ -4,6 +4,21 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Change how the client authenticates at the issuer's token endpoint.
+ */
+export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod = {
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+} as const;
+/**
+ * Change how the client authenticates at the issuer's token endpoint.
+ */
+export type UpdateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
+  typeof UpdateRemoteSessionClientFormTokenEndpointAuthMethod
+>;
 
 /**
  * Form for updating a remote_session_client. All non-id fields are optional patches.
@@ -18,15 +33,27 @@ export type UpdateRemoteSessionClientForm = {
    */
   id: string;
   /**
+   * Change how the client authenticates at the issuer's token endpoint.
+   */
+  tokenEndpointAuthMethod?:
+    | UpdateRemoteSessionClientFormTokenEndpointAuthMethod
+    | undefined;
+  /**
    * Re-pair with a different user_session_issuer.
    */
   userSessionIssuerId?: string | undefined;
 };
 
 /** @internal */
+export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
+  z.ZodMiniEnum<typeof UpdateRemoteSessionClientFormTokenEndpointAuthMethod> = z
+    .enum(UpdateRemoteSessionClientFormTokenEndpointAuthMethod);
+
+/** @internal */
 export type UpdateRemoteSessionClientForm$Outbound = {
   client_secret?: string | undefined;
   id: string;
+  token_endpoint_auth_method?: string | undefined;
   user_session_issuer_id?: string | undefined;
 };
 
@@ -38,11 +65,15 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   z.object({
     clientSecret: z.optional(z.string()),
     id: z.string(),
+    tokenEndpointAuthMethod: z.optional(
+      UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
+    ),
     userSessionIssuerId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       clientSecret: "client_secret",
+      tokenEndpointAuthMethod: "token_endpoint_auth_method",
       userSessionIssuerId: "user_session_issuer_id",
     });
   }),

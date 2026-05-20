@@ -397,7 +397,6 @@ run();
 * [discover](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
 * [get](docs/sdks/remotesessionissuers/README.md#get) - getRemoteSessionIssuer remoteSessionIssuers
 * [list](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
-* [register](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
 * [update](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 
 ### [RemoteSessions](docs/sdks/remotesessions/README.md)
@@ -729,7 +728,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteSessionIssuersDiscover`](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
 - [`remoteSessionIssuersGet`](docs/sdks/remotesessionissuers/README.md#get) - getRemoteSessionIssuer remoteSessionIssuers
 - [`remoteSessionIssuersList`](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
-- [`remoteSessionIssuersRegister`](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
 - [`remoteSessionIssuersUpdate`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 - [`remoteSessionsList`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`remoteSessionsRevoke`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
@@ -1005,7 +1003,6 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
-- [`useRegisterRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
 - [`useRemoteMcpServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`useRemoteSessionClient`](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
 - [`useRemoteSessionClients`](docs/sdks/remotesessionclients/README.md#list) - listRemoteSessionClients remoteSessionClients
