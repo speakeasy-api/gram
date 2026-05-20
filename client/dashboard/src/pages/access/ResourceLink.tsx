@@ -7,12 +7,14 @@ export function ResourceLink({
   challenge,
   orgSlug,
   projectMap,
+  toolsetMap,
 }: {
   challenge: ChallengeBucket;
   orgSlug: string;
   projectMap: Map<string, { slug: string; name: string }>;
+  toolsetMap: Map<string, { slug: string; name: string; projectId: string }>;
 }) {
-  const { resourceKind, resourceId, projectId } = challenge;
+  const { resourceKind, resourceId } = challenge;
 
   if (!resourceKind || !resourceId) {
     return (
@@ -36,10 +38,17 @@ export function ResourceLink({
     IconEl = FolderOpen;
     to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
   } else if (resourceKind === "mcp") {
-    label = resourceId;
     IconEl = Plug;
-    const proj = projectId ? projectMap.get(projectId) : undefined;
-    to = proj ? `/${orgSlug}/projects/${proj.slug}/mcp/${resourceId}` : null;
+    const toolset = toolsetMap.get(resourceId);
+    if (toolset) {
+      label = toolset.name;
+      const proj = projectMap.get(toolset.projectId);
+      to = proj
+        ? `/${orgSlug}/projects/${proj.slug}/mcp/${toolset.slug}`
+        : null;
+    } else {
+      label = resourceId;
+    }
   }
 
   if (to) {

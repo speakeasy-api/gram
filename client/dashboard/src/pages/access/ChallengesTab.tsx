@@ -23,6 +23,7 @@ import { Check, Loader2 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { isDisplayableBucket } from "./challengeHelpers";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
@@ -291,15 +292,16 @@ export function ChallengesTab() {
     setPageCount(1);
   }
 
-  // Accumulate results as pages load.
+  // Accumulate results as pages load, excluding buckets with no scope.
   useEffect(() => {
     if (!data?.buckets) return;
+    const withScope = data.buckets.filter(isDisplayableBucket);
     if (pageCount === 1) {
-      setAccumulated(data.buckets);
+      setAccumulated(withScope);
     } else {
       setAccumulated((prev) => {
         const existingIds = new Set(prev.map((b) => b.id));
-        const newItems = data.buckets.filter((b) => !existingIds.has(b.id));
+        const newItems = withScope.filter((b) => !existingIds.has(b.id));
         return [...prev, ...newItems];
       });
     }
