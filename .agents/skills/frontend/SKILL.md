@@ -70,6 +70,180 @@ export function HooksEmptyState({
 
 Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller passes overrides. Avoids divergent copies of the surrounding scaffolding (provider cards, setup dialogs, etc.).
 
+### Tables
+
+Use Moonshine's `Table` from `@speakeasy-api/moonshine` for dashboard tables. Do **not** add new imports from `@/components/ui/table`, do not create new shadcn table wrappers, and do not hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. Existing shadcn table usages should be migrated to Moonshine when touched.
+
+```tsx
+import { Column, Table } from "@speakeasy-api/moonshine";
+```
+
+For normal data tables, prefer the declarative `columns` / `data` / `rowKey` API. Define `Column<T>[]` near the component so render functions stay typed, use `render` for rich cells, and use `width` for stable layouts instead of ad hoc cell class widths.
+
+```tsx
+const columns: Column<Role>[] = [
+  {
+    key: "name",
+    header: "Name",
+    width: "180px",
+    render: (role) => <Type className="font-medium">{role.name}</Type>,
+  },
+  {
+    key: "members",
+    header: "Members",
+    width: "100px",
+    render: (role) => <Type>{role.memberCount}</Type>,
+  },
+];
+
+<Table columns={columns} data={roles} rowKey={(row) => row.id} />;
+```
+
+For empty and loading states, use the Table's built-in empty surface and the shared `SkeletonTable` from `@/components/ui/skeleton`. Do not rebuild a one-off empty `<tbody>` or skeleton table.
+
+```tsx
+<Table
+  columns={columns}
+  data={filteredKeys}
+  rowKey={(row) => row.id}
+  className="max-h-[500px] overflow-y-auto"
+  noResultsMessage={<Type>No matching API keys</Type>}
+/>
+```
+
+Search and filter controls are siblings above the table. Keep filter state outside the table, derive filtered rows with `useMemo`, and pass the result to `data`. Use existing controls such as `SearchBar`, `MultiSelect`, `Select`, or page-specific filter pills; do not put form controls inside `Table.Header` unless they are truly column headers. If the table is paginated, reset the page index when filters change.
+
+```tsx
+const [search, setSearch] = useState("");
+const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+const filteredRows = useMemo(() => {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  return rows.filter((row) => {
+    const matchesSearch =
+      normalizedSearch.length === 0 ||
+      row.name.toLowerCase().includes(normalizedSearch);
+    const matchesTags =
+      selectedTags.length === 0 ||
+      row.tags.some((tag) => selectedTags.includes(tag));
+
+    return matchesSearch && matchesTags;
+  });
+}, [rows, search, selectedTags]);
+
+<Stack direction="horizontal" gap={2} className="mb-4 h-fit">
+  <SearchBar
+    value={search}
+    onChange={(value) => {
+      setSearch(value);
+      setPage(0);
+    }}
+    placeholder="Search tools"
+    className="w-64"
+  />
+  <MultiSelect
+    options={tagOptions}
+    defaultValue={selectedTags}
+    onValueChange={(value) => {
+      setSelectedTags(value);
+      setPage(0);
+    }}
+    placeholder="Filter by tag"
+    autoSize
+  />
+</Stack>
+
+<Table
+  columns={columns}
+  data={filteredRows}
+  rowKey={(row) => row.id}
+  noResultsMessage={<Type>No matching tools</Type>}
+/>;
+```
+
+Footers that summarize, paginate, or load more rows should usually be sibling bars immediately below the table. Moonshine's table API does not require a special footer component for this; keep the table declarative and put pagination/load-more controls after it.
+
+```tsx
+<Table columns={columns} data={visibleRows} rowKey={(row) => row.id} />;
+
+{
+  totalPages > 1 && (
+    <div className="flex items-center justify-between border-t px-4 py-3">
+      <Type className="text-muted-foreground text-sm">
+        {pageStart}-{pageEnd} of {filteredRows.length}
+      </Type>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => setPage((page) => page - 1)}
+          disabled={page === 0}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => setPage((page) => page + 1)}
+          disabled={page >= totalPages - 1}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+Use the compound API only when the body needs custom structure that the declarative API cannot express, such as mixed rows, a full-width CTA row, or a custom no-results branch. Keep the Moonshine wrapper, header, row, and cell components as the default primitives.
+
+```tsx
+<Table columns={columns}>
+  <Table.Header columns={columns} />
+  {items.length === 0 ? (
+    <Table.NoResultsMessage>No results found.</Table.NoResultsMessage>
+  ) : (
+    <Table.Body>
+      {items.map((item) => (
+        <Table.Row key={item.id} row={item} columns={columns} />
+      ))}
+    </Table.Body>
+  )}
+  <Table.Row>
+    <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
+      <Type className="text-muted-foreground text-sm">
+        Want to grant new members access?
+      </Type>
+      <Button variant="tertiary" size="sm" className="mt-2">
+        Configure Roles
+      </Button>
+    </div>
+  </Table.Row>
+</Table>
+```
+
+Use grouped or expandable rows through Moonshine's table props instead of nesting unrelated cards or custom accordions around a table. Current patterns use `hideHeader` for grouped parent rows and `renderExpandedContent` for nested details.
+
+```tsx
+<Table
+  columns={groupColumns}
+  data={groups}
+  rowKey={(row) => row.key}
+  hideHeader
+  renderExpandedContent={(group) => (
+    <Table
+      columns={childColumns}
+      data={group.items}
+      rowKey={(row) => row.id}
+      hideHeader
+    />
+  )}
+/>
+```
+
+Raw `<tr>` / `<td>` should be rare and stay inside a Moonshine `<Table.Body>` only when native table semantics are needed and Moonshine does not expose them, such as a `colSpan` overflow row. If the row is a normal data row, use `<Table.Row row={row} columns={columns} />` or the declarative `data` prop.
+
 ### React Performance Patterns
 
 These patterns were established in the audit log (#2140) and deployment log (#2167) redesigns. Apply them whenever building search, filtering, or keyboard navigation.
