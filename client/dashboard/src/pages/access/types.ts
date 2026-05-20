@@ -46,20 +46,25 @@ export type ActivePanel =
 /** Policy effect for a grant: allow (default) or deny. */
 export type PolicyEffect = "allow" | "deny";
 
-/** A single grant within a role: a scope + optional selector constraints. */
+/** A single allow or deny rule within a scope grant. */
+export interface ScopeRule {
+  /** Unique identifier (React key + editing reference). */
+  id: string;
+  /** Whether this rule allows or denies access. */
+  effect: PolicyEffect;
+  /** null = unrestricted (all resources); Selector[] = constrained. */
+  selectors: Selector[] | null;
+  /** Annotation hints for annotation-level rules (UI-only). */
+  annotations?: AnnotationHint[];
+  /** Which custom tab was last active when editing (UI-only). */
+  customTab?: CustomTab;
+}
+
+/** A scope within a role, containing one or more allow/deny rules. */
 export interface RoleGrant {
   scope: Scope;
-  /** Whether this grant allows or denies the scope. Defaults to 'allow'. */
-  effect?: PolicyEffect;
-  /** null = unrestricted; Selector[] = constrained by selectors */
-  selectors: Selector[] | null;
-  /** Resources to explicitly deny — generates separate deny grants on submit.
-   *  Only meaningful when selectors is null (unrestricted allow + targeted deny). */
-  exclusions?: Selector[];
-  /** Selected annotation hints for auto-group matching (MCP scopes only) */
-  annotations?: AnnotationHint[];
-  /** Which custom tab was last active (UI-only, not persisted to backend) */
-  customTab?: CustomTab;
+  /** The set of allow and deny rules for this scope. */
+  rules: ScopeRule[];
 }
 
 /** Maps annotation hint keys to disposition values stored in selectors.

@@ -6,7 +6,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { RequireScope } from "@/components/require-scope";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -26,13 +25,11 @@ import {
   Plus,
   Repeat,
   Shield,
-  Tag,
   Wrench,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   ActivePanel,
   AnnotationHint,
@@ -59,6 +56,14 @@ interface ScopePickerPopoverProps {
   onCustomTabChange?: (tab: CustomTab) => void;
   /** Hide the "All" option — used for deny pickers where unrestricted deny is nonsensical */
   hideAllOption?: boolean;
+  /** Whether this picker is editing a deny rule (affects descriptions). */
+  isDeny?: boolean;
+  /** Restrict which scope-level panels are visible (e.g. ["projects"] for deny rules).
+   *  When set, auto-switches to the first allowed panel if current panel isn't in the list. */
+  allowedPanels?: ActivePanel[];
+  /** When editing a deny rule, pass the allow rule's selectors here.
+   *  The picker will filter projects/servers/tools to only those covered by the allow. */
+  allowSelectors?: Selector[] | null;
   /** "popover" (default) = floating popover with trigger button.
    *  "panel" = inline content that fills its parent container (for sheet slide panels). */
   variant?: "popover" | "panel";
@@ -151,6 +156,9 @@ export function ScopePickerPopover({
   customTab,
   onCustomTabChange,
   hideAllOption,
+  isDeny: isDenyProp,
+  allowedPanels,
+  allowSelectors,
   variant = "popover",
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
@@ -192,6 +200,32 @@ export function ScopePickerPopover({
   // selectors have content, so clearing it eagerly only causes the UI to
   // jump back to "servers" when the user deselects all items.
 
+  // Auto-switch to first allowed panel when current panel isn't permitted.
+  // Fires on mount when allowedPanels constrains the picker (e.g. deny rules).
+  useEffect(() => {
+    if (!allowedPanels || allowedPanels.length === 0) return;
+    if (allowedPanels.includes(activePanel)) return;
+    switchPanel(allowedPanels[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowedPanels?.join(",")]);
+
+  // Derive allowed project/server IDs from the allow rule's selectors.
+  // When deny picker is open, only show resources the allow rule covers.
+  const allowFilter = useMemo(() => {
+    // null or undefined = no filtering (allow covers everything)
+    if (allowSelectors === null || allowSelectors === undefined) return null;
+    const projectIds = new Set<string>();
+    const serverIds = new Set<string>();
+    for (const s of allowSelectors) {
+      if (s.projectId) projectIds.add(s.projectId);
+      if (s.resourceId && s.resourceId !== "*") serverIds.add(s.resourceId);
+    }
+    return {
+      projectIds: projectIds.size > 0 ? projectIds : null,
+      serverIds: serverIds.size > 0 ? serverIds : null,
+    };
+  }, [allowSelectors]);
+
   const projectList = useMemo(() => {
     const seen = new Set<string>();
     const projects: { id: string; name: string }[] = [];
@@ -210,8 +244,22 @@ export function ScopePickerPopover({
         projects.push({ id: group.projectId, name: group.projectName });
       }
     }
+    // Filter to only projects covered by the allow rule
+    if (allowFilter?.projectIds) {
+      return projects.filter((p) => allowFilter.projectIds!.has(p.id));
+    }
+    // If allow uses specific server IDs, derive their projects from mcpServers
+    if (allowFilter?.serverIds) {
+      const allowedProjectIds = new Set<string>();
+      for (const group of mcpServers) {
+        if (group.servers.some((s) => allowFilter.serverIds!.has(s.id))) {
+          allowedProjectIds.add(group.projectId);
+        }
+      }
+      return projects.filter((p) => allowedProjectIds.has(p.id));
+    }
     return projects;
-  }, [organization.projects, mcpServers]);
+  }, [organization.projects, mcpServers, allowFilter]);
 
   const resourceKind = resourceType === "project" ? "project" : "mcp";
 
@@ -225,10 +273,35 @@ export function ScopePickerPopover({
     [projectList, resourceSearch],
   );
 
-  const filteredMcpServers = useMemo(() => {
-    if (!resourceSearch) return mcpServers;
-    const q = resourceSearch.toLowerCase();
+  // Pre-filter mcpServers by allow scope, then apply search
+  const scopedMcpServers = useMemo(() => {
+    if (!allowFilter) return mcpServers;
     return mcpServers
+      .map((group) => {
+        // If allow specifies project IDs, only show groups in those projects
+        if (
+          allowFilter.projectIds &&
+          !allowFilter.projectIds.has(group.projectId)
+        )
+          return { ...group, servers: [] };
+        // If allow specifies server IDs, only show those servers
+        if (allowFilter.serverIds) {
+          return {
+            ...group,
+            servers: group.servers.filter((s) =>
+              allowFilter.serverIds!.has(s.id),
+            ),
+          };
+        }
+        return group;
+      })
+      .filter((g) => g.servers.length > 0);
+  }, [mcpServers, allowFilter]);
+
+  const filteredMcpServers = useMemo(() => {
+    if (!resourceSearch) return scopedMcpServers;
+    const q = resourceSearch.toLowerCase();
+    return scopedMcpServers
       .map((group) => ({
         ...group,
         servers: group.servers.filter(
@@ -238,7 +311,7 @@ export function ScopePickerPopover({
         ),
       }))
       .filter((g) => g.servers.length > 0);
-  }, [mcpServers, resourceSearch]);
+  }, [scopedMcpServers, resourceSearch]);
 
   // Fixed-scope permissions have no resource picker — their granularity is
   // baked into the scope definition. Org scopes are always org-wide;
@@ -299,43 +372,63 @@ export function ScopePickerPopover({
     }
   };
 
+  const isPanelAllowed = (panel: ActivePanel) =>
+    !allowedPanels || allowedPanels.includes(panel);
+
   const renderScopeOptions = ({
     includeCollection,
   }: {
     includeCollection: boolean;
   }) => (
     <div className="shrink-0 pb-1.5">
-      {!hideAllOption && (
+      {!hideAllOption && isPanelAllowed("all") && (
         <ScopeOption
           label={resourceType === "project" ? "All projects" : "All servers"}
+          description={
+            resourceType === "project"
+              ? "Give access to every project in your org"
+              : "Give access to all servers in every project in your org"
+          }
           selected={activePanel === "all"}
           onClick={() => switchPanel("all")}
         />
       )}
-      {resourceType === "mcp" && (
+      {resourceType === "mcp" && isPanelAllowed("projects") && (
         <ScopeOption
           label="Specific projects"
+          description="Give access to servers within specific projects in your org"
           selected={activePanel === "projects"}
           onClick={() => switchPanel("projects")}
         />
       )}
-      <ScopeOption
-        label={
-          resourceType === "project" ? "Specific projects" : "Specific servers"
-        }
-        selected={activePanel === "servers"}
-        onClick={() => switchPanel("servers")}
-      />
-      {isMcpConnect && (
+      {isPanelAllowed("servers") && (
+        <ScopeOption
+          label={
+            resourceType === "project"
+              ? "Specific projects"
+              : "Specific servers"
+          }
+          description={
+            resourceType === "project"
+              ? "Give access to specific projects in your org"
+              : "Give access to specific servers across your org"
+          }
+          selected={activePanel === "servers"}
+          onClick={() => switchPanel("servers")}
+        />
+      )}
+      {isMcpConnect && isPanelAllowed("tools") && (
         <ScopeOption
           label="Specific tools"
+          description="Give fine-grained access to individual tools"
           selected={activePanel === "tools"}
           onClick={() => switchPanel("tools")}
         />
       )}
-      {isMcpConnect && includeCollection && (
+      {isMcpConnect && includeCollection && isPanelAllowed("collection") && (
         <ScopeOption
           label="Specific collections"
+          description="Give access to a curated set of tools"
           selected={activePanel === "collection"}
           onClick={() => switchPanel("collection")}
         />
@@ -346,7 +439,7 @@ export function ScopePickerPopover({
   const resourceList = activePanel === "servers" && (
     <>
       <div className="bg-border mt-1 h-px" />
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-2 px-3 pt-2 pb-1">
         <input
           type="text"
           placeholder={
@@ -366,7 +459,7 @@ export function ScopePickerPopover({
           </button>
         )}
       </div>
-      <div className="bg-border h-px" />
+      <div className="bg-border my-1 h-px" />
       <div
         ref={resourceListRef}
         onWheel={handleResourceWheel}
@@ -392,7 +485,7 @@ export function ScopePickerPopover({
           )
         ) : filteredMcpServers.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
-            {mcpServers.length === 0
+            {scopedMcpServers.length === 0
               ? "No servers found"
               : "No matching servers"}
           </div>
@@ -425,7 +518,7 @@ export function ScopePickerPopover({
   const projectPickerList = activePanel === "projects" && (
     <>
       <div className="bg-border mt-1 h-px" />
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-2 px-3 pt-2 pb-1">
         <input
           type="text"
           placeholder="Search projects…"
@@ -443,7 +536,7 @@ export function ScopePickerPopover({
           </button>
         )}
       </div>
-      <div className="bg-border h-px" />
+      <div className="bg-border my-1 h-px" />
       <div
         ref={resourceListRef}
         onWheel={handleResourceWheel}
@@ -471,113 +564,63 @@ export function ScopePickerPopover({
   );
 
   const customTabs = (toolScrollClass?: string) => (
-    <Tabs
-      value={customTab ?? "select"}
-      className="flex min-h-0 flex-1 flex-col gap-0"
-      onValueChange={(value) => {
-        onChangeSelectors([]);
-        onChangeAnnotations?.([]);
-        onCustomTabChange?.(value as CustomTab);
+    <ToolSelectionPanel
+      mcpServers={scopedMcpServers}
+      selectors={selectors ?? []}
+      annotations={annotations}
+      onChangeAnnotations={onChangeAnnotations}
+      isDeny={!!isDenyProp}
+      onChangeSelectors={(sels) => onChangeSelectors(sels)}
+      onToggleTool={(serverId, toolName) => {
+        const sels = selectors ?? [];
+        const exists = sels.some(
+          (s) => s.resourceId === serverId && s.tool === toolName,
+        );
+        if (exists) {
+          onChangeSelectors(
+            sels.filter(
+              (s) => !(s.resourceId === serverId && s.tool === toolName),
+            ),
+          );
+        } else {
+          onChangeSelectors([
+            ...sels,
+            {
+              resourceKind: "mcp",
+              resourceId: serverId,
+              tool: toolName,
+            },
+          ]);
+        }
       }}
-    >
-      <TabsList className="border-border h-auto w-full shrink-0 gap-2 rounded-none border-y bg-transparent px-1.5 py-1.5">
-        <TabsTrigger
-          value="select"
-          className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
-        >
-          <Wrench className="h-3.5 w-3.5" />
-          All tools
-        </TabsTrigger>
-        <div className="bg-border/40 my-1 w-px self-stretch" />
-        <TabsTrigger
-          value="auto-groups"
-          className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
-        >
-          <Tag className="h-3.5 w-3.5" />
-          By annotation
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent
-        value="select"
-        className="flex min-h-[200px] flex-1 flex-col p-0"
-      >
-        <ToolSelectionPanel
-          mcpServers={mcpServers}
-          selectors={selectors ?? []}
-          onToggleTool={(serverId, toolName) => {
-            const sels = selectors ?? [];
-            const exists = sels.some(
-              (s) => s.resourceId === serverId && s.tool === toolName,
-            );
-            if (exists) {
-              onChangeSelectors(
-                sels.filter(
-                  (s) => !(s.resourceId === serverId && s.tool === toolName),
-                ),
-              );
-            } else {
-              onChangeSelectors([
-                ...sels,
-                {
-                  resourceKind: "mcp",
-                  resourceId: serverId,
-                  tool: toolName,
-                },
-              ]);
-            }
-          }}
-          onBatchToggleTools={(serverId, toolNames, select) => {
-            const sels = selectors ?? [];
-            if (select) {
-              const existing = new Set(
-                sels
-                  .filter((s) => s.resourceId === serverId && s.tool)
-                  .map((s) => s.tool!),
-              );
-              const toAdd = toolNames
-                .filter((name) => !existing.has(name))
-                .map((name) => ({
-                  resourceKind: "mcp" as const,
-                  resourceId: serverId,
-                  tool: name,
-                }));
-              onChangeSelectors([...sels, ...toAdd]);
-            } else {
-              const toolSet = new Set(toolNames);
-              onChangeSelectors(
-                sels.filter(
-                  (s) =>
-                    !(
-                      s.resourceId === serverId &&
-                      s.tool &&
-                      toolSet.has(s.tool)
-                    ),
-                ),
-              );
-            }
-          }}
-          className={toolScrollClass}
-        />
-      </TabsContent>
-      <TabsContent
-        value="auto-groups"
-        className="min-h-[200px] flex-1 overflow-y-auto px-2 py-1"
-      >
-        <AnnotationGroupPanel
-          annotations={annotations ?? []}
-          onChangeAnnotations={(newAnnotations) => {
-            onChangeAnnotations?.(newAnnotations);
-            const newSelectors = newAnnotations.map((hint) => ({
+      onBatchToggleTools={(serverId, toolNames, select) => {
+        const sels = selectors ?? [];
+        if (select) {
+          const existing = new Set(
+            sels
+              .filter((s) => s.resourceId === serverId && s.tool)
+              .map((s) => s.tool!),
+          );
+          const toAdd = toolNames
+            .filter((name) => !existing.has(name))
+            .map((name) => ({
               resourceKind: "mcp" as const,
-              resourceId: "*",
-              disposition: ANNOTATION_TO_DISPOSITION[hint],
+              resourceId: serverId,
+              tool: name,
             }));
-            onChangeSelectors(newSelectors);
-          }}
-          mcpServers={mcpServers}
-        />
-      </TabsContent>
-    </Tabs>
+          onChangeSelectors([...sels, ...toAdd]);
+        } else {
+          const toolSet = new Set(toolNames);
+          onChangeSelectors(
+            sels.filter(
+              (s) =>
+                !(s.resourceId === serverId && s.tool && toolSet.has(s.tool)),
+            ),
+          );
+        }
+      }}
+      className={cn("min-h-[200px]", toolScrollClass)}
+    />
   );
 
   const collectionPanel = (
@@ -635,7 +678,7 @@ export function ScopePickerPopover({
   // Panel variant: render inline, filling the parent container
   if (variant === "panel") {
     return (
-      <div className="flex flex-1 flex-col overflow-y-auto p-1.5">
+      <div className="flex flex-1 flex-col overflow-y-auto px-1.5 pb-1.5">
         {pickerContent}
       </div>
     );
@@ -714,6 +757,10 @@ function ToolSelectionPanel({
   selectors,
   onToggleTool,
   onBatchToggleTools,
+  annotations,
+  onChangeAnnotations,
+  onChangeSelectors,
+  isDeny,
   className,
 }: {
   mcpServers: ServerGroup[];
@@ -724,6 +771,10 @@ function ToolSelectionPanel({
     toolNames: string[],
     select: boolean,
   ) => void;
+  annotations?: AnnotationHint[];
+  onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
+  onChangeSelectors?: (selectors: Selector[]) => void;
+  isDeny?: boolean;
   className?: string;
 }) {
   const allServers = useMemo(
@@ -739,54 +790,86 @@ function ToolSelectionPanel({
         ),
     [mcpServers],
   );
-  const [selectedServerId, setSelectedServerId] = useState<string | null>(
-    allServers[0]?.id ?? null,
-  );
+
   const [search, setSearch] = useState("");
-  const [serverSearch, setServerSearch] = useState("");
-  const [leftWidth, setLeftWidth] = useState(260);
-  const dragging = useRef(false);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragging.current) return;
-      const container = serverScrollRef.current?.parentElement?.parentElement;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const next = Math.max(
-        140,
-        Math.min(e.clientX - rect.left, rect.width - 180),
-      );
-      setLeftWidth(next);
-    };
-    const onUp = () => {
-      dragging.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, []);
-
-  const selectedServer = allServers.find((s) => s.id === selectedServerId);
-  const tools = useMemo(
-    () => selectedServer?.tools ?? [],
-    [selectedServer?.tools],
+  // Auto-expand if only one server; otherwise all collapsed
+  const [expandedServers, setExpandedServers] = useState<Set<string>>(
+    () => new Set(allServers.length === 1 ? [allServers[0].id] : []),
   );
-  const filteredTools = useMemo(
+
+  const toggleExpanded = (serverId: string) => {
+    setExpandedServers((prev) =>
+      prev.has(serverId) ? new Set() : new Set([serverId]),
+    );
+  };
+
+  const q = search.toLowerCase();
+
+  // Check if any annotation filters are active
+  const hasAnnotationFilter = (annotations ?? []).length > 0;
+
+  // Compute matching tools per annotation
+  const allTools = useMemo(
     () =>
-      (search
-        ? tools.filter((t) =>
-            t.name.toLowerCase().includes(search.toLowerCase()),
-          )
-        : [...tools]
-      ).sort((a, b) => a.name.localeCompare(b.name)),
-    [tools, search],
+      allServers.flatMap((s) => s.tools.map((t) => ({ ...t, serverId: s.id }))),
+    [allServers],
   );
+
+  const toolCountByAnnotation = useMemo(() => {
+    const counts = new Map<AnnotationHint, number>();
+    for (const hint of [
+      "readOnlyHint",
+      "destructiveHint",
+      "idempotentHint",
+      "openWorldHint",
+    ] as AnnotationHint[]) {
+      counts.set(hint, allTools.filter((t) => t.annotations?.[hint]).length);
+    }
+    return counts;
+  }, [allTools]);
+
+  const toggleAnnotation = (key: AnnotationHint) => {
+    if (!onChangeAnnotations || !onChangeSelectors) return;
+    const current = annotations ?? [];
+    const has = current.includes(key);
+    const next = has ? current.filter((a) => a !== key) : [...current, key];
+    onChangeAnnotations(next);
+    // Sync selectors to annotation-based selectors
+    const newSelectors = next.map((hint) => ({
+      resourceKind: "mcp" as const,
+      resourceId: "*",
+      disposition: ANNOTATION_TO_DISPOSITION[hint],
+    }));
+    onChangeSelectors(newSelectors);
+    // Collapse all server accordions when switching to annotation mode
+    if (next.length > 0) {
+      setExpandedServers(new Set());
+      setSearch("");
+    }
+  };
+
+  // Filter servers and tools by search query
+  const filteredServers = useMemo(() => {
+    if (!q) return allServers;
+    return allServers
+      .map((server) => ({
+        ...server,
+        tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
+      }))
+      .filter(
+        (s) =>
+          s.tools.length > 0 ||
+          s.name.toLowerCase().includes(q) ||
+          s.projectName.toLowerCase().includes(q),
+      );
+  }, [allServers, q]);
+
+  // Auto-expand servers when searching
+  useEffect(() => {
+    if (q) {
+      setExpandedServers(new Set(filteredServers.map((s) => s.id)));
+    }
+  }, [q, filteredServers]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -795,245 +878,249 @@ function ToolSelectionPanel({
     }
   }, []);
 
-  const serverScrollRef = useRef<HTMLDivElement>(null);
-  const handleServerWheel = useCallback((e: React.WheelEvent) => {
-    if (serverScrollRef.current) {
-      serverScrollRef.current.scrollTop += e.deltaY;
-    }
-  }, []);
-
-  const filteredServers = useMemo(
-    () =>
-      serverSearch
-        ? allServers.filter((s) =>
-            `${s.projectName}/${s.name}`
-              .toLowerCase()
-              .includes(serverSearch.toLowerCase()),
-          )
-        : allServers,
-    [allServers, serverSearch],
+  // Determine active mode: annotation-based or manual tool selection
+  const hasManualTools = selectors.some(
+    (s) => s.tool && s.resourceId && s.resourceId !== "*",
   );
 
-  const serverVirtualizer = useVirtualizer({
-    count: filteredServers.length,
-    getScrollElement: () => serverScrollRef.current,
-    estimateSize: () => 40,
-    overscan: 5,
-  });
-
-  const toolVirtualizer = useVirtualizer({
-    count: filteredTools.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 40,
-    overscan: 5,
-  });
-
   return (
-    <div className={cn("flex min-h-0 flex-1", className)}>
-      {/* Left column — server list */}
+    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
       <div
-        className="border-border flex min-h-0 shrink-0 flex-col border-r"
-        style={{ width: leftWidth }}
+        ref={scrollRef}
+        onWheel={handleWheel}
+        className="min-h-0 flex-1 overflow-y-auto"
       >
-        <div className="border-border flex h-10 shrink-0 items-center gap-2 border-b px-3">
-          <Globe className="text-muted-foreground h-3 w-3 shrink-0" />
-          <input
-            type="text"
-            placeholder="Search servers…"
-            value={serverSearch}
-            onChange={(e) => setServerSearch(e.target.value)}
-            className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
-          />
-          {serverSearch && (
-            <button
-              type="button"
-              onClick={() => setServerSearch("")}
-              className="text-muted-foreground hover:text-foreground shrink-0"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-        <div
-          ref={serverScrollRef}
-          onWheel={handleServerWheel}
-          className="min-h-0 flex-1 overflow-y-auto"
-        >
-          {filteredServers.length === 0 ? (
-            <div className="text-muted-foreground px-3 py-3 text-sm">
-              {allServers.length === 0
-                ? "No servers found"
-                : "No matching servers"}
+        {/* ── Section 1: By annotation ── */}
+        {onChangeAnnotations && (
+          <div className={cn(hasManualTools && "opacity-60")}>
+            <div className="px-3 pt-5 pb-3">
+              <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+                By annotation
+              </div>
+              <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
+                Tools can be annotated with labels that provide more context
+                about the properties of the tool, such as if it's a destructive
+                operation. OpenAPI sources are tagged automatically based on
+                HTTP method. You can edit annotations on the MCP tools tab.
+              </div>
             </div>
-          ) : (
-            <div
-              style={{
-                height: `${serverVirtualizer.getTotalSize()}px`,
-                position: "relative",
-              }}
-            >
-              {serverVirtualizer.getVirtualItems().map((virtualItem) => {
-                const server = filteredServers[virtualItem.index];
-                const isActive = selectedServerId === server.id;
+            <div className="flex flex-wrap gap-2 px-3 pb-4">
+              {ANNOTATION_OPTIONS.map((opt) => {
+                const isActive = (annotations ?? []).includes(opt.key);
+                const count = toolCountByAnnotation.get(opt.key) ?? 0;
+                if (count === 0) return null;
+                const Icon = opt.icon;
                 return (
                   <button
-                    key={server.id}
+                    key={opt.key}
                     type="button"
-                    onClick={() => {
-                      setSelectedServerId(server.id);
-                      setSearch("");
-                    }}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: `${virtualItem.size}px`,
-                      transform: `translateY(${virtualItem.start}px)`,
-                    }}
+                    onClick={() => toggleAnnotation(opt.key)}
                     className={cn(
-                      "hover:bg-muted/50 flex cursor-pointer items-center justify-between truncate px-3 text-sm",
-                      isActive && "bg-muted font-medium",
+                      "border-input hover:bg-accent inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
+                      isActive &&
+                        "border-primary bg-primary/5 text-primary font-medium",
                     )}
                   >
-                    <span className="truncate">
-                      <span className="text-muted-foreground/60">
-                        {server.projectName.toLowerCase()}/
-                      </span>
-                      {server.name}
+                    <Icon className="h-3 w-3" />
+                    {opt.label}
+                    <span className="text-muted-foreground ml-0.5">
+                      {count}
                     </span>
-                    {isActive && (
-                      <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                    )}
                   </button>
                 );
               })}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* Resize handle */}
-      <div
-        onMouseDown={(e) => {
-          e.preventDefault();
-          dragging.current = true;
-          document.body.style.cursor = "col-resize";
-          document.body.style.userSelect = "none";
-        }}
-        className="hover:bg-border/80 flex w-1 shrink-0 cursor-col-resize items-center justify-center transition-colors"
-      />
+        {/* ── OR divider ── */}
+        {onChangeAnnotations && (
+          <div className="flex items-center gap-3 px-3 py-3">
+            <div className="bg-border h-px flex-1" />
+            <span className="text-muted-foreground text-[11px] font-medium uppercase">
+              or
+            </span>
+            <div className="bg-border h-px flex-1" />
+          </div>
+        )}
 
-      {/* Right column — tools for selected server */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="border-border flex h-10 items-center gap-1 border-b px-3">
-          <input
-            type="text"
-            placeholder="Search tools…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="text-muted-foreground hover:text-foreground shrink-0"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-        {filteredTools.length > 0 &&
-          !search &&
-          (() => {
-            const selectedCount = filteredTools.filter((t) =>
-              selectors.some(
-                (s) => s.resourceId === selectedServerId && s.tool === t.name,
-              ),
-            ).length;
-            const allSelected = selectedCount === filteredTools.length;
-            const someSelected = selectedCount > 0 && !allSelected;
-            return (
-              <button
-                type="button"
-                onClick={() => {
-                  if (onBatchToggleTools && selectedServerId) {
-                    const toolNames = filteredTools.map((t) => t.name);
-                    onBatchToggleTools(
-                      selectedServerId,
-                      toolNames,
-                      !allSelected,
-                    );
-                  }
-                }}
-                className="bg-muted/50 border-border hover:bg-muted flex h-10 shrink-0 cursor-pointer items-center gap-2 border-b px-3 transition-colors"
-              >
-                <Checkbox
-                  checked={
-                    allSelected ? true : someSelected ? "indeterminate" : false
-                  }
-                  className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-                  tabIndex={-1}
-                />
-                <span className="text-muted-foreground text-sm">
-                  {allSelected
-                    ? `All ${tools.length} selected`
-                    : someSelected
-                      ? `${selectedCount} of ${tools.length} selected`
-                      : `Select all`}
-                </span>
-              </button>
-            );
-          })()}
-        <div
-          ref={scrollRef}
-          onWheel={handleWheel}
-          className="tool-scroll min-h-0 flex-1 overflow-y-auto"
-        >
-          {filteredTools.length === 0 ? (
-            <div className="text-muted-foreground px-3 py-3 text-sm">
-              {tools.length === 0 ? "No tools found" : "No matching tools"}
+        {/* ── Section 2: By server (manual) ── */}
+        <div className={cn(hasAnnotationFilter && "opacity-60")}>
+          <div className="px-3 pt-1 pb-3">
+            <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+              By server
             </div>
-          ) : (
-            <div
-              style={{
-                height: `${toolVirtualizer.getTotalSize()}px`,
-                position: "relative",
-              }}
-            >
-              {toolVirtualizer.getVirtualItems().map((virtualItem) => {
-                const tool = filteredTools[virtualItem.index];
-                const isSelected = selectors.some(
-                  (s) =>
-                    s.resourceId === selectedServerId && s.tool === tool.name,
-                );
+            <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
+              {isDeny
+                ? "Select specific tools to deny. Expand a server to choose which tools this role should not access."
+                : "Select specific tools to allow. Expand a server to choose which tools this role can access."}
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="flex items-center gap-2 px-3 pb-3">
+            <div className="border-input flex h-8 flex-1 items-center gap-2 rounded-md border px-2">
+              <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
+              <input
+                type="text"
+                placeholder="Search tools and servers…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="placeholder:text-muted-foreground flex-1 bg-transparent text-xs outline-none"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Server accordion */}
+          <div className="border-border border-t">
+            {filteredServers.length === 0 ? (
+              <div className="text-muted-foreground px-3 py-3 text-sm">
+                {allServers.length === 0
+                  ? "No servers found"
+                  : "No matching tools or servers"}
+              </div>
+            ) : (
+              filteredServers.map((server) => {
+                const isExpanded = expandedServers.has(server.id);
+                const serverTools = server.tools
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name));
+
+                const selectedCount = serverTools.filter((t) =>
+                  selectors.some(
+                    (s) => s.resourceId === server.id && s.tool === t.name,
+                  ),
+                ).length;
+                const allSelected =
+                  serverTools.length > 0 &&
+                  selectedCount === serverTools.length;
+                const someSelected = selectedCount > 0 && !allSelected;
+
                 return (
                   <div
-                    key={tool.id}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: `${virtualItem.size}px`,
-                      transform: `translateY(${virtualItem.start}px)`,
-                    }}
+                    key={server.id}
+                    className="border-border border-b last:border-b-0"
                   >
-                    <ResourceCheckbox
-                      id={tool.name}
-                      name={tool.name}
-                      checked={isSelected}
-                      onToggle={() =>
-                        onToggleTool(selectedServerId!, tool.name)
-                      }
-                      compact
-                    />
+                    {/* Server header */}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => toggleExpanded(server.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleExpanded(server.id);
+                        }
+                      }}
+                      className="hover:bg-muted/50 flex cursor-pointer items-center"
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-sm">
+                        <ChevronRight
+                          className={cn(
+                            "text-muted-foreground h-3 w-3 shrink-0 transition-transform",
+                            isExpanded && "rotate-90",
+                          )}
+                        />
+                        <span className="min-w-0 truncate">
+                          <HighlightMatch
+                            text={`${server.projectName.toLowerCase()}/`}
+                            query={q}
+                            className="text-muted-foreground/60"
+                          />
+                          <HighlightMatch
+                            text={server.name}
+                            query={q}
+                            className="font-medium"
+                          />
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 pr-3">
+                        <span className="text-muted-foreground text-xs">
+                          {selectedCount > 0
+                            ? `${selectedCount} of ${serverTools.length} selected`
+                            : `${serverTools.length} ${serverTools.length === 1 ? "tool" : "tools"} available`}
+                        </span>
+                        {
+                          <Checkbox
+                            checked={
+                              allSelected
+                                ? true
+                                : someSelected
+                                  ? "indeterminate"
+                                  : false
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (hasAnnotationFilter && onChangeAnnotations) {
+                                onChangeAnnotations([]);
+                              }
+                              if (onBatchToggleTools) {
+                                onBatchToggleTools(
+                                  server.id,
+                                  serverTools.map((t) => t.name),
+                                  !allSelected,
+                                );
+                              }
+                            }}
+                            className="focus-visible:border-input pointer-events-auto cursor-pointer focus-visible:ring-0"
+                          />
+                        }
+                      </div>
+                    </div>
+
+                    {/* Expanded tool list */}
+                    {isExpanded && (
+                      <div className="bg-muted/30 border-border max-h-[300px] overflow-y-auto border-t">
+                        {serverTools.map((tool) => {
+                          const isSelected = selectors.some(
+                            (s) =>
+                              s.resourceId === server.id &&
+                              s.tool === tool.name,
+                          );
+                          return (
+                            <button
+                              key={tool.id}
+                              type="button"
+                              onClick={() => {
+                                if (
+                                  hasAnnotationFilter &&
+                                  onChangeAnnotations
+                                ) {
+                                  onChangeAnnotations([]);
+                                }
+                                onToggleTool(server.id, tool.name);
+                              }}
+                              className="hover:bg-accent flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 pl-8 text-sm"
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
+                                tabIndex={-1}
+                              />
+                              <HighlightMatch
+                                text={tool.name}
+                                query={q}
+                                className="truncate"
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1071,90 +1158,6 @@ const ANNOTATION_OPTIONS: {
     icon: Globe,
   },
 ];
-
-function AnnotationGroupPanel({
-  annotations,
-  onChangeAnnotations,
-  mcpServers,
-}: {
-  annotations: AnnotationHint[];
-  onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
-  mcpServers: ServerGroup[];
-}) {
-  const allTools = useMemo(
-    () =>
-      mcpServers.flatMap((g) =>
-        g.servers.flatMap((s) =>
-          s.tools.map((t) => ({ ...t, serverName: s.name })),
-        ),
-      ),
-    [mcpServers],
-  );
-
-  const toolsByAnnotation = useMemo(() => {
-    const map = new Map<AnnotationHint, typeof allTools>();
-    for (const hint of [
-      "readOnlyHint",
-      "destructiveHint",
-      "idempotentHint",
-      "openWorldHint",
-    ] as AnnotationHint[]) {
-      map.set(
-        hint,
-        allTools.filter((t) => t.annotations?.[hint] === true),
-      );
-    }
-    return map;
-  }, [allTools]);
-
-  const toggle = (key: AnnotationHint) => {
-    const has = annotations.includes(key);
-    const next = has
-      ? annotations.filter((a) => a !== key)
-      : [...annotations, key];
-    onChangeAnnotations?.(next);
-  };
-
-  return (
-    <div className="py-1">
-      <div className="text-muted-foreground px-2 py-2 text-sm">
-        Grant access to all tools matching selected annotations:
-      </div>
-      {ANNOTATION_OPTIONS.map((opt) => {
-        const isSelected = annotations.includes(opt.key);
-        const matchCount = (toolsByAnnotation.get(opt.key) ?? []).length;
-        const Icon = opt.icon;
-        return (
-          <button
-            key={opt.key}
-            type="button"
-            onClick={() => toggle(opt.key)}
-            className={cn(
-              "hover:bg-accent flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-sm outline-none",
-              isSelected && "font-medium",
-            )}
-          >
-            <Checkbox
-              checked={isSelected}
-              className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-              tabIndex={-1}
-            />
-            <Icon className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-            <div className="min-w-0 flex-1 text-left">
-              <div>{opt.label}</div>
-              <div className="text-muted-foreground text-[11px] font-normal">
-                {opt.description}
-              </div>
-            </div>
-            <span className="text-muted-foreground shrink-0 text-xs">
-              {matchCount} tool{matchCount !== 1 ? "s" : ""}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 /** Fetches collection groups with resolved server/tool data. */
 function useCollectionGroups(
@@ -1383,10 +1386,12 @@ function ResourceCheckbox({
 
 function ScopeOption({
   label,
+  description,
   selected,
   onClick,
 }: {
   label: string;
+  description?: string;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -1395,14 +1400,45 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "hover:bg-accent flex w-full cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm",
+        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 rounded-sm px-3 py-2 text-sm",
         selected && "font-medium",
       )}
     >
-      <span className="flex w-4 shrink-0 items-center justify-center">
+      <span className="mt-0.5 flex w-4 shrink-0 items-center justify-center">
         {selected && <Check className="h-3.5 w-3.5" />}
       </span>
-      <span>{label}</span>
+      <span className="flex flex-col items-start">
+        <span>{label}</span>
+        {description && (
+          <span className="text-muted-foreground text-xs font-normal">
+            {description}
+          </span>
+        )}
+      </span>
     </button>
+  );
+}
+
+/** Highlights substring matches with a yellow background. */
+function HighlightMatch({
+  text,
+  query,
+  className,
+}: {
+  text: string;
+  query: string;
+  className?: string;
+}) {
+  if (!query) return <span className={className}>{text}</span>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <span className={className}>{text}</span>;
+  return (
+    <span className={className}>
+      {text.slice(0, idx)}
+      <mark className="rounded-sm bg-yellow-200 dark:bg-yellow-800/60">
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </span>
   );
 }

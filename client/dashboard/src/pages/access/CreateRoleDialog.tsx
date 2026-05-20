@@ -2,16 +2,19 @@ import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button as LocalButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
+import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
@@ -30,6 +33,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Ban,
+  Check,
+  ChevronDown,
   ChevronRight,
   Info,
   Loader2,
@@ -44,89 +49,127 @@ import {
 import { useMemo, useState } from "react";
 import { ScopePickerPopover } from "./ScopePickerPopover";
 import type {
+  ActivePanel,
   AnnotationHint,
-  CustomTab,
+  PolicyEffect,
   ResourceType,
   RoleGrant,
   Scope,
+  ScopeRule,
 } from "./types";
 import type { Selector } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
-import { isSaveDisabled } from "./roleDialogState";
+import {
+  isSaveDisabled,
+  effectiveGrantCount,
+  grantKeysString as grantKeysStringFn,
+  computeRuleLabel,
+  computeRuleTooltip,
+} from "./roleDialogState";
 
-/** Derive a short label for a grant's current selector state. */
-function computeGrantLabel(
-  grant: Pick<RoleGrant, "selectors">,
-  resourceType: ResourceType,
-): string {
-  const { selectors } = grant;
-  if (selectors === null) {
-    return resourceType === "project" ? "All projects" : "All servers";
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Human-readable label for a rule chip. */
+/** Split a flat selector array into groups by hierarchy level. */
+function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
+  const projects: Selector[] = [];
+  const servers: Selector[] = [];
+  const tools: Selector[] = [];
+  const annotations: Selector[] = [];
+
+  for (const s of selectors) {
+    if (s.disposition) annotations.push(s);
+    else if (s.tool) tools.push(s);
+    else if (s.projectId) projects.push(s);
+    else servers.push(s);
   }
-  if (selectors.length === 0) return "Select…";
-  const hasTools = selectors.some((s) => s.tool);
-  if (hasTools) {
-    const count = selectors.filter((s) => s.tool).length;
-    return `${count} tool${count === 1 ? "" : "s"}`;
-  }
-  const hasProjects = selectors.some((s) => s.projectId);
-  if (hasProjects) {
-    const count = selectors.filter((s) => s.projectId).length;
-    return `${count} project${count === 1 ? "" : "s"}`;
-  }
-  const count = selectors.length;
-  const noun = resourceType === "project" ? "project" : "server";
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+  const groups: Selector[][] = [];
+  if (projects.length) groups.push(projects);
+  if (servers.length) groups.push(servers);
+  if (tools.length) groups.push(tools);
+  if (annotations.length) groups.push(annotations);
+  return groups;
 }
+
+/** Convert API Role grants to rules-based RoleGrant map. */
+function grantsFromRole(role: Role): Record<string, RoleGrant> {
+  const result: Record<string, RoleGrant> = {};
+
+  for (const g of role.grants) {
+    if (!result[g.scope]) {
+      result[g.scope] = { scope: g.scope, rules: [] };
+    }
+
+    const effect: PolicyEffect = (g.effect as PolicyEffect) ?? "allow";
+
+    if (!g.selectors || g.selectors.length === 0) {
+      // Unrestricted rule
+      result[g.scope].rules.push({
+        id: crypto.randomUUID(),
+        effect,
+        selectors: null,
+      });
+    } else {
+      // Split selectors by hierarchy level into separate rules
+      const groups = groupSelectorsByLevel(g.selectors as Selector[]);
+      for (const sels of groups) {
+        const rule: ScopeRule = {
+          id: crypto.randomUUID(),
+          effect,
+          selectors: sels,
+        };
+        // Detect annotation-based rules and restore UI hints
+        if (sels.some((s) => s.disposition)) {
+          rule.customTab = "auto-groups";
+          rule.annotations = sels
+            .filter((s) => s.disposition)
+            .map((s) => DISPOSITION_TO_ANNOTATION[s.disposition!])
+            .filter((a): a is AnnotationHint => !!a);
+        }
+        result[g.scope].rules.push(rule);
+      }
+    }
+  }
+
+  return result;
+}
+
+/** Determine the broadest allow level from a scope's rules. */
+function getAllowLevel(
+  rules: ScopeRule[],
+): "all" | "project" | "server" | "tool" | "annotation" | null {
+  const allows = rules.filter((r) => r.effect === "allow");
+  if (allows.length === 0) return null;
+  if (allows.some((r) => r.selectors === null)) return "all";
+  const allSels = allows.flatMap((r) => r.selectors ?? []);
+  if (allSels.some((s) => s.projectId)) return "project";
+  if (allSels.some((s) => s.disposition)) return "annotation";
+  if (allSels.some((s) => s.tool)) return "tool";
+  return "server";
+}
+
+/** Map an allow level to the panels available for deny rules — all levels narrower. */
+function getDenyPanels(allowLevel: string | null): ActivePanel[] {
+  switch (allowLevel) {
+    case "all":
+      return ["projects", "servers", "tools"];
+    case "project":
+      return ["servers", "tools"];
+    case "server":
+      return ["tools"];
+    default:
+      return []; // tool/annotation — already most specific, no deny possible
+  }
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
 
 interface CreateRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingRole?: Role | null;
   onRoleCreated?: (roleName: string) => void;
-}
-
-function grantsFromRole(role: Role): Record<string, RoleGrant> {
-  const result: Record<string, RoleGrant> = {};
-  // First pass: collect allow grants
-  for (const g of role.grants) {
-    if (g.effect === "deny") continue;
-    result[g.scope] = { scope: g.scope, selectors: g.selectors ?? null };
-  }
-  // Second pass: fold deny grants into exclusions on matching allow grants
-  for (const g of role.grants) {
-    if (g.effect !== "deny") continue;
-    if (!result[g.scope]) {
-      // Deny without allow in same role — create unrestricted allow to pair with
-      result[g.scope] = { scope: g.scope, selectors: null };
-    }
-    result[g.scope].exclusions = g.selectors ?? [];
-  }
-  return result;
-}
-
-/**
- * Infer which custom tab was used from saved selectors by inspecting
- * their keys — disposition selectors → "auto-groups", tool selectors → "select".
- */
-function inferCustomTab(selectors: Selector[]): {
-  tab: CustomTab;
-  annotations?: AnnotationHint[];
-} {
-  if (!selectors.length) return { tab: "select" };
-
-  // Check for disposition selectors → "auto-groups" tab
-  const dispositionSelectors = selectors.filter((s) => s.disposition);
-  if (dispositionSelectors.length > 0) {
-    const annotations = dispositionSelectors
-      .map((s) =>
-        s.disposition ? DISPOSITION_TO_ANNOTATION[s.disposition] : undefined,
-      )
-      .filter((a): a is AnnotationHint => !!a);
-    return { tab: "auto-groups", annotations };
-  }
-
-  return { tab: "select" };
 }
 
 export function CreateRoleDialog({
@@ -137,9 +180,10 @@ export function CreateRoleDialog({
 }: CreateRoleDialogProps) {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
+
+  // ─── Form state ───────────────────────────────────────────────
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  // Grants keyed by scope slug — presence means the scope is enabled
   const [grants, setGrants] = useState<Record<string, RoleGrant>>({});
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
@@ -153,15 +197,16 @@ export function CreateRoleDialog({
   const [showPermissions, setShowPermissions] = useState(true);
   const [initialized, setInitialized] = useState(false);
 
-  // Slide navigation: "form" = main role editor, "scope-picker" = configuring a specific scope
-  type DialogStep = "form" | "scope-picker";
+  // ─── Rule editor state ────────────────────────────────────────
+  type DialogStep = "form" | "rule-editor";
   const [dialogStep, setDialogStep] = useState<DialogStep>("form");
   const [editingScopeSlug, setEditingScopeSlug] = useState<string | null>(null);
-  const [editingScopeEffect, setEditingScopeEffect] = useState<
-    "allow" | "deny"
-  >("allow");
+  const [editingRuleIndex, setEditingRuleIndex] = useState<number>(-1);
+  const [draftRule, setDraftRule] = useState<ScopeRule | null>(null);
 
+  // ─── Hooks ────────────────────────────────────────────────────
   const queryClient = useQueryClient();
+  const organization = useOrganization();
   const { data: membersData } = useMembers();
   const members = membersData?.members ?? [];
   const { data: rolesData } = useRoles();
@@ -169,6 +214,11 @@ export function CreateRoleDialog({
     (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
   );
   const { data: scopesData } = useListScopes();
+
+  const projectList = useMemo(
+    () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
+    [organization.projects],
+  );
 
   const scopeGroups = useMemo(() => {
     const scopes = scopesData?.scopes ?? [];
@@ -184,12 +234,11 @@ export function CreateRoleDialog({
     }));
   }, [scopesData]);
 
-  // Pre-populate fields when editing — wait for async data so autoExpanded works correctly.
+  // ─── Initialize when editing ──────────────────────────────────
   if (editingRole && !initialized && scopesData && membersData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
     const roleGrants = grantsFromRole(editingRole);
-    // Auto-expand groups that have at least one scope selected
     const grantedScopes = new Set(Object.keys(roleGrants));
     const autoExpanded = new Set(
       scopeGroups
@@ -197,23 +246,10 @@ export function CreateRoleDialog({
         .map((g) => g.label),
     );
     setExpandedGroups(autoExpanded);
-    // Restore custom tab hints for MCP scopes with tool/disposition selectors
-    for (const [scope, grant] of Object.entries(roleGrants)) {
-      if (!scope.startsWith("mcp:")) continue;
-      const hasCustomSelectors =
-        grant.selectors?.some((s) => s.tool || s.disposition) ?? false;
-      if (!hasCustomSelectors) continue;
-      const detected = inferCustomTab(grant.selectors ?? []);
-      roleGrants[scope] = {
-        ...grant,
-        customTab: detected.tab,
-        ...(detected.annotations ? { annotations: detected.annotations } : {}),
-      };
-    }
     setGrants(roleGrants);
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
-    setInitialGrantKeys(Object.keys(roleGrants).sort().join(","));
+    setInitialGrantKeys(grantKeysStringFn(roleGrants));
     const assignedIds = new Set(
       members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
     );
@@ -225,6 +261,7 @@ export function CreateRoleDialog({
     setInitialized(false);
   }
 
+  // ─── Mutations ────────────────────────────────────────────────
   const createRole = useCreateRoleMutation({
     onSuccess: async () => {
       await Promise.all([
@@ -247,10 +284,7 @@ export function CreateRoleDialog({
   });
 
   const isMutating = createRole.isPending || updateRole.isPending;
-
-  const grantCount = Object.values(grants).filter(
-    (g) => g.selectors === null || g.selectors.length > 0,
-  ).length;
+  const grantCount = effectiveGrantCount(grants);
 
   const saveDisabled = isSaveDisabled({
     isMutating,
@@ -268,69 +302,118 @@ export function CreateRoleDialog({
     },
   });
 
+  // ─── Scope / grant operations ─────────────────────────────────
+
   const toggleScope = (scope: Scope) => {
     setGrants((prev) => {
       const next = { ...prev };
       if (next[scope]) {
         delete next[scope];
       } else {
-        next[scope] = { scope, selectors: null };
+        next[scope] = {
+          scope,
+          rules: [
+            { id: crypto.randomUUID(), effect: "allow", selectors: null },
+          ],
+        };
       }
       return next;
     });
   };
 
-  const setGrantSelectors = (scope: Scope, selectors: Selector[] | null) => {
-    setGrants((prev) => ({
-      ...prev,
-      [scope]: { ...prev[scope], scope, selectors },
-    }));
+  const openRuleEditor = (scopeSlug: string, ruleIndex: number) => {
+    setEditingScopeSlug(scopeSlug);
+    setEditingRuleIndex(ruleIndex);
+
+    const grant = grants[scopeSlug];
+    if (ruleIndex >= 0 && grant?.rules[ruleIndex]) {
+      // Edit existing rule — clone it as draft
+      setDraftRule({ ...grant.rules[ruleIndex] });
+    } else {
+      // New deny rule — or edit existing deny if one already exists
+      const existingDenyIdx = grant?.rules.findIndex(
+        (r) => r.effect === "deny",
+      );
+      if (existingDenyIdx !== undefined && existingDenyIdx >= 0) {
+        // Edit the existing deny rule instead of creating a new one
+        setEditingRuleIndex(existingDenyIdx);
+        setDraftRule({ ...grant!.rules[existingDenyIdx] });
+      } else {
+        setDraftRule({
+          id: crypto.randomUUID(),
+          effect: "deny",
+          selectors: [],
+        });
+      }
+    }
+    setDialogStep("rule-editor");
   };
 
-  const setGrantAnnotations = (scope: Scope, annotations: AnnotationHint[]) => {
-    setGrants((prev) => ({
-      ...prev,
-      [scope]: { ...prev[scope], scope, annotations },
-    }));
+  const saveAndCloseRuleEditor = () => {
+    if (draftRule && editingScopeSlug) {
+      const hasContent =
+        draftRule.selectors === null || draftRule.selectors.length > 0;
+      if (hasContent) {
+        setGrants((prev) => {
+          const grant = prev[editingScopeSlug] ?? {
+            scope: editingScopeSlug,
+            rules: [],
+          };
+          let rules = [...grant.rules];
+          if (editingRuleIndex >= 0 && editingRuleIndex < rules.length) {
+            // Editing existing rule — replace in place
+            rules[editingRuleIndex] = draftRule;
+            // Allow changed → clear deny exceptions (they were scoped to old allow)
+            if (draftRule.effect === "allow") {
+              rules = rules.filter((r) => r.effect !== "deny");
+            }
+          } else if (draftRule.effect === "deny") {
+            // One deny per scope — replace any existing deny
+            rules = rules.filter((r) => r.effect !== "deny");
+            rules.push(draftRule);
+          } else {
+            rules.push(draftRule);
+          }
+          return {
+            ...prev,
+            [editingScopeSlug]: { scope: editingScopeSlug, rules },
+          };
+        });
+      }
+    }
+    setDialogStep("form");
+    setTimeout(() => {
+      setEditingScopeSlug(null);
+      setEditingRuleIndex(-1);
+      setDraftRule(null);
+    }, 300);
   };
 
-  const setGrantExclusions = (scope: Scope, exclusions: Selector[]) => {
-    setGrants((prev) => ({
-      ...prev,
-      [scope]: { ...prev[scope], scope, exclusions },
-    }));
-  };
-
-  const removeGrantExclusions = (scope: Scope) => {
+  const removeRule = (scopeSlug: string, ruleIndex: number) => {
     setGrants((prev) => {
-      const { exclusions: _, ...rest } = prev[scope] ?? { scope };
-      return { ...prev, [scope]: rest as RoleGrant };
+      const grant = prev[scopeSlug];
+      if (!grant) return prev;
+      let rules = grant.rules.filter((_, i) => i !== ruleIndex);
+      // No allows left → denies are orphaned, clear everything
+      if (!rules.some((r) => r.effect === "allow")) {
+        rules = [];
+      }
+      if (rules.length === 0) {
+        const next = { ...prev };
+        delete next[scopeSlug];
+        return next;
+      }
+      return { ...prev, [scopeSlug]: { ...grant, rules } };
     });
   };
 
-  const openScopePicker = (slug: string, effect: "allow" | "deny") => {
-    setEditingScopeSlug(slug);
-    setEditingScopeEffect(effect);
-    setDialogStep("scope-picker");
-  };
-
-  const closeScopePicker = () => {
-    setDialogStep("form");
-    // Keep editingScopeSlug around during the transition so the panel doesn't unmount mid-slide
-    setTimeout(() => {
-      setEditingScopeSlug(null);
-      setEditingScopeEffect("allow");
-    }, 300);
-  };
+  // ─── Group operations ─────────────────────────────────────────
 
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(label)) {
-        next.delete(label);
-      } else {
-        next.add(label);
-      }
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
       return next;
     });
   };
@@ -338,7 +421,6 @@ export function CreateRoleDialog({
   const toggleGroupCheckbox = (label: string) => {
     const group = scopeGroups.find((g) => g.label === label);
     if (!group) return;
-
     setGrants((prev) => {
       const allSelected = group.scopes.every((s) => prev[s.slug]);
       const next = { ...prev };
@@ -346,21 +428,25 @@ export function CreateRoleDialog({
         if (allSelected) {
           delete next[scope.slug];
         } else if (!next[scope.slug]) {
-          next[scope.slug] = { scope: scope.slug, selectors: null };
+          next[scope.slug] = {
+            scope: scope.slug,
+            rules: [
+              { id: crypto.randomUUID(), effect: "allow", selectors: null },
+            ],
+          };
         }
       }
       return next;
     });
   };
 
+  // ─── Member operations ────────────────────────────────────────
+
   const toggleMember = (memberId: string) => {
     setSelectedMembers((prev) => {
       const next = new Set(prev);
-      if (next.has(memberId)) {
-        next.delete(memberId);
-      } else {
-        next.add(memberId);
-      }
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
       return next;
     });
   };
@@ -373,15 +459,14 @@ export function CreateRoleDialog({
       const allSelected = selectableMembers.every((m) => prev.has(m.id));
       const next = new Set(prev);
       for (const m of selectableMembers) {
-        if (allSelected) {
-          next.delete(m.id);
-        } else {
-          next.add(m.id);
-        }
+        if (allSelected) next.delete(m.id);
+        else next.add(m.id);
       }
       return next;
     });
   };
+
+  // ─── Submit ───────────────────────────────────────────────────
 
   const handleSubmit = () => {
     const sdkGrants: {
@@ -389,21 +474,36 @@ export function CreateRoleDialog({
       effect?: "allow" | "deny";
       selectors?: any[];
     }[] = [];
-    for (const g of Object.values(grants)) {
-      // Drop scopes with an empty selector list — the user switched to
-      // "specific" but didn't select anything, so there's nothing to grant.
-      if (g.selectors !== null && g.selectors.length === 0) continue;
-      // Allow grant
+
+    for (const grant of Object.values(grants)) {
+      const allowSelectors: Selector[] = [];
+      const denySelectors: Selector[] = [];
+      let hasUnrestrictedAllow = false;
+
+      for (const rule of grant.rules) {
+        if (rule.effect === "allow") {
+          if (rule.selectors === null) hasUnrestrictedAllow = true;
+          else if (rule.selectors.length > 0)
+            allowSelectors.push(...rule.selectors);
+        } else {
+          if (rule.selectors && rule.selectors.length > 0)
+            denySelectors.push(...rule.selectors);
+        }
+      }
+
+      // Skip scopes with no effective allows
+      if (!hasUnrestrictedAllow && allowSelectors.length === 0) continue;
+
       sdkGrants.push({
-        scope: g.scope,
-        selectors: g.selectors === null ? undefined : g.selectors,
+        scope: grant.scope,
+        selectors: hasUnrestrictedAllow ? undefined : allowSelectors,
       });
-      // Deny grant from exclusions
-      if (g.exclusions && g.exclusions.length > 0) {
+
+      if (denySelectors.length > 0) {
         sdkGrants.push({
-          scope: g.scope,
+          scope: grant.scope,
           effect: "deny",
-          selectors: g.exclusions,
+          selectors: denySelectors,
         });
       }
     }
@@ -413,7 +513,6 @@ export function CreateRoleDialog({
         request: {
           updateRoleForm: {
             id: editingRole.id,
-            // System roles are immutable in WorkOS — only member assignment is allowed.
             ...(isSystemRole ? {} : { name, description, grants: sdkGrants }),
             memberIds:
               selectedMembers.size > 0
@@ -439,6 +538,8 @@ export function CreateRoleDialog({
     }
   };
 
+  // ─── Close / reset ────────────────────────────────────────────
+
   const handleClose = () => {
     setName("");
     setDescription("");
@@ -454,46 +555,52 @@ export function CreateRoleDialog({
     setInitialized(false);
     setDialogStep("form");
     setEditingScopeSlug(null);
-    setEditingScopeEffect("allow");
+    setEditingRuleIndex(-1);
+    setDraftRule(null);
     onOpenChange(false);
   };
 
-  // Resolve the scope definition for the currently editing scope
+  // ─── Derived for slide panel ──────────────────────────────────
+
   const editingScopeDef = editingScopeSlug
     ? scopeGroups
         .flatMap((g) => g.scopes)
         .find((s) => s.slug === editingScopeSlug)
     : null;
-  const editingGrant = editingScopeSlug ? grants[editingScopeSlug] : null;
 
+  // Deny-level constraints: deny must be one level narrower than the broadest allow.
+  const editingGrantRules = editingScopeSlug
+    ? (grants[editingScopeSlug]?.rules ?? [])
+    : [];
+  const allowLevel = getAllowLevel(editingGrantRules);
+  const denyAllowedPanels = getDenyPanels(allowLevel);
   const stepOffset =
     dialogStep === "form" ? "translate-x-0" : "-translate-x-full";
+
+  // ─── Render ───────────────────────────────────────────────────
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent
         side="right"
         className={cn(
-          "flex w-full flex-col overflow-hidden transition-[max-width] duration-300",
-          dialogStep === "scope-picker" ? "sm:max-w-2xl" : "sm:max-w-lg",
+          "flex w-full flex-col gap-1 overflow-hidden sm:max-w-2xl",
         )}
       >
-        <SheetHeader>
+        <SheetHeader className="border-border border-b">
           <SheetTitle>
-            {dialogStep === "scope-picker" && editingScopeDef ? (
+            {dialogStep === "rule-editor" && editingScopeDef ? (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={closeScopePicker}
+                  onClick={saveAndCloseRuleEditor}
                   className="text-muted-foreground hover:text-foreground -ml-1 rounded-sm p-1 transition-colors"
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </button>
                 <span>
-                  {editingScopeEffect === "deny" ? "Deny" : "Configure"}{" "}
-                  <code className="bg-muted rounded px-1 font-mono text-sm">
-                    {editingScopeSlug}
-                  </code>
+                  {editingRuleIndex >= 0 ? "Edit" : "Create"}{" "}
+                  {draftRule?.effect === "allow" ? "allow" : "deny"} rule
                 </span>
               </div>
             ) : isEditing ? (
@@ -502,6 +609,13 @@ export function CreateRoleDialog({
               "Create Role"
             )}
           </SheetTitle>
+          {dialogStep === "rule-editor" && draftRule && (
+            <SheetDescription className="text-muted-foreground mr-5 ml-7 line-clamp-2 text-xs">
+              {draftRule.effect === "allow"
+                ? "Choose which resources this role can access. Start broad — you can add exceptions later to restrict specific items."
+                : "Deny access to specific resources that the allow rule would otherwise permit. Use exceptions to carve out items that this role should not access."}
+            </SheetDescription>
+          )}
         </SheetHeader>
 
         <div className="relative flex-1 overflow-hidden">
@@ -511,8 +625,8 @@ export function CreateRoleDialog({
               stepOffset,
             )}
           >
-            {/* Panel 1: Role form */}
-            <div className="w-full shrink-0 space-y-4 overflow-y-auto px-4">
+            {/* ─── Panel 1: Role form ─── */}
+            <div className="w-full shrink-0 space-y-4 overflow-y-auto px-4 pt-3">
               <InputField
                 label="Name"
                 placeholder="e.g., Project Manager"
@@ -539,7 +653,7 @@ export function CreateRoleDialog({
                 )}
               />
 
-              {/* Permissions / Grants */}
+              {/* ─── Permissions ─── */}
               <div className="border-border border-t pt-4">
                 <button
                   type="button"
@@ -640,19 +754,13 @@ export function CreateRoleDialog({
                               {group.scopes.map((scopeDef) => {
                                 const grant = grants[scopeDef.slug];
                                 const isChecked = !!grant;
-                                const hasDenyRow =
-                                  isChecked &&
-                                  !isSystemRole &&
-                                  grant.exclusions !== undefined;
-                                const canAddException =
-                                  isChecked &&
-                                  !isSystemRole &&
+                                const isConfigurable =
                                   scopeDef.resourceType !== "org" &&
-                                  scopeDef.resourceType !== "environment" &&
-                                  grant.exclusions === undefined;
+                                  scopeDef.resourceType !== "environment";
 
                                 const row = (
                                   <div key={scopeDef.slug}>
+                                    {/* Scope checkbox row */}
                                     <div
                                       className={cn(
                                         "hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5",
@@ -691,105 +799,80 @@ export function CreateRoleDialog({
                                         </div>
                                       </label>
 
-                                      <div className="flex shrink-0 items-center justify-end gap-1">
-                                        {isChecked &&
-                                          !isSystemRole &&
-                                          scopeDef.resourceType !== "org" &&
-                                          scopeDef.resourceType !==
-                                            "environment" && (
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.preventDefault();
-                                                openScopePicker(
-                                                  scopeDef.slug,
-                                                  "allow",
-                                                );
-                                              }}
-                                              className="border-input bg-background inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs shadow-xs transition-colors hover:bg-white/80"
-                                            >
-                                              <span className="max-w-[120px] truncate">
-                                                {computeGrantLabel(
-                                                  grant,
-                                                  scopeDef.resourceType,
-                                                )}
-                                              </span>
-                                              <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
-                                            </button>
-                                          )}
-                                        {isChecked &&
-                                          !isSystemRole &&
-                                          (scopeDef.resourceType === "org" ||
-                                            scopeDef.resourceType ===
-                                              "environment") && (
-                                            <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
-                                              {scopeDef.resourceType ===
-                                              "environment"
-                                                ? "All in project"
-                                                : "All"}
-                                            </span>
-                                          )}
-                                      </div>
+                                      {/* Static label for org/environment */}
+                                      {isChecked && !isConfigurable && (
+                                        <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
+                                          {scopeDef.resourceType ===
+                                          "environment"
+                                            ? "All in project"
+                                            : "All"}
+                                        </span>
+                                      )}
                                     </div>
 
-                                    {/* Deny row — nested under the allow grant */}
-                                    {hasDenyRow && (
-                                      <div className="bg-destructive/5 border-destructive/20 mr-3 mb-1 ml-8 flex items-center gap-2 rounded-md border px-2.5 py-2">
-                                        <Ban className="text-destructive h-3.5 w-3.5 shrink-0" />
-                                        <Type
-                                          variant="body"
-                                          className="text-destructive text-xs font-medium"
-                                        >
-                                          deny
-                                        </Type>
-                                        <div className="flex flex-1 justify-end">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              openScopePicker(
-                                                scopeDef.slug,
-                                                "deny",
-                                              )
+                                    {/* Rule chips for configurable scopes */}
+                                    {isChecked && isConfigurable && (
+                                      <div className="mr-3 ml-8 flex flex-wrap items-center gap-1.5 pb-3">
+                                        {grant.rules.map((rule, ruleIdx) => (
+                                          <RuleChip
+                                            key={rule.id}
+                                            rule={rule}
+                                            label={computeRuleLabel(
+                                              rule.selectors,
+                                              scopeDef.resourceType,
+                                              projectList,
+                                            )}
+                                            tooltip={computeRuleTooltip(
+                                              rule.effect,
+                                              rule.selectors,
+                                              scopeDef.resourceType,
+                                              projectList,
+                                            )}
+                                            onClick={
+                                              isSystemRole
+                                                ? undefined
+                                                : () =>
+                                                    openRuleEditor(
+                                                      scopeDef.slug,
+                                                      ruleIdx,
+                                                    )
                                             }
-                                            className="border-input bg-background inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs shadow-xs transition-colors hover:bg-white/80"
-                                          >
-                                            <span className="max-w-[120px] truncate">
-                                              {computeGrantLabel(
-                                                {
-                                                  ...grant,
-                                                  selectors:
-                                                    grant.exclusions ?? [],
-                                                },
-                                                scopeDef.resourceType,
-                                              )}
-                                            </span>
-                                            <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
-                                          </button>
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            removeGrantExclusions(scopeDef.slug)
-                                          }
-                                          className="text-muted-foreground hover:text-destructive ml-1 shrink-0"
-                                        >
-                                          <X className="h-3.5 w-3.5" />
-                                        </button>
+                                            onRemove={
+                                              isSystemRole
+                                                ? undefined
+                                                : () =>
+                                                    removeRule(
+                                                      scopeDef.slug,
+                                                      ruleIdx,
+                                                    )
+                                            }
+                                            readOnly={isSystemRole}
+                                          />
+                                        ))}
+                                        {!isSystemRole &&
+                                          !grant.rules.some(
+                                            (r) => r.effect === "deny",
+                                          ) &&
+                                          getDenyPanels(
+                                            getAllowLevel(grant.rules),
+                                          ).length > 0 && (
+                                            <LocalButton
+                                              type="button"
+                                              variant="ghost"
+                                              size="inline"
+                                              className="text-muted-foreground text-xs"
+                                              onClick={() =>
+                                                openRuleEditor(
+                                                  scopeDef.slug,
+                                                  -1,
+                                                )
+                                              }
+                                            >
+                                              <Plus className="h-3 w-3" />
+                                              Except…
+                                            </LocalButton>
+                                          )}
                                       </div>
-                                    )}
-
-                                    {/* Add exception button */}
-                                    {canAddException && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setGrantExclusions(scopeDef.slug, [])
-                                        }
-                                        className="text-muted-foreground hover:text-foreground mb-1 ml-8 flex items-center gap-1 px-2.5 py-1 text-xs transition-colors"
-                                      >
-                                        <Plus className="h-3 w-3" />
-                                        Add exception
-                                      </button>
                                     )}
                                   </div>
                                 );
@@ -821,7 +904,7 @@ export function CreateRoleDialog({
                 )}
               </div>
 
-              {/* Assign Members */}
+              {/* ─── Assign Members ─── */}
               <div className="border-border border-t pt-4 pb-4">
                 <button
                   type="button"
@@ -972,52 +1055,64 @@ export function CreateRoleDialog({
               </div>
             </div>
 
-            {/* Panel 2: Scope picker (slides in from right) */}
+            {/* ─── Panel 2: Rule editor (slides in from right) ─── */}
             <div className="flex w-full shrink-0 flex-col overflow-hidden">
-              {editingScopeDef && editingGrant && (
-                <ScopePickerPopover
-                  variant="panel"
-                  resourceType={editingScopeDef.resourceType}
-                  scope={editingScopeSlug!}
-                  selectors={
-                    editingScopeEffect === "deny"
-                      ? (editingGrant.exclusions ?? [])
-                      : editingGrant.selectors
-                  }
-                  onChangeSelectors={(sels) => {
-                    if (editingScopeEffect === "deny") {
-                      setGrantExclusions(editingScopeSlug!, sels ?? []);
-                    } else {
-                      setGrantSelectors(editingScopeSlug!, sels);
+              {editingScopeDef && draftRule && (
+                <>
+                  {/* Resource picker */}
+                  <ScopePickerPopover
+                    variant="panel"
+                    resourceType={editingScopeDef.resourceType}
+                    scope={editingScopeSlug!}
+                    selectors={draftRule.selectors}
+                    onChangeSelectors={(sels) =>
+                      setDraftRule((prev) =>
+                        prev ? { ...prev, selectors: sels } : null,
+                      )
                     }
-                  }}
-                  annotations={
-                    editingScopeEffect === "allow"
-                      ? editingGrant.annotations
-                      : undefined
-                  }
-                  onChangeAnnotations={
-                    editingScopeEffect === "allow"
-                      ? (annotations) =>
-                          setGrantAnnotations(editingScopeSlug!, annotations)
-                      : undefined
-                  }
-                  customTab={editingGrant.customTab}
-                  onCustomTabChange={(tab) =>
-                    setGrants((prev) => ({
-                      ...prev,
-                      [editingScopeSlug!]: {
-                        ...prev[editingScopeSlug!]!,
-                        customTab: tab,
-                      },
-                    }))
-                  }
-                  hideAllOption={editingScopeEffect === "deny"}
-                />
+                    annotations={draftRule.annotations}
+                    onChangeAnnotations={(annotations) =>
+                      setDraftRule((prev) =>
+                        prev ? { ...prev, annotations } : null,
+                      )
+                    }
+                    customTab={draftRule.customTab}
+                    onCustomTabChange={(customTab) =>
+                      setDraftRule((prev) =>
+                        prev ? { ...prev, customTab } : null,
+                      )
+                    }
+                    hideAllOption={draftRule.effect === "deny"}
+                    isDeny={draftRule.effect === "deny"}
+                    allowedPanels={
+                      draftRule.effect === "deny"
+                        ? denyAllowedPanels
+                        : undefined
+                    }
+                    allowSelectors={
+                      draftRule.effect === "deny" && editingScopeSlug
+                        ? (grants[editingScopeSlug]?.rules.find(
+                            (r) => r.effect === "allow",
+                          )?.selectors ?? null)
+                        : undefined
+                    }
+                  />
+                </>
               )}
             </div>
           </div>
         </div>
+
+        {dialogStep === "rule-editor" && (
+          <SheetFooter className="border-border flex-row justify-end border-t">
+            <Button variant="primary" onClick={saveAndCloseRuleEditor}>
+              <Button.LeftIcon>
+                <Check className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Done</Button.Text>
+            </Button>
+          </SheetFooter>
+        )}
 
         {dialogStep === "form" && (
           <SheetFooter className="border-border flex-row justify-end border-t">
@@ -1033,8 +1128,8 @@ export function CreateRoleDialog({
               <Button.Text>
                 {isMutating
                   ? isEditing
-                    ? "Saving…"
-                    : "Creating…"
+                    ? "Saving\u2026"
+                    : "Creating\u2026"
                   : isEditing
                     ? "Save Changes"
                     : "Create Role"}
@@ -1044,5 +1139,91 @@ export function CreateRoleDialog({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ─── Sub-components ─────────────────────────────────────────────────────────
+
+function RuleChip({
+  rule,
+  label,
+  tooltip,
+  onClick,
+  onRemove,
+  readOnly,
+}: {
+  rule: ScopeRule;
+  label: string;
+  tooltip?: string;
+  onClick?: () => void;
+  onRemove?: () => void;
+  readOnly?: boolean;
+}) {
+  const isAllow = rule.effect === "allow";
+  const isDeny = !isAllow;
+  const chip = (
+    <span
+      className={cn(
+        "border-input bg-background inline-flex items-center gap-1 overflow-hidden rounded-md border px-1 py-1 text-xs",
+        isDeny && "border-destructive/30",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={readOnly && !onClick}
+        className={cn(
+          "hover:bg-accent inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors",
+          isDeny
+            ? "text-destructive hover:bg-destructive/5"
+            : "text-foreground",
+          readOnly && "rounded-md",
+          !readOnly && onClick && "cursor-pointer",
+        )}
+      >
+        {isAllow ? (
+          <Check className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <Ban className="h-3 w-3 shrink-0 opacity-70" />
+        )}
+        <span className="max-w-[160px] truncate">{label}</span>
+        {!readOnly && onClick && (
+          <ChevronDown className="text-muted-foreground -mr-0.5 h-3 w-3 shrink-0" />
+        )}
+      </button>
+      {!readOnly && onRemove && (
+        <>
+          <div
+            className={cn(
+              "bg-border h-4 w-px shrink-0",
+              isDeny && "bg-destructive/20",
+            )}
+          />
+          <button
+            type="button"
+            onClick={onRemove}
+            className={cn(
+              "hover:bg-accent inline-flex items-center rounded-md px-1.5 py-1 transition-colors",
+              isDeny
+                ? "text-destructive/60 hover:text-destructive hover:bg-destructive/5"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </>
+      )}
+    </span>
+  );
+
+  if (!tooltip) return chip;
+
+  return (
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>{chip}</TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs whitespace-nowrap">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
   );
 }
