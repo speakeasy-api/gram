@@ -1,11 +1,13 @@
-import { NavButton } from "@/components/nav-menu";
+import {
+  CollapsibleNavGroup,
+  CollapsibleNavItem,
+  NavButton,
+  NavGroupProvider,
+} from "@/components/nav-menu";
 import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
@@ -17,12 +19,21 @@ import { Icon } from "@speakeasy-api/moonshine";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 
-/**
- * Nav items use hasAnyScope — the link is enabled if the user holds ANY of the
- * provided scopes (view OR mutate). Fine-grained enforcement happens inside
- * each page via page-level and component-level RequireScope guards.
- */
 function ScopeGatedNavItem({
+  item,
+  scope,
+}: {
+  item: AppRoute;
+  scope: Scope | Scope[];
+}) {
+  return (
+    <RequireScope scope={scope} level="section">
+      <CollapsibleNavItem item={item} />
+    </RequireScope>
+  );
+}
+
+function ScopeGatedTopLevelItem({
   item,
   scope,
 }: {
@@ -58,35 +69,69 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
       : "https://app.speakeasy.com";
 
+  const settingsActive = [
+    orgRoutes.billing,
+    orgRoutes.team,
+    orgRoutes.apiKeys,
+    orgRoutes.domains,
+    orgRoutes.logs,
+    orgRoutes.webhooks,
+    orgRoutes.adminSettings,
+  ].some((r) => r.active);
+
+  const secureActive = [
+    orgRoutes.auditLogs,
+    orgRoutes.identity,
+    orgRoutes.access,
+  ].some((r) => r.active);
+
+  const activeGroup = settingsActive
+    ? "Settings"
+    : secureActive
+      ? "Security"
+      : undefined;
+
+  const allOrgNavRoutes = [
+    orgRoutes.home,
+    orgRoutes.collections,
+    orgRoutes.billing,
+    orgRoutes.team,
+    orgRoutes.apiKeys,
+    orgRoutes.domains,
+    orgRoutes.logs,
+    orgRoutes.webhooks,
+    orgRoutes.adminSettings,
+    orgRoutes.auditLogs,
+    orgRoutes.identity,
+    orgRoutes.access,
+  ];
+  const activeRoute = allOrgNavRoutes.find((r) => r.active);
+  const activeItem = activeRoute?.title;
+
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarContent className="pt-2">
-        <SidebarGroup>
-          <SidebarGroupLabel>projects</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <ScopeGatedNavItem
-                item={orgRoutes.home}
-                scope={["org:read", "project:read", "org:admin"]}
-              />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>explore</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <ScopeGatedNavItem
-                item={orgRoutes.collections}
-                scope={["org:read", "org:admin"]}
-              />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>settings</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
+      <SidebarContent className="pt-5">
+        <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
+          <SidebarMenu className="gap-1 px-2">
+            {/* Home — top-level */}
+            <ScopeGatedTopLevelItem
+              item={orgRoutes.home}
+              scope={["org:read", "project:read", "org:admin"]}
+            />
+
+            {/* Collections — top-level */}
+            <ScopeGatedTopLevelItem
+              item={orgRoutes.collections}
+              scope={["org:read", "org:admin"]}
+            />
+
+            {/* Settings group */}
+            <CollapsibleNavGroup
+              label="Settings"
+              Icon={(p) => <Icon {...p} name="settings" />}
+              defaultHref={orgRoutes.billing.href()}
+              isActive={settingsActive}
+            >
               <ScopeGatedNavItem
                 item={orgRoutes.billing}
                 scope={["org:read", "org:admin"]}
@@ -97,12 +142,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   scope={["org:read", "org:admin"]}
                 />
               ) : (
-                <SidebarMenuItem>
-                  <RequireScope
-                    scope={["org:read", "org:admin"]}
-                    level="component"
-                    className="w-full"
-                  >
+                <RequireScope
+                  scope={["org:read", "org:admin"]}
+                  level="component"
+                  className="w-full"
+                >
+                  <li data-sidebar="menu-item">
                     <NavButton
                       title="Team"
                       titleNode={
@@ -115,8 +160,8 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       target="_blank"
                       Icon={(props) => <Icon name="users-round" {...props} />}
                     />
-                  </RequireScope>
-                </SidebarMenuItem>
+                  </li>
+                </RequireScope>
               )}
               <ScopeGatedNavItem item={orgRoutes.apiKeys} scope="org:admin" />
               <ScopeGatedNavItem
@@ -131,23 +176,16 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={orgRoutes.webhooks}
                 scope={["org:read", "org:admin"]}
               />
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <NavButton
-                    title={orgRoutes.adminSettings.title}
-                    href={orgRoutes.adminSettings.href()}
-                    active={orgRoutes.adminSettings.active}
-                    Icon={orgRoutes.adminSettings.Icon}
-                  />
-                </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>secure</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
+              {isAdmin && <CollapsibleNavItem item={orgRoutes.adminSettings} />}
+            </CollapsibleNavGroup>
+
+            {/* Secure group */}
+            <CollapsibleNavGroup
+              label="Security"
+              Icon={(p) => <Icon {...p} name="shield-check" />}
+              defaultHref={orgRoutes.auditLogs.href()}
+              isActive={secureActive}
+            >
               <ScopeGatedNavItem
                 item={orgRoutes.auditLogs}
                 scope={["org:read", "org:admin"]}
@@ -162,9 +200,9 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   scope={["org:read", "org:admin"]}
                 />
               )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            </CollapsibleNavGroup>
+          </SidebarMenu>
+        </NavGroupProvider>
       </SidebarContent>
     </Sidebar>
   );

@@ -1,11 +1,13 @@
-import { NavButton } from "@/components/nav-menu";
+import {
+  CollapsibleNavGroup,
+  CollapsibleNavItem,
+  NavButton,
+  NavGroupProvider,
+} from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
@@ -15,7 +17,7 @@ import { Scope } from "@/hooks/useRBAC";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
-import { cn, Stack } from "@speakeasy-api/moonshine";
+import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
 import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -26,6 +28,20 @@ import { Button } from "./ui/button";
 import { Type } from "./ui/type";
 
 function ScopeGatedNavItem({
+  item,
+  scope,
+}: {
+  item: AppRoute;
+  scope: Scope | Scope[];
+}) {
+  return (
+    <RequireScope scope={scope} level="section">
+      <CollapsibleNavItem item={item} />
+    </RequireScope>
+  );
+}
+
+function ScopeGatedTopLevelItem({
   item,
   scope,
 }: {
@@ -55,21 +71,73 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
 
+  const connectActive = [
+    routes.sources,
+    routes.catalog,
+    routes.playground,
+    routes.deployments,
+  ].some((r) => r.active);
+
+  const buildActive = [
+    routes.mcp,
+    routes.clis,
+    routes.plugins,
+    routes.environments,
+    ...(isAssistantsEnabled ? [routes.assistants] : []),
+  ].some((r) => r.active);
+
+  const observeActive = [routes.insights, routes.logs].some((r) => r.active);
+
+  const securityActive = [routes.riskOverview, routes.policyCenter].some(
+    (r) => r.active,
+  );
+
+  const activeGroup = connectActive
+    ? "Connect"
+    : buildActive
+      ? "Build"
+      : observeActive
+        ? "Observe"
+        : securityActive
+          ? "Security"
+          : undefined;
+
+  // Find the specific active route title for the sliding highlight
+  const allNavRoutes = [
+    routes.home,
+    routes.sources,
+    routes.catalog,
+    routes.playground,
+    routes.deployments,
+    routes.mcp,
+    ...(isAssistantsEnabled ? [routes.assistants] : []),
+    routes.clis,
+    routes.plugins,
+    routes.environments,
+    routes.insights,
+    routes.logs,
+    routes.riskOverview,
+    routes.policyCenter,
+    routes.settings,
+  ];
+  const activeRoute = allNavRoutes.find((r) => r.active);
+  const activeItem = activeRoute?.title;
+
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarContent className="pt-2">
-        <SidebarGroup>
-          <SidebarGroupLabel>project</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <ScopeGatedNavItem item={routes.home} scope="project:read" />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>connect</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
+      <SidebarContent className="pt-5">
+        <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
+          <SidebarMenu className="gap-1 px-2">
+            {/* Home — top-level, no group */}
+            <ScopeGatedTopLevelItem item={routes.home} scope="project:read" />
+
+            {/* Connect group */}
+            <CollapsibleNavGroup
+              label="Connect"
+              Icon={(p) => <Icon {...p} name="plug" />}
+              defaultHref={routes.sources.href()}
+              isActive={connectActive}
+            >
               <ScopeGatedNavItem
                 item={routes.sources}
                 scope={["project:read", "project:write"]}
@@ -86,13 +154,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.deployments}
                 scope={["project:read", "project:write"]}
               />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>build</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
+            </CollapsibleNavGroup>
+
+            {/* Build group */}
+            <CollapsibleNavGroup
+              label="Build"
+              Icon={(p) => <Icon {...p} name="hammer" />}
+              defaultHref={routes.mcp.href()}
+              isActive={buildActive}
+            >
               <ScopeGatedNavItem
                 item={routes.mcp}
                 scope={["mcp:read", "mcp:write"]}
@@ -112,22 +182,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.environments}
                 scope={["project:read", "project:write"]}
               />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>observe</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
+            </CollapsibleNavGroup>
+
+            {/* Observe group */}
+            <CollapsibleNavGroup
+              label="Observe"
+              Icon={(p) => <Icon {...p} name="eye" />}
+              defaultHref={routes.insights.href()}
+              isActive={observeActive}
+            >
               <ScopeGatedNavItem item={routes.insights} scope="project:read" />
               <ScopeGatedNavItem item={routes.logs} scope="project:read" />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>security</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
+            </CollapsibleNavGroup>
+
+            {/* Security group */}
+            <CollapsibleNavGroup
+              label="Security"
+              Icon={(p) => <Icon {...p} name="shield" />}
+              defaultHref={routes.riskOverview.href()}
+              isActive={securityActive}
+            >
               <ScopeGatedNavItem
                 item={routes.riskOverview}
                 scope="project:read"
@@ -136,17 +210,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.policyCenter}
                 scope={["project:read", "project:write"]}
               />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>settings</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <ScopeGatedNavItem item={routes.settings} scope="project:write" />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            </CollapsibleNavGroup>
+
+            {/* Settings — top-level, no group */}
+            <ScopeGatedTopLevelItem
+              item={routes.settings}
+              scope="project:write"
+            />
+          </SidebarMenu>
+        </NavGroupProvider>
+
         <div className="mt-auto px-2 py-3 group-data-[collapsible=icon]:px-0">
           <Link
             to={`/${orgSlug}`}
