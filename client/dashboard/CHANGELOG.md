@@ -1,5 +1,21 @@
 # dashboard
 
+## 0.58.0
+
+### Minor Changes
+
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings.
+
+### Patch Changes
+
+- 3db9f30: Deleting a custom domain now soft-deletes every `mcp_endpoints` row registered under it across all projects in the org, emits one `mcp-endpoint:delete` audit event per cascaded row, and the dashboard delete-confirmation modal previews the impacted endpoints via the new `/rpc/domain.listMcpEndpoints` endpoint.
+- 7b002eb: The Assistants spec panel now links each attached MCP server to its MCP details page, so you can jump straight from the draft view to inspect or configure the server.
+- 85790f1: The active/paused indicator on each assistant card is now an interactive switch — you can pause or resume an assistant directly from the assistants list without opening it.
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings
+- 35a7938: Improved server names in hooks logs. Improved UI for inspecting indiivudal logs
+- Updated dependencies [12a0fa3]
+  - @gram-ai/elements@1.33.1
+
 ## 0.57.0
 
 ### Minor Changes
