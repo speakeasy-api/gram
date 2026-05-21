@@ -130,7 +130,6 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Settings"
               Icon={(p) => <Icon {...p} name="settings" />}
               defaultHref={orgRoutes.billing.href()}
-              isActive={settingsActive}
             >
               <ScopeGatedNavItem
                 item={orgRoutes.billing}
@@ -184,7 +183,6 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Secure"
               Icon={(p) => <Icon {...p} name="shield-check" />}
               defaultHref={orgRoutes.auditLogs.href()}
-              isActive={secureActive}
             >
               <ScopeGatedNavItem
                 item={orgRoutes.auditLogs}

@@ -454,8 +454,6 @@ export function CollapsibleNavGroup({
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   defaultHref?: string;
-  /** @deprecated No longer used — open state managed by NavGroupProvider */
-  isActive?: boolean;
   children: React.ReactNode;
 }) {
   const { openGroups, toggleGroup, openGroup } =

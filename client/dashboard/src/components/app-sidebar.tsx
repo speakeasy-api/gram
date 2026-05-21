@@ -140,7 +140,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Connect"
               Icon={(p) => <Icon {...p} name="plug" />}
               defaultHref={routes.sources.href()}
-              isActive={connectActive}
             >
               <ScopeGatedNavItem
                 item={routes.sources}
@@ -165,7 +164,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Build"
               Icon={(p) => <Icon {...p} name="hammer" />}
               defaultHref={routes.mcp.href()}
-              isActive={buildActive}
             >
               <ScopeGatedNavItem
                 item={routes.mcp}
@@ -193,7 +191,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Observe"
               Icon={(p) => <Icon {...p} name="eye" />}
               defaultHref={routes.insights.href()}
-              isActive={observeActive}
             >
               <ScopeGatedNavItem item={routes.insights} scope="project:read" />
               <ScopeGatedNavItem item={routes.logs} scope="project:read" />
@@ -204,7 +201,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Secure"
               Icon={(p) => <Icon {...p} name="shield" />}
               defaultHref={routes.riskOverview.href()}
-              isActive={securityActive}
             >
               <ScopeGatedNavItem
                 item={routes.riskOverview}
