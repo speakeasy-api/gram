@@ -283,7 +283,7 @@ function ResultsTable({
     <div
       ref={scrollRef}
       onScroll={onScroll}
-      className="max-h-[70vh] overflow-y-auto rounded-lg border"
+      className="isolate max-h-[70vh] overflow-y-auto rounded-lg border"
     >
       <table className="w-full table-fixed text-sm">
         <colgroup>
@@ -294,7 +294,7 @@ function ResultsTable({
           <col className="w-[280px]" />
           <col className="w-[48px]" />
         </colgroup>
-        <thead className="bg-muted text-muted-foreground sticky top-0 z-10 text-xs font-medium tracking-wide uppercase shadow-[0_1px_0_0_var(--color-border)]">
+        <thead className="bg-muted text-muted-foreground sticky top-0 z-[1] text-xs font-medium tracking-wide uppercase shadow-[0_1px_0_0_var(--color-border)]">
           <tr>
             <th className="px-4 py-2 text-left">Time</th>
             <th className="px-4 py-2 text-left">Rule</th>
