@@ -32,6 +32,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/otelforwarding"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
 	_ "github.com/speakeasy-api/gram/server/design/plugins"
+	_ "github.com/speakeasy-api/gram/server/design/portals"
 	_ "github.com/speakeasy-api/gram/server/design/productfeatures"
 	_ "github.com/speakeasy-api/gram/server/design/projects"
 	_ "github.com/speakeasy-api/gram/server/design/remotemcp"
