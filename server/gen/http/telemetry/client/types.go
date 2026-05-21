@@ -2993,6 +2993,8 @@ type HookSourceUsageResponseBody struct {
 type RoleSummaryResponseBody struct {
 	// Role identifier extracted from role URN
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// Human-readable role name
+	RoleName *string `form:"role_name,omitempty" json:"role_name,omitempty" xml:"role_name,omitempty"`
 	// Number of users with this role
 	UserCount *int `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
 	// Total cost across all users with this role
@@ -9608,6 +9610,9 @@ func ValidateHookSourceUsageResponseBody(body *HookSourceUsageResponseBody) (err
 func ValidateRoleSummaryResponseBody(body *RoleSummaryResponseBody) (err error) {
 	if body.RoleID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	}
+	if body.RoleName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_name", "body"))
 	}
 	if body.UserCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_count", "body"))

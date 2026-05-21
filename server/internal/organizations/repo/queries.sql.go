@@ -704,16 +704,27 @@ func (q *Queries) LinkRoleAssignmentsToUser(ctx context.Context, arg LinkRoleAss
 }
 
 const listActiveRoleAssignmentsByOrganization = `-- name: ListActiveRoleAssignmentsByOrganization :many
-SELECT user_id, role_urn
-FROM organization_role_assignments
-WHERE organization_id = $1
-  AND user_id IS NOT NULL
-  AND deleted_at IS NULL
+SELECT
+    ora.user_id,
+    ora.role_urn,
+    COALESCE(orgr.workos_name, gr.workos_name, ora.role_urn) AS role_name
+FROM organization_role_assignments ora
+LEFT JOIN organization_roles orgr
+    ON ora.role_urn = 'role:organization:' || orgr.id::text
+    AND orgr.organization_id = $1
+    AND orgr.deleted IS FALSE
+LEFT JOIN global_roles gr
+    ON ora.role_urn = 'role:global:' || gr.id::text
+    AND gr.deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
 `
 
 type ListActiveRoleAssignmentsByOrganizationRow struct {
-	UserID  pgtype.Text
-	RoleUrn string
+	UserID   pgtype.Text
+	RoleUrn  string
+	RoleName string
 }
 
 func (q *Queries) ListActiveRoleAssignmentsByOrganization(ctx context.Context, organizationID string) ([]ListActiveRoleAssignmentsByOrganizationRow, error) {
@@ -725,7 +736,7 @@ func (q *Queries) ListActiveRoleAssignmentsByOrganization(ctx context.Context, o
 	var items []ListActiveRoleAssignmentsByOrganizationRow
 	for rows.Next() {
 		var i ListActiveRoleAssignmentsByOrganizationRow
-		if err := rows.Scan(&i.UserID, &i.RoleUrn); err != nil {
+		if err := rows.Scan(&i.UserID, &i.RoleUrn, &i.RoleName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

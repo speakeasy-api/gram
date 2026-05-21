@@ -3384,6 +3384,7 @@ func marshalTelemetryRoleSummaryToRoleSummaryResponseBody(v *telemetry.RoleSumma
 	}
 	res := &RoleSummaryResponseBody{
 		RoleID:            v.RoleID,
+		RoleName:          v.RoleName,
 		UserCount:         v.UserCount,
 		TotalCost:         v.TotalCost,
 		CostPerUser:       v.CostPerUser,

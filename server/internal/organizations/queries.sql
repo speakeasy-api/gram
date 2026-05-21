@@ -635,8 +635,18 @@ FROM organization_metadata
 WHERE id = @id AND svix_app_id IS NOT NULL;
 
 -- name: ListActiveRoleAssignmentsByOrganization :many
-SELECT user_id, role_urn
-FROM organization_role_assignments
-WHERE organization_id = @organization_id
-  AND user_id IS NOT NULL
-  AND deleted_at IS NULL;
+SELECT
+    ora.user_id,
+    ora.role_urn,
+    COALESCE(orgr.workos_name, gr.workos_name, ora.role_urn) AS role_name
+FROM organization_role_assignments ora
+LEFT JOIN organization_roles orgr
+    ON ora.role_urn = 'role:organization:' || orgr.id::text
+    AND orgr.organization_id = @organization_id
+    AND orgr.deleted IS FALSE
+LEFT JOIN global_roles gr
+    ON ora.role_urn = 'role:global:' || gr.id::text
+    AND gr.deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL;

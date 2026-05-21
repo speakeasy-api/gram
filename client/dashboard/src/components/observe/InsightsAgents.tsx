@@ -31,7 +31,7 @@ import type {
   TimeSeriesBucket,
   UserSummary,
 } from "@gram/client/models/components";
-import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
+import { useGramContext, useMembers } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -195,14 +195,9 @@ export function InsightsAgentsContent() {
   }, [customRange, customRangeLabel, dateRange]);
 
   const { data: membersData, isLoading: membersLoading } = useMembers();
-  const { data: rolesData } = useRoles();
   const memberMap = useMemo(
     () => new Map((membersData?.members ?? []).map((m) => [m.id, m])),
     [membersData],
-  );
-  const roleNameById = useMemo(
-    () => new Map((rolesData?.roles ?? []).map((r) => [r.id, r.name])),
-    [rolesData],
   );
 
   const usersQuery = useQuery({
@@ -622,7 +617,6 @@ export function InsightsAgentsContent() {
               <EmployeeCostTable
                 users={filteredUserRows}
                 roleUsage={roleUsage}
-                roleNameById={roleNameById}
                 valueMode={valueMode}
                 clientFilter={clientFilter}
                 groupByDimension={groupByDimension}
@@ -1005,7 +999,6 @@ function SortableHead({
 function EmployeeCostTable({
   users,
   roleUsage,
-  roleNameById,
   valueMode,
   clientFilter,
   groupByDimension,
@@ -1014,7 +1007,6 @@ function EmployeeCostTable({
 }: {
   users: EmployeeRow[];
   roleUsage: RoleSummary[];
-  roleNameById: Map<string, string>;
   valueMode: ValueMode;
   clientFilter: string;
   groupByDimension: "employee" | "role";
@@ -1093,7 +1085,7 @@ function EmployeeCostTable({
     const getValue = (r: RoleSummary): number | string => {
       switch (effectiveSortField) {
         case "role":
-          return (roleNameById.get(r.roleId) ?? r.roleId).toLowerCase();
+          return r.roleName.toLowerCase();
         case "userCount":
           return r.userCount;
         case "cost":
@@ -1121,7 +1113,7 @@ function EmployeeCostTable({
           : (va as number) - (vb as number);
       return effectiveSortDir === "asc" ? cmp : -cmp;
     });
-  }, [roleUsage, roleNameById, effectiveSortField, effectiveSortDir]);
+  }, [roleUsage, effectiveSortField, effectiveSortDir]);
 
   const items = isRoleView ? sortedRoles : sortedUsers;
   const totalPages = Math.ceil(items.length / PAGE_SIZE);
@@ -1236,10 +1228,7 @@ function EmployeeCostTable({
               <TableBody>
                 {(pageItems as RoleSummary[]).length > 0 ? (
                   (pageItems as RoleSummary[]).map((role) => {
-                    const roleName =
-                      role.roleId === "unassigned"
-                        ? "Unassigned"
-                        : (roleNameById.get(role.roleId) ?? role.roleId);
+                    const roleName = role.roleName;
                     const costShare =
                       totalRoleCost > 0
                         ? (role.totalCost / totalRoleCost) * 100

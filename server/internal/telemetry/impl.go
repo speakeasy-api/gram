@@ -508,13 +508,20 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching role usage data")
 	}
 
-	// Build user_id → role_id map. A user may have multiple role assignments;
-	// we take the first one encountered.
-	userToRoleID := make(map[string]string, len(assignments))
+	// Build user_id → (role_id, role_name) map. A user may have multiple role
+	// assignments; we take the first one encountered.
+	type roleInfo struct {
+		id   string
+		name string
+	}
+	userToRole := make(map[string]roleInfo, len(assignments))
 	for _, a := range assignments {
 		if a.UserID.Valid {
-			if _, exists := userToRoleID[a.UserID.String]; !exists {
-				userToRoleID[a.UserID.String] = roleIDFromURN(a.RoleUrn)
+			if _, exists := userToRole[a.UserID.String]; !exists {
+				userToRole[a.UserID.String] = roleInfo{
+					id:   roleIDFromURN(a.RoleUrn),
+					name: a.RoleName,
+				}
 			}
 		}
 	}
@@ -523,18 +530,19 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	type roleAgg struct {
 		summary *telem_gen.RoleSummary
 	}
-	aggByRole := make(map[string]*roleAgg, len(userToRoleID))
+	aggByRole := make(map[string]*roleAgg, len(userToRole))
 
 	const unassignedRoleID = "unassigned"
 	for _, item := range items {
-		roleID := unassignedRoleID
-		if id, ok := userToRoleID[item.UserID]; ok {
-			roleID = id
+		ri := roleInfo{id: unassignedRoleID, name: "Unassigned"}
+		if r, ok := userToRole[item.UserID]; ok {
+			ri = r
 		}
-		agg, exists := aggByRole[roleID]
+		agg, exists := aggByRole[ri.id]
 		if !exists {
 			agg = &roleAgg{summary: &telem_gen.RoleSummary{
-				RoleID:            roleID,
+				RoleID:            ri.id,
+				RoleName:          ri.name,
 				UserCount:         0,
 				TotalCost:         0,
 				CostPerUser:       0,
@@ -543,7 +551,7 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 				TotalTokens:       0,
 				TotalChats:        0,
 			}}
-			aggByRole[roleID] = agg
+			aggByRole[ri.id] = agg
 		}
 		s := agg.summary
 		s.UserCount++
