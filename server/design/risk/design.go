@@ -266,6 +266,39 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByChat"}`)
 	})
 
+	Method("getRiskOverview", func() {
+		Description("Get risk overview metrics and trend data for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("from", String, "Inclusive start of the overview window. Defaults to the start of the 7-day calendar window ending at to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the overview window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(RiskOverviewResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.overview.get")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskOverview")
+		Meta("openapi:extension:x-speakeasy-group", "risk.overview")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskOverview"}`)
+	})
+
 	Method("getRiskPolicyStatus", func() {
 		Description("Get the analysis status of a risk policy including progress and workflow state.")
 
@@ -437,6 +470,48 @@ var ListRiskResultsByChatResult = Type("ListRiskResultsByChatResult", func() {
 	Attribute("chats", ArrayOf(shared.RiskChatSummary), "Risk results grouped by chat.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("chats")
+})
+
+var RiskOverviewResult = Type("RiskOverviewResult", func() {
+	Attribute("from", String, "Inclusive start of the overview window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("to", String, "Exclusive end of the overview window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("messages_scanned", Int64, "Messages analyzed by risk policies in the window.")
+	Attribute("findings", Int64, "Policy findings in the window.")
+	Attribute("flagged_sessions", Int64, "Chat sessions with at least one finding in the window.")
+	Attribute("active_policies", Int64, "Enabled risk policies for the current project.")
+	Attribute("top_categories", ArrayOf(RiskOverviewCategory), "Top policy categories by finding count.")
+	Attribute("top_users", ArrayOf(RiskOverviewUser), "Top users by finding count.")
+	Attribute("time_series_findings", ArrayOf(RiskOverviewTimeSeriesFinding), "Time-series finding counts by category in the window.")
+
+	Required("from", "to", "messages_scanned", "findings", "flagged_sessions", "active_policies", "top_categories", "top_users", "time_series_findings")
+})
+
+var RiskOverviewCategory = Type("RiskOverviewCategory", func() {
+	Attribute("category", String, "Policy category key.")
+	Attribute("findings", Int64, "Finding count for this category.")
+
+	Required("category", "findings")
+})
+
+var RiskOverviewUser = Type("RiskOverviewUser", func() {
+	Attribute("email", String, "User email, or Unknown user when unavailable.")
+	Attribute("findings", Int64, "Finding count for this user.")
+
+	Required("email", "findings")
+})
+
+var RiskOverviewTimeSeriesFinding = Type("RiskOverviewTimeSeriesFinding", func() {
+	Attribute("bucket_start", String, "Time bucket start.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("category", String, "Policy category key.")
+	Attribute("findings", Int64, "Finding count for this category and time bucket.")
+
+	Required("bucket_start", "category", "findings")
 })
 
 var ListShadowMCPApprovalsResult = Type("ListShadowMCPApprovalsResult", func() {

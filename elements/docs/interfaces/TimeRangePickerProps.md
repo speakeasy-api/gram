@@ -122,6 +122,14 @@ Called when LIVE mode changes
 
 ***
 
+### availablePresets?
+
+> `optional` **availablePresets**: readonly [`DateRangePreset`](../type-aliases/DateRangePreset.md)[]
+
+Presets to show in the dropdown
+
+***
+
 ### disabled?
 
 > `optional` **disabled**: `boolean`

@@ -26,6 +26,7 @@ func TestGetMcpServer(t *testing.T) {
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
 		EnvironmentID:     nil,
 		RemoteMcpServerID: &serverID,
 		ToolsetID:         nil,
@@ -34,7 +35,8 @@ func TestGetMcpServer(t *testing.T) {
 	require.NoError(t, err)
 
 	fetched, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
-		ID:               created.ID,
+		ID:               &created.ID,
+		Slug:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -44,13 +46,81 @@ func TestGetMcpServer(t *testing.T) {
 	require.Equal(t, types.McpServerVisibility("private"), fetched.Visibility)
 }
 
-func TestGetMcpServer_NotFound(t *testing.T) {
+func TestGetMcpServer_BySlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "fetch by slug",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.Slug)
+
+	fetched, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
+		ID:               nil,
+		Slug:             created.Slug,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, fetched.ID)
+}
+
+func TestGetMcpServer_MissingIDAndSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	_, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
-		ID:               uuid.NewString(),
+		ID:               nil,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestGetMcpServer_BothIDAndSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	id := uuid.NewString()
+	slug := "some-slug"
+	_, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
+		ID:               &id,
+		Slug:             &slug,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestGetMcpServer_NotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	id := uuid.NewString()
+	_, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
+		ID:               &id,
+		Slug:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -63,8 +133,10 @@ func TestGetMcpServer_InvalidID(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
+	id := "not-a-uuid"
 	_, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
-		ID:               "not-a-uuid",
+		ID:               &id,
+		Slug:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -79,8 +151,10 @@ func TestGetMcpServer_RBACForbidden(t *testing.T) {
 
 	ctx = withExactAuthzGrants(t, ctx, ti.conn)
 
+	id := uuid.NewString()
 	_, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
-		ID:               uuid.NewString(),
+		ID:               &id,
+		Slug:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,

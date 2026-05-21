@@ -5,6 +5,7 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Approvals } from "./approvals.js";
 import { Capabilities } from "./capabilities.js";
+import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { Results } from "./results.js";
 
@@ -17,6 +18,11 @@ export class Risk extends ClientSDK {
   private _capabilities?: Capabilities;
   get capabilities(): Capabilities {
     return (this._capabilities ??= new Capabilities(this._options));
+  }
+
+  private _overview?: Overview;
+  get overview(): Overview {
+    return (this._overview ??= new Overview(this._options));
   }
 
   private _policies?: Policies;

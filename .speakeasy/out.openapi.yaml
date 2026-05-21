@@ -9637,6 +9637,123 @@ paths:
       x-speakeasy-name-override: validate
       x-speakeasy-react-hook:
         name: ValidateAPIKey
+  /rpc/mcpEndpoints.checkSlugAvailability:
+    get:
+      description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
+      operationId: checkMcpEndpointSlugAvailability
+      parameters:
+        - allowEmptyValue: true
+          description: The slug to check
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+            maxLength: 128
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Optional custom domain ID. Omit to check platform-domain slug availability.
+          in: query
+          name: custom_domain_id
+          schema:
+            description: Optional custom domain ID. Omit to check platform-domain slug availability.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: boolean
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: checkMcpEndpointSlugAvailability mcpEndpoints
+      tags:
+        - mcpEndpoints
+      x-speakeasy-name-override: checkSlugAvailability
+      x-speakeasy-react-hook:
+        name: CheckMcpEndpointSlugAvailability
   /rpc/mcpEndpoints.create:
     post:
       description: Create a new MCP endpoint for an MCP server
@@ -11146,17 +11263,23 @@ paths:
         name: DeleteMcpServer
   /rpc/mcpServers.get:
     get:
-      description: Get an MCP server by ID
+      description: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
       operationId: getMcpServer
       parameters:
         - allowEmptyValue: true
-          description: The ID of the MCP server
+          description: The ID of the MCP server. Mutually exclusive with slug.
           in: query
           name: id
-          required: true
           schema:
-            description: The ID of the MCP server
+            description: The ID of the MCP server. Mutually exclusive with slug.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The slug of the MCP server. Mutually exclusive with id.
+          in: query
+          name: slug
+          schema:
+            description: The slug of the MCP server. Mutually exclusive with id.
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -11369,7 +11492,7 @@ paths:
         name: McpServers
   /rpc/mcpServers.update:
     post:
-      description: 'Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.'
+      description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.'
       operationId: updateMcpServer
       parameters:
         - allowEmptyValue: true
@@ -18147,6 +18270,122 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: RiskCapabilities
+  /rpc/risk.overview.get:
+    get:
+      description: Get risk overview metrics and trend data for the current project.
+      operationId: getRiskOverview
+      parameters:
+        - allowEmptyValue: true
+          description: Inclusive start of the overview window. Defaults to the start of the 7-day calendar window ending at to.
+          in: query
+          name: from
+          schema:
+            description: Inclusive start of the overview window. Defaults to the start of the 7-day calendar window ending at to.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive end of the overview window. Defaults to now.
+          in: query
+          name: to
+          schema:
+            description: Exclusive end of the overview window. Defaults to now.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskOverviewResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getRiskOverview risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.overview
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: RiskOverview
   /rpc/risk.policies.create:
     post:
       description: Create a new risk analysis policy for the current project.
@@ -27780,8 +28019,14 @@ components:
         continue:
           type: boolean
           description: Whether to continue (SessionStart only)
+        decision:
+          type: string
+          description: Top-level block decision for UserPromptSubmit / PostToolUse / Stop / SubagentStop. Use 'block' to halt processing.
         hookSpecificOutput:
           description: Hook-specific output as JSON object
+        reason:
+          type: string
+          description: Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).
         stopReason:
           type: string
           description: Reason if blocked (SessionStart only)
@@ -27795,6 +28040,11 @@ components:
     CloneClientFromOAuthProxyProviderForm:
       type: object
       properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.
+          pattern: ^[!-~]+$
+          maxLength: 512
         oauth_proxy_provider_id:
           type: string
           description: The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.
@@ -27803,6 +28053,13 @@ components:
           type: string
           description: The remote_session_issuer the new client is registered with.
           format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.
         token_endpoint_auth_method:
           type: string
           description: How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -28122,6 +28379,9 @@ components:
           type: string
           description: The ID of the environment to associate with the server
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server
         remote_mcp_server_id:
           type: string
           description: The ID of the remote MCP server to use as the backend
@@ -28129,6 +28389,10 @@ components:
         toolset_id:
           type: string
           description: The ID of the toolset to use as the backend
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
           format: uuid
         visibility:
           type: string
@@ -28139,6 +28403,7 @@ components:
             - public
       description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided.
       required:
+        - name
         - visibility
     CreatePackageForm:
       type: object
@@ -28304,6 +28569,11 @@ components:
     CreateRemoteSessionClientForm:
       type: object
       properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+          pattern: ^[!-~]+$
+          maxLength: 512
         client_id:
           type: string
           description: client_id supplied by the caller.
@@ -28314,6 +28584,13 @@ components:
           type: string
           description: The owning remote_session_issuer id.
           format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
         token_endpoint_auth_method:
           type: string
           description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -32109,6 +32386,9 @@ components:
           type: string
           description: The ID of the MCP server
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server
         project_id:
           type: string
           description: The project ID this MCP server belongs to
@@ -32117,6 +32397,9 @@ components:
           type: string
           description: The ID of the remote MCP server used as the backend
           format: uuid
+        slug:
+          type: string
+          description: A URL-safe, project-unique slug derived server-side from the name and ID
         toolset_id:
           type: string
           description: The ID of the toolset used as the backend
@@ -32125,6 +32408,10 @@ components:
           type: string
           description: When the MCP server was last updated
           format: date-time
+        user_session_issuer_id:
+          type: string
+          description: The ID of the user session issuer that gates OAuth-based MCP client authentication for this server, if any.
+          format: uuid
         visibility:
           type: string
           description: The visibility of an MCP server
@@ -33786,6 +34073,9 @@ components:
     RemoteSessionClient:
       type: object
       properties:
+        audience:
+          type: string
+          description: Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
         client_id:
           type: string
           description: The client_id used to identify this client at the issuer's token and authorization endpoints.
@@ -33811,6 +34101,11 @@ components:
           type: string
           description: The owning remote_session_issuer id.
           format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+          description: Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
         token_endpoint_auth_method:
           type: string
           description: How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
@@ -34124,6 +34419,102 @@ components:
         - chat_id
         - findings_count
         - latest_detected
+    RiskOverviewCategory:
+      type: object
+      properties:
+        category:
+          type: string
+          description: Policy category key.
+        findings:
+          type: integer
+          description: Finding count for this category.
+          format: int64
+      required:
+        - category
+        - findings
+    RiskOverviewResult:
+      type: object
+      properties:
+        active_policies:
+          type: integer
+          description: Enabled risk policies for the current project.
+          format: int64
+        findings:
+          type: integer
+          description: Policy findings in the window.
+          format: int64
+        flagged_sessions:
+          type: integer
+          description: Chat sessions with at least one finding in the window.
+          format: int64
+        from:
+          type: string
+          description: Inclusive start of the overview window.
+          format: date-time
+        messages_scanned:
+          type: integer
+          description: Messages analyzed by risk policies in the window.
+          format: int64
+        time_series_findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskOverviewTimeSeriesFinding'
+          description: Time-series finding counts by category in the window.
+        to:
+          type: string
+          description: Exclusive end of the overview window.
+          format: date-time
+        top_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskOverviewCategory'
+          description: Top policy categories by finding count.
+        top_users:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskOverviewUser'
+          description: Top users by finding count.
+      required:
+        - from
+        - to
+        - messages_scanned
+        - findings
+        - flagged_sessions
+        - active_policies
+        - top_categories
+        - top_users
+        - time_series_findings
+    RiskOverviewTimeSeriesFinding:
+      type: object
+      properties:
+        bucket_start:
+          type: string
+          description: Time bucket start.
+          format: date-time
+        category:
+          type: string
+          description: Policy category key.
+        findings:
+          type: integer
+          description: Finding count for this category and time bucket.
+          format: int64
+      required:
+        - bucket_start
+        - category
+        - findings
+    RiskOverviewUser:
+      type: object
+      properties:
+        email:
+          type: string
+          description: User email, or Unknown user when unavailable.
+        findings:
+          type: integer
+          description: Finding count for this user.
+          format: int64
+      required:
+        - email
+        - findings
     RiskPolicy:
       type: object
       properties:
@@ -34386,6 +34777,54 @@ components:
           description: Selector constraints. Null means unrestricted.
       required:
         - scope
+    RoleSummary:
+      type: object
+      properties:
+        cost_per_user:
+          type: number
+          description: Average cost per user (total_cost / user_count)
+          format: double
+        role_id:
+          type: string
+          description: Role identifier extracted from role URN
+        role_name:
+          type: string
+          description: Human-readable role name
+        total_chats:
+          type: integer
+          description: Total chat sessions across all users
+          format: int64
+        total_cost:
+          type: number
+          description: Total cost across all users with this role
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Sum of input tokens across all users
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Sum of output tokens across all users
+          format: int64
+        total_tokens:
+          type: integer
+          description: Sum of all tokens across all users
+          format: int64
+        user_count:
+          type: integer
+          description: Number of users with this role
+          format: int64
+      description: Aggregated usage summary for a role
+      required:
+        - role_id
+        - role_name
+        - user_count
+        - total_cost
+        - cost_per_user
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - total_chats
     ScopeDefinition:
       type: object
       properties:
@@ -34714,6 +35153,13 @@ components:
           description: Cursor for pagination (user identifier from last item)
         filter:
           $ref: '#/components/schemas/SearchUsersFilter'
+        group_by:
+          type: string
+          description: Grouping dimension for results
+          default: employee
+          enum:
+            - employee
+            - role
         limit:
           type: integer
           description: Number of items to return (1-1000)
@@ -34744,11 +35190,16 @@ components:
         next_cursor:
           type: string
           description: Cursor for next page
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleSummary'
+          description: List of role usage summaries (populated when group_by=role)
         users:
           type: array
           items:
             $ref: '#/components/schemas/UserSummary'
-          description: List of user usage summaries
+          description: List of user usage summaries (populated when group_by=employee)
       description: Result of searching user usage summaries
       required:
         - users
@@ -36413,6 +36864,9 @@ components:
           type: string
           description: The ID of the MCP server to update
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
         remote_mcp_server_id:
           type: string
           description: The ID of the remote MCP server to use as the backend
@@ -36421,6 +36875,10 @@ components:
           type: string
           description: The ID of the toolset to use as the backend
           format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
+          format: uuid
         visibility:
           type: string
           description: The visibility of an MCP server
@@ -36428,7 +36886,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided.'
+      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
       required:
         - id
         - visibility
@@ -36620,6 +37078,11 @@ components:
     UpdateRemoteSessionClientForm:
       type: object
       properties:
+        audience:
+          type: string
+          description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
+          pattern: ^[!-~]+$
+          maxLength: 512
         client_secret:
           type: string
           description: Rotate the client secret. Gram re-encrypts before persisting.
@@ -36627,6 +37090,13 @@ components:
           type: string
           description: The remote_session_client id.
           format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
         token_endpoint_auth_method:
           type: string
           description: Change how the client authenticates at the issuer's token endpoint.

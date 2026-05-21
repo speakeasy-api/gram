@@ -13,6 +13,7 @@
     "/client/sdk/**",
     "/elements/docs/**",
     "/elements/examples/tanstack-start/src/routeTree.gen.ts",
+    "/pnpm-lock.yaml",
     "/server/**/fixtures/**",
     "/server/gen/**",
     "/server/**/*_gen.yaml"

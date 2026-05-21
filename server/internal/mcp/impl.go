@@ -68,7 +68,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
@@ -259,7 +258,7 @@ func NewService(
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.remoteChallengeMgr.HandleRemoteLoginCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -280,7 +279,16 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/remote_login_callback", oops.ErrHandle(service.logger, service.remoteChallengeMgr.HandleRemoteLoginCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+}
+
+// HandleRemoteLoginCallback is the chi handler at
+// `GET /mcp/remote_login_callback` (plus the legacy per-slug variant). Thin
+// passthrough to remotesessions.ChallengeManager so /x/mcp can reuse the
+// same handler via the public method instead of reaching into the
+// unexported manager field.
+func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
@@ -378,7 +386,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
 	}
 
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	var customDomainID uuid.NullUUID
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
+		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
+	}
+	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
@@ -386,7 +398,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
 	}
 
-	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp")
+	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, "")
 }
 
 // ServeToolsetResolved serves an MCP runtime request after the slug has
@@ -399,8 +411,19 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // between the well-known prefix and the slug — "mcp" for /mcp/{slug} or
 // "x/mcp" for /x/mcp/{slug}, no leading or trailing slashes.
 //
+// skipIssuerGate skips the in-toolset user_session_issuer_id JWT-validation
+// branch. /x/mcp callers set this to true once they have run their own
+// gate keyed on mcp_servers.user_session_issuer_id, so the same request
+// isn't gated twice. /mcp callers always pass false.
+//
+// extraUpstreamToken is the upstream remote-session access token collected
+// by a caller-side issuer gate (today: /x/mcp's pre-dispatch ApplyIssuerGate
+// run). When non-empty it satisfies the toolset's oauth2 security scheme so
+// the downstream tool dispatch doesn't 401 when the in-toolset gate is
+// skipped. /mcp callers pass "".
+//
 // The caller is responsible for closing r.Body.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string) error {
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamToken string) error {
 	ctx := r.Context()
 	var err error
 
@@ -415,6 +438,12 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	authToken := AuthorizationBearerToken(r)
 
 	var tokenInputs []oauthTokenInputs
+	if extraUpstreamToken != "" {
+		tokenInputs = append(tokenInputs, oauthTokenInputs{
+			securityKeys: []string{},
+			Token:        extraUpstreamToken,
+		})
+	}
 
 	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
 	if toolset.OauthProxyServerID.Valid {
@@ -449,45 +478,33 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// validating a user-session JWT; on success stamp ctx and skip the legacy
 	// auth chain entirely; on miss, 401 with WWW-Authenticate so the client
 	// can discover the AS surface.
-	issuerGated := toolset.UserSessionIssuerID.Valid
-	if issuerGated {
-		newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, toolset)
-		if !ok {
-			// Accept an assistant-runtime JWT, but only when the assistant
-			// belongs to the toolset's project — otherwise a token minted
-			// in project A could resolve a remote_session linked under
-			// the same user in project B.
-			if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == toolset.ProjectID.String() {
-				ssubj := urn.NewUserSubject(claims.UserID)
-				newCtx, subject, ok = assistCtx, &ssubj, true
-			}
-		}
-		if !ok {
-			return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "expired or invalid access token")
+	//
+	// runInToolsetGate is the in-function variant of the gate, only run when
+	// the toolset itself is issuer-gated AND the caller hasn't already gated
+	// (skipIssuerGate). callerAlreadyGated tracks the orthogonal case where
+	// the caller (/x/mcp) ran its own gate keyed on a different column
+	// (mcp_servers.user_session_issuer_id) — the request has been
+	// authenticated, so the legacy auth chain below must also be skipped or
+	// it would re-reject the JWT it doesn't recognise.
+	runInToolsetGate := toolset.UserSessionIssuerID.Valid && !skipIssuerGate
+	callerAlreadyGated := skipIssuerGate
+	if runInToolsetGate {
+		// Pass mcpRouteBase (the surface the request arrived under) rather
+		// than letting the constructor default to "mcp": when called from
+		// /x/mcp the WWW-Authenticate URL, issuer URL, and consent action
+		// all need to match the caller's surface, not the toolset's
+		// canonical /mcp surface.
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
+		newCtx, gateToken, err := s.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint)
+		if err != nil {
+			return err
 		}
 		ctx = newCtx
-
-		// Resolve the upstream remote_session for this subject before
-		// running the legacy auth chain. The resolver short-circuits to
-		// no-op when the issuer has no remote_session_clients bound;
-		// otherwise it either supplies the upstream access token (fed
-		// into tokenInputs so it satisfies the toolset's oauth2 scheme
-		// downstream) or fails with ErrNoValidToken — which the user
-		// resolves by re-linking via /mcp/{slug}/connect.
-		if subject != nil {
-			upstream, rerr := s.remoteChallengeMgr.ResolveOneAccessToken(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID, *subject)
-			switch {
-			case errors.Is(rerr, remotesessions.ErrNoValidToken):
-				return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "")
-			case rerr != nil:
-				return oops.E(oops.CodeUnexpected, rerr, "resolve remote session").Log(ctx, s.logger)
-			}
-			if upstream != "" {
-				tokenInputs = append(tokenInputs, oauthTokenInputs{
-					securityKeys: []string{},
-					Token:        upstream,
-				})
-			}
+		if gateToken != "" {
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: []string{},
+				Token:        gateToken,
+			})
 		}
 	}
 
@@ -496,7 +513,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
 	}
 
-	if !issuerGated {
+	if !runInToolsetGate && !callerAlreadyGated {
 		switch {
 		case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 			// External OAuth server flow — collect token if present
@@ -785,39 +802,46 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 	return anySchemeSatisfied(schemes, mergedEnv, oauthToken), nil
 }
 
-// loadToolsetFromMcpSlug resolves the toolset for a route-driven request
-// (path mcpSlug + optional customdomains.Context). Distinct from
-// resolveMcp: when there is no customdomain context, it falls back to
-// GetToolsetByMcpSlug — which prefers a platform-domain toolset but
-// accepts a custom-domain toolset when no platform-only row exists. The
-// fallback is load-bearing (TestServePublic_CustomDomain_PlatformDomainStillWorks)
-// because customers attach custom domains to existing toolsets without
-// retiring the platform URL.
+// loadToolset loads the toolset for an mcp_slug. The lookup dispatches
+// on customDomainID and strictPlatform:
 //
-// resolveMcp, used by stored-state callbacks, is strict-platform on an
-// unset CustomDomainID — there the value is an explicit assertion
-// rather than a route inference.
-func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
-	customDomainCtx := customdomains.FromContext(ctx)
-	if customDomainCtx != nil {
-		toolset, err := s.resolveMcp(ctx, LegacyMcpEndpointRef{
-			McpSlug:        mcpSlug,
-			CustomDomainID: uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true},
+//   - customDomainID.Valid → scoped strictly to that custom domain.
+//   - customDomainID zero + strictPlatform=true → platform-only (custom_domain_id IS NULL).
+//   - customDomainID zero + strictPlatform=false → loose: prefers platform but
+//     accepts a custom-domain row matching the slug if no platform row exists.
+//
+// Runtime callers (route-driven) derive customDomainID from
+// customdomains.FromContext and pass strictPlatform=false so legacy
+// slug-routed requests on the platform URL keep resolving custom-domain
+// toolsets (load-bearing for TestServePublic_CustomDomain_PlatformDomainStillWorks
+// — customers attach custom domains to existing toolsets without retiring
+// the platform URL).
+//
+// Stored-state callers (resuming a cached EndpointRef) pass
+// strictPlatform=true to assert that the original challenge was minted
+// on the platform domain — the value is an explicit assertion rather
+// than a route inference.
+func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, error) {
+	var toolset toolsets_repo.Toolset
+	var err error
+	switch {
+	case customDomainID.Valid:
+		toolset, err = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
+			McpSlug:        conv.ToPGText(mcpSlug),
+			CustomDomainID: customDomainID,
 		})
-		if err != nil {
-			return nil, nil, err
-		}
-		return toolset, customDomainCtx, nil
+	case strictPlatform:
+		toolset, err = s.toolsetsRepo.GetToolsetByPlatformMcpSlug(ctx, conv.ToPGText(mcpSlug))
+	default:
+		toolset, err = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
-
-	toolset, err := s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, errToolsetNotFound
+		return nil, errToolsetNotFound
 	case err != nil:
-		return nil, nil, fmt.Errorf("lookup toolset: %w", err)
+		return nil, fmt.Errorf("lookup toolset: %w", err)
 	}
-	return &toolset, nil, nil
+	return &toolset, nil
 }
 
 // loadHeaderDisplayNames loads the header display names mapping from MCP metadata.

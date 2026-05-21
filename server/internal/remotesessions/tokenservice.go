@@ -209,6 +209,9 @@ func (m *ChallengeManager) refreshAccessToken(
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", refreshToken)
 	form.Set("client_id", client.ExternalClientID)
+	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
+		form.Set("audience", audience)
+	}
 
 	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {

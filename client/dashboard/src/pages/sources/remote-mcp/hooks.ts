@@ -1,5 +1,9 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import type { RemoteMcpServer } from "@gram/client/models/components";
+import { formatRemoteMcpDisplay } from "@/lib/sources";
+import type {
+  McpServer,
+  RemoteMcpServer,
+} from "@gram/client/models/components";
 import {
   invalidateAllMcpEndpoints,
   invalidateAllMcpServers,
@@ -16,7 +20,10 @@ export type CreateRemoteMcpSourceVariables = {
   url: string;
 };
 
-export type CreateRemoteMcpSourceData = { remoteMcpServer: RemoteMcpServer };
+export type CreateRemoteMcpSourceData = {
+  remoteMcpServer: RemoteMcpServer;
+  mcpServer: McpServer;
+};
 
 export function useCreateRemoteMcpSource(): UseMutationResult<
   CreateRemoteMcpSourceData,
@@ -37,9 +44,14 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         },
       });
 
+      let mcpServer: McpServer;
       try {
-        await client.mcpServers.create({
+        mcpServer = await client.mcpServers.create({
           createMcpServerForm: {
+            // mcp_servers.name is required; reuse the canonical
+            // formatRemoteMcpDisplay fallback so the auto-linked row matches
+            // what the dashboard shows for the source.
+            name: formatRemoteMcpDisplay(remoteMcpServer),
             remoteMcpServerId: remoteMcpServer.id,
             visibility: "disabled",
           },
@@ -63,7 +75,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
-      return { remoteMcpServer };
+      return { remoteMcpServer, mcpServer };
     },
     onSuccess: async () => {
       // refetchType "all" forces the refetch even when there are no active
@@ -73,6 +85,39 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       ]);
+    },
+  });
+}
+
+export type LinkMcpServerToRemoteVariables = {
+  remoteMcpServer: RemoteMcpServer;
+};
+
+// Mirrors the auto-provisioning step in useCreateRemoteMcpSource: create an
+// mcp_servers row backed by the given remote MCP server, using the same
+// display-name fallback and "disabled" visibility default. Surfaced as its own
+// hook so the details page can re-link after a user deletes the auto-created
+// server.
+export function useLinkMcpServerToRemote(): UseMutationResult<
+  void,
+  Error,
+  LinkMcpServerToRemoteVariables
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ remoteMcpServer }) => {
+      await client.mcpServers.create({
+        createMcpServerForm: {
+          name: formatRemoteMcpDisplay(remoteMcpServer),
+          remoteMcpServerId: remoteMcpServer.id,
+          visibility: "disabled",
+        },
+      });
+    },
+    onSuccess: async () => {
+      await invalidateAllMcpServers(queryClient, { refetchType: "all" });
     },
   });
 }

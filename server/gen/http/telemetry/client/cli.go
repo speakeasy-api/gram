@@ -204,7 +204,7 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 	{
 		err = json.Unmarshal([]byte(telemetrySearchUsersBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"group_by\": \"role\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
 		}
 		if body.Filter == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("filter", "body"))
@@ -216,6 +216,9 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 		}
 		if !(body.UserType == "internal" || body.UserType == "external") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_type", body.UserType, []any{"internal", "external"}))
+		}
+		if !(body.GroupBy == "employee" || body.GroupBy == "role") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", body.GroupBy, []any{"employee", "role"}))
 		}
 		if !(body.Sort == "asc" || body.Sort == "desc") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", body.Sort, []any{"asc", "desc"}))
@@ -250,12 +253,19 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 	}
 	v := &telemetry.SearchUsersPayload{
 		UserType: body.UserType,
+		GroupBy:  body.GroupBy,
 		Cursor:   body.Cursor,
 		Sort:     body.Sort,
 		Limit:    body.Limit,
 	}
 	if body.Filter != nil {
 		v.Filter = marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
+	}
+	{
+		var zero string
+		if v.GroupBy == zero {
+			v.GroupBy = "employee"
+		}
 	}
 	{
 		var zero string

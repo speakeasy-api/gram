@@ -204,6 +204,8 @@ func (c *Client) AgentChat(
 			HTTPMetadata:              nil,
 			APIKeyID:                  "",
 			JSONSchema:                nil,
+			Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+			CacheControl:              nil,
 			NormalizeOutboundMessages: false,
 		}
 
@@ -303,6 +305,7 @@ func (c *Client) LoadToolsetTools(
 					Description: mcpTool.Description,
 					Parameters:  mcpTool.InputSchema,
 				},
+				CacheControl: nil,
 			},
 			Executor: executor,
 		})

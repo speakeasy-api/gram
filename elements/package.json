@@ -230,7 +230,6 @@
     "msw-storybook-addon": "^2.0.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-is": "19.2.3",
     "remark-gfm": "^4.0.1",
     "storybook": "^10.0.8",
     "tailwindcss": "^4.2.4",

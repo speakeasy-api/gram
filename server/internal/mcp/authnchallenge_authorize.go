@@ -9,10 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"slices"
 	"time"
 
@@ -47,26 +45,19 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
-
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	if err != nil {
 		return err
 	}
+	return s.ServeAuthorize(w, r, endpoint)
+}
 
-	logger := s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
+// ServeAuthorize is the post-resolution entry point for the OAuth 2.1
+// authorize endpoint, shared by /mcp's HandleAuthorize (toolset-keyed)
+// and /x/mcp's mcp_endpoint-keyed route registration.
+func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	ctx := r.Context()
+	logger := endpoint.LogWith(s.logger)
 
 	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 	req.SetDefaults()
@@ -80,7 +71,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		ClientID:            req.ClientID,
 	})
 	if err != nil {
@@ -108,23 +99,17 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate consent csrf token").Log(ctx, logger)
 	}
-	customDomainID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if customDomainCtx != nil {
-		customDomainID = uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true}
-	}
 	var subject *urn.SessionSubject
-	if toolset.McpIsPublic {
+	if endpoint.IsPublic {
 		sub := urn.NewAnonymousSubject(uuid.NewString())
 		subject = &sub
 	}
 
+	baseURL := s.BaseURLForRequest(r)
 	challengeState := AuthnChallengeState{
 		ID:                  challengeID,
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: LegacyMcpEndpointRef{
-			McpSlug:        mcpSlug,
-			CustomDomainID: customDomainID,
-		},
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Endpoint:            endpoint.EndpointRef(baseURL),
 		ClientID:            req.ClientID,
 		RedirectURI:         req.RedirectURI,
 		State:               req.State,
@@ -139,13 +124,8 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").Log(ctx, logger)
 	}
 
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
-
-	if !toolset.McpIsPublic {
-		callbackURL, err := url.JoinPath(s.serverURL.String(), "mcp", "idp_callback")
+	if !endpoint.IsPublic {
+		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").Log(ctx, logger)
 		}
@@ -162,8 +142,8 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return nil
 	}
 
-	// Public toolset: skip IDP and route straight to consent.
-	consentURL, err := buildConsentURL(baseURL, mcpSlug, challengeID)
+	// Public endpoint: skip IDP and route straight to consent.
+	consentURL, err := endpoint.ConsentURL(baseURL, challengeID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)
 	}

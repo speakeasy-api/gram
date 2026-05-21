@@ -469,6 +469,7 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 		ProjectID:           toolset.ProjectID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Subject:             &subject,
+		RouteBase:           "mcp",
 		McpSlug:             mcpSlug,
 		FinalRedirectURI:    parsedRedirect.String(),
 	}

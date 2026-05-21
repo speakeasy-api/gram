@@ -19,7 +19,7 @@ export type GetMcpServerQueryData = components.McpServer;
 export function prefetchGetMcpServer(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetMcpServerRequest,
+  request?: operations.GetMcpServerRequest | undefined,
   security?: operations.GetMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchGetMcpServer(
 
 export function buildGetMcpServerQuery(
   client$: GramCore,
-  request: operations.GetMcpServerRequest,
+  request?: operations.GetMcpServerRequest | undefined,
   security?: operations.GetMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -44,10 +44,11 @@ export function buildGetMcpServerQuery(
 } {
   return {
     queryKey: queryKeyGetMcpServer({
-      id: request.id,
-      gramSession: request.gramSession,
-      gramKey: request.gramKey,
-      gramProject: request.gramProject,
+      id: request?.id,
+      slug: request?.slug,
+      gramSession: request?.gramSession,
+      gramKey: request?.gramKey,
+      gramProject: request?.gramProject,
     }),
     queryFn: async function getMcpServerQueryFn(
       ctx,
@@ -75,7 +76,8 @@ export function buildGetMcpServerQuery(
 
 export function queryKeyGetMcpServer(
   parameters: {
-    id: string;
+    id?: string | undefined;
+    slug?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

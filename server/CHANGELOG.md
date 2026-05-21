@@ -1,5 +1,21 @@
 # server
 
+## 0.56.0
+
+### Minor Changes
+
+- 978d13f: Integrate `/x/mcp` with `mcp_servers.user_session_issuer_id`. The `mcpServers.create` and `mcpServers.update` management endpoints now accept an optional `user_session_issuer_id`, and `McpServer` carries it on read. When set on an `mcp_server`, `/x/mcp` requests are issuer-gated: callers without a valid Authorization receive 401 + `WWW-Authenticate` pointing at `/.well-known/oauth-protected-resource/x/mcp/{slug}`, and the full OAuth surface — dynamic client registration, authorize, IDP callback, consent, token, revoke — is mounted under `/x/mcp/{slug}/...` against the same JWT machinery `/mcp` uses, with audience bound to `urn.NewUserSessionIssuer(...)` so tokens stay portable across toolset-backed and remote-backed servers under the same issuer. Both well-known metadata routes under `/x/mcp` now return the issuer-gated metadata shape for any addressed `mcp_server` with an issuer set, including remote-backed servers (previously 404). The `/oauth/proxy-register` DCR helper now also registers `<server>/x/mcp/remote_login_callback` so remote-OAuth `mcp_servers` reached via `/x/mcp/{slug}/connect` can complete the upstream callback against the same upstream client registration.
+- 9aa2fed: Assistants can now authenticate with OAuth-protected MCP servers. When a configured MCP server requires user authentication, the assistant relays the authorization link through an available output tool; once the user completes authentication, the assistant reconnects and continues its task.
+- 0ef489c: Slack assistants can now manage the full message and channel lifecycle: edit, delete, and ephemeral messages; pull permalinks; open DMs; create, join, leave, invite, archive, and rename channels; manage pins, bookmarks, usergroup membership, reminders, file uploads, canvases, and presence/DND. Closes the previous gap where assistants could read Slack but barely write to it.
+
+### Patch Changes
+
+- 4f16ea3: Chat completions no longer generate hidden reasoning tokens. Previously, OpenRouter could route requests through models that produced reasoning output Gram discarded before storage — yet still billed. The proxy and every internal completion caller (chat title generation, Slack agent loop, risk policy naming, structured object completion) now explicitly disable reasoning, eliminating that silent cost without changing observed behavior.
+- 11d0b70: Anthropic prompt caching now actually takes effect for assistant chats. The `/chat/completions` proxy used to strip `cache_control` markers off the request body before forwarding to OpenRouter, so every Anthropic call billed at the full input rate. The proxy now preserves the markers at the top level, on tool definitions, and on message content blocks, so Claude requests with stable prefixes can serve from cache.
+- 5746c4e: Assistants can now update their own triggers. Previously, calling `configure_trigger` on an existing trigger returned a generic internal error every time, even though the assistant could read its triggers fine — its scoped tool was being silently swapped for a stricter variant that demanded fields the assistant isn't allowed to send. As a side effect, an assistant's trigger list no longer leaks sibling assistants' triggers in the same project.
+- 4e1be24: Outbound OpenRouter chat completions now carry a session ID, user, source metadata, and distributed-trace identifiers so OpenRouter's dashboard can group requests per conversation and roll up cost per customer, and so Datadog traces correlate with OpenRouter's request records.
+- 31bafa1: Deprecated obsolete outbox event types and explicitly adds versioning in the name scheme of events. In particular, `risk_finding.created` is replaced by `risk_finding.created_v1`.
+
 ## 0.55.1
 
 ### Patch Changes

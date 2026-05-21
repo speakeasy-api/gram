@@ -68,6 +68,12 @@ type ClaudeHookResult struct {
 	SystemMessage *string
 	// Hook-specific output as JSON object
 	HookSpecificOutput any
+	// Top-level block decision for UserPromptSubmit / PostToolUse / Stop /
+	// SubagentStop. Use 'block' to halt processing.
+	Decision *string
+	// Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude
+	// (PostToolUse/Stop).
+	Reason *string
 }
 
 // ClaudePayload is the payload type of the hooks service claude method.

@@ -31,11 +31,11 @@ import { Result } from "../types/fp.js";
  * getMcpServer mcpServers
  *
  * @remarks
- * Get an MCP server by ID
+ * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function mcpServersGet(
   client: GramCore,
-  request: operations.GetMcpServerRequest,
+  request?: operations.GetMcpServerRequest | undefined,
   security?: operations.GetMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function mcpServersGet(
 
 async function $do(
   client: GramCore,
-  request: operations.GetMcpServerRequest,
+  request?: operations.GetMcpServerRequest | undefined,
   security?: operations.GetMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -84,7 +84,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.GetMcpServerRequest$outboundSchema, value),
+    (value) =>
+      z.parse(z.optional(operations.GetMcpServerRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -96,20 +97,21 @@ async function $do(
   const path = pathToFunc("/rpc/mcpServers.get")();
 
   const query = encodeFormQuery({
-    "id": payload.id,
+    "id": payload?.id,
+    "slug": payload?.slug,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

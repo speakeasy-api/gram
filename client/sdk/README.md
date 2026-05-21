@@ -290,6 +290,7 @@ run();
 
 ### [McpEndpoints](docs/sdks/mcpendpoints/README.md)
 
+* [checkSlugAvailability](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 * [create](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 * [delete](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 * [get](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
@@ -417,6 +418,10 @@ run();
 ### [Risk.Capabilities](docs/sdks/capabilities/README.md)
 
 * [get](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
+
+### [Risk.Overview](docs/sdks/overview/README.md)
+
+* [get](docs/sdks/overview/README.md#get) - getRiskOverview risk
 
 ### [Risk.Policies](docs/sdks/policies/README.md)
 
@@ -654,6 +659,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`mcpEndpointsCheckSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`mcpEndpointsCreate`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`mcpEndpointsDelete`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 - [`mcpEndpointsGet`](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
@@ -736,6 +742,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskApprovalsDelete`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
 - [`riskApprovalsList`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
 - [`riskCapabilitiesGet`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
+- [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`riskPoliciesCreate`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`riskPoliciesDelete`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 - [`riskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
@@ -858,6 +865,7 @@ To learn about this feature and how to get started, check
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
+- [`useCheckMcpEndpointSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneClientFromOAuthProxyProviderMutation`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`useCloneEnvironmentMutation`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
@@ -1030,6 +1038,7 @@ To learn about this feature and how to get started, check
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`useRiskListResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`useRiskListShadowMCPApprovals`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
+- [`useRiskOverview`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`useRiskPoliciesDeleteMutation`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 - [`useRiskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
 - [`useRiskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk

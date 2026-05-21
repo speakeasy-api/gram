@@ -430,6 +430,58 @@ func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, r
 	return v, nil
 }
 
+// BuildGetRiskOverviewPayload builds the payload for the risk getRiskOverview
+// endpoint from CLI flags.
+func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOverviewTo string, riskGetRiskOverviewApikeyToken string, riskGetRiskOverviewSessionToken string, riskGetRiskOverviewProjectSlugInput string) (*risk.GetRiskOverviewPayload, error) {
+	var err error
+	var from *string
+	{
+		if riskGetRiskOverviewFrom != "" {
+			from = &riskGetRiskOverviewFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskGetRiskOverviewTo != "" {
+			to = &riskGetRiskOverviewTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskOverviewApikeyToken != "" {
+			apikeyToken = &riskGetRiskOverviewApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskOverviewSessionToken != "" {
+			sessionToken = &riskGetRiskOverviewSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskOverviewProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskOverviewProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskOverviewPayload{}
+	v.From = from
+	v.To = to
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskPolicyStatusPayload builds the payload for the risk
 // getRiskPolicyStatus endpoint from CLI flags.
 func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRiskPolicyStatusApikeyToken string, riskGetRiskPolicyStatusSessionToken string, riskGetRiskPolicyStatusProjectSlugInput string) (*risk.GetRiskPolicyStatusPayload, error) {

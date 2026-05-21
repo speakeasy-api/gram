@@ -352,6 +352,44 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	return afterView, nil
 }
 
+func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload *gen.CheckMcpEndpointSlugAvailabilityPayload) (bool, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return false, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return false, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	customDomainID, err := conv.PtrToNullUUID(payload.CustomDomainID)
+	if err != nil {
+		return false, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").Log(ctx, logger)
+	}
+
+	// The query folds in a custom-domain ownership check: when
+	// custom_domain_id is supplied and not owned by the caller's organization,
+	// the result short-circuits to false ("unavailable"). This closes a
+	// slug-enumeration leak under foreign domains without exposing a separate
+	// error code, which the dashboard wouldn't differentiate from "taken"
+	// anyway.
+	available, err := repo.New(s.db).CheckSlugAvailability(ctx, repo.CheckSlugAvailabilityParams{
+		Slug:           string(payload.Slug),
+		CustomDomainID: customDomainID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").Log(ctx, logger)
+	}
+
+	// available.Valid is always true for this query (boolean expression with
+	// no nullable sub-terms), but sqlc widens the return type to pgtype.Bool
+	// because it doesn't infer non-null on compound expressions.
+	return available.Bool, nil
+}
+
 func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpEndpointPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

@@ -104,7 +104,9 @@ INSERT INTO remote_session_clients (
     client_secret_encrypted,
     client_id_issued_at,
     client_secret_expires_at,
-    token_endpoint_auth_method
+    token_endpoint_auth_method,
+    scope,
+    audience
 )
 VALUES (
     @project_id,
@@ -114,7 +116,9 @@ VALUES (
     @client_secret_encrypted,
     @client_id_issued_at,
     @client_secret_expires_at,
-    @token_endpoint_auth_method
+    @token_endpoint_auth_method,
+    sqlc.narg('scope')::text[],
+    @audience
 )
 RETURNING *;
 
@@ -141,6 +145,8 @@ SET
     client_secret_expires_at = COALESCE(sqlc.narg('client_secret_expires_at'), client_secret_expires_at),
     user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
+    scope = COALESCE(sqlc.narg('scope')::text[], scope),
+    audience = COALESCE(sqlc.narg('audience'), audience),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -251,6 +257,8 @@ SELECT
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -275,6 +283,8 @@ SELECT
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,

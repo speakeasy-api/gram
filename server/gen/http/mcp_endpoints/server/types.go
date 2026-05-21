@@ -864,6 +864,196 @@ type UpdateMcpEndpointGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CheckMcpEndpointSlugAvailabilityUnauthorizedResponseBody is the type of the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "unauthorized" error.
+type CheckMcpEndpointSlugAvailabilityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityForbiddenResponseBody is the type of the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "forbidden" error.
+type CheckMcpEndpointSlugAvailabilityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityBadRequestResponseBody is the type of the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "bad_request" error.
+type CheckMcpEndpointSlugAvailabilityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityNotFoundResponseBody is the type of the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "not_found" error.
+type CheckMcpEndpointSlugAvailabilityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityConflictResponseBody is the type of the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "conflict" error.
+type CheckMcpEndpointSlugAvailabilityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityUnsupportedMediaResponseBody is the type of
+// the "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CheckMcpEndpointSlugAvailabilityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityInvalidResponseBody is the type of the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "invalid" error.
+type CheckMcpEndpointSlugAvailabilityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityInvariantViolationResponseBody is the type
+// of the "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint
+// HTTP response body for the "invariant_violation" error.
+type CheckMcpEndpointSlugAvailabilityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityUnexpectedResponseBody is the type of the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "unexpected" error.
+type CheckMcpEndpointSlugAvailabilityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckMcpEndpointSlugAvailabilityGatewayErrorResponseBody is the type of the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint HTTP
+// response body for the "gateway_error" error.
+type CheckMcpEndpointSlugAvailabilityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteMcpEndpointUnauthorizedResponseBody is the type of the "mcpEndpoints"
 // service "deleteMcpEndpoint" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1715,6 +1905,156 @@ func NewUpdateMcpEndpointGatewayErrorResponseBody(res *goa.ServiceError) *Update
 	return body
 }
 
+// NewCheckMcpEndpointSlugAvailabilityUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityUnauthorizedResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityUnauthorizedResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityForbiddenResponseBody builds the HTTP
+// response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityForbiddenResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityForbiddenResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityBadRequestResponseBody builds the HTTP
+// response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityBadRequestResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityBadRequestResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityNotFoundResponseBody builds the HTTP
+// response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityNotFoundResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityNotFoundResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityConflictResponseBody builds the HTTP
+// response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityConflictResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityConflictResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityUnsupportedMediaResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityUnsupportedMediaResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityInvalidResponseBody builds the HTTP
+// response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityInvalidResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityInvalidResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityInvariantViolationResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityInvariantViolationResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityUnexpectedResponseBody builds the HTTP
+// response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityUnexpectedResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityUnexpectedResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckMcpEndpointSlugAvailabilityGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "checkMcpEndpointSlugAvailability"
+// endpoint of the "mcpEndpoints" service.
+func NewCheckMcpEndpointSlugAvailabilityGatewayErrorResponseBody(res *goa.ServiceError) *CheckMcpEndpointSlugAvailabilityGatewayErrorResponseBody {
+	body := &CheckMcpEndpointSlugAvailabilityGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteMcpEndpointUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "deleteMcpEndpoint" endpoint of the "mcpEndpoints"
 // service.
@@ -1914,6 +2254,19 @@ func NewUpdateMcpEndpointPayload(body *UpdateMcpEndpointRequestBody, sessionToke
 		McpServerID:    *body.McpServerID,
 		Slug:           types.McpEndpointSlug(*body.Slug),
 	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCheckMcpEndpointSlugAvailabilityPayload builds a mcpEndpoints service
+// checkMcpEndpointSlugAvailability endpoint payload.
+func NewCheckMcpEndpointSlugAvailabilityPayload(slug string, customDomainID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload {
+	v := &mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload{}
+	v.Slug = types.McpEndpointSlug(slug)
+	v.CustomDomainID = customDomainID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

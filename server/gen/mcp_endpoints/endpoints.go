@@ -16,11 +16,12 @@ import (
 
 // Endpoints wraps the "mcpEndpoints" service endpoints.
 type Endpoints struct {
-	CreateMcpEndpoint goa.Endpoint
-	GetMcpEndpoint    goa.Endpoint
-	ListMcpEndpoints  goa.Endpoint
-	UpdateMcpEndpoint goa.Endpoint
-	DeleteMcpEndpoint goa.Endpoint
+	CreateMcpEndpoint                goa.Endpoint
+	GetMcpEndpoint                   goa.Endpoint
+	ListMcpEndpoints                 goa.Endpoint
+	UpdateMcpEndpoint                goa.Endpoint
+	CheckMcpEndpointSlugAvailability goa.Endpoint
+	DeleteMcpEndpoint                goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "mcpEndpoints" service with endpoints.
@@ -28,11 +29,12 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateMcpEndpoint: NewCreateMcpEndpointEndpoint(s, a.APIKeyAuth),
-		GetMcpEndpoint:    NewGetMcpEndpointEndpoint(s, a.APIKeyAuth),
-		ListMcpEndpoints:  NewListMcpEndpointsEndpoint(s, a.APIKeyAuth),
-		UpdateMcpEndpoint: NewUpdateMcpEndpointEndpoint(s, a.APIKeyAuth),
-		DeleteMcpEndpoint: NewDeleteMcpEndpointEndpoint(s, a.APIKeyAuth),
+		CreateMcpEndpoint:                NewCreateMcpEndpointEndpoint(s, a.APIKeyAuth),
+		GetMcpEndpoint:                   NewGetMcpEndpointEndpoint(s, a.APIKeyAuth),
+		ListMcpEndpoints:                 NewListMcpEndpointsEndpoint(s, a.APIKeyAuth),
+		UpdateMcpEndpoint:                NewUpdateMcpEndpointEndpoint(s, a.APIKeyAuth),
+		CheckMcpEndpointSlugAvailability: NewCheckMcpEndpointSlugAvailabilityEndpoint(s, a.APIKeyAuth),
+		DeleteMcpEndpoint:                NewDeleteMcpEndpointEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -42,6 +44,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetMcpEndpoint = m(e.GetMcpEndpoint)
 	e.ListMcpEndpoints = m(e.ListMcpEndpoints)
 	e.UpdateMcpEndpoint = m(e.UpdateMcpEndpoint)
+	e.CheckMcpEndpointSlugAvailability = m(e.CheckMcpEndpointSlugAvailability)
 	e.DeleteMcpEndpoint = m(e.DeleteMcpEndpoint)
 }
 
@@ -278,6 +281,66 @@ func NewUpdateMcpEndpointEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.UpdateMcpEndpoint(ctx, p)
+	}
+}
+
+// NewCheckMcpEndpointSlugAvailabilityEndpoint returns an endpoint function
+// that calls the method "checkMcpEndpointSlugAvailability" of service
+// "mcpEndpoints".
+func NewCheckMcpEndpointSlugAvailabilityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CheckMcpEndpointSlugAvailabilityPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CheckMcpEndpointSlugAvailability(ctx, p)
 	}
 }
 
