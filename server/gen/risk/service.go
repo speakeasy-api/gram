@@ -251,8 +251,8 @@ type ListRiskResultsPayload struct {
 	ChatID *string
 	// Optional rule category key to filter by (e.g. secrets, pii, financial).
 	Category *string
-	// Optional rule identifier to filter by (exact match, e.g.
-	// 'secret.aws-access-key').
+	// Optional rule identifier substring to filter by (case-insensitive, e.g.
+	// 'secret' matches all 'secret.*' rules).
 	RuleID *string
 	// If true, collapse results to one row per (policy_id, rule_id, match),
 	// keeping the most recent occurrence. Useful when the same secret is detected

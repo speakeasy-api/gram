@@ -19378,11 +19378,11 @@ paths:
                     description: Optional rule category key to filter by (e.g. secrets, pii, financial).
                     type: string
                 - allowEmptyValue: true
-                  description: Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').
+                  description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
                   in: query
                   name: rule_id
                   schema:
-                    description: Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').
+                    description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
                     type: string
                 - allowEmptyValue: true
                   description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.

@@ -34,7 +34,7 @@ export type ListRiskResultsRequest = {
    */
   category?: string | undefined;
   /**
-   * Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').
+   * Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
    */
   ruleId?: string | undefined;
   /**

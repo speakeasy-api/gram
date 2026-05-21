@@ -208,7 +208,7 @@ var _ = Service("risk", func() {
 				Format(FormatUUID)
 			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
-			Attribute("rule_id", String, "Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').")
+			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
 			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
 				Format(FormatDateTime)

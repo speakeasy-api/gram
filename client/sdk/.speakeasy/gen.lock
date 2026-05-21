@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 9e1e8e968a75bc99fc65b1a5764f67d2
+  docChecksum: 28c605869cdeedb5c12be37218b85d3c
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2073,7 +2073,7 @@ trackedFiles:
   docs/models/operations/listriskresultsbychatsecurityoption2.md:
     last_write_checksum: sha1:e4671f7de0aa651f138730fc56273cf87c2eca30
   docs/models/operations/listriskresultsrequest.md:
-    last_write_checksum: sha1:5da2a883d5d669e0d5cdbf1fb80d36b29b9fc868
+    last_write_checksum: sha1:ea77bd1e744d66dff0abbd8f4ce571a835e2f1af
   docs/models/operations/listriskresultssecurity.md:
     last_write_checksum: sha1:d9f80b63da3e50953ab93a07dd1e54cca5068750
   docs/models/operations/listriskresultssecurityoption1.md:
@@ -5193,7 +5193,7 @@ trackedFiles:
   src/models/operations/listriskpolicies.ts:
     last_write_checksum: sha1:7f0b959f25ceb36e6f612a3a7d92427f4c9aa644
   src/models/operations/listriskresults.ts:
-    last_write_checksum: sha1:2262cc74205061d20bf5df7548d6b4459cf7ca4d
+    last_write_checksum: sha1:d186b7145b6ce94a484fbd082a616acce819a2e6
   src/models/operations/listriskresultsbychat.ts:
     last_write_checksum: sha1:e9e67cfb8e43e5a443a937d067267d2df381ab4e
   src/models/operations/listroles.ts:

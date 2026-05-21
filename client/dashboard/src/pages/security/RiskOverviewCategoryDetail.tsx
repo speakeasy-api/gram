@@ -471,7 +471,7 @@ function RuleIdFilter({
         type="text"
         value={local}
         onChange={(e) => setLocal(e.target.value)}
-        placeholder="Filter by rule ID..."
+        placeholder="Rule ID contains..."
         className="placeholder:text-muted-foreground w-[240px] bg-transparent text-sm outline-none"
         aria-label="Filter by rule ID"
       />

@@ -1137,7 +1137,7 @@ FROM (
     AND rr.found IS TRUE
     AND ($3::timestamptz IS NULL OR cm.created_at >= $3::timestamptz)
     AND ($4::timestamptz IS NULL OR cm.created_at < $4::timestamptz)
-    AND ($5::text = '' OR rr.rule_id = $5::text)
+    AND ($5::text = '' OR rr.rule_id ILIKE '%' || $5::text || '%')
     AND ($6::text = '' OR (
     CASE
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
