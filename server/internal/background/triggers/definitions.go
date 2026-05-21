@@ -396,6 +396,25 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 	}
 }
 
+// slackCorrelationID derives the assistant-thread correlation key from a
+// Slack event. Top-level messages (empty thread_ts) fall back to the event's
+// own ts so each top-level message maps 1:1 to a Gram thread — Slack itself
+// promotes a top-level ts into thread_ts the moment anyone replies, so this
+// mirrors Slack's threading semantic. Channel-less events (e.g. team_join)
+// fall back to the workspace ID.
+func slackCorrelationID(channelID, threadID, fallbackTs, teamID string) string {
+	if threadID == "" {
+		threadID = fallbackTs
+	}
+	if channelID != "" && threadID != "" {
+		return channelID + ":" + threadID
+	}
+	if channelID != "" {
+		return channelID
+	}
+	return teamID
+}
+
 // slackInteractionPayload is the JSON body of a Block Kit interaction
 // envelope (e.g. block_actions). Slack form-encodes this under the "payload"
 // field of the webhook request body. We only model the fields needed to
@@ -472,12 +491,6 @@ func handleSlackInteraction(body []byte) (*WebhookIngressResult, error) {
 	if channelID == "" {
 		channelID = payload.Container.ChannelID
 	}
-	// Mirror the events path: keep threadID empty for clicks on a top-level
-	// message so the correlation is channel-only and lines up with the
-	// assistant thread opened by the original Events API message. Falling
-	// back to message.ts here would fork the conversation onto a new
-	// "channel:bot_message_ts" correlation that does not match the
-	// originating thread.
 	threadID := payload.Message.ThreadTs
 	if threadID == "" {
 		threadID = payload.Container.ThreadTs
@@ -510,19 +523,11 @@ func handleSlackInteraction(body []byte) (*WebhookIngressResult, error) {
 		BlockID:      action.BlockID,
 	}
 
-	correlationID := channelID
-	if channelID != "" && threadID != "" {
-		correlationID = channelID + ":" + threadID
-	}
-	if correlationID == "" {
-		correlationID = payload.Team.ID
-	}
-
 	return &WebhookIngressResult{
 		Response: nil,
 		Event: &EventEnvelope{
 			EventID:           uuid.NewSHA1(uuid.NameSpaceURL, body).String(),
-			CorrelationID:     correlationID,
+			CorrelationID:     slackCorrelationID(channelID, threadID, messageTs, payload.Team.ID),
 			TriggerInstanceID: "",
 			DefinitionSlug:    "slack",
 			Event:             normalized,
@@ -753,10 +758,6 @@ func newSlackDefinition() Definition {
 				return nil, fmt.Errorf("decode slack payload: %w", err)
 			}
 
-			// thread_ts is only set for replies inside a thread. For top-level
-			// messages we key the correlation on the channel alone so a user
-			// sending multiple standalone messages in a DM or channel lands
-			// on a single Gram thread rather than spawning one per message.
 			threadID := event.ThreadTs
 
 			eventID := req.EventID
@@ -810,19 +811,11 @@ func newSlackDefinition() Definition {
 				BlockID:      "",
 			}
 
-			correlationID := channelID
-			if channelID != "" && threadID != "" {
-				correlationID = channelID + ":" + threadID
-			}
-			if correlationID == "" {
-				correlationID = req.TeamID
-			}
-
 			return &WebhookIngressResult{
 				Response: nil,
 				Event: &EventEnvelope{
 					EventID:           eventID,
-					CorrelationID:     correlationID,
+					CorrelationID:     slackCorrelationID(channelID, threadID, timestamp, req.TeamID),
 					TriggerInstanceID: "",
 					DefinitionSlug:    "slack",
 					Event:             normalizedEvent,
