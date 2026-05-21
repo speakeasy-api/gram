@@ -82,7 +82,7 @@ func TestService_UpdateMemberRole_WorkOSMembershipNotFound(t *testing.T) {
 
 	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: builderID})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "member not found")
+	require.Contains(t, err.Error(), "member is missing local WorkOS membership linkage")
 }
 
 func TestService_UpdateMemberRole_WorkOSFailure(t *testing.T) {

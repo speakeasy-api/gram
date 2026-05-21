@@ -676,6 +676,7 @@ LEFT JOIN global_roles
 WHERE ora.organization_id = $1
   AND ora.workos_user_id = $2
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
 ORDER BY role_slug
 `
 
@@ -709,6 +710,62 @@ func (q *Queries) ListMemberRolePrincipalsByWorkosUser(ctx context.Context, arg 
 	return items, nil
 }
 
+const listOrganizationRoleAssignmentRecordsByWorkosUser = `-- name: ListOrganizationRoleAssignmentRecordsByWorkosUser :many
+SELECT
+  id,
+  organization_id,
+  workos_user_id,
+  user_id,
+  role_urn,
+  workos_membership_id,
+  workos_updated_at,
+  workos_last_event_id,
+  created_at,
+  updated_at,
+  deleted_at
+FROM organization_role_assignments
+WHERE organization_id = $1
+  AND workos_user_id = $2
+ORDER BY created_at
+`
+
+type ListOrganizationRoleAssignmentRecordsByWorkosUserParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+func (q *Queries) ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx context.Context, arg ListOrganizationRoleAssignmentRecordsByWorkosUserParams) ([]OrganizationRoleAssignment, error) {
+	rows, err := q.db.Query(ctx, listOrganizationRoleAssignmentRecordsByWorkosUser, arg.OrganizationID, arg.WorkosUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationRoleAssignment
+	for rows.Next() {
+		var i OrganizationRoleAssignment
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.WorkosUserID,
+			&i.UserID,
+			&i.RoleUrn,
+			&i.WorkosMembershipID,
+			&i.WorkosUpdatedAt,
+			&i.WorkosLastEventID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationRoleAssignmentsBySlug = `-- name: ListOrganizationRoleAssignmentsBySlug :many
 SELECT
   ora.user_id,
@@ -728,6 +785,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE ora.organization_id = $1
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = $2
+  AND ora.deleted_at IS NULL
 ORDER BY ora.workos_user_id
 `
 
@@ -1004,22 +1062,20 @@ func (q *Queries) MarkOrganizationRoleDeleted(ctx context.Context, arg MarkOrgan
 
 const markOrganizationRoleDeletedLocally = `-- name: MarkOrganizationRoleDeletedLocally :execrows
 UPDATE organization_roles
-SET workos_last_event_id = $1,
-    deleted_at = clock_timestamp(),
+SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND workos_slug = $3
+WHERE organization_id = $1
+  AND workos_slug = $2
   AND deleted_at IS NULL
 `
 
 type MarkOrganizationRoleDeletedLocallyParams struct {
-	WorkosLastEventID pgtype.Text
-	OrganizationID    string
-	WorkosSlug        string
+	OrganizationID string
+	WorkosSlug     string
 }
 
 func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg MarkOrganizationRoleDeletedLocallyParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markOrganizationRoleDeletedLocally, arg.WorkosLastEventID, arg.OrganizationID, arg.WorkosSlug)
+	result, err := q.db.Exec(ctx, markOrganizationRoleDeletedLocally, arg.OrganizationID, arg.WorkosSlug)
 	if err != nil {
 		return 0, err
 	}
@@ -1064,16 +1120,19 @@ upserted AS (
     user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
     workos_membership_id = EXCLUDED.workos_membership_id,
     workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_role_assignments.workos_last_event_id),
     updated_at = clock_timestamp()
   RETURNING role_urn
 ),
 deleted AS (
-DELETE FROM organization_role_assignments
+UPDATE organization_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
 WHERE organization_role_assignments.organization_id = $1
   AND organization_role_assignments.workos_user_id = $3
   AND EXISTS (SELECT 1 FROM upserted)
   AND organization_role_assignments.role_urn NOT IN (SELECT role_urn FROM upserted)
+  AND organization_role_assignments.deleted_at IS NULL
   RETURNING 1
 )
 SELECT COUNT(*)::bigint FROM upserted
@@ -1124,7 +1183,7 @@ ON CONFLICT (workos_slug) DO UPDATE SET
     workos_name = EXCLUDED.workos_name,
     workos_description = EXCLUDED.workos_description,
     workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
@@ -1139,9 +1198,8 @@ type UpsertGlobalRoleParams struct {
 	WorkosLastEventID pgtype.Text
 }
 
-// Upsert an environment-level WorkOS role. Caller must have already passed
-// the row through ShouldProcessEvent. Resurrects a previously soft-deleted
-// role on conflict.
+// Upsert an environment-level role. WorkOS sync callers pass an event ID;
+// local/bootstrap callers pass NULL so an existing WorkOS event cursor is preserved.
 func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRoleParams) error {
 	_, err := q.db.Exec(ctx, upsertGlobalRole,
 		arg.WorkosSlug,
@@ -1177,7 +1235,7 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_name = EXCLUDED.workos_name,
     workos_description = EXCLUDED.workos_description,
     workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_roles.workos_last_event_id),
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
@@ -1204,6 +1262,7 @@ LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = upserted.organization_id
   AND ora.role_urn = 'role:organization:' || upserted.id::text
   AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
 GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
 `
 
@@ -1228,9 +1287,8 @@ type UpsertOrganizationRoleRow struct {
 	MemberCount       int64
 }
 
-// Upsert an org-scoped WorkOS role. Caller must have already passed the row
-// through ShouldProcessEvent. Resurrects a previously soft-deleted role on
-// conflict.
+// Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
+// lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
 func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) (UpsertOrganizationRoleRow, error) {
 	row := q.db.QueryRow(ctx, upsertOrganizationRole,
 		arg.OrganizationID,
@@ -1292,7 +1350,7 @@ ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL
   user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
   workos_membership_id = EXCLUDED.workos_membership_id,
   workos_updated_at = EXCLUDED.workos_updated_at,
-  workos_last_event_id = EXCLUDED.workos_last_event_id,
+  workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_role_assignments.workos_last_event_id),
   updated_at = clock_timestamp()
 `
 

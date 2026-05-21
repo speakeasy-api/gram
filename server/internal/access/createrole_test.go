@@ -233,7 +233,6 @@ func TestService_CreateRole_LocalRoleWriteFailureDoesNotAssignMembers(t *testing
 	_, err = ti.service.roleMgr.CreateRole(ctx, authCtx.ActiveOrganizationID, mockidp.MockOrgID, accessAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		DisplayName: authCtx.Email,
-		Slug:        nil,
 	}, &gen.CreateRolePayload{
 		Name:        "Broken Builder",
 		Description: "Will fail local write",

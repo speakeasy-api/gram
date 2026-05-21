@@ -3,10 +3,13 @@ package authz
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -81,6 +84,39 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 // SeedSystemRoleGrants upserts the fixed grant sets for all system roles.
 func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
 	for roleSlug, grants := range SystemRoleGrants {
+		existingRole, err := repo.New(db).GetGlobalRoleBySlug(ctx, roleSlug)
+		seedRole := false
+		switch {
+		case err == nil:
+			seedRole = existingRole.Deleted
+		case errors.Is(err, pgx.ErrNoRows):
+			seedRole = true
+		default:
+			return fmt.Errorf("load %s role: %w", roleSlug, err)
+		}
+		if seedRole {
+			name := roleSlug
+			description := ""
+			switch roleSlug {
+			case SystemRoleAdmin:
+				name = "Admin"
+				description = "Administrator role"
+			case SystemRoleMember:
+				name = "Member"
+				description = "Member role"
+			}
+			now := time.Now().UTC()
+			if err := repo.New(db).UpsertGlobalRole(ctx, repo.UpsertGlobalRoleParams{
+				WorkosSlug:        roleSlug,
+				WorkosName:        name,
+				WorkosDescription: conv.ToPGTextEmpty(description),
+				WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+				WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+				WorkosLastEventID: conv.ToPGTextEmpty(""),
+			}); err != nil {
+				return fmt.Errorf("seed %s role: %w", roleSlug, err)
+			}
+		}
 		if err := SyncGrants(ctx, logger, db, organizationID, roleSlug, "", grants); err != nil {
 			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
 		}

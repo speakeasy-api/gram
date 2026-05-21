@@ -73,9 +73,8 @@ WHERE deleted_at IS NULL
 ORDER BY workos_slug;
 
 -- name: UpsertGlobalRole :exec
--- Upsert an environment-level WorkOS role. Caller must have already passed
--- the row through ShouldProcessEvent. Resurrects a previously soft-deleted
--- role on conflict.
+-- Upsert an environment-level role. WorkOS sync callers pass an event ID;
+-- local/bootstrap callers pass NULL so an existing WorkOS event cursor is preserved.
 INSERT INTO global_roles (
     workos_slug,
     workos_name,
@@ -95,7 +94,7 @@ ON CONFLICT (workos_slug) DO UPDATE SET
     workos_name = EXCLUDED.workos_name,
     workos_description = EXCLUDED.workos_description,
     workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp();
@@ -123,9 +122,8 @@ WHERE organization_id = @organization_id
 ORDER BY workos_slug;
 
 -- name: UpsertOrganizationRole :one
--- Upsert an org-scoped WorkOS role. Caller must have already passed the row
--- through ShouldProcessEvent. Resurrects a previously soft-deleted role on
--- conflict.
+-- Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
+-- lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
 WITH upserted AS (
 INSERT INTO organization_roles (
     organization_id,
@@ -148,7 +146,7 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_name = EXCLUDED.workos_name,
     workos_description = EXCLUDED.workos_description,
     workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_roles.workos_last_event_id),
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
@@ -175,6 +173,7 @@ LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = upserted.organization_id
   AND ora.role_urn = 'role:organization:' || upserted.id::text
   AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
 GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at;
 
 -- name: MarkOrganizationRoleDeleted :execrows
@@ -189,8 +188,7 @@ WHERE organization_id = @organization_id
 
 -- name: MarkOrganizationRoleDeletedLocally :execrows
 UPDATE organization_roles
-SET workos_last_event_id = @workos_last_event_id,
-    deleted_at = clock_timestamp(),
+SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND workos_slug = @workos_slug
@@ -316,6 +314,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE ora.organization_id = @organization_id
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = @workos_role_slug
+  AND ora.deleted_at IS NULL
 ORDER BY ora.workos_user_id;
 
 -- name: GetOrganizationRoleAssignmentByWorkosUser :one
@@ -438,7 +437,26 @@ LEFT JOIN global_roles
 WHERE ora.organization_id = @organization_id
   AND ora.workos_user_id = @workos_user_id
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
 ORDER BY role_slug;
+
+-- name: ListOrganizationRoleAssignmentRecordsByWorkosUser :many
+SELECT
+  id,
+  organization_id,
+  workos_user_id,
+  user_id,
+  role_urn,
+  workos_membership_id,
+  workos_updated_at,
+  workos_last_event_id,
+  created_at,
+  updated_at,
+  deleted_at
+FROM organization_role_assignments
+WHERE organization_id = @organization_id
+  AND workos_user_id = @workos_user_id
+ORDER BY created_at;
 
 -- name: UpsertOrganizationRoleAssignment :execrows
 WITH input_role_urn AS (
@@ -477,7 +495,7 @@ ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL
   user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
   workos_membership_id = EXCLUDED.workos_membership_id,
   workos_updated_at = EXCLUDED.workos_updated_at,
-  workos_last_event_id = EXCLUDED.workos_last_event_id,
+  workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_role_assignments.workos_last_event_id),
   updated_at = clock_timestamp();
 
 -- name: ReplaceOrganizationRoleAssignment :one
@@ -518,16 +536,19 @@ upserted AS (
     user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
     workos_membership_id = EXCLUDED.workos_membership_id,
     workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_role_assignments.workos_last_event_id),
     updated_at = clock_timestamp()
   RETURNING role_urn
 ),
 deleted AS (
-DELETE FROM organization_role_assignments
+UPDATE organization_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
 WHERE organization_role_assignments.organization_id = @organization_id
   AND organization_role_assignments.workos_user_id = @workos_user_id
   AND EXISTS (SELECT 1 FROM upserted)
   AND organization_role_assignments.role_urn NOT IN (SELECT role_urn FROM upserted)
+  AND organization_role_assignments.deleted_at IS NULL
   RETURNING 1
 )
 SELECT COUNT(*)::bigint FROM upserted;

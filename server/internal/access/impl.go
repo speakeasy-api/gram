@@ -155,7 +155,6 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	created, err := s.roleMgr.CreateRole(ctx, ac.ActiveOrganizationID, workosOrgID, accessAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		DisplayName: ac.Email,
-		Slug:        nil,
 	}, payload)
 	if err != nil {
 		return nil, err
@@ -181,7 +180,6 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	updated, err := s.roleMgr.UpdateRole(ctx, ac.ActiveOrganizationID, workosOrgID, accessAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		DisplayName: ac.Email,
-		Slug:        nil,
 	}, payload)
 	if err != nil {
 		return nil, err
@@ -208,7 +206,6 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	deleted, err := s.roleMgr.DeleteRole(ctx, ac.ActiveOrganizationID, workosOrgID, payload.ID, accessAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		DisplayName: ac.Email,
-		Slug:        nil,
 	})
 	if err != nil {
 		return err
@@ -363,7 +360,6 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	memberUpdate, err := s.roleMgr.UpdateMemberRole(ctx, ac.ActiveOrganizationID, payload.UserID, payload.RoleID, accessAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		DisplayName: ac.Email,
-		Slug:        nil,
 	})
 	if err != nil {
 		return nil, err

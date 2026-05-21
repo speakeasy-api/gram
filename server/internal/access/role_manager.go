@@ -130,7 +130,6 @@ type workosSync func(context.Context)
 type accessAuditActor struct {
 	Principal   urn.Principal
 	DisplayName *string
-	Slug        *string
 }
 
 // CreateRole creates the local role, grants, optional assignments, and audit entry atomically, then best-effort syncs WorkOS after commit.
@@ -210,7 +209,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		OrganizationID:   gramOrgID,
 		Actor:            actor.Principal,
 		ActorDisplayName: actor.DisplayName,
-		ActorSlug:        actor.Slug,
+		ActorSlug:        nil,
 		RoleID:           createdRole.ID,
 		RoleName:         createdRole.Name,
 		RoleSlug:         createdRole.Slug,
@@ -371,7 +370,7 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		OrganizationID:     gramOrgID,
 		Actor:              actor.Principal,
 		ActorDisplayName:   actor.DisplayName,
-		ActorSlug:          actor.Slug,
+		ActorSlug:          nil,
 		RoleID:             updatedRole.ID,
 		RoleName:           updatedRoleView.Name,
 		RoleSlug:           updatedRole.Slug,
@@ -449,9 +448,8 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}
 
 	deletedCount, err := repo.New(tx).MarkOrganizationRoleDeletedLocally(ctx, repo.MarkOrganizationRoleDeletedLocallyParams{
-		OrganizationID:    gramOrgID,
-		WorkosSlug:        currentRole.Slug,
-		WorkosLastEventID: conv.ToPGTextEmpty(""),
+		OrganizationID: gramOrgID,
+		WorkosSlug:     currentRole.Slug,
 	})
 	if err != nil {
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
@@ -469,7 +467,7 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 		OrganizationID:   gramOrgID,
 		Actor:            actor.Principal,
 		ActorDisplayName: actor.DisplayName,
-		ActorSlug:        actor.Slug,
+		ActorSlug:        nil,
 		RoleID:           currentRole.ID,
 		RoleName:         currentRole.Name,
 		RoleSlug:         currentRole.Slug,
@@ -542,8 +540,7 @@ func (r *RoleManager) UpdateMemberRole(ctx context.Context, gramOrgID, userID, r
 
 	membershipID := conv.FromPGTextOrEmpty[string](existing.WorkosMembershipID)
 	if membershipID == "" {
-		// WorkOS sync must attach membership IDs before role changes can be propagated upstream.
-		return memberRoleUpdateContext{}, oops.E(oops.CodeNotFound, nil, "member not found").Log(ctx, r.logger)
+		return memberRoleUpdateContext{}, oops.E(oops.CodeNotFound, nil, "member is missing local WorkOS membership linkage").Log(ctx, r.logger)
 	}
 
 	if existing.WorkosUserID != "" && role.Slug != "" {
@@ -594,7 +591,7 @@ func (r *RoleManager) UpdateMemberRole(ctx context.Context, gramOrgID, userID, r
 		OrganizationID:       gramOrgID,
 		Actor:                actor.Principal,
 		ActorDisplayName:     actor.DisplayName,
-		ActorSlug:            actor.Slug,
+		ActorSlug:            nil,
 		MemberID:             result.UserID,
 		MemberName:           result.After.Name,
 		MemberEmail:          result.After.Email,
@@ -798,7 +795,7 @@ func (r *RoleManager) memberAssignmentTargetsTx(ctx context.Context, dbtx repo.D
 		})
 	}
 	if len(resolvedInputs) != len(requestedInputs) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "member role assignment not found; wait for WorkOS sync to complete").Log(ctx, r.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "member is missing local WorkOS membership linkage").Log(ctx, r.logger)
 	}
 
 	return targets, nil
