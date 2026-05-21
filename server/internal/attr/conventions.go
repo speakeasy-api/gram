@@ -282,6 +282,9 @@ const (
 	// the stored chat_message alone. Mirrors the value written to the
 	// risk_results.match column by hook-time blocks.
 	MCPMatchKey = attribute.Key("gram.mcp.match")
+	// MCPServerURLKey is the MCP server URL resolved from the SessionStart
+	// inventory snapshot (HTTP/SSE servers only). Empty for stdio servers.
+	MCPServerURLKey = attribute.Key("gram.mcp.server_url")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")

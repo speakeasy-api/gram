@@ -444,8 +444,29 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		entries = ParseClaudeMCPList(raw)
 		variant = agentVariantClaudeCode
 	case payload.AdditionalData["mcp_inventory_cowork"] != nil:
-		entries = ParseCoworkMCPInventory(payload.AdditionalData["mcp_inventory_cowork"])
+		raw := payload.AdditionalData["mcp_inventory_cowork"]
+		entries = ParseCoworkMCPInventory(raw)
 		variant = agentVariantCowork
+		// Diagnostic: cmux's per-run config has evolved its field names
+		// across versions, so when the inventory ships but every entry
+		// comes out without a ConnectorUUID we'd silently fall back to
+		// rendering the UUID instead of the server name. Log a sample of
+		// the raw payload to make schema drift visible without flooding
+		// the logs on a healthy session.
+		anyConnectorUUID := false
+		for _, e := range entries {
+			if e.ConnectorUUID != "" {
+				anyConnectorUUID = true
+				break
+			}
+		}
+		if len(entries) > 0 && !anyConnectorUUID {
+			s.logger.WarnContext(ctx, "cowork mcp inventory has no connector_uuid on any entry",
+				attr.SlogEvent("claude_hook_cowork_inventory_missing_uuid"),
+				attr.SlogGenAIConversationID(*payload.SessionID),
+				attr.SlogValueAny(raw),
+			)
+		}
 	default:
 		return
 	}

@@ -427,6 +427,11 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		if stripped, ok := strings.CutPrefix(toolName, "MCP:"); ok {
 			attrs[attr.ToolNameKey] = stripped
 		}
+		// Cursor surfaces the MCP server URL on the payload directly (no
+		// SessionStart inventory), so persist it alongside the tool call.
+		if payload.URL != nil && *payload.URL != "" {
+			attrs[attr.MCPServerURLKey] = *payload.URL
+		}
 	}
 
 	if correlationID := cursorToolCorrelationID(payload); correlationID != "" {
