@@ -9,6 +9,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import {
   Assistant,
@@ -39,6 +40,8 @@ export function AssistantsRoot() {
 
 function StatusToggle({ assistant }: { assistant: Assistant }) {
   const queryClient = useQueryClient();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("project:write");
   const isActive = assistant.status === AssistantStatus.Active;
 
   const updateAssistant = useAssistantsUpdateMutation({
@@ -67,7 +70,7 @@ function StatusToggle({ assistant }: { assistant: Assistant }) {
         <Switch
           checked={isActive}
           onCheckedChange={handleToggle}
-          disabled={updateAssistant.isPending}
+          disabled={!canWrite || updateAssistant.isPending}
           aria-label={`${isActive ? "Pause" : "Activate"} assistant ${assistant.name}`}
         />
       </div>
