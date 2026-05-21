@@ -17,7 +17,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAssistantDraft } from "../useAssistantDraft";
-import { PERSONALITIES, getPersonality } from "../personalities";
+import {
+  GENERIC_PERSONALITIES,
+  PERSONALITIES,
+  TEAM_PERSONALITIES,
+  getPersonality,
+} from "../personalities";
 import { buildSlackManifest } from "../slackManifest";
 
 type Status = ToolCallMessagePartProps["status"];
@@ -700,25 +705,46 @@ export function ProposePersonalityComponent({
               </Label>
             </div>
             {mode === "prebuilt" && (
-              <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {PERSONALITIES.map((p) => (
-                  <button
-                    key={p.slug}
-                    type="button"
-                    onClick={() => setPrebuiltSlug(p.slug)}
-                    className={cn(
-                      "border-border hover:bg-muted rounded-md border p-2 text-left transition-colors",
-                      prebuiltSlug === p.slug && "border-primary bg-primary/5",
-                    )}
-                  >
-                    <Type small className="font-medium">
-                      {p.title}
-                    </Type>
-                    <Type small muted className="mt-0.5">
-                      {p.summary}
-                    </Type>
-                  </button>
-                ))}
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {TEAM_PERSONALITIES.map((p) => (
+                    <button
+                      key={p.slug}
+                      type="button"
+                      onClick={() => setPrebuiltSlug(p.slug)}
+                      className={cn(
+                        "border-border hover:bg-muted rounded-md border px-3 py-1.5 text-left transition-colors",
+                        prebuiltSlug === p.slug &&
+                          "border-primary bg-primary/5",
+                      )}
+                    >
+                      <Type small className="font-medium">
+                        {p.title}
+                      </Type>
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {GENERIC_PERSONALITIES.map((p) => (
+                    <button
+                      key={p.slug}
+                      type="button"
+                      onClick={() => setPrebuiltSlug(p.slug)}
+                      className={cn(
+                        "border-border hover:bg-muted rounded-md border p-2 text-left transition-colors",
+                        prebuiltSlug === p.slug &&
+                          "border-primary bg-primary/5",
+                      )}
+                    >
+                      <Type small className="font-medium">
+                        {p.title}
+                      </Type>
+                      <Type small muted className="mt-0.5">
+                        {p.summary}
+                      </Type>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
