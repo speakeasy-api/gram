@@ -30,6 +30,7 @@ import { RBACDevToolbar } from "./components/dev-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
+import { PortalPage } from "./pages/portal/PortalPage";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
@@ -246,6 +247,7 @@ const RouteProvider = () => {
           <Route index element={<SlackRegister />} />
         </Route>
         <Route path="/" element={<LoginCheck />}>
+          <Route path="portal/:projectSlug" element={<PortalPage />} />
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
