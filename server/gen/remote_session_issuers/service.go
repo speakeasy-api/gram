@@ -24,11 +24,6 @@ type Service interface {
 	DiscoverRemoteSessionIssuer(context.Context, *DiscoverRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuerDraft, err error)
 	// Create a new remote_session_issuer.
 	CreateRemoteSessionIssuer(context.Context, *CreateRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
-	// Perform an RFC 7591 Dynamic Client Registration call against an existing
-	// issuer's registration_endpoint and persist the issued credentials as a new
-	// remote_session_client. The issuer must already have a registration_endpoint
-	// configured.
-	RegisterRemoteSessionIssuer(context.Context, *RegisterRemoteSessionIssuerPayload) (res *types.RemoteSessionClient, err error)
 	// Update fields on an existing remote_session_issuer.
 	UpdateRemoteSessionIssuer(context.Context, *UpdateRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// List remote_session_issuers in the caller's project.
@@ -60,7 +55,7 @@ const ServiceName = "remoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"discoverRemoteSessionIssuer", "createRemoteSessionIssuer", "registerRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "deleteRemoteSessionIssuer"}
+var MethodNames = [6]string{"discoverRemoteSessionIssuer", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "deleteRemoteSessionIssuer"}
 
 // CreateRemoteSessionIssuerPayload is the payload type of the
 // remoteSessionIssuers service createRemoteSessionIssuer method.
@@ -145,23 +140,6 @@ type ListRemoteSessionIssuersResult struct {
 	Items []*types.RemoteSessionIssuer
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
-}
-
-// RegisterRemoteSessionIssuerPayload is the payload type of the
-// remoteSessionIssuers service registerRemoteSessionIssuer method.
-type RegisterRemoteSessionIssuerPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// The remote_session_issuer to register against. Must have a
-	// registration_endpoint configured.
-	RemoteSessionIssuerID string
-	// The user_session_issuer the issued client is paired with.
-	UserSessionIssuerID string
-	// Optional client_name to send in the RFC 7591 registration request.
-	ClientName *string
-	// Optional redirect_uris to send in the RFC 7591 registration request.
-	RedirectUris []string
 }
 
 // UpdateRemoteSessionIssuerPayload is the payload type of the

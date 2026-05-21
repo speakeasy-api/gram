@@ -8,12 +8,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 )
 
-var RiskFindingCreated = outbox.NewEventDef[RiskFindingCreatedPayload](
+// Deprecated: use RiskFindingCreatedV1 instead
+var RiskFindingCreated = outbox.NewEventDef[RiskFindingCreatedPayloadV1](
 	"risk_finding.created",
 	"A potential risk was detected in a LLM message or tool call",
 )
 
-type RiskFindingCreatedPayload struct {
+var RiskFindingCreatedV1 = outbox.NewEventDef[RiskFindingCreatedPayloadV1](
+	"risk_finding.created_v1",
+	"A potential risk was detected in a LLM message or tool call",
+)
+
+type RiskFindingCreatedPayloadV1 struct {
 	ID                uuid.UUID `json:"id"`
 	ProjectID         uuid.UUID `json:"project_id"`
 	OrganizationID    string    `json:"organization_id"`

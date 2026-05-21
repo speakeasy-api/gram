@@ -129,19 +129,24 @@ export function AssistantDraftPanel() {
             >
               <Stack gap={2}>
                 {a.toolsets.map((t) => (
-                  <div
+                  <routes.mcp.details.Link
                     key={t.toolsetSlug}
-                    className="border-border flex items-center justify-between rounded-md border px-3 py-2"
+                    params={[t.toolsetSlug]}
+                    className="border-border hover:bg-surface-secondary flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:no-underline"
                   >
-                    <Stack gap={0}>
-                      <code className="text-xs">{t.toolsetSlug}</code>
+                    <Stack gap={0} className="min-w-0">
+                      <code className="truncate text-xs">{t.toolsetSlug}</code>
                       {t.environmentSlug && (
                         <Type small muted className="text-[11px]">
                           env: {t.environmentSlug}
                         </Type>
                       )}
                     </Stack>
-                  </div>
+                    <Icon
+                      name="chevron-right"
+                      className="text-muted-foreground h-4 w-4 shrink-0"
+                    />
+                  </routes.mcp.details.Link>
                 ))}
               </Stack>
             </Section>

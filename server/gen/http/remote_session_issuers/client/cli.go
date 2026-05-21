@@ -125,58 +125,6 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 	return v, nil
 }
 
-// BuildRegisterRemoteSessionIssuerPayload builds the payload for the
-// remoteSessionIssuers registerRemoteSessionIssuer endpoint from CLI flags.
-func BuildRegisterRemoteSessionIssuerPayload(remoteSessionIssuersRegisterRemoteSessionIssuerBody string, remoteSessionIssuersRegisterRemoteSessionIssuerSessionToken string, remoteSessionIssuersRegisterRemoteSessionIssuerApikeyToken string, remoteSessionIssuersRegisterRemoteSessionIssuerProjectSlugInput string) (*remotesessionissuers.RegisterRemoteSessionIssuerPayload, error) {
-	var err error
-	var body RegisterRemoteSessionIssuerRequestBody
-	{
-		err = json.Unmarshal([]byte(remoteSessionIssuersRegisterRemoteSessionIssuerBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_name\": \"abc123\",\n      \"redirect_uris\": [\n         \"abc123\"\n      ],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if remoteSessionIssuersRegisterRemoteSessionIssuerSessionToken != "" {
-			sessionToken = &remoteSessionIssuersRegisterRemoteSessionIssuerSessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if remoteSessionIssuersRegisterRemoteSessionIssuerApikeyToken != "" {
-			apikeyToken = &remoteSessionIssuersRegisterRemoteSessionIssuerApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if remoteSessionIssuersRegisterRemoteSessionIssuerProjectSlugInput != "" {
-			projectSlugInput = &remoteSessionIssuersRegisterRemoteSessionIssuerProjectSlugInput
-		}
-	}
-	v := &remotesessionissuers.RegisterRemoteSessionIssuerPayload{
-		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
-		ClientName:            body.ClientName,
-	}
-	if body.RedirectUris != nil {
-		v.RedirectUris = make([]string, len(body.RedirectUris))
-		for i, val := range body.RedirectUris {
-			v.RedirectUris[i] = val
-		}
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildUpdateRemoteSessionIssuerPayload builds the payload for the
 // remoteSessionIssuers updateRemoteSessionIssuer endpoint from CLI flags.
 func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessionIssuerBody string, remoteSessionIssuersUpdateRemoteSessionIssuerSessionToken string, remoteSessionIssuersUpdateRemoteSessionIssuerApikeyToken string, remoteSessionIssuersUpdateRemoteSessionIssuerProjectSlugInput string) (*remotesessionissuers.UpdateRemoteSessionIssuerPayload, error) {

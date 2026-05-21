@@ -1,3 +1,4 @@
+import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
   onboardExternalMcpToUserSessions as onboardToolsetToUserSessions,
@@ -167,6 +168,7 @@ export function useExternalMcpReleaseWorkflow({
   onboardExternalMcpToUserSessions = false,
 }: UseExternalMcpReleaseWorkflowOptions): ExternalMcpReleaseWorkflow {
   const client = useSdkClient();
+  const { fetch: authedFetch } = useFetcher();
   const { data: toolsetsResult, isLoading: toolsetsLoading } = useListToolsets(
     projectSlug ? { gramProject: projectSlug } : undefined,
   );
@@ -396,8 +398,8 @@ export function useExternalMcpReleaseWorkflow({
             if (oauth) {
               await onboardToolsetToUserSessions({
                 client,
+                authedFetch,
                 toolsetSlug: updatedToolset.slug,
-                toolsetName: updatedToolset.name,
                 oauth,
                 options: reqOpts,
               });

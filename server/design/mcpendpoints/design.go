@@ -128,6 +128,37 @@ var _ = Service("mcpEndpoints", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMcpEndpoint"}`)
 	})
 
+	Method("checkMcpEndpointSlugAvailability", func() {
+		Description("Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.")
+
+		Payload(func() {
+			Attribute("slug", McpEndpointSlug, "The slug to check")
+			Attribute("custom_domain_id", String, "Optional custom domain ID. Omit to check platform-domain slug availability.", func() {
+				Format(FormatUUID)
+			})
+			Required("slug")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Boolean)
+
+		HTTP(func() {
+			GET("/rpc/mcpEndpoints.checkSlugAvailability")
+			Param("slug")
+			Param("custom_domain_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "checkMcpEndpointSlugAvailability")
+		Meta("openapi:extension:x-speakeasy-name-override", "checkSlugAvailability")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckMcpEndpointSlugAvailability"}`)
+	})
+
 	Method("deleteMcpEndpoint", func() {
 		Description("Delete an MCP endpoint")
 

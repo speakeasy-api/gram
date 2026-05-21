@@ -23,6 +23,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/collections/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -37,6 +38,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -48,6 +50,7 @@ type Service struct {
 	orgRepo   *orgRepo.Queries
 	auth      *auth.Auth
 	authz     *authz.Engine
+	audit     *audit.Logger
 	sessions  *sessions.Manager
 	serverURL *url.URL
 }
@@ -57,7 +60,7 @@ const defaultCollectionSlug = "registry"
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("collections"))
 
 	return &Service{
@@ -69,6 +72,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		orgRepo:   orgRepo.New(db),
 		auth:      auth.New(logger, db, sessions, authzEngine),
 		authz:     authzEngine,
+		audit:     auditLogger,
 		sessions:  sessions,
 		serverURL: serverURL,
 	}
@@ -143,6 +147,18 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*type
 		}
 	}
 
+	if err := s.audit.LogMcpCollectionCreate(ctx, dbtx, audit.LogMcpCollectionCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		CollectionURN:    urn.NewMcpCollection(collection.ID),
+		CollectionName:   collection.Name,
+		CollectionSlug:   collection.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log collection creation").Log(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving collection").Log(ctx, s.logger)
 	}
@@ -211,7 +227,36 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid collection_id").Log(ctx, s.logger)
 	}
 
-	updated, err := s.repo.UpdateOrganizationMcpCollection(ctx, repo.UpdateOrganizationMcpCollectionParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collections").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tx := s.repo.WithTx(dbtx)
+
+	existing, err := tx.GetOrganizationMcpCollectionByID(ctx, repo.GetOrganizationMcpCollectionByIDParams{
+		ID:             collectionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection").Log(ctx, s.logger)
+	}
+
+	reg, err := tx.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+		CollectionID:   collectionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").Log(ctx, s.logger)
+	}
+
+	before := toMCPCollection(repo.CreateOrganizationMcpCollectionRow(existing), reg.Namespace)
+
+	updated, err := tx.UpdateOrganizationMcpCollection(ctx, repo.UpdateOrganizationMcpCollectionParams{
 		ID:             collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Name:           conv.PtrToPGTextEmpty(payload.Name),
@@ -225,15 +270,27 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to update collection").Log(ctx, s.logger)
 	}
 
-	reg, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
-		CollectionID:   collectionID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").Log(ctx, s.logger)
+	after := toMCPCollection(repo.CreateOrganizationMcpCollectionRow(updated), reg.Namespace)
+
+	if err := s.audit.LogMcpCollectionUpdate(ctx, dbtx, audit.LogMcpCollectionUpdateEvent{
+		OrganizationID:           authCtx.ActiveOrganizationID,
+		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:         authCtx.Email,
+		ActorSlug:                nil,
+		CollectionURN:            urn.NewMcpCollection(updated.ID),
+		CollectionName:           updated.Name,
+		CollectionSlug:           updated.Slug,
+		CollectionSnapshotBefore: before,
+		CollectionSnapshotAfter:  after,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log collection update").Log(ctx, s.logger)
 	}
 
-	return toMCPCollection(repo.CreateOrganizationMcpCollectionRow(updated), reg.Namespace), nil
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving collection update").Log(ctx, s.logger)
+	}
+
+	return after, nil
 }
 
 func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error {
@@ -293,6 +350,18 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 		return oops.E(oops.CodeUnexpected, err, "failed to delete collection").Log(ctx, s.logger)
 	}
 
+	if err := s.audit.LogMcpCollectionDelete(ctx, dbtx, audit.LogMcpCollectionDeleteEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		CollectionURN:    urn.NewMcpCollection(collection.ID),
+		CollectionName:   collection.Name,
+		CollectionSlug:   collection.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log collection deletion").Log(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error saving collection deletion").Log(ctx, s.logger)
 	}
@@ -320,7 +389,15 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
 	}
 
-	collection, err := s.repo.GetOrganizationMcpCollectionByID(ctx, repo.GetOrganizationMcpCollectionByIDParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collections").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tx := s.repo.WithTx(dbtx)
+
+	collection, err := tx.GetOrganizationMcpCollectionByID(ctx, repo.GetOrganizationMcpCollectionByIDParams{
 		ID:             collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
@@ -331,16 +408,33 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection").Log(ctx, s.logger)
 	}
 
-	if err := s.attachServerToCollection(ctx, s.repo, collectionID, toolsetID, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
+	if err := s.attachServerToCollection(ctx, tx, collectionID, toolsetID, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
 		return nil, err
 	}
 
-	reg, err := s.repo.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
+	reg, err := tx.GetOrganizationMcpCollectionRegistryByID(ctx, repo.GetOrganizationMcpCollectionRegistryByIDParams{
 		CollectionID:   collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").Log(ctx, s.logger)
+	}
+
+	if err := s.audit.LogMcpCollectionAttachServer(ctx, dbtx, audit.LogMcpCollectionAttachServerEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		CollectionURN:    urn.NewMcpCollection(collection.ID),
+		CollectionName:   collection.Name,
+		CollectionSlug:   collection.Slug,
+		ToolsetURN:       urn.NewToolset(toolsetID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log collection server attachment").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving collection server attachment").Log(ctx, s.logger)
 	}
 
 	return toMCPCollection(repo.CreateOrganizationMcpCollectionRow(collection), reg.Namespace), nil
@@ -366,7 +460,15 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
 	}
 
-	_, err = s.repo.GetOrganizationMcpCollectionByID(ctx, repo.GetOrganizationMcpCollectionByIDParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error accessing collections").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tx := s.repo.WithTx(dbtx)
+
+	collection, err := tx.GetOrganizationMcpCollectionByID(ctx, repo.GetOrganizationMcpCollectionByIDParams{
 		ID:             collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
@@ -377,12 +479,41 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return oops.E(oops.CodeUnexpected, err, "error accessing collection").Log(ctx, s.logger)
 	}
 
-	if err := s.repo.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
+	attached, err := tx.IsServerAttachedToOrganizationMcpCollection(ctx, repo.IsServerAttachedToOrganizationMcpCollectionParams{
+		CollectionID:   collectionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ToolsetID:      toolsetID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error checking collection server attachment").Log(ctx, s.logger)
+	}
+	if !attached {
+		return nil
+	}
+
+	if err := tx.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
 		CollectionID:   collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ToolsetID:      toolsetID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to detach server from collection").Log(ctx, s.logger)
+	}
+
+	if err := s.audit.LogMcpCollectionDetachServer(ctx, dbtx, audit.LogMcpCollectionDetachServerEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		CollectionURN:    urn.NewMcpCollection(collection.ID),
+		CollectionName:   collection.Name,
+		CollectionSlug:   collection.Slug,
+		ToolsetURN:       urn.NewToolset(toolsetID),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log collection server detachment").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error saving collection server detachment").Log(ctx, s.logger)
 	}
 
 	return nil

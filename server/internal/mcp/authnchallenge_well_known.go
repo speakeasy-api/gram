@@ -10,14 +10,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -79,7 +80,11 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
 
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	var customDomainID uuid.NullUUID
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
+		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
+	}
+	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
@@ -87,28 +92,24 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
 	}
 
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
+	baseURL := s.BaseURLForRequest(r)
 
 	if toolset.UserSessionIssuerID.Valid {
-		if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
+		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 			return err
 		}
-		resource := baseURL + "/mcp/" + mcpSlug
-		return writeJSONMetadata(ctx, w, s.logger, oauthProtectedResourceMetadata{
-			Resource:               resource,
-			AuthorizationServers:   []string{resource},
-			ScopesSupported:        nil,
-			BearerMethodsSupported: supportedBearerMethods,
-		})
+		return s.ServeGetProtectedResource(w, r, endpoint)
 	}
 
 	// Legacy fallback: delegate to the existing wellknown resolver. A nil
 	// result means the toolset has no OAuth configuration at all — 404.
+	resourceURL, err := url.JoinPath(baseURL, "mcp", mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").Log(ctx, s.logger)
+	}
 	legacy, err := wellknown.ResolveOAuthProtectedResourceFromToolset(
-		ctx, s.logger, s.db, &s.toolsetCache, toolset, baseURL+"/mcp/"+mcpSlug,
+		ctx, s.logger, s.db, &s.toolsetCache, toolset, resourceURL,
 	)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, s.logger)
@@ -131,7 +132,11 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
 
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	var customDomainID uuid.NullUUID
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
+		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
+	}
+	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
@@ -139,29 +144,14 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
 	}
 
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
+	baseURL := s.BaseURLForRequest(r)
 
 	if toolset.UserSessionIssuerID.Valid {
-		if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
+		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 			return err
 		}
-
-		root := baseURL + "/mcp/" + mcpSlug
-		return writeJSONMetadata(ctx, w, s.logger, oauthAuthorizationServerMetadata{
-			Issuer:                            root,
-			AuthorizationEndpoint:             root + "/authorize",
-			TokenEndpoint:                     root + "/token",
-			RegistrationEndpoint:              root + "/register",
-			RevocationEndpoint:                root + "/revoke",
-			ScopesSupported:                   nil,
-			ResponseTypesSupported:            usersessions.SupportedResponseTypes,
-			GrantTypesSupported:               usersessions.SupportedGrantTypes,
-			TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
-			CodeChallengeMethodsSupported:     usersessions.SupportedCodeChallengeMethods,
-		})
+		return s.ServeGetAuthorizationServer(w, r, endpoint)
 	}
 
 	// Legacy fallback: delegate to the existing wellknown resolver. A nil
@@ -198,6 +188,54 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	}
 
 	return writeOAuthServerMetadataResponse(ctx, s.logger, w, legacy)
+}
+
+// ServeGetProtectedResource is the post-resolution entry point for the
+// RFC 9728 protected-resource metadata response, shared by /mcp's
+// HandleGetProtectedResource (toolset-keyed) and /x/mcp's mcp_endpoint-
+// keyed route registration. Emits the issuer-gated metadata shape; the
+// legacy non-issuer-gated fallback stays in HandleGetProtectedResource
+// because it depends on the toolsets row directly.
+func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	ctx := r.Context()
+	baseURL := s.BaseURLForRequest(r)
+	resource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build resource URL").Log(ctx, s.logger)
+	}
+	return writeJSONMetadata(ctx, w, s.logger, oauthProtectedResourceMetadata{
+		Resource:               resource,
+		AuthorizationServers:   []string{resource},
+		ScopesSupported:        nil,
+		BearerMethodsSupported: supportedBearerMethods,
+	})
+}
+
+// ServeGetAuthorizationServer is the post-resolution entry point for the
+// RFC 8414 authorization-server metadata response, shared by /mcp's
+// HandleGetAuthorizationServer (toolset-keyed) and /x/mcp's
+// mcp_endpoint-keyed route registration. Emits the issuer-gated
+// metadata shape; the legacy non-issuer-gated fallback stays in
+// HandleGetAuthorizationServer.
+func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	ctx := r.Context()
+	baseURL := s.BaseURLForRequest(r)
+	urls, err := endpoint.AuthorizationServerURLs(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").Log(ctx, s.logger)
+	}
+	return writeJSONMetadata(ctx, w, s.logger, oauthAuthorizationServerMetadata{
+		Issuer:                            urls.Issuer,
+		AuthorizationEndpoint:             urls.Authorize,
+		TokenEndpoint:                     urls.Token,
+		RegistrationEndpoint:              urls.Register,
+		RevocationEndpoint:                urls.Revoke,
+		ScopesSupported:                   nil,
+		ResponseTypesSupported:            usersessions.SupportedResponseTypes,
+		GrantTypesSupported:               usersessions.SupportedGrantTypes,
+		TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
+		CodeChallengeMethodsSupported:     usersessions.SupportedCodeChallengeMethods,
+	})
 }
 
 // writeJSONMetadata is the shared write path for issuer-gated metadata

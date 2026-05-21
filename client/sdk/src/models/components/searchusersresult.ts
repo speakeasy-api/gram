@@ -7,6 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { RoleSummary, RoleSummary$inboundSchema } from "./rolesummary.js";
 import { UserSummary, UserSummary$inboundSchema } from "./usersummary.js";
 
 /**
@@ -18,7 +19,11 @@ export type SearchUsersResult = {
    */
   nextCursor?: string | undefined;
   /**
-   * List of user usage summaries
+   * List of role usage summaries (populated when group_by=role)
+   */
+  roles?: Array<RoleSummary> | undefined;
+  /**
+   * List of user usage summaries (populated when group_by=employee)
    */
   users: Array<UserSummary>;
 };
@@ -30,6 +35,7 @@ export const SearchUsersResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     next_cursor: z.optional(z.string()),
+    roles: z.optional(z.array(RoleSummary$inboundSchema)),
     users: z.array(UserSummary$inboundSchema),
   }),
   z.transform((v) => {

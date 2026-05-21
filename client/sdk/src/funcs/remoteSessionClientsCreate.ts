@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * createRemoteSessionClient remoteSessionClients
  *
  * @remarks
- * Register a remote_session_client. Two paths: manual (caller supplies client_id and optionally client_secret) or auto-DCR (auto_register=true triggers an outbound RFC 7591 registration against the issuer's registration_endpoint).
+ * Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
  */
 export function remoteSessionClientsCreate(
   client: GramCore,

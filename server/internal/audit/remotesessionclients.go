@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -53,7 +54,7 @@ func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBT
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
 }
 
 type LogRemoteSessionClientUpdateEvent struct {
@@ -105,7 +106,7 @@ func (l *Logger) LogRemoteSessionClientUpdate(ctx context.Context, dbtx repo.DBT
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
 }
 
 type LogRemoteSessionClientDeleteEvent struct {
@@ -143,5 +144,5 @@ func (l *Logger) LogRemoteSessionClientDelete(ctx context.Context, dbtx repo.DBT
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
 }

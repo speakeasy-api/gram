@@ -14,10 +14,12 @@
 package xmcp
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -127,6 +129,116 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 
 	o11y.AttachHandler(mux, http.MethodGet, wellknown.OAuthAuthorizationServerPath+"/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, wellknown.OAuthProtectedResourcePath+"/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
+
+	// Issuer-gated OAuth handler family. Each route resolves the slug to
+	// an /x/mcp-keyed *mcp.ResolvedMcpEndpoint via [Service.loadResolvedMcpEndpointBySlug]
+	// and delegates to the matching mcp.Service.Serve* post-resolution
+	// handler.
+	//
+	// idp_callback and remote_login_callback are mounted only at the
+	// slug-less global URLs: the authorize and consent handlers build
+	// their redirect_uris via endpoint.IDPCallbackURL and
+	// ChallengeManager.callbackURL, both of which always emit
+	// `<baseURL>/<RouteBase>/...` without the slug. The handlers recover
+	// the originating slug from the cached challenge / login state. /mcp
+	// also keeps per-slug variants for back-compat with pre-global-URL
+	// clients; /x/mcp is a fresh surface so the dead routes aren't mounted.
+	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/register", oops.ErrHandle(service.logger, service.handleOAuthRegister).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/authorize", oops.ErrHandle(service.logger, service.handleOAuthAuthorize).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.handleOAuthConsent).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.handleOAuthConsent).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.handleOAuthToken).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.handleOAuthRevoke).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/idp_callback", oops.ErrHandle(service.logger, service.mcpService.HandleIDPCallback).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.handleRemoteLoginCallback).ServeHTTP)
+}
+
+// handleRemoteLoginCallback adapts /x/mcp/remote_login_callback onto
+// mcp.Service.HandleRemoteLoginCallback. The
+// underlying handler reads the cached RemoteLoginState's RouteBase so the
+// post-callback redirect lands back on /x/mcp/{slug}/connect — populated
+// when the consent renderer built the parent challenge.
+func (s *Service) handleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
+	return s.mcpService.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
+// handleOAuthRegister adapts the chi /x/mcp/{mcpSlug}/register route to
+// mcp.Service.ServeRegister by resolving the slug to an ResolvedMcpEndpoint.
+func (s *Service) handleOAuthRegister(w http.ResponseWriter, r *http.Request) error {
+	endpoint, err := s.resolveOAuthEndpoint(r)
+	if err != nil {
+		return err
+	}
+	if err := s.mcpService.ServeRegister(w, r, endpoint); err != nil {
+		return fmt.Errorf("serve oauth register: %w", err)
+	}
+	return nil
+}
+
+// handleOAuthAuthorize adapts the chi /x/mcp/{mcpSlug}/authorize route
+// to mcp.Service.ServeAuthorize by resolving the slug to an
+// ResolvedMcpEndpoint.
+func (s *Service) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) error {
+	endpoint, err := s.resolveOAuthEndpoint(r)
+	if err != nil {
+		return err
+	}
+	if err := s.mcpService.ServeAuthorize(w, r, endpoint); err != nil {
+		return fmt.Errorf("serve oauth authorize: %w", err)
+	}
+	return nil
+}
+
+// handleOAuthConsent adapts the chi /x/mcp/{mcpSlug}/connect (GET/POST)
+// route to mcp.Service.ServeConsent.
+func (s *Service) handleOAuthConsent(w http.ResponseWriter, r *http.Request) error {
+	endpoint, err := s.resolveOAuthEndpoint(r)
+	if err != nil {
+		return err
+	}
+	if err := s.mcpService.ServeConsent(w, r, endpoint); err != nil {
+		return fmt.Errorf("serve oauth consent: %w", err)
+	}
+	return nil
+}
+
+// handleOAuthToken adapts the chi /x/mcp/{mcpSlug}/token route to
+// mcp.Service.ServeToken.
+func (s *Service) handleOAuthToken(w http.ResponseWriter, r *http.Request) error {
+	endpoint, err := s.resolveOAuthEndpoint(r)
+	if err != nil {
+		return err
+	}
+	if err := s.mcpService.ServeToken(w, r, endpoint); err != nil {
+		return fmt.Errorf("serve oauth token: %w", err)
+	}
+	return nil
+}
+
+// handleOAuthRevoke adapts the chi /x/mcp/{mcpSlug}/revoke route to
+// mcp.Service.ServeRevoke.
+func (s *Service) handleOAuthRevoke(w http.ResponseWriter, r *http.Request) error {
+	endpoint, err := s.resolveOAuthEndpoint(r)
+	if err != nil {
+		return err
+	}
+	if err := s.mcpService.ServeRevoke(w, r, endpoint); err != nil {
+		return fmt.Errorf("serve oauth revoke: %w", err)
+	}
+	return nil
+}
+
+// resolveOAuthEndpoint reads the mcpSlug chi param and resolves it to
+// an issuer-gated *mcp.ResolvedMcpEndpoint via the /x/mcp mcp_endpoints →
+// mcp_servers path. Returned to the per-handler adapters above.
+func (s *Service) resolveOAuthEndpoint(r *http.Request) (*mcp.ResolvedMcpEndpoint, error) {
+	ctx := r.Context()
+	slug := chi.URLParam(r, "mcpSlug")
+	if slug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
+	}
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
+	return s.loadResolvedMcpEndpointBySlug(ctx, logger, slug)
 }
 
 // newHeadersRepo returns a per-request headers wrapper bound to the service

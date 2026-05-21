@@ -96,7 +96,7 @@ func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) 
 	require.NoError(t, authnCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,
 		UserSessionIssuerID: issuer.ID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 		},

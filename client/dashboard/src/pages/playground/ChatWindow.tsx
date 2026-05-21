@@ -26,6 +26,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { extractStreamError } from "@/lib/chat-error";
 import { CustomChatTransport } from "@/lib/CustomChatTransport";
+import { describeStreamError } from "@gram-ai/elements";
 import {
   asTools,
   filterFunctionTools,
@@ -404,6 +405,11 @@ function ChatInner({
         };
       },
       onError: (event: { error: unknown }) => {
+        const credits = describeStreamError(event.error);
+        if (credits) {
+          appendDisplayOnlyMessage(`**Model Error:** *${credits}*`);
+          return;
+        }
         let displayMessage = extractStreamError(event);
         if (displayMessage) {
           if (displayMessage.includes("maximum context length")) {
@@ -414,14 +420,6 @@ function ChatInner({
             }
             displayMessage +=
               " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
-          }
-          if (displayMessage.includes("requires more credits")) {
-            displayMessage =
-              "You have reached your monthly credit limit. Reach out to the Speakeasy team to upgrade your account.";
-          }
-          if (displayMessage.includes("token balance exhausted")) {
-            displayMessage =
-              "Your token balance is exhausted. [Top up credits](/billing) to keep chatting.";
           }
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }

@@ -1,13 +1,14 @@
 use std::time::Duration;
 
 use reqwest_middleware::ClientWithMiddleware;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::http_layer::TokenRegistry;
 use crate::wire::ThreadBootstrap;
 
 const BOOTSTRAP_PATH: &str = "/rpc/assistants.getThreadBootstrap";
+const CREATE_MCP_AUTH_FLOW_PATH: &str = "/rpc/assistantMcpAuth.create";
 const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Lightweight client used by the runner to pull a per-thread bootstrap
@@ -42,6 +43,20 @@ pub enum GramClientError {
 #[derive(Serialize)]
 struct BootstrapRequest<'a> {
     thread_id: &'a str,
+}
+
+#[derive(Serialize)]
+struct CreateMcpAuthFlowRequest<'a> {
+    thread_id: &'a str,
+    server_id: &'a str,
+    url: &'a str,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateMcpAuthFlowResponse {
+    pub server_id: String,
+    pub mcp_slug: String,
+    pub auth_url: String,
 }
 
 impl GramBootstrapClient {
@@ -79,5 +94,44 @@ impl GramBootstrapClient {
         }
         let bootstrap: ThreadBootstrap = serde_json::from_str(&body)?;
         Ok(bootstrap)
+    }
+
+    pub async fn create_mcp_auth_flow(
+        &self,
+        thread_id: &str,
+        server_id: &str,
+        url: &str,
+        tokens: &TokenRegistry,
+    ) -> Result<CreateMcpAuthFlowResponse, GramClientError> {
+        let endpoint = format!(
+            "{}{}",
+            self.base_url.trim_end_matches('/'),
+            CREATE_MCP_AUTH_FLOW_PATH
+        );
+        let bearer = tokens.current().map_err(|_| GramClientError::Token)?;
+
+        let resp = self
+            .http
+            .post(&endpoint)
+            .timeout(BOOTSTRAP_TIMEOUT)
+            .bearer_auth(&bearer)
+            .json(&CreateMcpAuthFlowRequest {
+                thread_id,
+                server_id,
+                url,
+            })
+            .send()
+            .await?;
+
+        let status = resp.status();
+        let body = resp.text().await?;
+        if !status.is_success() {
+            return Err(GramClientError::Status {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        let flow: CreateMcpAuthFlowResponse = serde_json::from_str(&body)?;
+        Ok(flow)
     }
 }

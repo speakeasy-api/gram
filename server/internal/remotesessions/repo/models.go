@@ -36,6 +36,8 @@ type RemoteSessionClient struct {
 	ClientIDIssuedAt        pgtype.Timestamptz
 	ClientSecretExpiresAt   pgtype.Timestamptz
 	TokenEndpointAuthMethod pgtype.Text
+	Scope                   []string
+	Audience                pgtype.Text
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz

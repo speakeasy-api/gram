@@ -7,7 +7,6 @@ import { remoteSessionIssuersDelete } from "../funcs/remoteSessionIssuersDelete.
 import { remoteSessionIssuersDiscover } from "../funcs/remoteSessionIssuersDiscover.js";
 import { remoteSessionIssuersGet } from "../funcs/remoteSessionIssuersGet.js";
 import { remoteSessionIssuersList } from "../funcs/remoteSessionIssuersList.js";
-import { remoteSessionIssuersRegister } from "../funcs/remoteSessionIssuersRegister.js";
 import { remoteSessionIssuersUpdate } from "../funcs/remoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -109,25 +108,6 @@ export class RemoteSessionIssuers extends ClientSDK {
     >
   > {
     return unwrapResultIterator(remoteSessionIssuersList(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * registerRemoteSessionIssuer remoteSessionIssuers
-   *
-   * @remarks
-   * Perform an RFC 7591 Dynamic Client Registration call against an existing issuer's registration_endpoint and persist the issued credentials as a new remote_session_client. The issuer must already have a registration_endpoint configured.
-   */
-  async register(
-    request: operations.RegisterRemoteSessionIssuerRequest,
-    security?: operations.RegisterRemoteSessionIssuerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.RemoteSessionClient> {
-    return unwrapAsync(remoteSessionIssuersRegister(
       this,
       request,
       security,

@@ -5,6 +5,8 @@ import {
   hasFormChanges,
   isSaveDisabled,
   membersHaveChanged,
+  computeRuleLabel,
+  computeRuleTooltip,
   type SaveButtonInput,
 } from "./roleDialogState";
 import type { RoleGrant, Scope, Selector } from "./types";
@@ -12,7 +14,10 @@ import type { RoleGrant, Scope, Selector } from "./types";
 // --- Helpers ---
 
 function grant(scope: Scope, selectors: Selector[] | null = null): RoleGrant {
-  return { scope, selectors };
+  return {
+    scope,
+    rules: [{ id: "test", effect: "allow", selectors }],
+  };
 }
 
 function makeInput(overrides: Partial<SaveButtonInput> = {}): SaveButtonInput {
@@ -30,7 +35,7 @@ function makeInput(overrides: Partial<SaveButtonInput> = {}): SaveButtonInput {
     initial: {
       name: "Engineer",
       description: "Can build things",
-      grantKeys: "project:read,project:write",
+      grantKeys: "project:read[allow:*],project:write[allow:*]",
       members: new Set(["m1", "m2"]),
     },
     ...overrides,
@@ -96,13 +101,13 @@ describe("membersHaveChanged", () => {
 // --- grantKeysString ---
 
 describe("grantKeysString", () => {
-  it("sorts keys and joins", () => {
+  it("sorts keys and joins with rule summaries", () => {
     expect(
       grantKeysString({
         "mcp:write": grant("mcp:write"),
         "project:read": grant("project:read"),
       }),
-    ).toBe("mcp:write,project:read");
+    ).toBe("mcp:write[allow:*],project:read[allow:*]");
   });
 
   it("empty grants → empty string", () => {
@@ -321,5 +326,216 @@ describe("isSaveDisabled", () => {
         }),
       ).toBe(true);
     });
+  });
+});
+
+// --- Selector helpers ---
+
+const projects = [
+  { id: "p1", name: "ecommerce-api" },
+  { id: "p2", name: "my-app" },
+];
+
+function sel(overrides: Partial<Selector> = {}): Selector {
+  return { resourceId: "*", resourceKind: "mcp", ...overrides };
+}
+
+// --- computeRuleLabel ---
+
+describe("computeRuleLabel", () => {
+  it("null selectors (mcp) → All servers", () => {
+    expect(computeRuleLabel(null, "mcp", projects)).toBe("All servers");
+  });
+
+  it("null selectors (project) → All projects", () => {
+    expect(computeRuleLabel(null, "project", projects)).toBe("All projects");
+  });
+
+  it("empty selectors → Select…", () => {
+    expect(computeRuleLabel([], "mcp", projects)).toBe("Select\u2026");
+  });
+
+  it("single disposition → Destructive tools", () => {
+    expect(
+      computeRuleLabel([sel({ disposition: "destructive" })], "mcp", projects),
+    ).toBe("Destructive tools");
+  });
+
+  it("multiple dispositions → comma-joined", () => {
+    expect(
+      computeRuleLabel(
+        [
+          sel({ disposition: "read_only" }),
+          sel({ disposition: "destructive" }),
+        ],
+        "mcp",
+        projects,
+      ),
+    ).toBe("Read-only, Destructive");
+  });
+
+  it("single tool → tool name", () => {
+    expect(
+      computeRuleLabel([sel({ tool: "listUsers" })], "mcp", projects),
+    ).toBe("listUsers");
+  });
+
+  it("multiple tools → count", () => {
+    expect(
+      computeRuleLabel(
+        [sel({ tool: "listUsers" }), sel({ tool: "deleteUser" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("2 tools");
+  });
+
+  it("single project with name → Project: name", () => {
+    expect(computeRuleLabel([sel({ projectId: "p1" })], "mcp", projects)).toBe(
+      "Project: ecommerce-api",
+    );
+  });
+
+  it("single project without name → 1 project", () => {
+    expect(computeRuleLabel([sel({ projectId: "unknown" })], "mcp", [])).toBe(
+      "1 project",
+    );
+  });
+
+  it("multiple projects → count", () => {
+    expect(
+      computeRuleLabel(
+        [sel({ projectId: "p1" }), sel({ projectId: "p2" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("2 projects");
+  });
+
+  it("single server → 1 server", () => {
+    expect(
+      computeRuleLabel([sel({ resourceId: "srv1" })], "mcp", projects),
+    ).toBe("1 server");
+  });
+
+  it("multiple servers → count", () => {
+    expect(
+      computeRuleLabel(
+        [sel({ resourceId: "srv1" }), sel({ resourceId: "srv2" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("2 servers");
+  });
+});
+
+// --- computeRuleTooltip ---
+
+describe("computeRuleTooltip", () => {
+  it("allow null (mcp) → permits all servers", () => {
+    expect(computeRuleTooltip("allow", null, "mcp", projects)).toBe(
+      "Permits access to all servers across your org",
+    );
+  });
+
+  it("deny null (project) → denies all projects", () => {
+    expect(computeRuleTooltip("deny", null, "project", projects)).toBe(
+      "Denies access to all projects in your org",
+    );
+  });
+
+  it("empty selectors → none selected", () => {
+    expect(computeRuleTooltip("allow", [], "mcp", projects)).toBe(
+      "Permits access (none selected)",
+    );
+  });
+
+  it("single disposition → descriptive", () => {
+    expect(
+      computeRuleTooltip(
+        "deny",
+        [sel({ disposition: "destructive" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("Denies access to all destructive tools");
+  });
+
+  it("multiple dispositions → joined with 'and'", () => {
+    expect(
+      computeRuleTooltip(
+        "allow",
+        [sel({ disposition: "read_only" }), sel({ disposition: "idempotent" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("Permits access to all read-only and idempotent tools");
+  });
+
+  it("single tool → names the tool", () => {
+    expect(
+      computeRuleTooltip(
+        "deny",
+        [sel({ tool: "deleteUser" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("Denies access to deleteUser");
+  });
+
+  it("multiple tools → count only", () => {
+    expect(
+      computeRuleTooltip(
+        "allow",
+        [sel({ tool: "listUsers" }), sel({ tool: "getUser" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("Permits access to 2 tools");
+  });
+
+  it("single project with name → names the project", () => {
+    expect(
+      computeRuleTooltip("allow", [sel({ projectId: "p1" })], "mcp", projects),
+    ).toBe("Permits access to all servers in ecommerce-api");
+  });
+
+  it("single project without name → generic", () => {
+    expect(
+      computeRuleTooltip("allow", [sel({ projectId: "x" })], "mcp", []),
+    ).toBe("Permits access to 1 project");
+  });
+
+  it("multiple projects → count", () => {
+    expect(
+      computeRuleTooltip(
+        "deny",
+        [sel({ projectId: "p1" }), sel({ projectId: "p2" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("Denies access to 2 projects");
+  });
+
+  it("single server → count", () => {
+    expect(
+      computeRuleTooltip(
+        "deny",
+        [sel({ resourceId: "srv1" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("Denies access to 1 server");
+  });
+
+  it("multiple servers → count", () => {
+    expect(
+      computeRuleTooltip(
+        "allow",
+        [sel({ resourceId: "s1" }), sel({ resourceId: "s2" })],
+        "mcp",
+        projects,
+      ),
+    ).toBe("Permits access to 2 servers");
   });
 });

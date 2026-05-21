@@ -16,9 +16,17 @@ export type ClaudeHookResult = {
    */
   continue?: boolean | undefined;
   /**
+   * Top-level block decision for UserPromptSubmit / PostToolUse / Stop / SubagentStop. Use 'block' to halt processing.
+   */
+  decision?: string | undefined;
+  /**
    * Hook-specific output as JSON object
    */
   hookSpecificOutput?: any | undefined;
+  /**
+   * Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).
+   */
+  reason?: string | undefined;
   /**
    * Reason if blocked (SessionStart only)
    */
@@ -39,7 +47,9 @@ export const ClaudeHookResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   continue: z.optional(z.boolean()),
+  decision: z.optional(z.string()),
   hookSpecificOutput: z.optional(z.any()),
+  reason: z.optional(z.string()),
   stopReason: z.optional(z.string()),
   suppressOutput: z.optional(z.boolean()),
   systemMessage: z.optional(z.string()),

@@ -209,10 +209,15 @@ describe("OAuthWizard — rendering", () => {
     expect(screen.getByRole("button", { name: /External OAuth/ })).toBeTruthy();
   });
 
-  it("shows interactive auth status when user-session onboarding is enabled", () => {
+  it("keeps auto-configure labeled as OAuth Proxy when user-session onboarding is enabled", () => {
     mocks.isFeatureEnabled.mockReturnValue(true);
     renderWizard({ toolset: oauthToolset });
-    expect(screen.getByText("Interactive auth enabled")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Automatically set up OAuth Proxy based on pre-discovered details about this MCP server.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Interactive auth enabled")).toBeNull();
   });
 });
 

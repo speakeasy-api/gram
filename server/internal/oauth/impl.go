@@ -860,28 +860,24 @@ func (s *Service) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, to
 }
 
 type ProxyRegisterRequest struct {
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
+	RegistrationEndpoint    string  `json:"registration_endpoint"`
+	Scope                   *string `json:"scope,omitempty"`
+	TokenEndpointAuthMethod *string `json:"token_endpoint_auth_method,omitempty"`
 }
 
 type ProxyRegisterResponse struct {
 	ClientID                string `json:"client_id"`
 	ClientSecret            string `json:"client_secret,omitempty"`
-	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method,omitempty"`
 }
 
 // handleProxyRegister performs Dynamic Client Registration against an upstream
-// OAuth provider on behalf of the dashboard user so the OAuth Proxy wizard can
-// pre-fill client credentials. We perform this registration server side to avoid
-// CORS frustrations on the Client. We constrain the proxying behavior to be
-// limited to registration requests to avoid SSRF vulnerability to risk. Because
-// of this requirement we implement the business logic of determining client
-// properties in the server as well.
-// The goal behavior is that this registration will be performed entirely server
-// side without client orchestration as part of the remote MCP import flow and
-// this handler will be removed, but for the time being we leave it to the
-// client to orchestrate.
+// OAuth provider on behalf of the dashboard user so the dashboard can wire up
+// remote-session-clients and oauth_proxy_providers without hitting the
+// upstream's registration_endpoint from the browser (CORS). The handler
+// forwards the caller's `scope` and `token_endpoint_auth_method` verbatim
+// when supplied and omits them otherwise — interpreting RFC 7591 spec
+// defaults is the upstream's job, not Gram's. SSRF is gated by guardianPolicy.
 func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -904,17 +900,21 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, err, "invalid registration_endpoint").Log(ctx, s.logger)
 	}
 
-	authMethod := pickProxyAuthMethod(req.TokenEndpointAuthMethodsSupported)
-	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
+	serverURL := s.serverURL.String()
+	redirectURIs := []string{
+		fmt.Sprintf("%s/oauth/callback", serverURL),
+		fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
+		fmt.Sprintf("%s/x/mcp/remote_login_callback", serverURL),
+	}
 
 	dcrReq := DCRRequest{
-		RedirectURIs:            []string{callbackURL},
-		TokenEndpointAuthMethod: authMethod,
+		RedirectURIs:            redirectURIs,
+		TokenEndpointAuthMethod: conv.PtrValOr(req.TokenEndpointAuthMethod, ""),
 		GrantTypes:              []string{"authorization_code", "refresh_token"},
 		ResponseTypes:           []string{"code"},
-		ClientName:              "Gram",
-		ClientURI:               s.serverURL.String(),
-		Scope:                   strings.Join(req.ScopesSupported, " "),
+		ClientName:              "Speakeasy",
+		ClientURI:               serverURL,
+		Scope:                   conv.PtrValOr(req.Scope, ""),
 	}
 
 	body, err := json.Marshal(dcrReq)
@@ -963,39 +963,14 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeGatewayError, nil, "DCR response missing client_id").Log(ctx, s.logger)
 	}
 
-	respondedAuthMethod := dcrResp.TokenEndpointAuthMethod
-	if respondedAuthMethod == "" {
-		respondedAuthMethod = authMethod
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(ProxyRegisterResponse{
 		ClientID:                dcrResp.ClientID,
 		ClientSecret:            dcrResp.ClientSecret,
-		TokenEndpointAuthMethod: respondedAuthMethod,
+		TokenEndpointAuthMethod: dcrResp.TokenEndpointAuthMethod,
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to encode proxyRegister response", attr.SlogError(err))
 	}
 	return nil
-}
-
-// pickProxyAuthMethod selects a token endpoint auth method from those advertised
-// by the upstream provider, preferring client_secret_basic > client_secret_post >
-// none. Falls back to the upstream's first advertised method, or
-// client_secret_basic when nothing is advertised.
-func pickProxyAuthMethod(supported []string) string {
-	advertised := make(map[string]struct{}, len(supported))
-	for _, m := range supported {
-		advertised[m] = struct{}{}
-	}
-	for _, m := range []string{"client_secret_basic", "client_secret_post", "none"} {
-		if _, ok := advertised[m]; ok {
-			return m
-		}
-	}
-	if len(supported) > 0 {
-		return supported[0]
-	}
-	return "client_secret_basic"
 }

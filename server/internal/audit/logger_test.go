@@ -50,7 +50,7 @@ func TestLogger_OutboxEntrySnapshotsAreInlineJSON(t *testing.T) {
 
 	payload, err := auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
 		OrganizationID: orgID,
-		EventType:      string(events.AuditLogCreated.EventType()),
+		EventType:      string(events.AssetV1.EventType()),
 	})
 	require.NoError(t, err)
 
@@ -86,7 +86,7 @@ func TestLogger_WritesAuditLogAndOutboxEntry(t *testing.T) {
 
 	auditCountBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationWebhooksEnabled)
 	require.NoError(t, err)
-	outboxCountBefore, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.AuditLogCreated.EventType()))
+	outboxCountBefore, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationWebhooksV1.EventType()))
 	require.NoError(t, err)
 
 	err = logger.LogOrganizationWebhooksToggled(ctx, conn, audit.LogOrganizationWebhooksToggledEvent{
@@ -104,7 +104,7 @@ func TestLogger_WritesAuditLogAndOutboxEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, auditCountBefore+1, auditCountAfter)
 
-	outboxCountAfter, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.AuditLogCreated.EventType()))
+	outboxCountAfter, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationWebhooksV1.EventType()))
 	require.NoError(t, err)
 	require.Equal(t, outboxCountBefore+1, outboxCountAfter)
 }

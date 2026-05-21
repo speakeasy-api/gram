@@ -274,6 +274,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			attr.ProjectIDKey:      projectID,
 			attr.OrganizationIDKey: orgID,
 			attr.ResourceURNKey:    urn,
+			attr.HookSourceKey:     "claude-code",
 		}
 
 		// Only include non-zero values

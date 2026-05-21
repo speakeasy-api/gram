@@ -462,7 +462,10 @@ function MCPDetailPageContent({
             {isRbacEnabled && (
               <TabsContent value="team-access" className="mt-0 w-full">
                 <RequireScope scope="mcp:read" level="page">
-                  <MCPTeamAccessTab toolset={toolset} />
+                  <MCPTeamAccessTab
+                    resourceId={toolset.id}
+                    tools={toolset.tools}
+                  />
                 </RequireScope>
               </TabsContent>
             )}
@@ -1502,6 +1505,13 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     },
   });
 
+  // TODO(AGE-1902): replace the single-slug + single-customDomainId fields
+  // below with the shared Endpoints split-surface (Gram endpoint + N
+  // custom-domain endpoint rows) introduced for mcp_servers-backed servers
+  // under `client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx`. Once the
+  // Hosted MCP cards source from mcp_servers/mcp_endpoints, slug + custom
+  // domain handling collapses into that shared surface and the
+  // `toolset.mcpSlug` / `toolset.customDomainId` fields can be deprecated.
   const [mcpSlug, setMcpSlug] = useState(toolset.mcpSlug || "");
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
 

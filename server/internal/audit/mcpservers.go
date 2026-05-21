@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -26,7 +27,9 @@ type LogMcpServerCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpServerURN urn.McpServer
+	McpServerURN  urn.McpServer
+	McpServerName string
+	McpServerSlug string
 }
 
 func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerCreateEvent) error {
@@ -44,15 +47,15 @@ func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event L
 
 		SubjectID:          event.McpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(""),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
 }
 
 type LogMcpServerUpdateEvent struct {
@@ -64,6 +67,8 @@ type LogMcpServerUpdateEvent struct {
 	ActorSlug        *string
 
 	McpServerURN            urn.McpServer
+	McpServerName           string
+	McpServerSlug           string
 	McpServerSnapshotBefore *types.McpServer
 	McpServerSnapshotAfter  *types.McpServer
 }
@@ -94,15 +99,15 @@ func (l *Logger) LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event L
 
 		SubjectID:          event.McpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(""),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
 }
 
 type LogMcpServerDeleteEvent struct {
@@ -113,7 +118,9 @@ type LogMcpServerDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpServerURN urn.McpServer
+	McpServerURN  urn.McpServer
+	McpServerName string
+	McpServerSlug string
 }
 
 func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpServerDeleteEvent) error {
@@ -131,13 +138,13 @@ func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event L
 
 		SubjectID:          event.McpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(""),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
 }

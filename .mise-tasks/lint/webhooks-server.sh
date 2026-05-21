@@ -11,10 +11,16 @@ CATALOG="server/internal/outbox/events/catalog_gen.yaml"
 BASE="${usage_base:-origin/main}"
 
 if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-  openapi-changes markdown-report --no-logo \
-    --report-file breaking-changes.md \
-    --include-diff \
-    "${BASE}:${CATALOG}" "${CATALOG}"
+  BREAKING=$(openapi-changes report --no-logo \
+    "${BASE}:${CATALOG}" "${CATALOG}" 2>/dev/null \
+    | jq '[.reportSummary | to_entries[] | .value.breakingChanges] | add // 0')
+
+  if [ "${BREAKING:-0}" -gt 0 ]; then
+    openapi-changes markdown-report --no-logo \
+      --report-file breaking-changes.md \
+      --include-diff \
+      "${BASE}:${CATALOG}" "${CATALOG}"
+  fi
 else
   openapi-changes summary "${BASE}:${CATALOG}" "${CATALOG}"
 fi

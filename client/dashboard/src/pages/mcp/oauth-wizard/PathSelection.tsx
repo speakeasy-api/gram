@@ -15,11 +15,7 @@ import type { DiscoveredOAuth } from "./machine-types";
 export function PathSelection() {
   const send = WizardContext.useActorRef().send;
   const discovered = WizardContext.useSelector((s) => s.context.discovered);
-  const onboardToUserSessions = WizardContext.useSelector(
-    (s) => s.context.onboardToUserSessions,
-  );
   const canAutoConfigure = canAutoConfigureFromDiscovered(discovered);
-  const interactiveAuthEnabled = onboardToUserSessions && canAutoConfigure;
 
   return (
     <div className="space-y-4">
@@ -39,17 +35,11 @@ export function PathSelection() {
               <Badge key="recommended" variant="information">
                 Recommended
               </Badge>,
-              interactiveAuthEnabled && (
-                <Badge key="interactive-auth" variant="success">
-                  Interactive auth enabled
-                </Badge>
-              ),
             ]}
           >
             <Type muted small>
-              {onboardToUserSessions
-                ? "Automatically set up user sessions based on pre-discovered OAuth details about this MCP server."
-                : "Automatically set up OAuth Proxy based on pre-discovered details about this MCP server."}
+              Automatically set up OAuth Proxy based on pre-discovered details
+              about this MCP server.
             </Type>
           </PathOptionCard>
         )}

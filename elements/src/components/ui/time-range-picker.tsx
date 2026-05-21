@@ -318,6 +318,8 @@ export interface TimeRangePickerProps {
   isLive?: boolean;
   /** Called when LIVE mode changes */
   onLiveChange?: (isLive: boolean) => void;
+  /** Presets to show in the dropdown */
+  availablePresets?: readonly DateRangePreset[];
   /** Disabled state */
   disabled?: boolean;
   /** Timezone display (e.g., "UTC-08:00") */
@@ -340,6 +342,7 @@ function TimeRangePicker({
   showLive = false,
   isLive = false,
   onLiveChange,
+  availablePresets,
   disabled = false,
   timezone,
   apiUrl,
@@ -365,6 +368,16 @@ function TimeRangePicker({
 
   const effectiveApiUrl =
     apiUrl || (typeof window !== "undefined" ? window.location.origin : "");
+  const presetOptions = React.useMemo(() => {
+    if (!availablePresets) return PRESETS;
+    const available = new Set<DateRangePreset>(availablePresets);
+    return PRESETS.filter((p) => available.has(p.value));
+  }, [availablePresets]);
+  const isPresetAvailable = React.useCallback(
+    (presetValue: DateRangePreset) =>
+      !availablePresets || availablePresets.includes(presetValue),
+    [availablePresets],
+  );
 
   const handlePresetClick = (p: TimeRangePreset) => {
     onPresetChange?.(p.value);
@@ -377,7 +390,9 @@ function TimeRangePicker({
     onLiveChange?.(!isLive);
     if (!isLive) {
       // When enabling LIVE, also select a default short preset
-      onPresetChange?.("15m");
+      if (isPresetAvailable("15m")) {
+        onPresetChange?.("15m");
+      }
     }
     setIsOpen(false);
   };
@@ -399,6 +414,7 @@ function TimeRangePicker({
   const applyParseResult = (parsed: ParseResult) => {
     if (parsed) {
       if (parsed.type === "preset") {
+        if (!isPresetAvailable(parsed.preset)) return false;
         onPresetChange?.(parsed.preset);
         setCustomLabel(null);
       } else {
@@ -548,7 +564,7 @@ function TimeRangePicker({
             placeholder="e.g., 3 days ago, last week..."
             disabled={disabled}
             className={cn(
-              "min-w-[140px] flex-1 bg-transparent outline-none",
+              "min-w-35 flex-1 bg-transparent outline-none",
               "placeholder:text-muted-foreground/60",
               !isEditing && "cursor-pointer",
               disabled && "cursor-not-allowed",
@@ -640,7 +656,7 @@ function TimeRangePicker({
               )}
 
               {/* Preset options */}
-              {PRESETS.map((p) => {
+              {presetOptions.map((p) => {
                 const isSelected =
                   preset === p.value && !customRange && !isLive;
                 return (

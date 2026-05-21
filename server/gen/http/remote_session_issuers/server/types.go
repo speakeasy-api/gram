@@ -52,21 +52,6 @@ type CreateRemoteSessionIssuerRequestBody struct {
 	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
 }
 
-// RegisterRemoteSessionIssuerRequestBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// request body.
-type RegisterRemoteSessionIssuerRequestBody struct {
-	// The remote_session_issuer to register against. Must have a
-	// registration_endpoint configured.
-	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// The user_session_issuer the issued client is paired with.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// Optional client_name to send in the RFC 7591 registration request.
-	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
-	// Optional redirect_uris to send in the RFC 7591 registration request.
-	RedirectUris []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
-}
-
 // UpdateRemoteSessionIssuerRequestBody is the type of the
 // "remoteSessionIssuers" service "updateRemoteSessionIssuer" endpoint HTTP
 // request body.
@@ -149,28 +134,6 @@ type CreateRemoteSessionIssuerResponseBody struct {
 	Passthrough bool   `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// RegisterRemoteSessionIssuerResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body.
-type RegisterRemoteSessionIssuerResponseBody struct {
-	// The remote_session_client id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning remote_session_issuer id.
-	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
-	// The user_session_issuer this client is paired with.
-	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// The client_id used to identify this client at the issuer's token and
-	// authorization endpoints.
-	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
-	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
-	// Null when the secret does not expire.
-	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionIssuerResponseBody is the type of the
@@ -610,196 +573,6 @@ type CreateRemoteSessionIssuerUnexpectedResponseBody struct {
 // "remoteSessionIssuers" service "createRemoteSessionIssuer" endpoint HTTP
 // response body for the "gateway_error" error.
 type CreateRemoteSessionIssuerGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerUnauthorizedResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "unauthorized" error.
-type RegisterRemoteSessionIssuerUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerForbiddenResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "forbidden" error.
-type RegisterRemoteSessionIssuerForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerBadRequestResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "bad_request" error.
-type RegisterRemoteSessionIssuerBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerNotFoundResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "not_found" error.
-type RegisterRemoteSessionIssuerNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerConflictResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "conflict" error.
-type RegisterRemoteSessionIssuerConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerUnsupportedMediaResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "unsupported_media" error.
-type RegisterRemoteSessionIssuerUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerInvalidResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "invalid" error.
-type RegisterRemoteSessionIssuerInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerInvariantViolationResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "invariant_violation" error.
-type RegisterRemoteSessionIssuerInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerUnexpectedResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "unexpected" error.
-type RegisterRemoteSessionIssuerUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RegisterRemoteSessionIssuerGatewayErrorResponseBody is the type of the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint HTTP
-// response body for the "gateway_error" error.
-type RegisterRemoteSessionIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1699,24 +1472,6 @@ func NewCreateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *C
 	return body
 }
 
-// NewRegisterRemoteSessionIssuerResponseBody builds the HTTP response body
-// from the result of the "registerRemoteSessionIssuer" endpoint of the
-// "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerResponseBody(res *types.RemoteSessionClient) *RegisterRemoteSessionIssuerResponseBody {
-	body := &RegisterRemoteSessionIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		ClientID:              res.ClientID,
-		ClientIDIssuedAt:      res.ClientIDIssuedAt,
-		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
-	}
-	return body
-}
-
 // NewUpdateRemoteSessionIssuerResponseBody builds the HTTP response body from
 // the result of the "updateRemoteSessionIssuer" endpoint of the
 // "remoteSessionIssuers" service.
@@ -2119,156 +1874,6 @@ func NewCreateRemoteSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *
 // the "remoteSessionIssuers" service.
 func NewCreateRemoteSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *CreateRemoteSessionIssuerGatewayErrorResponseBody {
 	body := &CreateRemoteSessionIssuerGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "registerRemoteSessionIssuer" endpoint
-// of the "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerUnauthorizedResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerUnauthorizedResponseBody {
-	body := &RegisterRemoteSessionIssuerUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerForbiddenResponseBody builds the HTTP response
-// body from the result of the "registerRemoteSessionIssuer" endpoint of the
-// "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerForbiddenResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerForbiddenResponseBody {
-	body := &RegisterRemoteSessionIssuerForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerBadRequestResponseBody builds the HTTP
-// response body from the result of the "registerRemoteSessionIssuer" endpoint
-// of the "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerBadRequestResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerBadRequestResponseBody {
-	body := &RegisterRemoteSessionIssuerBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerNotFoundResponseBody builds the HTTP response
-// body from the result of the "registerRemoteSessionIssuer" endpoint of the
-// "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerNotFoundResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerNotFoundResponseBody {
-	body := &RegisterRemoteSessionIssuerNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerConflictResponseBody builds the HTTP response
-// body from the result of the "registerRemoteSessionIssuer" endpoint of the
-// "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerConflictResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerConflictResponseBody {
-	body := &RegisterRemoteSessionIssuerConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "registerRemoteSessionIssuer" endpoint
-// of the "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerUnsupportedMediaResponseBody {
-	body := &RegisterRemoteSessionIssuerUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerInvalidResponseBody builds the HTTP response
-// body from the result of the "registerRemoteSessionIssuer" endpoint of the
-// "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerInvalidResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerInvalidResponseBody {
-	body := &RegisterRemoteSessionIssuerInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "registerRemoteSessionIssuer" endpoint
-// of the "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerInvariantViolationResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerInvariantViolationResponseBody {
-	body := &RegisterRemoteSessionIssuerInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerUnexpectedResponseBody builds the HTTP
-// response body from the result of the "registerRemoteSessionIssuer" endpoint
-// of the "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerUnexpectedResponseBody {
-	body := &RegisterRemoteSessionIssuerUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRegisterRemoteSessionIssuerGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "registerRemoteSessionIssuer" endpoint
-// of the "remoteSessionIssuers" service.
-func NewRegisterRemoteSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *RegisterRemoteSessionIssuerGatewayErrorResponseBody {
-	body := &RegisterRemoteSessionIssuerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2936,27 +2541,6 @@ func NewCreateRemoteSessionIssuerPayload(body *CreateRemoteSessionIssuerRequestB
 	return v
 }
 
-// NewRegisterRemoteSessionIssuerPayload builds a remoteSessionIssuers service
-// registerRemoteSessionIssuer endpoint payload.
-func NewRegisterRemoteSessionIssuerPayload(body *RegisterRemoteSessionIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.RegisterRemoteSessionIssuerPayload {
-	v := &remotesessionissuers.RegisterRemoteSessionIssuerPayload{
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-		ClientName:            body.ClientName,
-	}
-	if body.RedirectUris != nil {
-		v.RedirectUris = make([]string, len(body.RedirectUris))
-		for i, val := range body.RedirectUris {
-			v.RedirectUris[i] = val
-		}
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v
-}
-
 // NewUpdateRemoteSessionIssuerPayload builds a remoteSessionIssuers service
 // updateRemoteSessionIssuer endpoint payload.
 func NewUpdateRemoteSessionIssuerPayload(body *UpdateRemoteSessionIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.UpdateRemoteSessionIssuerPayload {
@@ -3057,24 +2641,6 @@ func ValidateCreateRemoteSessionIssuerRequestBody(body *CreateRemoteSessionIssue
 	}
 	if body.Issuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
-	}
-	return
-}
-
-// ValidateRegisterRemoteSessionIssuerRequestBody runs the validations defined
-// on RegisterRemoteSessionIssuerRequestBody
-func ValidateRegisterRemoteSessionIssuerRequestBody(body *RegisterRemoteSessionIssuerRequestBody) (err error) {
-	if body.RemoteSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
-	}
-	if body.UserSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
-	}
-	if body.RemoteSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
-	}
-	if body.UserSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }

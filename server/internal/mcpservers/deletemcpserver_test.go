@@ -29,6 +29,7 @@ func TestDeleteMcpServer(t *testing.T) {
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
 		EnvironmentID:     nil,
 		RemoteMcpServerID: &serverID,
 		ToolsetID:         nil,
@@ -53,7 +54,8 @@ func TestDeleteMcpServer(t *testing.T) {
 
 	// Confirm subsequent get returns not-found.
 	_, err = ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
-		ID:               created.ID,
+		ID:               &created.ID,
+		Slug:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -89,6 +91,7 @@ func TestDeleteMcpServer_CascadesSoftDeleteToSlugs(t *testing.T) {
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
 		EnvironmentID:     nil,
 		RemoteMcpServerID: &serverID,
 		ToolsetID:         nil,
