@@ -3435,8 +3435,15 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		Name:     v.Name,
 		Email:    v.Email,
 		PhotoURL: v.PhotoURL,
-		RoleID:   v.RoleID,
 		JoinedAt: v.JoinedAt,
+	}
+	if v.RoleIds != nil {
+		res.RoleIds = make([]string, len(v.RoleIds))
+		for i, val := range v.RoleIds {
+			res.RoleIds[i] = val
+		}
+	} else {
+		res.RoleIds = []string{}
 	}
 
 	return res

@@ -279,8 +279,8 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
 	}
 
-	roleSlugs := []string{}
-	if member.RoleSlug != "" {
+	roleSlugs := member.RoleSlugs
+	if len(roleSlugs) == 0 && member.RoleSlug != "" {
 		roleSlugs = []string{member.RoleSlug}
 	}
 	if err := orgQueries.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{

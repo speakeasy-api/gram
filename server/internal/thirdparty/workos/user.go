@@ -8,13 +8,15 @@ import (
 )
 
 // Member represents an active organization membership.
-// RoleSlug is the slug of the member's assigned role.
+// RoleSlug is the slug of the member's primary role (from WorkOS Role field).
+// RoleSlugs contains all role slugs assigned to this membership (from WorkOS Roles field).
 type Member struct {
 	ID             string
 	UserID         string
 	OrganizationID string
 	Organization   string
 	RoleSlug       string
+	RoleSlugs      []string
 	Status         string
 	CreatedAt      string
 	UpdatedAt      string
@@ -240,6 +242,21 @@ func (wc *Client) UpdateMemberRole(ctx context.Context, membershipID string, rol
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update member role: %w", err)
+	}
+
+	member := convertMember(m)
+	return &member, nil
+}
+
+// UpdateMemberRoles replaces all roles on a membership. This is the multi-role
+// variant used when directory sync assigns multiple roles to a single user.
+func (wc *Client) UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*Member, error) {
+	m, err := wc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
+		RoleSlug:  "",
+		RoleSlugs: roleSlugs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("update member roles: %w", err)
 	}
 
 	member := convertMember(m)

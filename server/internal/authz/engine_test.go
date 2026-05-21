@@ -120,13 +120,13 @@ func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), membership, newMapCache())
 
-	roleSlug, err := engine.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	roleSlugs, err := engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Empty(t, roleSlug)
+	require.Empty(t, roleSlugs)
 
-	roleSlug, err = engine.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	roleSlugs, err = engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Empty(t, roleSlug)
+	require.Empty(t, roleSlugs)
 	require.Equal(t, 1, membership.calls)
 }
 

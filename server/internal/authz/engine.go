@@ -31,12 +31,13 @@ type EngineOpts struct {
 	DevMode bool
 }
 
-// roleSlugCache is the Redis cache entry for a resolved role slug.
+// roleSlugCache is the Redis cache entry for resolved role slugs.
 // Key is org-first so DeleteByPrefix on "role-slug:{orgID}:" invalidates the whole org.
 type roleSlugCache struct {
 	UserID string
 	OrgID  string
-	Slug   string
+	Slug   string   // Primary role slug (backward compat for single-role lookups).
+	Slugs  []string // All role slugs assigned to this user in this org.
 }
 
 var _ cache.CacheableObject[roleSlugCache] = (*roleSlugCache)(nil)
@@ -158,19 +159,19 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 
-	roleSlug, err := e.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	roleSlugs, err := e.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		e.logger.ErrorContext(
 			ctx,
-			"failed to resolve role for authz grants",
+			"failed to resolve roles for authz grants",
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 			attr.SlogUserID(authCtx.UserID),
 			attr.SlogError(err),
 		)
-		return ctx, fmt.Errorf("resolve role slug: %w", err)
+		return ctx, fmt.Errorf("resolve role slugs: %w", err)
 	}
-	if roleSlug != "" {
-		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	for _, slug := range roleSlugs {
+		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, slug))
 	}
 
 	grants, err := LoadGrants(ctx, e.db, authCtx.ActiveOrganizationID, principals)
@@ -188,48 +189,64 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	return GrantsToContext(ctx, grants), nil
 }
 
-func (e *Engine) resolveRoleSlug(ctx context.Context, userID, orgID string) (string, error) {
-	cacheKey := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}.CacheKey()
+func (e *Engine) resolveRoleSlugs(ctx context.Context, userID, orgID string) ([]string, error) {
+	cacheKey := roleSlugCache{UserID: userID, OrgID: orgID, Slug: "", Slugs: nil}.CacheKey()
 	if cached, err := e.roleCache.Get(ctx, cacheKey); err == nil {
-		return cached.Slug, nil
+		if len(cached.Slugs) > 0 {
+			return cached.Slugs, nil
+		}
+		// Backward compat: old cache entries only have Slug.
+		if cached.Slug != "" {
+			return []string{cached.Slug}, nil
+		}
+		return nil, nil
 	}
 
 	user, err := usersrepo.New(e.db).GetUser(ctx, userID)
 	if err != nil {
-		return "", fmt.Errorf("get user: %w", err)
+		return nil, fmt.Errorf("get user: %w", err)
 	}
 	if !user.WorkosID.Valid || user.WorkosID.String == "" {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
+		e.storeRoleSlugsCache(ctx, userID, orgID, nil)
+		return nil, nil
 	}
 
 	org, err := orgrepo.New(e.db).GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
-		return "", fmt.Errorf("get org: %w", err)
+		return nil, fmt.Errorf("get org: %w", err)
 	}
 	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
+		e.storeRoleSlugsCache(ctx, userID, orgID, nil)
+		return nil, nil
 	}
 
 	member, err := e.membership.GetOrgMembership(ctx, user.WorkosID.String, org.WorkosID.String)
 	if err != nil {
-		return "", fmt.Errorf("get org membership: %w", err)
+		return nil, fmt.Errorf("get org membership: %w", err)
 	}
 	if member == nil {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
+		e.storeRoleSlugsCache(ctx, userID, orgID, nil)
+		return nil, nil
 	}
 
-	e.storeRoleSlugCache(ctx, userID, orgID, member.RoleSlug)
+	slugs := member.RoleSlugs
+	if len(slugs) == 0 && member.RoleSlug != "" {
+		slugs = []string{member.RoleSlug}
+	}
 
-	return member.RoleSlug, nil
+	e.storeRoleSlugsCache(ctx, userID, orgID, slugs)
+
+	return slugs, nil
 }
 
-func (e *Engine) storeRoleSlugCache(ctx context.Context, userID, orgID, slug string) {
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: slug}
+func (e *Engine) storeRoleSlugsCache(ctx context.Context, userID, orgID string, slugs []string) {
+	primary := ""
+	if len(slugs) > 0 {
+		primary = slugs[0]
+	}
+	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: primary, Slugs: slugs}
 	if err := e.roleCache.Store(ctx, entry); err != nil {
-		e.logger.WarnContext(ctx, "failed to cache role slug",
+		e.logger.WarnContext(ctx, "failed to cache role slugs",
 			attr.SlogUserID(userID),
 			attr.SlogOrganizationID(orgID),
 			attr.SlogError(err),
@@ -240,7 +257,7 @@ func (e *Engine) storeRoleSlugCache(ctx context.Context, userID, orgID, slug str
 // InvalidateRoleCache removes the cached role slug for a single user. Call
 // this after updating a specific member's role via UpdateMemberRole.
 func (e *Engine) InvalidateRoleCache(ctx context.Context, userID, orgID string) {
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}
+	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: "", Slugs: nil}
 	if err := e.roleCache.Delete(ctx, entry); err != nil {
 		e.logger.WarnContext(ctx, "failed to invalidate cached role slug",
 			attr.SlogUserID(userID),

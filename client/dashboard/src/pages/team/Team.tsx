@@ -165,12 +165,13 @@ export function TeamInner() {
     ? (inviteRoleId ?? defaultRoleId)
     : memberRoleId;
 
-  // Cross-reference AccessMember (has roleId) by user ID
-  const roleByUserId = new Map(accessMembers.map((m) => [m.id, m.roleId]));
+  // Cross-reference AccessMember (has roleIds) by user ID
+  const roleIdsByUserId = new Map(accessMembers.map((m) => [m.id, m.roleIds]));
   const accessMemberByUserId = new Map(accessMembers.map((m) => [m.id, m]));
   const roleBySlug = new Map(roles.map((role) => [role.slug, role]));
+  const roleById = new Map(roles.map((role) => [role.id, role]));
   const getRoleName = (roleId: string) =>
-    roles.find((r) => r.id === roleId)?.name ?? "Unknown";
+    roleById.get(roleId)?.name ?? "Unknown";
   const getInviteRole = (invite: OrganizationInvitation) =>
     invite.roleSlug ? roleBySlug.get(invite.roleSlug) : undefined;
   const getInviteRoleId = (invite: OrganizationInvitation) =>
@@ -179,7 +180,7 @@ export function TeamInner() {
   // Identify admin role and count admins for last-admin protection
   const adminRoleId = roles.find((r) => r.name.toLowerCase() === "admin")?.id;
   const adminCount = adminRoleId
-    ? accessMembers.filter((m) => m.roleId === adminRoleId).length
+    ? accessMembers.filter((m) => m.roleIds.includes(adminRoleId)).length
     : 0;
 
   const invalidateTeamData = async () => {
@@ -418,21 +419,24 @@ export function TeamInner() {
       ? [
           {
             key: "role",
-            header: "Role",
-            width: "140px",
+            header: "Roles",
+            width: "200px",
             render: (member) => {
-              const roleId = roleByUserId.get(member.userId);
-              if (!roleId)
+              const memberRoleIds = roleIdsByUserId.get(member.userId);
+              if (!memberRoleIds || memberRoleIds.length === 0)
                 return <span className="text-muted-foreground">—</span>;
               return (
-                <Type variant="body">
-                  <Link
-                    to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                    className="text-primary hover:text-primary/80 underline decoration-dotted underline-offset-4 transition-colors"
-                  >
-                    {getRoleName(roleId)}
-                  </Link>
-                </Type>
+                <Stack direction="horizontal" gap={1} className="flex-wrap">
+                  {memberRoleIds.map((roleId) => (
+                    <Link
+                      key={roleId}
+                      to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
+                      className="text-primary hover:text-primary/80 rounded-sm border px-1.5 py-0.5 text-xs underline decoration-dotted underline-offset-4 transition-colors"
+                    >
+                      {getRoleName(roleId)}
+                    </Link>
+                  ))}
+                </Stack>
               );
             },
           } satisfies Column<OrganizationUser>,
@@ -460,22 +464,21 @@ export function TeamInner() {
       header: "",
       width: "60px",
       render: (member) => {
-        const memberRoleId = roleByUserId.get(member.userId);
+        const memberRoleIds = roleIdsByUserId.get(member.userId) ?? [];
         const isLastAdmin =
           adminRoleId != null &&
-          memberRoleId === adminRoleId &&
+          memberRoleIds.includes(adminRoleId) &&
           adminCount <= 1;
         const isSelf = member.email === user.email;
-        const roleId = roleByUserId.get(member.userId);
         const accessMember: AccessMember | undefined =
           accessMemberByUserId.get(member.userId) ??
-          (roleId
+          (memberRoleIds.length > 0
             ? {
                 id: member.userId,
                 name: member.name,
                 email: member.email,
                 photoUrl: member.photoUrl,
-                roleId,
+                roleIds: memberRoleIds,
                 joinedAt: member.createdAt,
               }
             : undefined);
@@ -500,7 +503,7 @@ export function TeamInner() {
                       setTimeout(() => setChangingMember(accessMember), 0)
                     }
                   >
-                    Change role
+                    Manage roles
                   </DropdownMenuItem>
                 </RequireScope>
               )}

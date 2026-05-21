@@ -46,8 +46,8 @@ type UpdateRoleRequestBody struct {
 type UpdateMemberRoleRequestBody struct {
 	// The user ID to update.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// The new role ID to assign.
-	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// The role IDs to assign. Replaces all existing role assignments.
+	RoleIds []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
 }
 
 // ResolveChallengeRequestBody is the type of the "access" service
@@ -171,8 +171,8 @@ type UpdateMemberRoleResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// Currently assigned role ID.
-	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// All role IDs assigned to this member.
+	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 }
@@ -2992,8 +2992,8 @@ type AccessMemberResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// Currently assigned role ID.
-	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// All role IDs assigned to this member.
+	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 }
@@ -3322,8 +3322,15 @@ func NewUpdateMemberRoleResponseBody(res *access.AccessMember) *UpdateMemberRole
 		Name:     res.Name,
 		Email:    res.Email,
 		PhotoURL: res.PhotoURL,
-		RoleID:   res.RoleID,
 		JoinedAt: res.JoinedAt,
+	}
+	if res.RoleIds != nil {
+		body.RoleIds = make([]string, len(res.RoleIds))
+		for i, val := range res.RoleIds {
+			body.RoleIds[i] = val
+		}
+	} else {
+		body.RoleIds = []string{}
 	}
 	return body
 }
@@ -5629,7 +5636,10 @@ func NewListGrantsPayload(apikeyToken *string, sessionToken *string) *access.Lis
 func NewUpdateMemberRolePayload(body *UpdateMemberRoleRequestBody, apikeyToken *string, sessionToken *string) *access.UpdateMemberRolePayload {
 	v := &access.UpdateMemberRolePayload{
 		UserID: *body.UserID,
-		RoleID: *body.RoleID,
+	}
+	v.RoleIds = make([]string, len(body.RoleIds))
+	for i, val := range body.RoleIds {
+		v.RoleIds[i] = val
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -5762,8 +5772,8 @@ func ValidateUpdateMemberRoleRequestBody(body *UpdateMemberRoleRequestBody) (err
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
-	if body.RoleID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	if body.RoleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
 	}
 	return
 }

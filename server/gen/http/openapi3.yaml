@@ -26289,14 +26289,16 @@ components:
                 photo_url:
                     type: string
                     description: Avatar URL.
-                role_id:
-                    type: string
-                    description: Currently assigned role ID.
+                role_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: All role IDs assigned to this member.
             required:
                 - id
                 - name
                 - email
-                - role_id
+                - role_ids
                 - joined_at
         AddDeploymentPackageForm:
             type: object
@@ -36522,15 +36524,17 @@ components:
         UpdateMemberRoleForm:
             type: object
             properties:
-                role_id:
-                    type: string
-                    description: The new role ID to assign.
+                role_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: The role IDs to assign. Replaces all existing role assignments.
                 user_id:
                     type: string
                     description: The user ID to update.
             required:
                 - user_id
-                - role_id
+                - role_ids
         UpdateOAuthProxyServerForm:
             type: object
             properties:

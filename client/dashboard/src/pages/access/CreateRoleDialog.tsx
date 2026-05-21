@@ -251,7 +251,9 @@ export function CreateRoleDialog({
     setInitialDescription(editingRole.description);
     setInitialGrantKeys(grantKeysStringFn(roleGrants));
     const assignedIds = new Set(
-      members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
+      members
+        .filter((m) => m.roleIds.includes(editingRole.id))
+        .map((m) => m.id),
     );
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
@@ -464,7 +466,8 @@ export function CreateRoleDialog({
 
   const toggleAllMembers = () => {
     const selectableMembers = members.filter(
-      (m) => !(isEditing && m.roleId === editingRole?.id),
+      (m) =>
+        !(isEditing && editingRole?.id && m.roleIds.includes(editingRole.id)),
     );
     setSelectedMembers((prev) => {
       const allSelected = selectableMembers.every((m) => prev.has(m.id));
@@ -937,7 +940,12 @@ export function CreateRoleDialog({
                     {/* Select-all header */}
                     {(() => {
                       const selectableMembers = members.filter(
-                        (m) => !(isEditing && m.roleId === editingRole?.id),
+                        (m) =>
+                          !(
+                            isEditing &&
+                            editingRole?.id &&
+                            m.roleIds.includes(editingRole.id)
+                          ),
                       );
                       const allSelected =
                         selectableMembers.length > 0 &&
@@ -972,7 +980,9 @@ export function CreateRoleDialog({
                     })()}
                     {members.map((member) => {
                       const alreadyHasRole =
-                        isEditing && member.roleId === editingRole?.id;
+                        isEditing &&
+                        editingRole?.id &&
+                        member.roleIds.includes(editingRole.id);
                       return (
                         <label
                           key={member.id}
@@ -1014,8 +1024,10 @@ export function CreateRoleDialog({
                               >
                                 {member.name}
                               </Type>
-                              {member.roleId &&
-                                roleNameById.get(member.roleId) && (
+                              {member.roleIds.length > 0 &&
+                                member.roleIds.some((id) =>
+                                  roleNameById.has(id),
+                                ) && (
                                   <div className="flex items-center gap-1">
                                     <Badge
                                       variant="outline"
@@ -1023,15 +1035,26 @@ export function CreateRoleDialog({
                                       className={cn(
                                         "font-mono text-[10px] uppercase",
                                         selectedMembers.has(member.id) &&
-                                          member.roleId !== editingRole?.id &&
+                                          !(
+                                            editingRole?.id &&
+                                            member.roleIds.includes(
+                                              editingRole.id,
+                                            )
+                                          ) &&
                                           name.trim() &&
                                           "line-through opacity-60",
                                       )}
                                     >
-                                      {roleNameById.get(member.roleId)}
+                                      {member.roleIds
+                                        .map((id) => roleNameById.get(id))
+                                        .filter(Boolean)
+                                        .join(", ")}
                                     </Badge>
                                     {selectedMembers.has(member.id) &&
-                                      member.roleId !== editingRole?.id &&
+                                      !(
+                                        editingRole?.id &&
+                                        member.roleIds.includes(editingRole.id)
+                                      ) &&
                                       name.trim() && (
                                         <>
                                           <ArrowRight className="text-muted-foreground h-3 w-3 shrink-0" />

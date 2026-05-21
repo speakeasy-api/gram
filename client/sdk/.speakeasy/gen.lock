@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 49c3dca7b97cd6a6c0dee62797a7a979
+  docChecksum: 3545f057e1187f6b6b261099bba7bf97
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -73,7 +73,7 @@ trackedFiles:
   docs/lib/utils/retryconfig.md:
     last_write_checksum: sha1:bc4454e196fcd219f5a78da690375a884f5ed07b
   docs/models/components/accessmember.md:
-    last_write_checksum: sha1:3054da106d66228a7be03e78be7f69086768e701
+    last_write_checksum: sha1:389e259ed7a37da6fd946b3af5721ded752e604b
   docs/models/components/action.md:
     last_write_checksum: sha1:66ce1fb4ea555bc6494786b035454529d311d883
   docs/models/components/adddeploymentpackageform.md:
@@ -455,7 +455,7 @@ trackedFiles:
   docs/models/components/listmcpserversresult.md:
     last_write_checksum: sha1:b405b0f206e6a0c9e0d4b8a1a0e7415de7bb5f2a
   docs/models/components/listmembersresult.md:
-    last_write_checksum: sha1:3ff50166211f061c4785fad224dc518f644e3309
+    last_write_checksum: sha1:8d30ed2359baaa8ddda4ca408b22a52d33cfc1f2
   docs/models/components/listpackagesresult.md:
     last_write_checksum: sha1:cb359e2921071954d7b35a3897ae94db823311c4
   docs/models/components/listpluginsresult.md:
@@ -927,7 +927,7 @@ trackedFiles:
   docs/models/components/updatemcpserverformvisibility.md:
     last_write_checksum: sha1:c533d738ab4fc273f9930d0c2c696a622af7ad79
   docs/models/components/updatememberroleform.md:
-    last_write_checksum: sha1:fc16ab2515659459bd0f6249777a6b685b3f78d3
+    last_write_checksum: sha1:240ff690e7036b89e90f7e5c91c91f1a8a3e402a
   docs/models/components/updateoauthproxyserverrequestbody.md:
     last_write_checksum: sha1:38f9762fad603cb7142e8443eea343204faf4b88
   docs/models/components/updatepackageform.md:
@@ -2497,7 +2497,7 @@ trackedFiles:
   docs/models/operations/updatemcpserversecurityoption2.md:
     last_write_checksum: sha1:d8475411d43db4aa46b60a88063b6595cb555ef1
   docs/models/operations/updatememberrolerequest.md:
-    last_write_checksum: sha1:4990de52bd7e6c2091b9a4180b6580db70aafaba
+    last_write_checksum: sha1:1a1f972aed19f801758410435f2884b08585318c
   docs/models/operations/updatememberrolesecurity.md:
     last_write_checksum: sha1:b8c1a631b77e111380bda55e33cb31ff0f6fa4b7
   docs/models/operations/updateoauthproxyserverrequest.md:
@@ -2669,7 +2669,7 @@ trackedFiles:
   docs/models/operations/verifyremotemcpurlsecurityoption2.md:
     last_write_checksum: sha1:d7327bb7bc7d90ea3fb3593531e041e6c9fc4f9e
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:c50ea3f9ce0e29ef04c31c8a4e4ef695d0c2fa30
+    last_write_checksum: sha1:673cdf07818d76287b54a7cbccd97ec8eb623ab0
   docs/sdks/approvals/README.md:
     last_write_checksum: sha1:db8e7e38d1bb7b98ece0f26752fc0b25cc20c5d0
   docs/sdks/assets/README.md:
@@ -3593,7 +3593,7 @@ trackedFiles:
     last_write_checksum: sha1:3bceadd74bf0b31adf13eb06b7531077c3e07d65
     pristine_git_object: 0605023172a29aae5811f93c479bed942d98dcb4
   src/models/components/accessmember.ts:
-    last_write_checksum: sha1:8688f34f45c5de02b049a8c31c69f43398e1c7ae
+    last_write_checksum: sha1:ae8a79e74e61fa90905ee5b64109b5eed104ace4
   src/models/components/adddeploymentpackageform.ts:
     id: 73a7fe3afa81
     last_write_checksum: sha1:a11950f515b9e570296047d57457fb3a6ac27360
@@ -4571,7 +4571,7 @@ trackedFiles:
   src/models/components/updatemcpserverform.ts:
     last_write_checksum: sha1:b62874997065998668a43cf016e273a5dc835e00
   src/models/components/updatememberroleform.ts:
-    last_write_checksum: sha1:51b48e1eae3b41468a844cd4bc9c761d42afa0db
+    last_write_checksum: sha1:635ff2bc8100b07a2cb60b2f1578d58d4ff280f8
   src/models/components/updateoauthproxyserverrequestbody.ts:
     last_write_checksum: sha1:81954061fa03a0e0e86804d9ea2903ebeb3f2d7b
   src/models/components/updatepackageform.ts:
@@ -8351,10 +8351,10 @@ examples:
   updateMemberRole:
     speakeasy-default-update-member-role:
       requestBody:
-        application/json: {"role_id": "<id>", "user_id": "<id>"}
+        application/json: {"role_ids": ["<value 1>", "<value 2>"], "user_id": "<id>"}
       responses:
         "200":
-          application/json: {"email": "Connie_Bayer@hotmail.com", "id": "<id>", "joined_at": "2024-12-28T07:55:09.816Z", "name": "<value>", "role_id": "<id>"}
+          application/json: {"email": "Connie_Bayer@hotmail.com", "id": "<id>", "joined_at": "2024-12-28T07:55:09.816Z", "name": "<value>", "role_ids": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

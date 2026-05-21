@@ -3719,8 +3719,11 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 		Name:     *v.Name,
 		Email:    *v.Email,
 		PhotoURL: v.PhotoURL,
-		RoleID:   *v.RoleID,
 		JoinedAt: *v.JoinedAt,
+	}
+	res.RoleIds = make([]string, len(v.RoleIds))
+	for i, val := range v.RoleIds {
+		res.RoleIds[i] = val
 	}
 
 	return res

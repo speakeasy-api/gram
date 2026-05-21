@@ -86,8 +86,8 @@ type AccessMember struct {
 	Email string
 	// Avatar URL.
 	PhotoURL *string
-	// Currently assigned role ID.
-	RoleID string
+	// All role IDs assigned to this member.
+	RoleIds []string
 	// When the member joined the organization.
 	JoinedAt string
 }
@@ -480,8 +480,8 @@ type UpdateMemberRolePayload struct {
 	SessionToken *string
 	// The user ID to update.
 	UserID string
-	// The new role ID to assign.
-	RoleID string
+	// The role IDs to assign. Replaces all existing role assignments.
+	RoleIds []string
 }
 
 // UpdateRolePayload is the payload type of the access service updateRole

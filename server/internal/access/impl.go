@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,6 +55,7 @@ type RoleProvider interface {
 	DeleteRole(ctx context.Context, orgID string, roleSlug string) error
 	ListMembers(ctx context.Context, orgID string) ([]workos.Member, error)
 	UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*workos.Member, error)
+	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetUser(ctx context.Context, userID string) (*workos.User, error)
 	ListOrgUsers(ctx context.Context, orgID string) (map[string]workos.User, error)
 	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
@@ -670,12 +672,19 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 			continue
 		}
 
+		roleIDs := make([]string, 0, len(member.RoleSlugs))
+		for _, slug := range member.RoleSlugs {
+			if id, ok := roleIDBySlug[slug]; ok {
+				roleIDs = append(roleIDs, id)
+			}
+		}
+
 		result = append(result, &gen.AccessMember{
 			ID:       local.ID,
 			Name:     formatUserName(user),
 			Email:    user.Email,
 			PhotoURL: conv.FromPGText[string](local.PhotoUrl),
-			RoleID:   roleIDBySlug[member.RoleSlug],
+			RoleIds:  roleIDs,
 			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		})
 	}
@@ -756,6 +765,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 
 // UpdateMemberRole is intentionally stricter than member listing: it only
 // mutates access for users Gram knows are connected to the local organization.
+// It accepts multiple role IDs and performs a full replacement of the user's roles.
 func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -764,17 +774,18 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
+	if len(payload.RoleIds) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one role is required").Log(ctx, s.logger)
+	}
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 		attr.SlogAccessMemberID(payload.UserID),
-		attr.SlogAccessRoleID(payload.RoleID),
 	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessMemberID(payload.UserID),
-		attr.AccessRoleID(payload.RoleID),
 	)
 
 	roles, err := s.roles.ListRoles(ctx, workosOrgID)
@@ -782,22 +793,21 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
 	}
 
-	roleSlug := ""
+	roleIDBySlug := make(map[string]string, len(roles))
+	roleSlugByID := make(map[string]string, len(roles))
 	for _, role := range roles {
-		if role.ID == payload.RoleID {
-			roleSlug = role.Slug
-			break
+		roleIDBySlug[role.Slug] = role.ID
+		roleSlugByID[role.ID] = role.Slug
+	}
+
+	roleSlugs := make([]string, 0, len(payload.RoleIds))
+	for _, roleID := range payload.RoleIds {
+		slug, ok := roleSlugByID[roleID]
+		if !ok {
+			return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
 		}
+		roleSlugs = append(roleSlugs, slug)
 	}
-	if roleSlug == "" {
-		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
-	}
-	logger = logger.With(attr.SlogAccessRoleSlug(roleSlug))
-	trace.SpanFromContext(ctx).SetAttributes(
-		attr.OrganizationID(ac.ActiveOrganizationID),
-		attr.UserID(ac.UserID),
-		attr.AccessRoleSlug(roleSlug),
-	)
 
 	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
 	switch {
@@ -815,11 +825,6 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 	}
 
-	roleIDBySlug := make(map[string]string, len(roles))
-	for _, role := range roles {
-		roleIDBySlug[role.Slug] = role.ID
-	}
-
 	membershipID := ""
 	var existingMember workos.Member
 	for _, member := range members {
@@ -833,9 +838,25 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		return nil, oops.E(oops.CodeNotFound, nil, "member not found").Log(ctx, logger)
 	}
 
-	updatedMember, err := s.roles.UpdateMemberRole(ctx, membershipID, roleSlug)
+	// Admin protection: if we're removing the admin role from this user,
+	// ensure at least one other member still has it.
+	existingAdminRole := slices.Contains(existingMember.RoleSlugs, authz.SystemRoleAdmin)
+	newAdminRole := slices.Contains(roleSlugs, authz.SystemRoleAdmin)
+	if existingAdminRole && !newAdminRole {
+		adminCount := 0
+		for _, m := range members {
+			if slices.Contains(m.RoleSlugs, authz.SystemRoleAdmin) {
+				adminCount++
+			}
+		}
+		if adminCount <= 1 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "cannot remove the last admin role").Log(ctx, logger)
+		}
+	}
+
+	updatedMember, err := s.roles.UpdateMemberRoles(ctx, membershipID, roleSlugs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update member role in workos").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update member roles in workos").Log(ctx, logger)
 	}
 	s.authz.InvalidateRoleCache(ctx, payload.UserID, ac.ActiveOrganizationID)
 
@@ -848,12 +869,19 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		return nil, oops.E(oops.CodeNotFound, nil, "member user not found").Log(ctx, logger)
 	}
 
+	beforeRoleIDs := make([]string, 0, len(existingMember.RoleSlugs))
+	for _, slug := range existingMember.RoleSlugs {
+		if id, ok := roleIDBySlug[slug]; ok {
+			beforeRoleIDs = append(beforeRoleIDs, id)
+		}
+	}
+
 	beforeMember := &gen.AccessMember{
 		ID:       connectedUser.ID,
 		Name:     formatUserName(user),
 		Email:    user.Email,
 		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-		RoleID:   roleIDBySlug[existingMember.RoleSlug],
+		RoleIds:  beforeRoleIDs,
 		JoinedAt: conv.Default(existingMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}
 	afterMember := &gen.AccessMember{
@@ -861,7 +889,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		Name:     formatUserName(user),
 		Email:    user.Email,
 		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-		RoleID:   payload.RoleID,
+		RoleIds:  payload.RoleIds,
 		JoinedAt: conv.Default(updatedMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}
 
@@ -1065,19 +1093,23 @@ func (s *Service) memberRoleSlugs(ctx context.Context, workosOrgID string, worko
 		return nil, fmt.Errorf("list members for role lookup: %w", err)
 	}
 
-	roleSlugs := make([]string, 0, len(members))
-	seenRoleSlugs := make(map[string]struct{}, len(members))
+	seen := make(map[string]struct{})
+	var roleSlugs []string
 
 	for _, member := range members {
-		if member.UserID != workosUserID || member.RoleSlug == "" {
+		if member.UserID != workosUserID {
 			continue
 		}
-		if _, ok := seenRoleSlugs[member.RoleSlug]; ok {
-			continue
+		for _, slug := range member.RoleSlugs {
+			if slug == "" {
+				continue
+			}
+			if _, ok := seen[slug]; ok {
+				continue
+			}
+			seen[slug] = struct{}{}
+			roleSlugs = append(roleSlugs, slug)
 		}
-
-		seenRoleSlugs[member.RoleSlug] = struct{}{}
-		roleSlugs = append(roleSlugs, member.RoleSlug)
 	}
 
 	return roleSlugs, nil

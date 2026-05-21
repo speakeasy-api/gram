@@ -578,13 +578,13 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "name", "email", "role_id", "joined_at")
+	Required("id", "name", "email", "role_ids", "joined_at")
 
 	Attribute("id", String, "User ID.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")
-	Attribute("role_id", String, "Currently assigned role ID.")
+	Attribute("role_ids", ArrayOf(String), "All role IDs assigned to this member.")
 	Attribute("joined_at", String, func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
@@ -602,10 +602,10 @@ var ListUserGrantsResult = Type("ListUserGrantsResult", func() {
 })
 
 var UpdateMemberRoleForm = Type("UpdateMemberRoleForm", func() {
-	Required("user_id", "role_id")
+	Required("user_id", "role_ids")
 
 	Attribute("user_id", String, "The user ID to update.")
-	Attribute("role_id", String, "The new role ID to assign.")
+	Attribute("role_ids", ArrayOf(String), "The role IDs to assign. Replaces all existing role assignments.")
 })
 
 var RBACStatus = Type("RBACStatus", func() {

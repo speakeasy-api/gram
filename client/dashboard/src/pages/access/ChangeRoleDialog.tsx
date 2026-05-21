@@ -1,13 +1,5 @@
-import { AnyField } from "@/components/moon/any-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { invalidateAllMembers } from "@gram/client/react-query/members.js";
@@ -18,8 +10,9 @@ import {
 import { useUpdateMemberRoleMutation } from "@gram/client/react-query/updateMemberRole.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface ChangeRoleDialogProps {
   member: AccessMember | null;
@@ -30,9 +23,7 @@ export function ChangeRoleDialog({
   member,
   onOpenChange,
 }: ChangeRoleDialogProps) {
-  const [selectedRole, setSelectedRole] = useState<string | undefined>(
-    undefined,
-  );
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
   const roles = rolesData?.roles ?? [];
@@ -47,20 +38,34 @@ export function ChangeRoleDialog({
     },
   });
 
-  // Reset selected role when the dialog opens for a different member
+  // Reset selected roles when the dialog opens for a different member
   useEffect(() => {
-    setSelectedRole(undefined);
+    setSelectedRoleIds(member?.roleIds ?? []);
   }, [member]);
 
-  const currentRole = selectedRole ?? member?.roleId;
+  const toggleRole = (roleId: string) => {
+    setSelectedRoleIds((prev) => {
+      if (prev.includes(roleId)) {
+        // Don't allow deselecting the last role
+        if (prev.length <= 1) return prev;
+        return prev.filter((id) => id !== roleId);
+      }
+      return [...prev, roleId];
+    });
+  };
+
+  const hasChanged =
+    member &&
+    (selectedRoleIds.length !== member.roleIds.length ||
+      selectedRoleIds.some((id) => !member.roleIds.includes(id)));
 
   const handleUpdate = () => {
-    if (!member || !currentRole) return;
+    if (!member || selectedRoleIds.length === 0) return;
     updateMemberRole.mutate({
       request: {
         updateMemberRoleForm: {
           userId: member.id,
-          roleId: currentRole,
+          roleIds: selectedRoleIds,
         },
       },
     });
@@ -70,9 +75,9 @@ export function ChangeRoleDialog({
     <Dialog open={!!member} onOpenChange={onOpenChange}>
       <Dialog.Content className="sm:max-w-md">
         <Dialog.Header>
-          <Dialog.Title>Change Role</Dialog.Title>
+          <Dialog.Title>Manage Roles</Dialog.Title>
           <Dialog.Description>
-            Update the role assignment for this team member.
+            Select one or more roles for this team member.
           </Dialog.Description>
         </Dialog.Header>
 
@@ -102,24 +107,48 @@ export function ChangeRoleDialog({
               </div>
             </div>
 
-            <AnyField
-              label="Role"
-              optionality="hidden"
-              render={() => (
-                <Select value={currentRole} onValueChange={setSelectedRole}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
+            <div className="space-y-1">
+              {roles.map((role) => {
+                const isSelected = selectedRoleIds.includes(role.id);
+                return (
+                  <button
+                    key={role.id}
+                    type="button"
+                    onClick={() => toggleRole(role.id)}
+                    className={cn(
+                      "flex w-full cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors",
+                      isSelected
+                        ? "border-primary/30 bg-primary/5"
+                        : "border-border hover:bg-accent",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
+                        isSelected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-muted-foreground/30",
+                      )}
+                    >
+                      {isSelected && <Check className="h-3 w-3" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <Type variant="body" className="font-medium">
                         {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
+                      </Type>
+                      {role.description && (
+                        <Type
+                          variant="body"
+                          className="text-muted-foreground truncate text-xs"
+                        >
+                          {role.description}
+                        </Type>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" onClick={() => onOpenChange(false)}>
@@ -129,8 +158,8 @@ export function ChangeRoleDialog({
                 onClick={handleUpdate}
                 disabled={
                   updateMemberRole.isPending ||
-                  !currentRole ||
-                  currentRole === member?.roleId
+                  selectedRoleIds.length === 0 ||
+                  !hasChanged
                 }
               >
                 {updateMemberRole.isPending && (
@@ -139,7 +168,7 @@ export function ChangeRoleDialog({
                   </Button.LeftIcon>
                 )}
                 <Button.Text>
-                  {updateMemberRole.isPending ? "Updating…" : "Update Role"}
+                  {updateMemberRole.isPending ? "Updating…" : "Update Roles"}
                 </Button.Text>
               </Button>
             </div>

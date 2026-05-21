@@ -48,11 +48,11 @@ func TestService_ListMembers(t *testing.T) {
 	// IDs should be Gram user IDs, not WorkOS user IDs.
 	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
 	require.Equal(t, "ada@example.com", byID["local_user_1"].Email)
-	require.Equal(t, "role_admin", byID["local_user_1"].RoleID)
+	require.Equal(t, []string{"role_admin"}, byID["local_user_1"].RoleIds)
 	require.Equal(t, "2024-11-15T15:04:05Z", byID["local_user_1"].JoinedAt)
 
 	require.Equal(t, "Grace", byID["local_user_2"].Name)
-	require.Equal(t, "role_builder", byID["local_user_2"].RoleID)
+	require.Equal(t, []string{"role_builder"}, byID["local_user_2"].RoleIds)
 }
 
 func TestService_ListMembers_ExcludesDisconnectedUsers(t *testing.T) {

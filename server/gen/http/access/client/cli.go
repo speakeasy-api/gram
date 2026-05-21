@@ -290,7 +290,13 @@ func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdat
 	{
 		err = json.Unmarshal([]byte(accessUpdateMemberRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }'")
+		}
+		if body.RoleIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var apikeyToken *string
@@ -307,7 +313,14 @@ func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdat
 	}
 	v := &access.UpdateMemberRolePayload{
 		UserID: body.UserID,
-		RoleID: body.RoleID,
+	}
+	if body.RoleIds != nil {
+		v.RoleIds = make([]string, len(body.RoleIds))
+		for i, val := range body.RoleIds {
+			v.RoleIds[i] = val
+		}
+	} else {
+		v.RoleIds = []string{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

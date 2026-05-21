@@ -229,8 +229,18 @@ func (s *StubClient) DeleteRole(_ context.Context, orgID string, roleSlug string
 	for membershipID, member := range state.memberships {
 		if member.RoleSlug == roleSlug {
 			member.RoleSlug = "member"
-			state.memberships[membershipID] = member
 		}
+		filtered := make([]string, 0, len(member.RoleSlugs))
+		for _, s := range member.RoleSlugs {
+			if s != roleSlug {
+				filtered = append(filtered, s)
+			}
+		}
+		if len(filtered) == 0 {
+			filtered = []string{"member"}
+		}
+		member.RoleSlugs = filtered
+		state.memberships[membershipID] = member
 	}
 
 	return nil
@@ -270,6 +280,32 @@ func (s *StubClient) UpdateMemberRole(_ context.Context, membershipID string, ro
 			return nil, fmt.Errorf("role %q not found", roleSlug)
 		}
 		member.RoleSlug = roleSlug
+		member.RoleSlugs = []string{roleSlug}
+		state.memberships[membershipID] = member
+		return &member, nil
+	}
+
+	return nil, fmt.Errorf("membership %q not found", membershipID)
+}
+
+func (s *StubClient) UpdateMemberRoles(_ context.Context, membershipID string, roleSlugs []string) (*Member, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	for _, state := range s.orgs {
+		member, ok := state.memberships[membershipID]
+		if !ok {
+			continue
+		}
+		for _, slug := range roleSlugs {
+			if _, ok := state.roles[slug]; !ok {
+				return nil, fmt.Errorf("role %q not found", slug)
+			}
+		}
+		member.RoleSlugs = roleSlugs
+		if len(roleSlugs) > 0 {
+			member.RoleSlug = roleSlugs[0]
+		}
 		state.memberships[membershipID] = member
 		return &member, nil
 	}
@@ -412,6 +448,7 @@ func (s *StubClient) CreateOrganizationMembership(_ context.Context, workosUserI
 		OrganizationID: workosOrgID,
 		Organization:   "",
 		RoleSlug:       roleSlug,
+		RoleSlugs:      []string{roleSlug},
 		Status:         "active",
 		CreatedAt:      "",
 		UpdatedAt:      "",

@@ -46,8 +46,8 @@ type UpdateRoleRequestBody struct {
 type UpdateMemberRoleRequestBody struct {
 	// The user ID to update.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
-	// The new role ID to assign.
-	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// The role IDs to assign. Replaces all existing role assignments.
+	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
 }
 
 // ResolveChallengeRequestBody is the type of the "access" service
@@ -171,8 +171,8 @@ type UpdateMemberRoleResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// Currently assigned role ID.
-	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// All role IDs assigned to this member.
+	RoleIds []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
 }
@@ -3018,8 +3018,8 @@ type AccessMemberResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// Currently assigned role ID.
-	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// All role IDs assigned to this member.
+	RoleIds []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
 }
@@ -3214,7 +3214,14 @@ func NewUpdateRoleRequestBody(p *access.UpdateRolePayload) *UpdateRoleRequestBod
 func NewUpdateMemberRoleRequestBody(p *access.UpdateMemberRolePayload) *UpdateMemberRoleRequestBody {
 	body := &UpdateMemberRoleRequestBody{
 		UserID: p.UserID,
-		RoleID: p.RoleID,
+	}
+	if p.RoleIds != nil {
+		body.RoleIds = make([]string, len(p.RoleIds))
+		for i, val := range p.RoleIds {
+			body.RoleIds[i] = val
+		}
+	} else {
+		body.RoleIds = []string{}
 	}
 	return body
 }
@@ -4583,8 +4590,11 @@ func NewUpdateMemberRoleAccessMemberOK(body *UpdateMemberRoleResponseBody) *acce
 		Name:     *body.Name,
 		Email:    *body.Email,
 		PhotoURL: body.PhotoURL,
-		RoleID:   *body.RoleID,
 		JoinedAt: *body.JoinedAt,
+	}
+	v.RoleIds = make([]string, len(body.RoleIds))
+	for i, val := range body.RoleIds {
+		v.RoleIds[i] = val
 	}
 
 	return v
@@ -5916,8 +5926,8 @@ func ValidateUpdateMemberRoleResponseBody(body *UpdateMemberRoleResponseBody) (e
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
 	}
-	if body.RoleID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	if body.RoleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
 	}
 	if body.JoinedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("joined_at", "body"))
@@ -9754,8 +9764,8 @@ func ValidateAccessMemberResponseBody(body *AccessMemberResponseBody) (err error
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
 	}
-	if body.RoleID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	if body.RoleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
 	}
 	if body.JoinedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("joined_at", "body"))

@@ -76,6 +76,14 @@ func (m *MockRoleProvider) UpdateMemberRole(ctx context.Context, membershipID st
 	return nil, mockErr(args, 1)
 }
 
+func (m *MockRoleProvider) UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*thirdpartyworkos.Member, error) {
+	args := m.Called(ctx, membershipID, roleSlugs)
+	if member, ok := args.Get(0).(*thirdpartyworkos.Member); ok {
+		return member, mockErr(args, 1)
+	}
+	return nil, mockErr(args, 1)
+}
+
 func (m *MockRoleProvider) GetUser(ctx context.Context, userID string) (*thirdpartyworkos.User, error) {
 	args := m.Called(ctx, userID)
 	if user, ok := args.Get(0).(*thirdpartyworkos.User); ok {
@@ -130,6 +138,7 @@ func mockMember(orgID, membershipID, userID, roleSlug string) thirdpartyworkos.M
 		UserID:         userID,
 		OrganizationID: orgID,
 		RoleSlug:       roleSlug,
+		RoleSlugs:      []string{roleSlug},
 		CreatedAt:      mockMembershipTimestamp,
 	}
 }
