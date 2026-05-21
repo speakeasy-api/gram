@@ -106,6 +106,7 @@ async function $do(
     "from": payload?.from,
     "limit": payload?.limit,
     "policy_id": payload?.policy_id,
+    "rule_id": payload?.rule_id,
     "to": payload?.to,
   });
 

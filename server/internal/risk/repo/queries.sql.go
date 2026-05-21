@@ -1063,7 +1063,8 @@ WHERE rr.project_id = $1
   AND rr.found IS TRUE
   AND ($2::timestamptz IS NULL OR cm.created_at >= $2::timestamptz)
   AND ($3::timestamptz IS NULL OR cm.created_at < $3::timestamptz)
-  AND ($4::text = '' OR (
+  AND ($4::text = '' OR rr.rule_id = $4::text)
+  AND ($5::text = '' OR (
     CASE
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
@@ -1103,19 +1104,20 @@ WHERE rr.project_id = $1
       WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $4::text)
+  ) = $5::text)
   AND (
-    $5::timestamptz IS NULL
-    OR (cm.created_at, rr.id) < ($5::timestamptz, $6::uuid)
+    $6::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < ($6::timestamptz, $7::uuid)
   )
 ORDER BY cm.created_at DESC, rr.id DESC
-LIMIT $7
+LIMIT $8
 `
 
 type ListRiskResultsByProjectFoundParams struct {
 	ProjectID              uuid.UUID
 	FromTime               pgtype.Timestamptz
 	ToTime                 pgtype.Timestamptz
+	RuleID                 string
 	Category               string
 	CursorMessageCreatedAt pgtype.Timestamptz
 	CursorID               uuid.NullUUID
@@ -1160,6 +1162,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 		arg.ProjectID,
 		arg.FromTime,
 		arg.ToTime,
+		arg.RuleID,
 		arg.Category,
 		arg.CursorMessageCreatedAt,
 		arg.CursorID,

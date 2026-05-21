@@ -19132,6 +19132,13 @@ paths:
                     description: Optional rule category key to filter by (e.g. secrets, pii, financial).
                     type: string
                 - allowEmptyValue: true
+                  description: Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').
+                  in: query
+                  name: rule_id
+                  schema:
+                    description: Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').
+                    type: string
+                - allowEmptyValue: true
                   description: Filter results to messages created at or after this timestamp (ISO 8601).
                   in: query
                   name: from

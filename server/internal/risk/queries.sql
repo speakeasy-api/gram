@@ -336,6 +336,7 @@ WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
   AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
   AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
+  AND (@rule_id::text = '' OR rr.rule_id = @rule_id::text)
   AND (@category::text = '' OR (
     CASE
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source

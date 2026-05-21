@@ -111,6 +111,7 @@ export function setRiskListResultsData(
       policyId?: string | undefined;
       chatId?: string | undefined;
       category?: string | undefined;
+      ruleId?: string | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
       cursor?: string | undefined;
@@ -134,6 +135,7 @@ export function invalidateRiskListResults(
       policyId?: string | undefined;
       chatId?: string | undefined;
       category?: string | undefined;
+      ruleId?: string | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
       cursor?: string | undefined;

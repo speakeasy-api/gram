@@ -292,7 +292,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -318,6 +318,12 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	{
 		if riskListRiskResultsCategory != "" {
 			category = &riskListRiskResultsCategory
+		}
+	}
+	var ruleID *string
+	{
+		if riskListRiskResultsRuleID != "" {
+			ruleID = &riskListRiskResultsRuleID
 		}
 	}
 	var from *string
@@ -389,6 +395,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Category = category
+	v.RuleID = ruleID
 	v.From = from
 	v.To = to
 	v.Cursor = cursor

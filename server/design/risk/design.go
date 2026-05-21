@@ -208,6 +208,7 @@ var _ = Service("risk", func() {
 				Format(FormatUUID)
 			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
+			Attribute("rule_id", String, "Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').")
 			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
 				Format(FormatDateTime)
 			})
@@ -231,6 +232,7 @@ var _ = Service("risk", func() {
 			Param("policy_id")
 			Param("chat_id")
 			Param("category")
+			Param("rule_id")
 			Param("from")
 			Param("to")
 			Param("cursor")

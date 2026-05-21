@@ -675,6 +675,10 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	if payload.Category != nil {
 		category = *payload.Category
 	}
+	ruleID := ""
+	if payload.RuleID != nil {
+		ruleID = *payload.RuleID
+	}
 	fromTime, err := parseOptionalTimestamptz(payload.From)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid from").Log(ctx, s.logger)
@@ -683,7 +687,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").Log(ctx, s.logger)
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, fromTime, toTime)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, fromTime, toTime)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -973,13 +977,14 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
 		FromTime:               fromTime,
 		ToTime:                 toTime,
 		Category:               category,
+		RuleID:                 ruleID,
 		CursorMessageCreatedAt: cursorCreatedAt,
 		CursorID:               cursorID,
 		PageLimit:              conv.SafeInt32(pageSize + 1),

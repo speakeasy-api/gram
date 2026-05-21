@@ -1494,6 +1494,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.Category != nil {
 			values.Add("category", *p.Category)
 		}
+		if p.RuleID != nil {
+			values.Add("rule_id", *p.RuleID)
+		}
 		if p.From != nil {
 			values.Add("from", *p.From)
 		}

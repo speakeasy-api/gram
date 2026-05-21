@@ -47,6 +47,7 @@ export function buildRiskListResultsQuery(
       policyId: request?.policyId,
       chatId: request?.chatId,
       category: request?.category,
+      ruleId: request?.ruleId,
       from: request?.from,
       to: request?.to,
       cursor: request?.cursor,
@@ -84,6 +85,7 @@ export function queryKeyRiskListResults(
     policyId?: string | undefined;
     chatId?: string | undefined;
     category?: string | undefined;
+    ruleId?: string | undefined;
     from?: Date | undefined;
     to?: Date | undefined;
     cursor?: string | undefined;

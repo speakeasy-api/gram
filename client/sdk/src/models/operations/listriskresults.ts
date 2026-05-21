@@ -34,6 +34,10 @@ export type ListRiskResultsRequest = {
    */
   category?: string | undefined;
   /**
+   * Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').
+   */
+  ruleId?: string | undefined;
+  /**
    * Filter results to messages created at or after this timestamp (ISO 8601).
    */
   from?: Date | undefined;
@@ -169,6 +173,7 @@ export type ListRiskResultsRequest$Outbound = {
   policy_id?: string | undefined;
   chat_id?: string | undefined;
   category?: string | undefined;
+  rule_id?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
   cursor?: string | undefined;
@@ -187,6 +192,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     policyId: z.optional(z.string()),
     chatId: z.optional(z.string()),
     category: z.optional(z.string()),
+    ruleId: z.optional(z.string()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     cursor: z.optional(z.string()),
@@ -199,6 +205,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       policyId: "policy_id",
       chatId: "chat_id",
+      ruleId: "rule_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
