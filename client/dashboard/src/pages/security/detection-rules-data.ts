@@ -71,16 +71,16 @@ const CATEGORY_DEFAULT_SEVERITY: Record<RuleCategory, SeverityLevel> = {
  *  so we surface a category-level explanation. */
 const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
   secrets:
-    "Regex-based detector from the gitleaks catalog. Matches the issuing service's standard token format.",
+    "Regex-backed detector tuned to the issuing service's token format. Flags credentials that match the canonical shape of the underlying provider.",
   financial:
-    "Pattern + checksum detector from Presidio for financial identifiers. Validates structure before reporting a match.",
-  pii: "Pattern detector from Presidio for personal identifiable information embedded in free-form text.",
+    "Pattern + checksum detector for financial identifiers. Validates the structure (length, check digit, BIN range) before reporting a match.",
+  pii: "Pattern detector for personal identifiable information embedded in free-form text. Anchors to the canonical format of the field.",
   government_ids:
-    "Pattern + checksum detector from Presidio for government-issued identifiers, validated against the issuer's format.",
+    "Pattern + checksum detector for government-issued identifiers, validated against the issuer's format and check-digit rules.",
   healthcare:
-    "Pattern detector from Presidio for healthcare identifiers and clinical references in free-form text.",
+    "Pattern detector for healthcare identifiers and clinical references in free-form text.",
   prompt_injection:
-    "Hybrid detector that combines deberta classifier scoring with regex/keyword heuristics to flag attempts to override the agent's instructions.",
+    "Hybrid detector that combines classifier scoring with regex and keyword heuristics to flag attempts to override the agent's instructions.",
   off_policy:
     "Classifier-backed detector for requests that fall outside the organization's acceptable-use policy.",
   shadow_mcp:
