@@ -1058,6 +1058,17 @@ type ProjectMarketplaceSetting struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type ProjectPortal struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	Enabled     bool
+	DisplayName pgtype.Text
+	Tagline     pgtype.Text
+	LogoAssetID uuid.NullUUID
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type ProjectToolVariation struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID

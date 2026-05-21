@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -140,6 +141,33 @@ func seedMcpServerAndEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.P
 		Slug:           endpointSlug,
 	})
 	require.NoError(t, err)
+}
+
+// seedProjectLogoAsset inserts an asset row for the project and points the
+// project's logo_asset_id at it. Returns the asset's UUID. The asset is not
+// backed by real storage — getPortal only constructs a URL from the UUID and
+// does not fetch bytes, so storage is not required for these tests.
+func seedProjectLogoAsset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	asset, err := assetsrepo.New(conn).CreateAsset(ctx, assetsrepo.CreateAssetParams{
+		Name:          "portal-test-logo.png",
+		Url:           "memory://portal-test-logo-" + uuid.NewString(),
+		ProjectID:     projectID,
+		Sha256:        "portal-test-" + uuid.NewString(),
+		Kind:          "image",
+		ContentType:   "image/png",
+		ContentLength: 32,
+	})
+	require.NoError(t, err)
+
+	_, err = projectsrepo.New(conn).UploadProjectLogo(ctx, projectsrepo.UploadProjectLogoParams{
+		LogoAssetID: uuid.NullUUID{UUID: asset.ID, Valid: true},
+		ProjectID:   projectID,
+	})
+	require.NoError(t, err)
+
+	return asset.ID
 }
 
 // newSiblingOrgContext creates a brand-new organization (different from the

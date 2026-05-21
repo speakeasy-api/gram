@@ -2,6 +2,7 @@ package portals_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -55,6 +56,36 @@ func TestGetPortal_Enabled_ReturnsServers(t *testing.T) {
 	require.NotEmpty(t, resp.DisplayName)
 	require.Len(t, resp.Servers, 1)
 	require.Equal(t, endpointSlug, resp.Servers[0].Slug)
+}
+
+func TestGetPortal_LogoFallsBackToProjectLogo(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Set a project-level logo but no portal-level logo override.
+	assetID := seedProjectLogoAsset(t, ctx, ti.conn, *authCtx.ProjectID)
+
+	// Enable the portal without setting a logo_asset_id on the portal row.
+	enabled := true
+	_, err := ti.service.UpdatePortal(ctx, &gen.UpdatePortalPayload{
+		ProjectSlugInput: authCtx.ProjectSlug,
+		Enabled:          &enabled,
+	})
+	require.NoError(t, err)
+
+	resp, err := ti.service.GetPortal(ctx, &gen.GetPortalPayload{
+		ProjectSlugInput: authCtx.ProjectSlug,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.LogoURL)
+	require.NotEmpty(t, *resp.LogoURL)
+	require.True(t, strings.Contains(*resp.LogoURL, assetID.String()),
+		"logo_url %q should reference the project's logo asset id %q", *resp.LogoURL, assetID.String())
 }
 
 func TestGetPortal_PreviewBypassesDisabled(t *testing.T) {

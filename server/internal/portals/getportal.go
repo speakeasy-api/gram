@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/portals"
@@ -63,17 +64,18 @@ func (s *Service) GetPortal(ctx context.Context, payload *gen.GetPortalPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "list portal servers").Log(ctx, s.logger)
 	}
 
-	displayName, err := resolveDisplayName(ctx, s, portalRow, authCtx)
+	// Fetch the project once: needed for both display_name and logo_url fallbacks.
+	proj, err := projectsrepo.New(s.db).GetProjectByID(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch project").Log(ctx, s.logger)
 	}
 
 	out := &gen.Portal{
 		Enabled:     !disabled,
 		ProjectSlug: conv.PtrValOr(authCtx.ProjectSlug, ""),
-		DisplayName: displayName,
+		DisplayName: resolveDisplayName(portalRow, proj),
 		Tagline:     resolveTagline(portalRow),
-		LogoURL:     resolveLogoURL(portalRow),
+		LogoURL:     s.resolveLogoURL(portalRow, proj),
 		Servers:     make([]*gen.PortalServer, 0, len(servers)),
 	}
 
@@ -94,18 +96,13 @@ func (s *Service) GetPortal(ctx context.Context, payload *gen.GetPortalPayload) 
 // resolveDisplayName returns the portal's display name. Preference order:
 //  1. Portal-specific display_name override (if set and non-empty).
 //  2. Project name from the database.
-func resolveDisplayName(ctx context.Context, s *Service, row *repo.ProjectPortal, authCtx *contextvalues.AuthContext) (string, error) {
+func resolveDisplayName(row *repo.ProjectPortal, proj projectsrepo.Project) string {
 	if row != nil {
 		if name := conv.FromPGTextOrEmpty[string](row.DisplayName); name != "" {
-			return name, nil
+			return name
 		}
 	}
-	// Fall back to project name.
-	proj, err := projectsrepo.New(s.db).GetProjectByID(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "fetch project name").Log(ctx, s.logger)
-	}
-	return proj.Name, nil
+	return proj.Name
 }
 
 func resolveTagline(row *repo.ProjectPortal) *string {
@@ -118,24 +115,32 @@ func resolveTagline(row *repo.ProjectPortal) *string {
 // resolveLogoURL returns the portal's logo URL.
 // Preference order:
 //  1. Portal-specific logo_asset_id (if set).
-//  2. No logo (project logo fallback is a future enhancement).
+//  2. Project-level logo_asset_id (if set).
+//  3. No logo.
 //
 // Asset URLs are served via the management API assets.serveImage endpoint
 // following the same pattern as mcpmetadata.
-func resolveLogoURL(row *repo.ProjectPortal) *string {
-	if row == nil {
+func (s *Service) resolveLogoURL(row *repo.ProjectPortal, proj projectsrepo.Project) *string {
+	var assetID uuid.UUID
+	switch {
+	case row != nil && row.LogoAssetID.Valid:
+		assetID = row.LogoAssetID.UUID
+	case proj.LogoAssetID.Valid:
+		assetID = proj.LogoAssetID.UUID
+	default:
 		return nil
 	}
-	if !row.LogoAssetID.Valid {
-		return nil
-	}
-	// Construct the asset serve URL. The base URL is resolved at runtime via
-	// GRAM_SITE_URL (same host for dashboard + API in production).
-	u := fmt.Sprintf("%s/rpc/assets.serveImage?id=%s",
-		conv.Default(os.Getenv("GRAM_SITE_URL"), "https://app.getgram.ai"),
-		row.LogoAssetID.UUID.String(),
-	)
+	u := s.assetServeURL(assetID)
 	return &u
+}
+
+// assetServeURL constructs a management API URL that serves the given asset
+// via the assets.serveImage endpoint.
+func (s *Service) assetServeURL(assetID uuid.UUID) string {
+	return fmt.Sprintf("%s/rpc/assets.serveImage?id=%s",
+		conv.Default(os.Getenv("GRAM_SITE_URL"), "https://app.getgram.ai"),
+		assetID.String(),
+	)
 }
 
 // toolCountFromInterface converts the interface{} value returned by sqlc for
