@@ -1108,17 +1108,37 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE rr.project_id = $1
-  AND rr.found IS TRUE
-  AND ($2::timestamptz IS NULL OR cm.created_at >= $2::timestamptz)
-  AND ($3::timestamptz IS NULL OR cm.created_at < $3::timestamptz)
-  AND ($4::text = '' OR rr.rule_id = $4::text)
-  AND ($5::text = '' OR (
+SELECT
+    sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
+    sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
+    sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
+    sub.confidence, sub.tags, sub.dead_letter_reason, sub.created_at,
+    sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id
+FROM (
+  SELECT
+      rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
+      rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
+      rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
+      rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at,
+      cm.chat_id, cm.created_at AS message_created_at,
+      c.title AS chat_title, c.external_user_id AS chat_user_id,
+      CASE
+        WHEN $1::boolean THEN ROW_NUMBER() OVER (
+          PARTITION BY rr.risk_policy_id, rr.rule_id, rr.match
+          ORDER BY cm.created_at DESC, rr.id DESC
+        )
+        ELSE 1
+      END AS dedup_rank
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE rr.project_id = $2
+    AND rr.found IS TRUE
+    AND ($3::timestamptz IS NULL OR cm.created_at >= $3::timestamptz)
+    AND ($4::timestamptz IS NULL OR cm.created_at < $4::timestamptz)
+    AND ($5::text = '' OR rr.rule_id = $5::text)
+    AND ($6::text = '' OR (
     CASE
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
@@ -1158,16 +1178,19 @@ WHERE rr.project_id = $1
       WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $5::text)
+  ) = $6::text)
+) sub
+WHERE sub.dedup_rank = 1
   AND (
-    $6::timestamptz IS NULL
-    OR (cm.created_at, rr.id) < ($6::timestamptz, $7::uuid)
+    $7::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($7::timestamptz, $8::uuid)
   )
-ORDER BY cm.created_at DESC, rr.id DESC
-LIMIT $8
+ORDER BY sub.message_created_at DESC, sub.id DESC
+LIMIT $9
 `
 
 type ListRiskResultsByProjectFoundParams struct {
+	UniqueMatch            bool
 	ProjectID              uuid.UUID
 	FromTime               pgtype.Timestamptz
 	ToTime                 pgtype.Timestamptz
@@ -1211,8 +1234,14 @@ type ListRiskResultsByProjectFoundRow struct {
 // The category CASE expression here must stay in sync with the one in
 // ListRiskOverviewTimeSeriesFindings; both derive the user-facing category
 // key from rr.source and rr.rule_id.
+//
+// When @unique_match is TRUE, dedup at the SQL layer: keep only one row per
+// (risk_policy_id, rule_id, match), choosing the most recent occurrence. Done
+// inside a subquery so pagination over the deduped stream stays correct
+// (client-side dedup over paged data broke "Load more").
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound,
+		arg.UniqueMatch,
 		arg.ProjectID,
 		arg.FromTime,
 		arg.ToTime,

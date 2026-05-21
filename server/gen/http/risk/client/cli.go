@@ -292,7 +292,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUniqueMatch string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -324,6 +324,17 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	{
 		if riskListRiskResultsRuleID != "" {
 			ruleID = &riskListRiskResultsRuleID
+		}
+	}
+	var uniqueMatch *bool
+	{
+		if riskListRiskResultsUniqueMatch != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskListRiskResultsUniqueMatch)
+			uniqueMatch = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for uniqueMatch, must be BOOL")
+			}
 		}
 	}
 	var from *string
@@ -396,6 +407,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v.ChatID = chatID
 	v.Category = category
 	v.RuleID = ruleID
+	v.UniqueMatch = uniqueMatch
 	v.From = from
 	v.To = to
 	v.Cursor = cursor

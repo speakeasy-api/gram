@@ -38,6 +38,10 @@ export type ListRiskResultsRequest = {
    */
   ruleId?: string | undefined;
   /**
+   * If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+   */
+  uniqueMatch?: boolean | undefined;
+  /**
    * Filter results to messages created at or after this timestamp (ISO 8601).
    */
   from?: Date | undefined;
@@ -174,6 +178,7 @@ export type ListRiskResultsRequest$Outbound = {
   chat_id?: string | undefined;
   category?: string | undefined;
   rule_id?: string | undefined;
+  unique_match?: boolean | undefined;
   from?: string | undefined;
   to?: string | undefined;
   cursor?: string | undefined;
@@ -193,6 +198,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     chatId: z.optional(z.string()),
     category: z.optional(z.string()),
     ruleId: z.optional(z.string()),
+    uniqueMatch: z.optional(z.boolean()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     cursor: z.optional(z.string()),
@@ -206,6 +212,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
       policyId: "policy_id",
       chatId: "chat_id",
       ruleId: "rule_id",
+      uniqueMatch: "unique_match",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

@@ -144,40 +144,25 @@ export default function RiskEvents() {
   }, [policies]);
 
   const resultsQuery = useInfiniteQuery({
-    queryKey: ["risk", "results", "list", policyFilter, ruleFilter],
+    queryKey: ["risk", "results", "list", policyFilter, ruleFilter, uniqueOnly],
     queryFn: async ({ pageParam }) => {
       return client.risk.results.list({
         cursor: pageParam,
         limit: 50,
         policyId: policyFilter || undefined,
         ruleId: ruleFilter || undefined,
+        uniqueMatch: uniqueOnly || undefined,
       });
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
-  const rawResults = useMemo(
+  const results = useMemo(
     () => resultsQuery.data?.pages.flatMap((p) => p.results) ?? [],
     [resultsQuery.data],
   );
-  const results = useMemo(() => {
-    if (!uniqueOnly) return rawResults;
-    const seen = new Set<string>();
-    const out: typeof rawResults = [];
-    for (const r of rawResults) {
-      // Use (policyId, ruleId, match) as the uniqueness key. Same match under
-      // different rules counts as distinct (e.g. an AWS key flagged by both a
-      // gitleaks rule and a custom regex shouldn't collapse).
-      const key = `${r.policyId}|${r.ruleId ?? ""}|${r.match ?? ""}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(r);
-    }
-    return out;
-  }, [rawResults, uniqueOnly]);
-  const totalCount =
-    resultsQuery.data?.pages[0]?.totalCount ?? rawResults.length;
+  const totalCount = resultsQuery.data?.pages[0]?.totalCount ?? results.length;
   const isInitialLoading = policiesLoading || resultsQuery.isLoading;
 
   const approveMutation = useRiskApproveShadowMCPMutation();

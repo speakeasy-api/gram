@@ -1497,6 +1497,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.RuleID != nil {
 			values.Add("rule_id", *p.RuleID)
 		}
+		if p.UniqueMatch != nil {
+			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
+		}
 		if p.From != nil {
 			values.Add("from", *p.From)
 		}

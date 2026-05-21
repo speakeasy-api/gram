@@ -108,6 +108,7 @@ async function $do(
     "policy_id": payload?.policy_id,
     "rule_id": payload?.rule_id,
     "to": payload?.to,
+    "unique_match": payload?.unique_match,
   });
 
   const headers = new Headers(compactMap({

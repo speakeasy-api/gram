@@ -254,6 +254,10 @@ type ListRiskResultsPayload struct {
 	// Optional rule identifier to filter by (exact match, e.g.
 	// 'secret.aws-access-key').
 	RuleID *string
+	// If true, collapse results to one row per (policy_id, rule_id, match),
+	// keeping the most recent occurrence. Useful when the same secret is detected
+	// many times within a single message body.
+	UniqueMatch *bool
 	// Filter results to messages created at or after this timestamp (ISO 8601).
 	From *string
 	// Filter results to messages created strictly before this timestamp (ISO 8601).

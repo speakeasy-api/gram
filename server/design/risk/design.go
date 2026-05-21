@@ -209,6 +209,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier to filter by (exact match, e.g. 'secret.aws-access-key').")
+			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
 			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
 				Format(FormatDateTime)
 			})
@@ -233,6 +234,7 @@ var _ = Service("risk", func() {
 			Param("chat_id")
 			Param("category")
 			Param("rule_id")
+			Param("unique_match")
 			Param("from")
 			Param("to")
 			Param("cursor")
