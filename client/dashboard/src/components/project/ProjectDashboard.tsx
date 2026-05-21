@@ -10,9 +10,11 @@ import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   useAuditLogs,
   useGramContext,
+  useMembers,
   useProductFeatures,
 } from "@gram/client/react-query";
 import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
+import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -77,6 +79,42 @@ export function ProjectDashboard() {
     enabled: logsEnabled,
     placeholderData: keepPreviousData,
   });
+
+  const { data: membersData, isPending: isMembersPending } = useMembers();
+  const members = useMemo(() => membersData?.members ?? [], [membersData]);
+
+  const { data: topUsersSearchData, isPending: isTopUsersPending } = useQuery({
+    queryKey: ["project", "topUsers", from.toISOString(), to.toISOString()],
+    queryFn: () =>
+      unwrapAsync(
+        telemetrySearchUsers(client, {
+          searchUsersPayload: {
+            filter: { from, to, eventSource: "hook" },
+            limit: 200,
+            sort: "desc",
+            userType: "internal",
+          },
+        }),
+      ),
+    enabled: logsEnabled,
+    placeholderData: keepPreviousData,
+  });
+
+  const topUsersByTokens = useMemo(() => {
+    if (!topUsersSearchData?.users) return [];
+    const memberById = new Map(members.map((m) => [m.id, m]));
+    return [...topUsersSearchData.users]
+      .sort((a, b) => b.totalTokens - a.totalTokens)
+      .slice(0, 5)
+      .map((u) => ({
+        key: u.userId,
+        label: memberById.get(u.userId)?.name ?? u.userId,
+        value: u.totalTokens,
+      }));
+  }, [topUsersSearchData, members]);
+
+  const isTopUsersLoading =
+    logsEnabled && (isTopUsersPending || isMembersPending);
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
@@ -246,20 +284,12 @@ export function ProjectDashboard() {
                     </CardActions>
                   }
                 >
-                  {isOverviewPending ? (
+                  {isTopUsersLoading ? (
                     <SkeletonList />
-                  ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
+                  ) : topUsersByTokens.length === 0 ? (
                     <EmptyState message="No user activity recorded" />
                   ) : (
-                    <RankedBarList
-                      items={(overview?.summary.topUsers ?? [])
-                        .slice(0, 5)
-                        .map((u) => ({
-                          key: u.userId,
-                          label: u.userId,
-                          value: u.activityCount,
-                        }))}
-                    />
+                    <RankedBarList items={topUsersByTokens} />
                   )}
                 </DashboardCard>
 
