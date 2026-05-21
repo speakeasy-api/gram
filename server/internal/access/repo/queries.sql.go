@@ -1084,18 +1084,24 @@ func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg Ma
 
 const replaceOrganizationRoleAssignment = `-- name: ReplaceOrganizationRoleAssignment :one
 WITH input_role_urn AS (
-  SELECT 'role:organization:' || id::text AS role_urn
-  FROM organization_roles
-  WHERE organization_roles.organization_id = $1
-    AND organization_roles.workos_slug = $2
-    AND organization_roles.deleted IS FALSE
-    AND organization_roles.workos_deleted IS FALSE
-  UNION ALL
-  SELECT 'role:global:' || id::text AS role_urn
-  FROM global_roles
-  WHERE global_roles.workos_slug = $2
-    AND global_roles.deleted IS FALSE
-    AND global_roles.workos_deleted IS FALSE
+  SELECT role_urn
+  FROM (
+    SELECT 'role:organization:' || id::text AS role_urn, 'organization'::text AS role_kind
+    FROM organization_roles
+    WHERE organization_roles.organization_id = $1
+      AND organization_roles.workos_slug = $2
+      AND organization_roles.deleted IS FALSE
+      AND organization_roles.workos_deleted IS FALSE
+    UNION ALL
+    SELECT 'role:global:' || id::text AS role_urn, 'global'::text AS role_kind
+    FROM global_roles
+    WHERE global_roles.workos_slug = $2
+      AND global_roles.deleted IS FALSE
+      AND global_roles.workos_deleted IS FALSE
+  ) roles
+  -- Keep assignment writes aligned with role reads: org roles shadow global roles.
+  ORDER BY role_kind DESC
+  LIMIT 1
 ),
 upserted AS (
   INSERT INTO organization_role_assignments (
@@ -1315,18 +1321,24 @@ func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganiza
 
 const upsertOrganizationRoleAssignment = `-- name: UpsertOrganizationRoleAssignment :execrows
 WITH input_role_urn AS (
-  SELECT 'role:organization:' || id::text AS role_urn
-  FROM organization_roles
-  WHERE organization_roles.organization_id = $1
-    AND organization_roles.workos_slug = $7
-    AND organization_roles.deleted IS FALSE
-    AND organization_roles.workos_deleted IS FALSE
-  UNION ALL
-  SELECT 'role:global:' || id::text AS role_urn
-  FROM global_roles
-  WHERE global_roles.workos_slug = $7
-    AND global_roles.deleted IS FALSE
-    AND global_roles.workos_deleted IS FALSE
+  SELECT role_urn
+  FROM (
+    SELECT 'role:organization:' || id::text AS role_urn, 'organization'::text AS role_kind
+    FROM organization_roles
+    WHERE organization_roles.organization_id = $1
+      AND organization_roles.workos_slug = $7
+      AND organization_roles.deleted IS FALSE
+      AND organization_roles.workos_deleted IS FALSE
+    UNION ALL
+    SELECT 'role:global:' || id::text AS role_urn, 'global'::text AS role_kind
+    FROM global_roles
+    WHERE global_roles.workos_slug = $7
+      AND global_roles.deleted IS FALSE
+      AND global_roles.workos_deleted IS FALSE
+  ) roles
+  -- Keep assignment writes aligned with role reads: org roles shadow global roles.
+  ORDER BY role_kind DESC
+  LIMIT 1
 )
 INSERT INTO organization_role_assignments (
   organization_id,

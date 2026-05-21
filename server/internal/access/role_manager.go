@@ -422,7 +422,7 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 				OrganizationID:     gramOrgID,
 				WorkosUserID:       row.WorkosUserID,
 				WorkosRoleSlug:     authz.SystemRoleMember,
-				UserID:             conv.ToPGTextEmpty(""),
+				UserID:             row.UserID,
 				WorkosMembershipID: conv.ToPGTextEmpty(membershipID),
 				WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
 				WorkosLastEventID:  conv.ToPGTextEmpty(""),

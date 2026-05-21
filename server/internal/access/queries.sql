@@ -460,18 +460,24 @@ ORDER BY created_at;
 
 -- name: UpsertOrganizationRoleAssignment :execrows
 WITH input_role_urn AS (
-  SELECT 'role:organization:' || id::text AS role_urn
-  FROM organization_roles
-  WHERE organization_roles.organization_id = @organization_id
-    AND organization_roles.workos_slug = sqlc.arg(workos_role_slug)
-    AND organization_roles.deleted IS FALSE
-    AND organization_roles.workos_deleted IS FALSE
-  UNION ALL
-  SELECT 'role:global:' || id::text AS role_urn
-  FROM global_roles
-  WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
-    AND global_roles.deleted IS FALSE
-    AND global_roles.workos_deleted IS FALSE
+  SELECT role_urn
+  FROM (
+    SELECT 'role:organization:' || id::text AS role_urn, 'organization'::text AS role_kind
+    FROM organization_roles
+    WHERE organization_roles.organization_id = @organization_id
+      AND organization_roles.workos_slug = sqlc.arg(workos_role_slug)
+      AND organization_roles.deleted IS FALSE
+      AND organization_roles.workos_deleted IS FALSE
+    UNION ALL
+    SELECT 'role:global:' || id::text AS role_urn, 'global'::text AS role_kind
+    FROM global_roles
+    WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
+      AND global_roles.deleted IS FALSE
+      AND global_roles.workos_deleted IS FALSE
+  ) roles
+  -- Keep assignment writes aligned with role reads: org roles shadow global roles.
+  ORDER BY role_kind DESC
+  LIMIT 1
 )
 INSERT INTO organization_role_assignments (
   organization_id,
@@ -500,18 +506,24 @@ ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL
 
 -- name: ReplaceOrganizationRoleAssignment :one
 WITH input_role_urn AS (
-  SELECT 'role:organization:' || id::text AS role_urn
-  FROM organization_roles
-  WHERE organization_roles.organization_id = @organization_id
-    AND organization_roles.workos_slug = sqlc.arg(workos_role_slug)
-    AND organization_roles.deleted IS FALSE
-    AND organization_roles.workos_deleted IS FALSE
-  UNION ALL
-  SELECT 'role:global:' || id::text AS role_urn
-  FROM global_roles
-  WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
-    AND global_roles.deleted IS FALSE
-    AND global_roles.workos_deleted IS FALSE
+  SELECT role_urn
+  FROM (
+    SELECT 'role:organization:' || id::text AS role_urn, 'organization'::text AS role_kind
+    FROM organization_roles
+    WHERE organization_roles.organization_id = @organization_id
+      AND organization_roles.workos_slug = sqlc.arg(workos_role_slug)
+      AND organization_roles.deleted IS FALSE
+      AND organization_roles.workos_deleted IS FALSE
+    UNION ALL
+    SELECT 'role:global:' || id::text AS role_urn, 'global'::text AS role_kind
+    FROM global_roles
+    WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
+      AND global_roles.deleted IS FALSE
+      AND global_roles.workos_deleted IS FALSE
+  ) roles
+  -- Keep assignment writes aligned with role reads: org roles shadow global roles.
+  ORDER BY role_kind DESC
+  LIMIT 1
 ),
 upserted AS (
   INSERT INTO organization_role_assignments (
