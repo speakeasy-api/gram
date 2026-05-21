@@ -1,5 +1,11 @@
 # server
 
+## 0.58.0
+
+### Minor Changes
+
+- d755880: Assistants spec panel now has a "Sessions" quick link that opens Agent Sessions filtered to that assistant.
+
 ## 0.57.0
 
 ### Minor Changes
