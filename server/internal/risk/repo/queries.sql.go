@@ -641,10 +641,17 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 }
 
 const listRiskOverviewTimeSeriesFindings = `-- name: ListRiskOverviewTimeSeriesFindings :many
-WITH buckets AS (
+WITH risk_category_lookup AS (
+  SELECT unnest($1::int[]) AS priority,
+         unnest($2::text[]) AS category,
+         unnest($3::text[]) AS source,
+         unnest($4::text[]) AS rule_id,
+         unnest($5::text[]) AS rule_prefix
+),
+buckets AS (
   SELECT generate_series(
-      date_trunc('hour', $1::timestamptz)
-    , date_trunc('hour', ($2::timestamptz - INTERVAL '1 microsecond'))
+      date_trunc('hour', $6::timestamptz)
+    , date_trunc('hour', ($7::timestamptz - INTERVAL '1 microsecond'))
     , INTERVAL '1 hour'
   )::timestamptz AS bucket_start
 ),
@@ -654,19 +661,19 @@ categorized AS (
     , COALESCE(
         (
           SELECT rcl.category FROM risk_category_lookup rcl
-          WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
-             OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
-             OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+          WHERE (rcl.source != '' AND rcl.source = rr.source)
+             OR (rcl.rule_id != '' AND rcl.rule_id = rr.rule_id)
+             OR (rcl.rule_prefix != '' AND rr.rule_id LIKE rcl.rule_prefix || '%')
           ORDER BY rcl.priority ASC
           LIMIT 1
         ),
         'custom'
       )::text AS category
   FROM risk_results rr
-  WHERE rr.project_id = $3::uuid
+  WHERE rr.project_id = $8::uuid
     AND rr.found IS TRUE
-    AND rr.created_at >= $1
-    AND rr.created_at < $2
+    AND rr.created_at >= $6
+    AND rr.created_at < $7
 ),
 categories AS (
   SELECT DISTINCT category
@@ -691,9 +698,14 @@ ORDER BY buckets.bucket_start ASC, categories.category ASC
 `
 
 type ListRiskOverviewTimeSeriesFindingsParams struct {
-	FromTime  pgtype.Timestamptz
-	ToTime    pgtype.Timestamptz
-	ProjectID uuid.UUID
+	CatPriority   []int32
+	CatCategory   []string
+	CatSource     []string
+	CatRuleID     []string
+	CatRulePrefix []string
+	FromTime      pgtype.Timestamptz
+	ToTime        pgtype.Timestamptz
+	ProjectID     uuid.UUID
 }
 
 type ListRiskOverviewTimeSeriesFindingsRow struct {
@@ -702,8 +714,19 @@ type ListRiskOverviewTimeSeriesFindingsRow struct {
 	Findings    int64
 }
 
+// Categories are resolved against the canonical Go classifier passed in as
+// the @cat_* parallel arrays (see internal/risk/categories.SQLRows).
 func (q *Queries) ListRiskOverviewTimeSeriesFindings(ctx context.Context, arg ListRiskOverviewTimeSeriesFindingsParams) ([]ListRiskOverviewTimeSeriesFindingsRow, error) {
-	rows, err := q.db.Query(ctx, listRiskOverviewTimeSeriesFindings, arg.FromTime, arg.ToTime, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listRiskOverviewTimeSeriesFindings,
+		arg.CatPriority,
+		arg.CatCategory,
+		arg.CatSource,
+		arg.CatRuleID,
+		arg.CatRulePrefix,
+		arg.FromTime,
+		arg.ToTime,
+		arg.ProjectID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1080,6 +1103,13 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
+WITH risk_category_lookup AS (
+  SELECT unnest($10::int[]) AS priority,
+         unnest($11::text[]) AS category,
+         unnest($12::text[]) AS source,
+         unnest($13::text[]) AS rule_id,
+         unnest($14::text[]) AS rule_prefix
+)
 SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
@@ -1113,9 +1143,9 @@ FROM (
     AND ($6::text = '' OR COALESCE(
       (
         SELECT rcl.category FROM risk_category_lookup rcl
-        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
-           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
-           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        WHERE (rcl.source != '' AND rcl.source = rr.source)
+           OR (rcl.rule_id != '' AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix != '' AND rr.rule_id LIKE rcl.rule_prefix || '%')
         ORDER BY rcl.priority ASC
         LIMIT 1
       ),
@@ -1141,6 +1171,11 @@ type ListRiskResultsByProjectFoundParams struct {
 	CursorMessageCreatedAt pgtype.Timestamptz
 	CursorID               uuid.NullUUID
 	PageLimit              int32
+	CatPriority            []int32
+	CatCategory            []string
+	CatSource              []string
+	CatRuleID              []string
+	CatRulePrefix          []string
 }
 
 type ListRiskResultsByProjectFoundRow struct {
@@ -1170,12 +1205,11 @@ type ListRiskResultsByProjectFoundRow struct {
 // Sort by the underlying chat message's created_at (the event time), NOT
 // rr.created_at (the scan time). The background drain workflow analyzes
 // historical messages in arbitrary order, so rr.created_at can put a
-// finding for an old message ahead of one for a recent message — which is
+// finding for an old message ahead of one for a recent message, which is
 // exactly the "random-seeming" order users see in Recent Findings.
 // Cursor is (cm.created_at, rr.id) for stable pagination.
-// The category CASE expression here must stay in sync with the one in
-// ListRiskOverviewTimeSeriesFindings; both derive the user-facing category
-// key from rr.source and rr.rule_id.
+// Categories are resolved against the canonical Go classifier passed in as
+// the @cat_* parallel arrays (see internal/risk/categories.SQLRows).
 //
 // When @unique_match is TRUE, dedup at the SQL layer: keep only one row per
 // (risk_policy_id, rule_id, match), choosing the most recent occurrence. Done
@@ -1192,6 +1226,11 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 		arg.CursorMessageCreatedAt,
 		arg.CursorID,
 		arg.PageLimit,
+		arg.CatPriority,
+		arg.CatCategory,
+		arg.CatSource,
+		arg.CatRuleID,
+		arg.CatRulePrefix,
 	)
 	if err != nil {
 		return nil, err
@@ -1293,29 +1332,33 @@ func (q *Queries) ListRiskResultsGroupedByChat(ctx context.Context, arg ListRisk
 }
 
 const listRiskRulesByCategory = `-- name: ListRiskRulesByCategory :many
-WITH categorized AS (
+WITH risk_category_lookup AS (
+  SELECT unnest($2::int[]) AS priority,
+         unnest($3::text[]) AS category,
+         unnest($4::text[]) AS source,
+         unnest($5::text[]) AS rule_id,
+         unnest($6::text[]) AS rule_prefix
+),
+categorized AS (
   SELECT
     COALESCE(rr.rule_id, '')::TEXT AS rule_id,
     rr.source,
-    -- Classify via the risk_category_lookup TEMP TABLE populated from the
-    -- Go classifier in internal/risk/categories. See bootstrap.go and the
-    -- pgxpool AfterConnect hook in cmd/gram/deps.go.
     COALESCE(
       (
         SELECT rcl.category FROM risk_category_lookup rcl
-        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
-           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
-           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        WHERE (rcl.source != '' AND rcl.source = rr.source)
+           OR (rcl.rule_id != '' AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix != '' AND rr.rule_id LIKE rcl.rule_prefix || '%')
         ORDER BY rcl.priority ASC
         LIMIT 1
       ),
       'custom'
     )::text AS category
   FROM risk_results rr
-  WHERE rr.project_id = $2
+  WHERE rr.project_id = $7
     AND rr.found IS TRUE
-    AND rr.created_at >= $3
-    AND rr.created_at < $4
+    AND rr.created_at >= $8
+    AND rr.created_at < $9
 )
 SELECT rule_id, source, COUNT(*)::BIGINT AS findings
 FROM categorized
@@ -1325,10 +1368,15 @@ ORDER BY findings DESC, rule_id ASC
 `
 
 type ListRiskRulesByCategoryParams struct {
-	Category  string
-	ProjectID uuid.UUID
-	FromTime  pgtype.Timestamptz
-	ToTime    pgtype.Timestamptz
+	Category      string
+	CatPriority   []int32
+	CatCategory   []string
+	CatSource     []string
+	CatRuleID     []string
+	CatRulePrefix []string
+	ProjectID     uuid.UUID
+	FromTime      pgtype.Timestamptz
+	ToTime        pgtype.Timestamptz
 }
 
 type ListRiskRulesByCategoryRow struct {
@@ -1337,12 +1385,17 @@ type ListRiskRulesByCategoryRow struct {
 	Findings int64
 }
 
-// Returns per-rule_id finding counts for a category within a window.
-// The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings
-// and ListRiskResultsByProjectFound; all three classify rr.rule_id the same way.
+// Per-rule_id finding counts for a category within a window. Categories are
+// resolved against the canonical Go classifier passed in as the @cat_*
+// parallel arrays (see internal/risk/categories.SQLRows).
 func (q *Queries) ListRiskRulesByCategory(ctx context.Context, arg ListRiskRulesByCategoryParams) ([]ListRiskRulesByCategoryRow, error) {
 	rows, err := q.db.Query(ctx, listRiskRulesByCategory,
 		arg.Category,
+		arg.CatPriority,
+		arg.CatCategory,
+		arg.CatSource,
+		arg.CatRuleID,
+		arg.CatRulePrefix,
 		arg.ProjectID,
 		arg.FromTime,
 		arg.ToTime,
@@ -1366,17 +1419,21 @@ func (q *Queries) ListRiskRulesByCategory(ctx context.Context, arg ListRiskRules
 }
 
 const listRiskUserCategoryBreakdown = `-- name: ListRiskUserCategoryBreakdown :many
-WITH user_findings AS (
+WITH risk_category_lookup AS (
+  SELECT unnest($1::int[]) AS priority,
+         unnest($2::text[]) AS category,
+         unnest($3::text[]) AS source,
+         unnest($4::text[]) AS rule_id,
+         unnest($5::text[]) AS rule_prefix
+),
+user_findings AS (
   SELECT
-    -- Classify via the risk_category_lookup TEMP TABLE populated from the
-    -- Go classifier in internal/risk/categories. See bootstrap.go and the
-    -- pgxpool AfterConnect hook in cmd/gram/deps.go.
     COALESCE(
       (
         SELECT rcl.category FROM risk_category_lookup rcl
-        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
-           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
-           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        WHERE (rcl.source != '' AND rcl.source = rr.source)
+           OR (rcl.rule_id != '' AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix != '' AND rr.rule_id LIKE rcl.rule_prefix || '%')
         ORDER BY rcl.priority ASC
         LIMIT 1
       ),
@@ -1385,11 +1442,11 @@ WITH user_findings AS (
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
-  WHERE rr.project_id = $1
+  WHERE rr.project_id = $6
     AND rr.found IS TRUE
-    AND rr.created_at >= $2
-    AND rr.created_at < $3
-    AND COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '') = $4::text
+    AND rr.created_at >= $7
+    AND rr.created_at < $8
+    AND COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '') = $9::text
 )
 SELECT category, COUNT(*)::BIGINT AS findings
 FROM user_findings
@@ -1398,6 +1455,11 @@ ORDER BY findings DESC, category ASC
 `
 
 type ListRiskUserCategoryBreakdownParams struct {
+	CatPriority    []int32
+	CatCategory    []string
+	CatSource      []string
+	CatRuleID      []string
+	CatRulePrefix  []string
 	ProjectID      uuid.UUID
 	FromTime       pgtype.Timestamptz
 	ToTime         pgtype.Timestamptz
@@ -1410,10 +1472,15 @@ type ListRiskUserCategoryBreakdownRow struct {
 }
 
 // Per-category finding counts for a single external_user_id in a window.
-// The category CASE expression must stay in sync with the other ListRisk*
-// queries.
+// Categories are resolved against the canonical Go classifier passed in as
+// the @cat_* parallel arrays (see internal/risk/categories.SQLRows).
 func (q *Queries) ListRiskUserCategoryBreakdown(ctx context.Context, arg ListRiskUserCategoryBreakdownParams) ([]ListRiskUserCategoryBreakdownRow, error) {
 	rows, err := q.db.Query(ctx, listRiskUserCategoryBreakdown,
+		arg.CatPriority,
+		arg.CatCategory,
+		arg.CatSource,
+		arg.CatRuleID,
+		arg.CatRulePrefix,
 		arg.ProjectID,
 		arg.FromTime,
 		arg.ToTime,

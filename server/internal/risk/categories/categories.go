@@ -1,16 +1,17 @@
 // Package categories is the single source of truth for the
-// (source, rule_id) → risk category mapping shown across the dashboard.
+// (source, rule_id) -> risk category mapping shown across the dashboard.
 //
 // Previously the mapping lived in four duplicated SQL CASE expressions
 // (queries.sql) and a separate TypeScript classifier (risk-utils.ts),
 // which silently drifted whenever a new rule was added. Now:
 //
 //   - Definitions below is the canonical list.
-//   - Classify(source, ruleID) is the canonical lookup.
-//   - SQLFilter(category) produces the parameter set the queries use to
-//     filter without an in-query CASE.
-//   - JSONResult() is what /rpc/risk.categories returns so the dashboard
-//     can consume the same data instead of maintaining its own copy.
+//   - Classify(source, ruleID) is the canonical lookup used by Go callers.
+//   - SQLRows() projects Definitions into five parallel arrays that every
+//     SQL query in internal/risk inlines via an unnest CTE. Same source of
+//     truth, no in-query CASE.
+//   - /rpc/risk.categories serves the JSON form so the dashboard reads the
+//     same definitions instead of maintaining its own copy.
 //
 // When adding a new rule or category, edit Definitions and the matching
 // frontend RULE_CATEGORY_META label, and everything else follows.
@@ -222,47 +223,6 @@ func matchesRule(def Definition, ruleID string) bool {
 		return true
 	}
 	return false
-}
-
-// Filter is the parameter set a SQL query uses to express "rows belonging
-// to this category" without an in-query CASE expression. Pass these
-// directly to query params; a query is filtered by category iff at least
-// one of Sources / RuleIDs / RulePrefix is non-empty.
-type Filter struct {
-	Sources    []string
-	RuleIDs    []string
-	RulePrefix string
-}
-
-// FilterFor returns the SQL filter for one category. Empty Filter means
-// "match nothing" (unknown category); callers should distinguish that
-// from "no filter applied" upstream.
-func FilterFor(cat Category) Filter {
-	if cat == "" {
-		return Filter{}
-	}
-	if cat == CategoryCustom {
-		// Custom is the fallback: anything not matched by the explicit
-		// definitions. Caller composes it as NOT (any other category).
-		// In practice the dashboard never filters by "custom" since it's
-		// the "everything else" bucket; emit an empty filter and let it
-		// be a no-op rather than implementing the negation here.
-		return Filter{}
-	}
-	for _, def := range Definitions {
-		if def.Category != cat {
-			continue
-		}
-		out := Filter{RulePrefix: def.RulePrefix}
-		if def.Source != "" {
-			out.Sources = []string{def.Source}
-		}
-		if len(def.RuleIDs) > 0 {
-			out.RuleIDs = append(out.RuleIDs, def.RuleIDs...)
-		}
-		return out
-	}
-	return Filter{}
 }
 
 // All returns every Definition, with CustomDefinition appended last.

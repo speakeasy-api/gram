@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
@@ -95,14 +94,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 		}
 
 		cloneuri := strings.Replace(uri, "gotestdb", clonename, 1)
-		poolcfg, err := pgxpool.ParseConfig(cloneuri)
-		if err != nil {
-			return nil, fmt.Errorf("parse clone pool config: %w", err)
-		}
-		// Mirror the production AfterConnect hook so queries that rely on
-		// the risk_category_lookup TEMP TABLE work the same way under tests.
-		poolcfg.AfterConnect = categories.BootstrapConnection
-		pool, err := pgxpool.NewWithConfig(ctx, poolcfg)
+		pool, err := pgxpool.New(ctx, cloneuri)
 		if err != nil {
 			return nil, fmt.Errorf("create pgx pool: %w", err)
 		}

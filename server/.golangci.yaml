@@ -269,7 +269,6 @@ linters:
         # always-present metadata. Filter is the runtime output struct, same
         # pattern.
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Definition$'
-        - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Filter$'
     exhaustive:
       check:
         - switch

@@ -66,49 +66,6 @@ func TestClassify_PinsPriorCASEBehavior(t *testing.T) {
 	}
 }
 
-func TestFilterFor(t *testing.T) {
-	t.Parallel()
-
-	t.Run("source category", func(t *testing.T) {
-		t.Parallel()
-		f := FilterFor(CategoryShadowMCP)
-		require.Equal(t, []string{"shadow_mcp"}, f.Sources)
-		require.Empty(t, f.RuleIDs)
-		require.Empty(t, f.RulePrefix)
-	})
-
-	t.Run("prefix category", func(t *testing.T) {
-		t.Parallel()
-		f := FilterFor(CategorySecrets)
-		require.Equal(t, "secret.", f.RulePrefix)
-		require.Empty(t, f.Sources)
-		require.Empty(t, f.RuleIDs)
-	})
-
-	t.Run("explicit-list category", func(t *testing.T) {
-		t.Parallel()
-		f := FilterFor(CategoryFinancial)
-		require.Contains(t, f.RuleIDs, "pii.credit_card")
-		require.Empty(t, f.RulePrefix)
-	})
-
-	t.Run("custom is no-op", func(t *testing.T) {
-		t.Parallel()
-		f := FilterFor(CategoryCustom)
-		require.Empty(t, f.Sources)
-		require.Empty(t, f.RuleIDs)
-		require.Empty(t, f.RulePrefix)
-	})
-
-	t.Run("empty is no-op", func(t *testing.T) {
-		t.Parallel()
-		f := FilterFor("")
-		require.Empty(t, f.Sources)
-		require.Empty(t, f.RuleIDs)
-		require.Empty(t, f.RulePrefix)
-	})
-}
-
 func TestAll_IncludesCustom(t *testing.T) {
 	t.Parallel()
 	all := All()

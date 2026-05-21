@@ -159,19 +159,23 @@ LIMIT @row_limit;
 
 -- name: ListRiskUserCategoryBreakdown :many
 -- Per-category finding counts for a single external_user_id in a window.
--- The category CASE expression must stay in sync with the other ListRisk*
--- queries.
-WITH user_findings AS (
+-- Categories are resolved against the canonical Go classifier passed in as
+-- the @cat_* parallel arrays (see internal/risk/categories.SQLRows).
+WITH risk_category_lookup AS (
+  SELECT unnest(@cat_priority::int[]) AS priority,
+         unnest(@cat_category::text[]) AS category,
+         unnest(@cat_source::text[]) AS source,
+         unnest(@cat_rule_id::text[]) AS rule_id,
+         unnest(@cat_rule_prefix::text[]) AS rule_prefix
+),
+user_findings AS (
   SELECT
-    -- Classify via the risk_category_lookup TEMP TABLE populated from the
-    -- Go classifier in internal/risk/categories. See bootstrap.go and the
-    -- pgxpool AfterConnect hook in cmd/gram/deps.go.
     COALESCE(
       (
         SELECT rcl.category FROM risk_category_lookup rcl
-        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
-           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
-           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        WHERE (rcl.source != '' AND rcl.source = rr.source)
+           OR (rcl.rule_id != '' AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix != '' AND rr.rule_id LIKE rcl.rule_prefix || '%')
         ORDER BY rcl.priority ASC
         LIMIT 1
       ),
@@ -209,22 +213,26 @@ GROUP BY rr.rule_id, rr.source
 ORDER BY findings DESC, rule_id ASC;
 
 -- name: ListRiskRulesByCategory :many
--- Returns per-rule_id finding counts for a category within a window.
--- The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings
--- and ListRiskResultsByProjectFound; all three classify rr.rule_id the same way.
-WITH categorized AS (
+-- Per-rule_id finding counts for a category within a window. Categories are
+-- resolved against the canonical Go classifier passed in as the @cat_*
+-- parallel arrays (see internal/risk/categories.SQLRows).
+WITH risk_category_lookup AS (
+  SELECT unnest(@cat_priority::int[]) AS priority,
+         unnest(@cat_category::text[]) AS category,
+         unnest(@cat_source::text[]) AS source,
+         unnest(@cat_rule_id::text[]) AS rule_id,
+         unnest(@cat_rule_prefix::text[]) AS rule_prefix
+),
+categorized AS (
   SELECT
     COALESCE(rr.rule_id, '')::TEXT AS rule_id,
     rr.source,
-    -- Classify via the risk_category_lookup TEMP TABLE populated from the
-    -- Go classifier in internal/risk/categories. See bootstrap.go and the
-    -- pgxpool AfterConnect hook in cmd/gram/deps.go.
     COALESCE(
       (
         SELECT rcl.category FROM risk_category_lookup rcl
-        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
-           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
-           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        WHERE (rcl.source != '' AND rcl.source = rr.source)
+           OR (rcl.rule_id != '' AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix != '' AND rr.rule_id LIKE rcl.rule_prefix || '%')
         ORDER BY rcl.priority ASC
         LIMIT 1
       ),
@@ -268,7 +276,16 @@ ORDER BY findings DESC, email ASC
 LIMIT @row_limit;
 
 -- name: ListRiskOverviewTimeSeriesFindings :many
-WITH buckets AS (
+-- Categories are resolved against the canonical Go classifier passed in as
+-- the @cat_* parallel arrays (see internal/risk/categories.SQLRows).
+WITH risk_category_lookup AS (
+  SELECT unnest(@cat_priority::int[]) AS priority,
+         unnest(@cat_category::text[]) AS category,
+         unnest(@cat_source::text[]) AS source,
+         unnest(@cat_rule_id::text[]) AS rule_id,
+         unnest(@cat_rule_prefix::text[]) AS rule_prefix
+),
+buckets AS (
   SELECT generate_series(
       date_trunc('hour', sqlc.arg(from_time)::timestamptz)
     , date_trunc('hour', (sqlc.arg(to_time)::timestamptz - INTERVAL '1 microsecond'))
@@ -281,9 +298,9 @@ categorized AS (
     , COALESCE(
         (
           SELECT rcl.category FROM risk_category_lookup rcl
-          WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
-             OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
-             OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+          WHERE (rcl.source != '' AND rcl.source = rr.source)
+             OR (rcl.rule_id != '' AND rcl.rule_id = rr.rule_id)
+             OR (rcl.rule_prefix != '' AND rr.rule_id LIKE rcl.rule_prefix || '%')
           ORDER BY rcl.priority ASC
           LIMIT 1
         ),
@@ -393,17 +410,23 @@ WHERE risk_policy_id = @risk_policy_id
 -- Sort by the underlying chat message's created_at (the event time), NOT
 -- rr.created_at (the scan time). The background drain workflow analyzes
 -- historical messages in arbitrary order, so rr.created_at can put a
--- finding for an old message ahead of one for a recent message — which is
+-- finding for an old message ahead of one for a recent message, which is
 -- exactly the "random-seeming" order users see in Recent Findings.
 -- Cursor is (cm.created_at, rr.id) for stable pagination.
--- The category CASE expression here must stay in sync with the one in
--- ListRiskOverviewTimeSeriesFindings; both derive the user-facing category
--- key from rr.source and rr.rule_id.
+-- Categories are resolved against the canonical Go classifier passed in as
+-- the @cat_* parallel arrays (see internal/risk/categories.SQLRows).
 --
 -- When @unique_match is TRUE, dedup at the SQL layer: keep only one row per
 -- (risk_policy_id, rule_id, match), choosing the most recent occurrence. Done
 -- inside a subquery so pagination over the deduped stream stays correct
 -- (client-side dedup over paged data broke "Load more").
+WITH risk_category_lookup AS (
+  SELECT unnest(@cat_priority::int[]) AS priority,
+         unnest(@cat_category::text[]) AS category,
+         unnest(@cat_source::text[]) AS source,
+         unnest(@cat_rule_id::text[]) AS rule_id,
+         unnest(@cat_rule_prefix::text[]) AS rule_prefix
+)
 SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
@@ -437,9 +460,9 @@ FROM (
     AND (@category::text = '' OR COALESCE(
       (
         SELECT rcl.category FROM risk_category_lookup rcl
-        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
-           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
-           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        WHERE (rcl.source != '' AND rcl.source = rr.source)
+           OR (rcl.rule_id != '' AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix != '' AND rr.rule_id LIKE rcl.rule_prefix || '%')
         ORDER BY rcl.priority ASC
         LIMIT 1
       ),

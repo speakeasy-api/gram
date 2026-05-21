@@ -57,7 +57,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
@@ -217,12 +216,6 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 		},
 		o11y.NewPGXLogger(logger.With(attr.SlogComponent("pgx")), consoleLogLevel),
 	)
-
-	// Populate the risk category classifier temp table on every new connection.
-	// SQL queries that need to bucket findings into categories join against
-	// risk_category_lookup instead of carrying their own CASE expression;
-	// internal/risk/categories owns the canonical mapping.
-	poolcfg.AfterConnect = categories.BootstrapConnection
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolcfg)
 	if err != nil {

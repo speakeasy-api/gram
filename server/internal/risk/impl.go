@@ -795,10 +795,16 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users").Log(ctx, s.logger)
 	}
 
+	catPriority, catCategory, catSource, catRuleID, catRulePrefix := categories.SQLRows()
 	timeSeriesRows, err := s.repo.ListRiskOverviewTimeSeriesFindings(ctx, repo.ListRiskOverviewTimeSeriesFindingsParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
+		CatPriority:   catPriority,
+		CatCategory:   catCategory,
+		CatSource:     catSource,
+		CatRuleID:     catRuleID,
+		CatRulePrefix: catRulePrefix,
+		ProjectID:     *authCtx.ProjectID,
+		FromTime:      window.from,
+		ToTime:        window.to,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series findings").Log(ctx, s.logger)
@@ -1011,7 +1017,13 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 
 func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
+	catPriority, catCategory, catSource, catRuleID, catRulePrefix := categories.SQLRows()
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
+		CatPriority:            catPriority,
+		CatCategory:            catCategory,
+		CatSource:              catSource,
+		CatRuleID:              catRuleID,
+		CatRulePrefix:          catRulePrefix,
 		ProjectID:              projectID,
 		FromTime:               fromTime,
 		ToTime:                 toTime,
@@ -1079,7 +1091,13 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 	}
 	window := riskOverviewWindowParams(from, to)
 
+	catPriority, catCategory, catSource, catRuleID, catRulePrefix := categories.SQLRows()
 	categoryRows, err := s.repo.ListRiskUserCategoryBreakdown(ctx, repo.ListRiskUserCategoryBreakdownParams{
+		CatPriority:    catPriority,
+		CatCategory:    catCategory,
+		CatSource:      catSource,
+		CatRuleID:      catRuleID,
+		CatRulePrefix:  catRulePrefix,
 		ProjectID:      *authCtx.ProjectID,
 		FromTime:       window.from,
 		ToTime:         window.to,
@@ -1144,11 +1162,17 @@ func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRisk
 	}
 
 	window := riskOverviewWindowParams(from, to)
+	catPriority, catCategory, catSource, catRuleID, catRulePrefix := categories.SQLRows()
 	rows, err := s.repo.ListRiskRulesByCategory(ctx, repo.ListRiskRulesByCategoryParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-		Category:  payload.Category,
+		CatPriority:   catPriority,
+		CatCategory:   catCategory,
+		CatSource:     catSource,
+		CatRuleID:     catRuleID,
+		CatRulePrefix: catRulePrefix,
+		ProjectID:     *authCtx.ProjectID,
+		FromTime:      window.from,
+		ToTime:        window.to,
+		Category:      payload.Category,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list rule breakdown").Log(ctx, s.logger)
