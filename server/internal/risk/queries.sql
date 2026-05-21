@@ -200,6 +200,11 @@ WITH user_findings AS (
         , 'pii.topic_boundary_violation'
       ) THEN 'off_policy'
       WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+      -- Scanner-source fallbacks: keep these LAST so any prefixed
+      -- rule_id wins. Stay in sync with the Go classifier in
+      -- internal/risk/categories.
+      WHEN rr.source = 'gitleaks' THEN 'secrets'
+      WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END AS category
   FROM risk_results rr
@@ -278,6 +283,11 @@ WITH categorized AS (
         , 'pii.topic_boundary_violation'
       ) THEN 'off_policy'
       WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+      -- Scanner-source fallbacks: keep these LAST so any prefixed
+      -- rule_id wins. Stay in sync with the Go classifier in
+      -- internal/risk/categories.
+      WHEN rr.source = 'gitleaks' THEN 'secrets'
+      WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END AS category
   FROM risk_results rr
@@ -365,6 +375,11 @@ categorized AS (
           , 'pii.topic_boundary_violation'
         ) THEN 'off_policy'
         WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+        -- Scanner-source fallbacks: keep these LAST so any prefixed
+        -- rule_id wins. Stay in sync with the Go classifier in
+        -- internal/risk/categories.
+        WHEN rr.source = 'gitleaks' THEN 'secrets'
+        WHEN rr.source = 'presidio' THEN 'pii'
         ELSE 'custom'
       END AS category
   FROM risk_results rr
@@ -550,6 +565,11 @@ FROM (
         , 'pii.topic_boundary_violation'
       ) THEN 'off_policy'
       WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+      -- Scanner-source fallbacks: keep these LAST so any prefixed
+      -- rule_id wins. Stay in sync with the Go classifier in
+      -- internal/risk/categories.
+      WHEN rr.source = 'gitleaks' THEN 'secrets'
+      WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
   ) = @category::text)

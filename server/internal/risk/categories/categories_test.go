@@ -46,6 +46,13 @@ func TestClassify_PinsPriorCASEBehavior(t *testing.T) {
 		{name: "pii phone", source: "presidio", ruleID: "pii.phone_number", want: CategoryPII},
 		{name: "pii ip", source: "presidio", ruleID: "pii.ip_address", want: CategoryPII},
 
+		// Scanner-source fallbacks: when the rule_id doesn't carry a prefix,
+		// we still resolve to the user-facing category instead of exposing
+		// the scanner name to the UI.
+		{name: "gitleaks bare", source: "gitleaks", ruleID: "generic-api-key", want: CategorySecrets},
+		{name: "gitleaks empty rule", source: "gitleaks", ruleID: "", want: CategorySecrets},
+		{name: "presidio bare", source: "presidio", ruleID: "email", want: CategoryPII},
+
 		// Custom fallback.
 		{name: "empty", source: "", ruleID: "", want: CategoryCustom},
 		{name: "unknown", source: "custom_regex", ruleID: "company.foobar", want: CategoryCustom},

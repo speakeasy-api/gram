@@ -64,9 +64,11 @@ type Definition struct {
 
 // Definitions is the canonical, ordered classifier.
 //
-// Order matters: more specific rule_id lists are declared BEFORE the
-// catch-all prefix categories so a single rule_id resolves to exactly one
-// category.
+// Order matters: source-based categories that "own" their source come first
+// (shadow_mcp etc.); then explicit rule_id lists; then prefix matches; finally
+// scanner-source fallbacks (gitleaks → secrets, presidio → pii) for unprefixed
+// rule_ids like `generic-api-key`. Scanner-source names MUST NOT leak to the
+// UI — only the resolved Category does.
 var Definitions = []Definition{
 	{
 		Category:    CategoryShadowMCP,
@@ -166,6 +168,24 @@ var Definitions = []Definition{
 		Description: "Phone numbers, email addresses, IP and MAC addresses",
 		Icon:        "user",
 		RulePrefix:  "pii.",
+	},
+	// Scanner-source fallbacks. These let unprefixed rule_ids that come from
+	// our integrated scanners (e.g. gitleaks' bare "generic-api-key") still
+	// resolve to a user-facing category instead of leaking the scanner name.
+	// Keep these LAST so any rule_id with a real prefix takes precedence.
+	{
+		Category:    CategorySecrets,
+		Label:       "Secrets",
+		Description: "API keys, tokens, private keys, credentials",
+		Icon:        "key-round",
+		Source:      "gitleaks",
+	},
+	{
+		Category:    CategoryPII,
+		Label:       "Personal Identifiable Information",
+		Description: "Phone numbers, email addresses, IP and MAC addresses",
+		Icon:        "user",
+		Source:      "presidio",
 	},
 }
 

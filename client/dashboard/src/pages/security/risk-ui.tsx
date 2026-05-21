@@ -11,7 +11,6 @@ import {
 } from "react";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
-import { humanizeRuleId } from "./rule-ids";
 import { Badge } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
@@ -23,23 +22,16 @@ export function CategoryLabel({
   ruleId?: string;
 }) {
   const category = getCategoryForFinding(source, ruleId);
-  const meta = category ? RULE_CATEGORY_META[category] : null;
-  const unknownSourceLabel = source ? humanizeRuleId(source) : "-";
+  const meta = category
+    ? RULE_CATEGORY_META[category]
+    : RULE_CATEGORY_META.custom;
   return (
     <span
       className="block min-w-0 truncate"
-      title={
-        meta
-          ? `${meta.label}: ${meta.description}`
-          : source
-            ? `Unknown source: ${source}`
-            : undefined
-      }
+      title={`${meta.label}: ${meta.description}`}
     >
       <Badge variant="neutral" className="max-w-full">
-        <Badge.Text className="min-w-0 truncate">
-          {meta?.label ?? unknownSourceLabel}
-        </Badge.Text>
+        <Badge.Text className="min-w-0 truncate">{meta.label}</Badge.Text>
       </Badge>
     </span>
   );

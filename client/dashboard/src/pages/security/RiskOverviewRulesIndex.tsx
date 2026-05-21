@@ -140,9 +140,6 @@ function RiskOverviewRulesIndexContent() {
                     {r.ruleId && (
                       <div className="text-muted-foreground mt-1 truncate font-mono text-xs">
                         {r.ruleId}
-                        {r.source && (
-                          <span className="ml-2 opacity-70">· {r.source}</span>
-                        )}
                       </div>
                     )}
                   </div>
