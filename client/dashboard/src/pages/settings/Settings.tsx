@@ -7,6 +7,7 @@ import { ShieldAlert } from "lucide-react";
 import { Stack } from "@speakeasy-api/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
+import { PortalSettings } from "./PortalSettings";
 
 export default function Settings() {
   const isAdmin = useIsAdmin();
@@ -27,7 +28,11 @@ export default function Settings() {
             Manage your project configuration and perform administrative
             actions.
           </Type>
-          <SettingsDangerZone />
+          <PortalSettings />
+
+          <div className="mt-8">
+            <SettingsDangerZone />
+          </div>
 
           {isAdmin && (
             <div className="mt-8 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
