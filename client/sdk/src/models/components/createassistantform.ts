@@ -14,14 +14,16 @@ import {
 /**
  * Optional initial status.
  */
-export const Status = {
+export const CreateAssistantFormStatus = {
   Active: "active",
   Paused: "paused",
 } as const;
 /**
  * Optional initial status.
  */
-export type Status = ClosedEnum<typeof Status>;
+export type CreateAssistantFormStatus = ClosedEnum<
+  typeof CreateAssistantFormStatus
+>;
 
 export type CreateAssistantForm = {
   /**
@@ -43,7 +45,7 @@ export type CreateAssistantForm = {
   /**
    * Optional initial status.
    */
-  status?: Status | undefined;
+  status?: CreateAssistantFormStatus | undefined;
   /**
    * Toolsets available to the assistant.
    */
@@ -55,9 +57,9 @@ export type CreateAssistantForm = {
 };
 
 /** @internal */
-export const Status$outboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
-  Status,
-);
+export const CreateAssistantFormStatus$outboundSchema: z.ZodMiniEnum<
+  typeof CreateAssistantFormStatus
+> = z.enum(CreateAssistantFormStatus);
 
 /** @internal */
 export type CreateAssistantForm$Outbound = {
@@ -80,7 +82,7 @@ export const CreateAssistantForm$outboundSchema: z.ZodMiniType<
     maxConcurrency: z.optional(z.int()),
     model: z.string(),
     name: z.string(),
-    status: z.optional(Status$outboundSchema),
+    status: z.optional(CreateAssistantFormStatus$outboundSchema),
     toolsets: z.array(AssistantToolsetRef$outboundSchema),
     warmTtlSeconds: z.optional(z.int()),
   }),

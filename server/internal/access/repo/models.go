@@ -9,6 +9,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccessApprovalRequest struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	ResourceType         string
+	RequesterUserID      pgtype.Text
+	RequesterEmail       pgtype.Text
+	RequesterDisplayName pgtype.Text
+	Status               string
+	RequestFingerprint   pgtype.Text
+	DisplayName          pgtype.Text
+	ObservedSummary      []byte
+	BlockedCount         int32
+	FirstBlockedAt       pgtype.Timestamptz
+	LastBlockedAt        pgtype.Timestamptz
+	RequestedAt          pgtype.Timestamptz
+	DecidedAt            pgtype.Timestamptz
+	DecidedBy            pgtype.Text
+	DecisionNote         pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+type AccessRule struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.NullUUID
+	AccessScope     string
+	ResourceType    string
+	Disposition     string
+	MatchKind       string
+	MatchValue      string
+	DisplayName     string
+	ObservedSummary []byte
+	SourceRequestID uuid.NullUUID
+	CreatedBy       pgtype.Text
+	UpdatedBy       pgtype.Text
+	Reason          pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
 type AuthzChallengeResolution struct {
 	ID             uuid.UUID

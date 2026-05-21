@@ -13,6 +13,205 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const createAccessRule = `-- name: CreateAccessRule :one
+INSERT INTO access_rules (
+  organization_id,
+  project_id,
+  access_scope,
+  resource_type,
+  disposition,
+  match_kind,
+  match_value,
+  display_name,
+  observed_summary,
+  source_request_id,
+  created_by,
+  updated_by,
+  reason
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12,
+  $13
+)
+RETURNING id, organization_id, project_id, access_scope, resource_type, disposition, match_kind, match_value, display_name, observed_summary, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateAccessRuleParams struct {
+	OrganizationID  string
+	ProjectID       uuid.NullUUID
+	AccessScope     string
+	ResourceType    string
+	Disposition     string
+	MatchKind       string
+	MatchValue      string
+	DisplayName     string
+	ObservedSummary []byte
+	SourceRequestID uuid.NullUUID
+	CreatedBy       pgtype.Text
+	UpdatedBy       pgtype.Text
+	Reason          pgtype.Text
+}
+
+func (q *Queries) CreateAccessRule(ctx context.Context, arg CreateAccessRuleParams) (AccessRule, error) {
+	row := q.db.QueryRow(ctx, createAccessRule,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AccessScope,
+		arg.ResourceType,
+		arg.Disposition,
+		arg.MatchKind,
+		arg.MatchValue,
+		arg.DisplayName,
+		arg.ObservedSummary,
+		arg.SourceRequestID,
+		arg.CreatedBy,
+		arg.UpdatedBy,
+		arg.Reason,
+	)
+	var i AccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.ResourceType,
+		&i.Disposition,
+		&i.MatchKind,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const decideAccessApprovalRequest = `-- name: DecideAccessApprovalRequest :one
+UPDATE access_approval_requests
+SET status = $1,
+    decided_at = clock_timestamp(),
+    decided_by = $2,
+    decision_note = $3,
+    updated_at = clock_timestamp()
+WHERE organization_id = $4
+  AND id = $5
+  AND resource_type = $6
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, resource_type, requester_user_id, requester_email, requester_display_name, status, request_fingerprint, display_name, observed_summary, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+`
+
+type DecideAccessApprovalRequestParams struct {
+	Status         string
+	DecidedBy      pgtype.Text
+	DecisionNote   pgtype.Text
+	OrganizationID string
+	ID             uuid.UUID
+	ResourceType   string
+}
+
+func (q *Queries) DecideAccessApprovalRequest(ctx context.Context, arg DecideAccessApprovalRequestParams) (AccessApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, decideAccessApprovalRequest,
+		arg.Status,
+		arg.DecidedBy,
+		arg.DecisionNote,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ResourceType,
+	)
+	var i AccessApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ResourceType,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.RequesterDisplayName,
+		&i.Status,
+		&i.RequestFingerprint,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.BlockedCount,
+		&i.FirstBlockedAt,
+		&i.LastBlockedAt,
+		&i.RequestedAt,
+		&i.DecidedAt,
+		&i.DecidedBy,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteAccessRule = `-- name: DeleteAccessRule :one
+UPDATE access_rules
+SET deleted_at = clock_timestamp(),
+    updated_by = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND id = $3
+  AND resource_type = $4
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, access_scope, resource_type, disposition, match_kind, match_value, display_name, observed_summary, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+`
+
+type DeleteAccessRuleParams struct {
+	UpdatedBy      pgtype.Text
+	OrganizationID string
+	ID             uuid.UUID
+	ResourceType   string
+}
+
+func (q *Queries) DeleteAccessRule(ctx context.Context, arg DeleteAccessRuleParams) (AccessRule, error) {
+	row := q.db.QueryRow(ctx, deleteAccessRule,
+		arg.UpdatedBy,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ResourceType,
+	)
+	var i AccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.ResourceType,
+		&i.Disposition,
+		&i.MatchKind,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const deletePrincipalGrant = `-- name: DeletePrincipalGrant :execrows
 DELETE FROM principal_grants
 WHERE id = $1
@@ -52,6 +251,195 @@ func (q *Queries) DeletePrincipalGrantsByPrincipal(ctx context.Context, arg Dele
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getAccessApprovalRequest = `-- name: GetAccessApprovalRequest :one
+SELECT id, organization_id, project_id, resource_type, requester_user_id, requester_email, requester_display_name, status, request_fingerprint, display_name, observed_summary, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+FROM access_approval_requests
+WHERE organization_id = $1
+  AND id = $2
+  AND resource_type = $3
+  AND deleted IS FALSE
+`
+
+type GetAccessApprovalRequestParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+	ResourceType   string
+}
+
+func (q *Queries) GetAccessApprovalRequest(ctx context.Context, arg GetAccessApprovalRequestParams) (AccessApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, getAccessApprovalRequest, arg.OrganizationID, arg.ID, arg.ResourceType)
+	var i AccessApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ResourceType,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.RequesterDisplayName,
+		&i.Status,
+		&i.RequestFingerprint,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.BlockedCount,
+		&i.FirstBlockedAt,
+		&i.LastBlockedAt,
+		&i.RequestedAt,
+		&i.DecidedAt,
+		&i.DecidedBy,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAccessApprovalRequestForUpdate = `-- name: GetAccessApprovalRequestForUpdate :one
+SELECT id, organization_id, project_id, resource_type, requester_user_id, requester_email, requester_display_name, status, request_fingerprint, display_name, observed_summary, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+FROM access_approval_requests
+WHERE organization_id = $1
+  AND id = $2
+  AND resource_type = $3
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetAccessApprovalRequestForUpdateParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+	ResourceType   string
+}
+
+func (q *Queries) GetAccessApprovalRequestForUpdate(ctx context.Context, arg GetAccessApprovalRequestForUpdateParams) (AccessApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, getAccessApprovalRequestForUpdate, arg.OrganizationID, arg.ID, arg.ResourceType)
+	var i AccessApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ResourceType,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.RequesterDisplayName,
+		&i.Status,
+		&i.RequestFingerprint,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.BlockedCount,
+		&i.FirstBlockedAt,
+		&i.LastBlockedAt,
+		&i.RequestedAt,
+		&i.DecidedAt,
+		&i.DecidedBy,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAccessRule = `-- name: GetAccessRule :one
+SELECT id, organization_id, project_id, access_scope, resource_type, disposition, match_kind, match_value, display_name, observed_summary, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+FROM access_rules
+WHERE organization_id = $1
+  AND id = $2
+  AND resource_type = $3
+  AND deleted IS FALSE
+`
+
+type GetAccessRuleParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+	ResourceType   string
+}
+
+func (q *Queries) GetAccessRule(ctx context.Context, arg GetAccessRuleParams) (AccessRule, error) {
+	row := q.db.QueryRow(ctx, getAccessRule, arg.OrganizationID, arg.ID, arg.ResourceType)
+	var i AccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.ResourceType,
+		&i.Disposition,
+		&i.MatchKind,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAccessRuleByMatch = `-- name: GetAccessRuleByMatch :one
+SELECT id, organization_id, project_id, access_scope, resource_type, disposition, match_kind, match_value, display_name, observed_summary, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+FROM access_rules
+WHERE organization_id = $1
+  AND resource_type = $2
+  AND access_scope = $3
+  AND (
+    ($3::text = 'organization' AND project_id IS NULL)
+    OR ($3::text = 'project' AND project_id = $4)
+  )
+  AND match_kind = $5
+  AND match_value = $6
+  AND deleted IS FALSE
+`
+
+type GetAccessRuleByMatchParams struct {
+	OrganizationID string
+	ResourceType   string
+	AccessScope    string
+	ProjectID      uuid.NullUUID
+	MatchKind      string
+	MatchValue     string
+}
+
+func (q *Queries) GetAccessRuleByMatch(ctx context.Context, arg GetAccessRuleByMatchParams) (AccessRule, error) {
+	row := q.db.QueryRow(ctx, getAccessRuleByMatch,
+		arg.OrganizationID,
+		arg.ResourceType,
+		arg.AccessScope,
+		arg.ProjectID,
+		arg.MatchKind,
+		arg.MatchValue,
+	)
+	var i AccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.ResourceType,
+		&i.Disposition,
+		&i.MatchKind,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getGlobalRoleBySlug = `-- name: GetGlobalRoleBySlug :one
@@ -229,6 +617,161 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 	return items, nil
 }
 
+const listAccessApprovalRequests = `-- name: ListAccessApprovalRequests :many
+
+SELECT id, organization_id, project_id, resource_type, requester_user_id, requester_email, requester_display_name, status, request_fingerprint, display_name, observed_summary, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+FROM access_approval_requests
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND ($2::text = '' OR resource_type = $2)
+  AND ($3::text = '' OR status = $3)
+  AND ($4::text = '' OR project_id::text = $4)
+  AND (
+    $5::timestamptz IS NULL
+    OR (requested_at, id) < ($5::timestamptz, $6::uuid)
+  )
+ORDER BY requested_at DESC, id DESC
+LIMIT $7
+`
+
+type ListAccessApprovalRequestsParams struct {
+	OrganizationID    string
+	ResourceType      string
+	Status            string
+	ProjectID         string
+	CursorRequestedAt pgtype.Timestamptz
+	CursorID          uuid.NullUUID
+	LimitCount        int32
+}
+
+// Queries for access approval requests and managed access rules.
+func (q *Queries) ListAccessApprovalRequests(ctx context.Context, arg ListAccessApprovalRequestsParams) ([]AccessApprovalRequest, error) {
+	rows, err := q.db.Query(ctx, listAccessApprovalRequests,
+		arg.OrganizationID,
+		arg.ResourceType,
+		arg.Status,
+		arg.ProjectID,
+		arg.CursorRequestedAt,
+		arg.CursorID,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccessApprovalRequest
+	for rows.Next() {
+		var i AccessApprovalRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.ResourceType,
+			&i.RequesterUserID,
+			&i.RequesterEmail,
+			&i.RequesterDisplayName,
+			&i.Status,
+			&i.RequestFingerprint,
+			&i.DisplayName,
+			&i.ObservedSummary,
+			&i.BlockedCount,
+			&i.FirstBlockedAt,
+			&i.LastBlockedAt,
+			&i.RequestedAt,
+			&i.DecidedAt,
+			&i.DecidedBy,
+			&i.DecisionNote,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessRules = `-- name: ListAccessRules :many
+SELECT id, organization_id, project_id, access_scope, resource_type, disposition, match_kind, match_value, display_name, observed_summary, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+FROM access_rules
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND ($2::text = '' OR resource_type = $2)
+  AND ($3::text = '' OR disposition = $3)
+  AND ($4::text = '' OR access_scope = $4)
+  AND ($5::text = '' OR project_id::text = $5)
+  AND (
+    $6::timestamptz IS NULL
+    OR (created_at, id) < ($6::timestamptz, $7::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $8
+`
+
+type ListAccessRulesParams struct {
+	OrganizationID  string
+	ResourceType    string
+	Disposition     string
+	AccessScope     string
+	ProjectID       string
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	LimitCount      int32
+}
+
+func (q *Queries) ListAccessRules(ctx context.Context, arg ListAccessRulesParams) ([]AccessRule, error) {
+	rows, err := q.db.Query(ctx, listAccessRules,
+		arg.OrganizationID,
+		arg.ResourceType,
+		arg.Disposition,
+		arg.AccessScope,
+		arg.ProjectID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccessRule
+	for rows.Next() {
+		var i AccessRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AccessScope,
+			&i.ResourceType,
+			&i.Disposition,
+			&i.MatchKind,
+			&i.MatchValue,
+			&i.DisplayName,
+			&i.ObservedSummary,
+			&i.SourceRequestID,
+			&i.CreatedBy,
+			&i.UpdatedBy,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many
 
 SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
@@ -302,6 +845,83 @@ func (q *Queries) ListGlobalRoles(ctx context.Context) ([]GlobalRole, error) {
 			&i.WorkosDeletedAt,
 			&i.WorkosDeleted,
 			&i.WorkosLastEventID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMatchingAccessRules = `-- name: ListMatchingAccessRules :many
+SELECT id, organization_id, project_id, access_scope, resource_type, disposition, match_kind, match_value, display_name, observed_summary, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+FROM access_rules
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND resource_type = $2
+  AND (
+    access_scope = 'organization'
+    OR (access_scope = 'project' AND project_id = $3)
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM unnest($4::text[]) WITH ORDINALITY AS candidate_kinds(match_kind, index)
+    JOIN unnest($5::text[]) WITH ORDINALITY AS candidate_values(match_value, index)
+      ON candidate_kinds.index = candidate_values.index
+    WHERE access_rules.match_kind = candidate_kinds.match_kind
+      AND access_rules.match_value = candidate_values.match_value
+  )
+ORDER BY
+  CASE WHEN disposition = 'denied' THEN 0 ELSE 1 END,
+  created_at DESC,
+  id DESC
+`
+
+type ListMatchingAccessRulesParams struct {
+	OrganizationID string
+	ResourceType   string
+	ProjectID      uuid.NullUUID
+	MatchKinds     []string
+	MatchValues    []string
+}
+
+func (q *Queries) ListMatchingAccessRules(ctx context.Context, arg ListMatchingAccessRulesParams) ([]AccessRule, error) {
+	rows, err := q.db.Query(ctx, listMatchingAccessRules,
+		arg.OrganizationID,
+		arg.ResourceType,
+		arg.ProjectID,
+		arg.MatchKinds,
+		arg.MatchValues,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccessRule
+	for rows.Next() {
+		var i AccessRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AccessScope,
+			&i.ResourceType,
+			&i.Disposition,
+			&i.MatchKind,
+			&i.MatchValue,
+			&i.DisplayName,
+			&i.ObservedSummary,
+			&i.SourceRequestID,
+			&i.CreatedBy,
+			&i.UpdatedBy,
+			&i.Reason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -472,6 +1092,203 @@ func (q *Queries) MarkOrganizationRoleDeleted(ctx context.Context, arg MarkOrgan
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateAccessRule = `-- name: UpdateAccessRule :one
+UPDATE access_rules
+SET disposition = $1,
+    project_id = $2,
+    access_scope = $3,
+    resource_type = $4,
+    match_kind = $5,
+    match_value = $6,
+    display_name = $7,
+    observed_summary = $8,
+    updated_by = $9,
+    reason = $10,
+    updated_at = clock_timestamp()
+WHERE organization_id = $11
+  AND id = $12
+  AND resource_type = $4
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, access_scope, resource_type, disposition, match_kind, match_value, display_name, observed_summary, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateAccessRuleParams struct {
+	Disposition     string
+	ProjectID       uuid.NullUUID
+	AccessScope     string
+	ResourceType    string
+	MatchKind       string
+	MatchValue      string
+	DisplayName     string
+	ObservedSummary []byte
+	UpdatedBy       pgtype.Text
+	Reason          pgtype.Text
+	OrganizationID  string
+	ID              uuid.UUID
+}
+
+func (q *Queries) UpdateAccessRule(ctx context.Context, arg UpdateAccessRuleParams) (AccessRule, error) {
+	row := q.db.QueryRow(ctx, updateAccessRule,
+		arg.Disposition,
+		arg.ProjectID,
+		arg.AccessScope,
+		arg.ResourceType,
+		arg.MatchKind,
+		arg.MatchValue,
+		arg.DisplayName,
+		arg.ObservedSummary,
+		arg.UpdatedBy,
+		arg.Reason,
+		arg.OrganizationID,
+		arg.ID,
+	)
+	var i AccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.ResourceType,
+		&i.Disposition,
+		&i.MatchKind,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertAccessApprovalRequest = `-- name: UpsertAccessApprovalRequest :one
+INSERT INTO access_approval_requests (
+  organization_id,
+  project_id,
+  resource_type,
+  requester_user_id,
+  requester_email,
+  requester_display_name,
+  status,
+  request_fingerprint,
+  display_name,
+  observed_summary,
+  first_blocked_at,
+  last_blocked_at
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  'requested',
+  $7,
+  $8,
+  $9,
+  clock_timestamp(),
+  clock_timestamp()
+)
+ON CONFLICT (organization_id, project_id, resource_type, requester_user_id, request_fingerprint)
+WHERE deleted IS FALSE AND status = 'requested' AND requester_user_id IS NOT NULL AND request_fingerprint IS NOT NULL
+DO UPDATE SET
+  requester_email = EXCLUDED.requester_email,
+  requester_display_name = EXCLUDED.requester_display_name,
+  display_name = COALESCE(EXCLUDED.display_name, access_approval_requests.display_name),
+  observed_summary = CASE
+    WHEN EXCLUDED.observed_summary = '{}'::jsonb THEN access_approval_requests.observed_summary
+    ELSE EXCLUDED.observed_summary
+  END,
+  blocked_count = access_approval_requests.blocked_count + 1,
+  last_blocked_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, resource_type, requester_user_id, requester_email, requester_display_name, status, request_fingerprint, display_name, observed_summary, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS was_created
+`
+
+type UpsertAccessApprovalRequestParams struct {
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	ResourceType         string
+	RequesterUserID      pgtype.Text
+	RequesterEmail       pgtype.Text
+	RequesterDisplayName pgtype.Text
+	RequestFingerprint   pgtype.Text
+	DisplayName          pgtype.Text
+	ObservedSummary      []byte
+}
+
+type UpsertAccessApprovalRequestRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	ResourceType         string
+	RequesterUserID      pgtype.Text
+	RequesterEmail       pgtype.Text
+	RequesterDisplayName pgtype.Text
+	Status               string
+	RequestFingerprint   pgtype.Text
+	DisplayName          pgtype.Text
+	ObservedSummary      []byte
+	BlockedCount         int32
+	FirstBlockedAt       pgtype.Timestamptz
+	LastBlockedAt        pgtype.Timestamptz
+	RequestedAt          pgtype.Timestamptz
+	DecidedAt            pgtype.Timestamptz
+	DecidedBy            pgtype.Text
+	DecisionNote         pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+	WasCreated           bool
+}
+
+func (q *Queries) UpsertAccessApprovalRequest(ctx context.Context, arg UpsertAccessApprovalRequestParams) (UpsertAccessApprovalRequestRow, error) {
+	row := q.db.QueryRow(ctx, upsertAccessApprovalRequest,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ResourceType,
+		arg.RequesterUserID,
+		arg.RequesterEmail,
+		arg.RequesterDisplayName,
+		arg.RequestFingerprint,
+		arg.DisplayName,
+		arg.ObservedSummary,
+	)
+	var i UpsertAccessApprovalRequestRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ResourceType,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.RequesterDisplayName,
+		&i.Status,
+		&i.RequestFingerprint,
+		&i.DisplayName,
+		&i.ObservedSummary,
+		&i.BlockedCount,
+		&i.FirstBlockedAt,
+		&i.LastBlockedAt,
+		&i.RequestedAt,
+		&i.DecidedAt,
+		&i.DecidedBy,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.WasCreated,
+	)
+	return i, err
 }
 
 const upsertGlobalRole = `-- name: UpsertGlobalRole :exec

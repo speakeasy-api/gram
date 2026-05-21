@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -12,6 +14,7 @@ import (
 
 type LogRecord struct {
 	Action         string
+	ProjectID      uuid.NullUUID
 	SubjectType    string
 	SubjectDisplay string
 	SubjectSlug    string
@@ -28,6 +31,7 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 
 	return LogRecord{
 		Action:         row.Action,
+		ProjectID:      row.ProjectID,
 		SubjectType:    row.SubjectType,
 		SubjectDisplay: conv.PtrValOr(conv.FromPGText[string](row.SubjectDisplayName), ""),
 		SubjectSlug:    conv.PtrValOr(conv.FromPGText[string](row.SubjectSlug), ""),

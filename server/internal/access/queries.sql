@@ -161,3 +161,216 @@ SET workos_deleted_at = @workos_deleted_at,
 WHERE organization_id = @organization_id
   AND workos_slug = @workos_slug
   AND deleted_at IS NULL;
+
+-- Queries for access approval requests and managed access rules.
+
+-- name: ListAccessApprovalRequests :many
+SELECT *
+FROM access_approval_requests
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (@resource_type::text = '' OR resource_type = @resource_type)
+  AND (@status::text = '' OR status = @status)
+  AND (@project_id::text = '' OR project_id::text = @project_id)
+  AND (
+    sqlc.narg(cursor_requested_at)::timestamptz IS NULL
+    OR (requested_at, id) < (sqlc.narg(cursor_requested_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY requested_at DESC, id DESC
+LIMIT @limit_count;
+
+-- name: GetAccessApprovalRequest :one
+SELECT *
+FROM access_approval_requests
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resource_type = @resource_type
+  AND deleted IS FALSE;
+
+-- name: GetAccessApprovalRequestForUpdate :one
+SELECT *
+FROM access_approval_requests
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resource_type = @resource_type
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: UpsertAccessApprovalRequest :one
+INSERT INTO access_approval_requests (
+  organization_id,
+  project_id,
+  resource_type,
+  requester_user_id,
+  requester_email,
+  requester_display_name,
+  status,
+  request_fingerprint,
+  display_name,
+  observed_summary,
+  first_blocked_at,
+  last_blocked_at
+) VALUES (
+  @organization_id,
+  @project_id,
+  @resource_type,
+  @requester_user_id,
+  @requester_email,
+  @requester_display_name,
+  'requested',
+  @request_fingerprint,
+  @display_name,
+  @observed_summary,
+  clock_timestamp(),
+  clock_timestamp()
+)
+ON CONFLICT (organization_id, project_id, resource_type, requester_user_id, request_fingerprint)
+WHERE deleted IS FALSE AND status = 'requested' AND requester_user_id IS NOT NULL AND request_fingerprint IS NOT NULL
+DO UPDATE SET
+  requester_email = EXCLUDED.requester_email,
+  requester_display_name = EXCLUDED.requester_display_name,
+  display_name = COALESCE(EXCLUDED.display_name, access_approval_requests.display_name),
+  observed_summary = CASE
+    WHEN EXCLUDED.observed_summary = '{}'::jsonb THEN access_approval_requests.observed_summary
+    ELSE EXCLUDED.observed_summary
+  END,
+  blocked_count = access_approval_requests.blocked_count + 1,
+  last_blocked_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+RETURNING *, (xmax = 0) AS was_created;
+
+-- name: DecideAccessApprovalRequest :one
+UPDATE access_approval_requests
+SET status = @status,
+    decided_at = clock_timestamp(),
+    decided_by = @decided_by,
+    decision_note = @decision_note,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resource_type = @resource_type
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListAccessRules :many
+SELECT *
+FROM access_rules
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (@resource_type::text = '' OR resource_type = @resource_type)
+  AND (@disposition::text = '' OR disposition = @disposition)
+  AND (@access_scope::text = '' OR access_scope = @access_scope)
+  AND (@project_id::text = '' OR project_id::text = @project_id)
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @limit_count;
+
+-- name: GetAccessRule :one
+SELECT *
+FROM access_rules
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resource_type = @resource_type
+  AND deleted IS FALSE;
+
+-- name: GetAccessRuleByMatch :one
+SELECT *
+FROM access_rules
+WHERE organization_id = @organization_id
+  AND resource_type = @resource_type
+  AND access_scope = @access_scope
+  AND (
+    (@access_scope::text = 'organization' AND project_id IS NULL)
+    OR (@access_scope::text = 'project' AND project_id = @project_id)
+  )
+  AND match_kind = @match_kind
+  AND match_value = @match_value
+  AND deleted IS FALSE;
+
+-- name: ListMatchingAccessRules :many
+SELECT *
+FROM access_rules
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND resource_type = @resource_type
+  AND (
+    access_scope = 'organization'
+    OR (access_scope = 'project' AND project_id = @project_id)
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM unnest(@match_kinds::text[]) WITH ORDINALITY AS candidate_kinds(match_kind, index)
+    JOIN unnest(@match_values::text[]) WITH ORDINALITY AS candidate_values(match_value, index)
+      ON candidate_kinds.index = candidate_values.index
+    WHERE access_rules.match_kind = candidate_kinds.match_kind
+      AND access_rules.match_value = candidate_values.match_value
+  )
+ORDER BY
+  CASE WHEN disposition = 'denied' THEN 0 ELSE 1 END,
+  created_at DESC,
+  id DESC;
+
+-- name: CreateAccessRule :one
+INSERT INTO access_rules (
+  organization_id,
+  project_id,
+  access_scope,
+  resource_type,
+  disposition,
+  match_kind,
+  match_value,
+  display_name,
+  observed_summary,
+  source_request_id,
+  created_by,
+  updated_by,
+  reason
+) VALUES (
+  @organization_id,
+  @project_id,
+  @access_scope,
+  @resource_type,
+  @disposition,
+  @match_kind,
+  @match_value,
+  @display_name,
+  @observed_summary,
+  @source_request_id,
+  @created_by,
+  @updated_by,
+  @reason
+)
+RETURNING *;
+
+-- name: UpdateAccessRule :one
+UPDATE access_rules
+SET disposition = @disposition,
+    project_id = @project_id,
+    access_scope = @access_scope,
+    resource_type = @resource_type,
+    match_kind = @match_kind,
+    match_value = @match_value,
+    display_name = @display_name,
+    observed_summary = @observed_summary,
+    updated_by = @updated_by,
+    reason = @reason,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resource_type = @resource_type
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteAccessRule :one
+UPDATE access_rules
+SET deleted_at = clock_timestamp(),
+    updated_by = @updated_by,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resource_type = @resource_type
+  AND deleted IS FALSE
+RETURNING *;

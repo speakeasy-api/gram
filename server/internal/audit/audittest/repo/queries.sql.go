@@ -8,6 +8,7 @@ package repo
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -39,6 +40,7 @@ func (q *Queries) CountAuditLogsByAction(ctx context.Context, action string) (in
 const getLatestAuditLogByAction = `-- name: GetLatestAuditLogByAction :one
 SELECT
   action,
+  project_id,
   subject_type,
   subject_display_name,
   subject_slug,
@@ -53,6 +55,7 @@ LIMIT 1
 
 type GetLatestAuditLogByActionRow struct {
 	Action             string
+	ProjectID          uuid.NullUUID
 	SubjectType        string
 	SubjectDisplayName pgtype.Text
 	SubjectSlug        pgtype.Text
@@ -66,6 +69,7 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 	var i GetLatestAuditLogByActionRow
 	err := row.Scan(
 		&i.Action,
+		&i.ProjectID,
 		&i.SubjectType,
 		&i.SubjectDisplayName,
 		&i.SubjectSlug,

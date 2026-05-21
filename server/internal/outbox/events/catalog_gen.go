@@ -31,6 +31,8 @@ var All = []outbox.EventRegistration{
 	RiskFindingCreated,
 	RiskFindingCreatedV1,
 	RiskPolicyV1,
+	ShadowMCPAccessRuleV1,
+	ShadowMCPApprovalV1,
 	TemplateV1,
 	ToolsetV1,
 	TriggerInstanceV1,
