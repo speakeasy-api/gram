@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -13,6 +14,10 @@ export type RiskOverviewUser = {
    */
   email: string;
   /**
+   * External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.
+   */
+  externalUserId: string;
+  /**
    * Finding count for this user.
    */
   findings: number;
@@ -22,10 +27,18 @@ export type RiskOverviewUser = {
 export const RiskOverviewUser$inboundSchema: z.ZodMiniType<
   RiskOverviewUser,
   unknown
-> = z.object({
-  email: z.string(),
-  findings: z.int(),
-});
+> = z.pipe(
+  z.object({
+    email: z.string(),
+    external_user_id: z.string(),
+    findings: z.int(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "external_user_id": "externalUserId",
+    });
+  }),
+);
 
 export function riskOverviewUserFromJSON(
   jsonString: string,

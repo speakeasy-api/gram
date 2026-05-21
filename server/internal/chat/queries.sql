@@ -277,6 +277,27 @@ WHERE c.project_id = @project_id
         SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
       )
     )
+  )
+  AND (
+    @has_risk_filter::text = ''
+    OR (
+      @has_risk_filter::text = 'true' AND EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = @project_id
+          AND rr.found IS TRUE
+      )
+    )
+    OR (
+      @has_risk_filter::text = 'false' AND NOT EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = @project_id
+          AND rr.found IS TRUE
+      )
+    )
   );
 
 -- name: ListChatsWithResolutions :many
@@ -294,7 +315,15 @@ WITH limited_chats AS (
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
-    ) as avg_score
+    ) as avg_score,
+    (
+      SELECT COUNT(*)::integer
+      FROM risk_results rr
+      JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      WHERE cm.chat_id = c.id
+        AND rr.project_id = @project_id
+        AND rr.found IS TRUE
+    ) as risk_findings_count
   FROM chats c
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
@@ -320,6 +349,27 @@ WITH limited_chats AS (
         )
       )
     )
+    AND (
+      @has_risk_filter::text = ''
+      OR (
+        @has_risk_filter::text = 'true' AND EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = @project_id
+            AND rr.found IS TRUE
+        )
+      )
+      OR (
+        @has_risk_filter::text = 'false' AND NOT EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = @project_id
+            AND rr.found IS TRUE
+        )
+      )
+    )
   ORDER BY
     CASE WHEN @sort_by = 'created_at' AND @sort_order = 'desc' THEN c.created_at END DESC NULLS LAST,
     CASE WHEN @sort_by = 'created_at' AND @sort_order = 'asc' THEN c.created_at END ASC NULLS LAST,
@@ -342,6 +392,7 @@ SELECT
     lc.num_messages,
     lc.last_message_timestamp,
     lc.avg_score,
+    lc.risk_findings_count,
     cr.id as resolution_id,
     cr.user_goal,
     cr.resolution,

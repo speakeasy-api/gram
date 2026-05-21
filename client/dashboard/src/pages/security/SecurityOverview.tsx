@@ -9,13 +9,14 @@ import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { Shield } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import { useRoutes } from "@/routes";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import { getRuleTitleFallback } from "./risk-utils";
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -88,6 +89,7 @@ type BarDatum = {
   key: string;
   label: string;
   value: number;
+  href?: string;
 };
 
 type TrendPoint = {
@@ -109,6 +111,10 @@ export default function SecurityOverview() {
       </Page>
     </RequireScope>
   );
+}
+
+export function RiskOverviewRoot() {
+  return <Outlet />;
 }
 
 function RiskOverviewShell({
@@ -164,6 +170,8 @@ function NoPoliciesEmptyState() {
 }
 
 function SecurityOverviewContent() {
+  const routes = useRoutes();
+  const location = useLocation();
   const {
     dateRange,
     customRange,
@@ -192,25 +200,96 @@ function SecurityOverviewContent() {
   const overviewQuery = useRiskOverview({ from, to });
   const overview = overviewQuery.data;
 
+  const categoriesIndexHref = useMemo(() => {
+    const r = (
+      routes.riskOverview as unknown as {
+        categoriesIndex?: { href: () => string };
+      }
+    ).categoriesIndex;
+    return r ? `${r.href()}${location.search}` : "";
+  }, [routes.riskOverview, location.search]);
+
+  const usersIndexHref = useMemo(() => {
+    const r = (
+      routes.riskOverview as unknown as {
+        usersIndex?: { href: () => string };
+      }
+    ).usersIndex;
+    return r ? `${r.href()}${location.search}` : "";
+  }, [routes.riskOverview, location.search]);
+
+  const rulesIndexHref = useMemo(() => {
+    const r = (
+      routes.riskOverview as unknown as {
+        rulesIndex?: { href: () => string };
+      }
+    ).rulesIndex;
+    return r ? `${r.href()}${location.search}` : "";
+  }, [routes.riskOverview, location.search]);
+
   const topCategories = useMemo<BarDatum[]>(() => {
+    const categoryDetailRoute = (
+      routes.riskOverview as unknown as {
+        categoryDetail?: { href: (...params: string[]) => string };
+      }
+    ).categoryDetail;
     return (overview?.topCategories ?? []).map((category) => {
       const key = category.category;
       const meta = RULE_CATEGORY_META[key as RuleCategory];
+      const href = categoryDetailRoute
+        ? `${categoryDetailRoute.href(encodeURIComponent(key))}${location.search}`
+        : undefined;
       return {
         key,
         label: meta?.label ?? key,
         value: category.findings,
+        href,
       };
     });
-  }, [overview?.topCategories]);
+  }, [overview?.topCategories, routes.riskOverview, location.search]);
+
+  const topRules = useMemo<BarDatum[]>(() => {
+    const riskEventsHref = routes.logs.riskEvents.href();
+    return (overview?.topRules ?? []).map((r) => {
+      const label = r.ruleId ? getRuleTitleFallback(r.ruleId) : "(no rule_id)";
+      const ruleParams = new URLSearchParams();
+      if (r.ruleId) ruleParams.set("rule_id", r.ruleId);
+      const search = location.search
+        ? `${location.search}&${ruleParams.toString()}`
+        : ruleParams.toString()
+          ? `?${ruleParams.toString()}`
+          : "";
+      const href = r.ruleId ? `${riskEventsHref}${search}` : undefined;
+      return {
+        key: r.ruleId || "__none",
+        label,
+        value: Number(r.findings),
+        href,
+      };
+    });
+  }, [overview?.topRules, routes.logs.riskEvents, location.search]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
-    return (overview?.topUsers ?? []).map((user) => ({
-      key: user.email,
-      label: user.email,
-      value: user.findings,
-    }));
-  }, [overview?.topUsers]);
+    const userDetailRoute = (
+      routes.riskOverview as unknown as {
+        userDetail?: { href: (...params: string[]) => string };
+      }
+    ).userDetail;
+    return (overview?.topUsers ?? []).map((user) => {
+      const href =
+        user.externalUserId && userDetailRoute
+          ? `${userDetailRoute.href(
+              encodeURIComponent(user.externalUserId),
+            )}${location.search}`
+          : undefined;
+      return {
+        key: user.externalUserId || user.email,
+        label: user.email,
+        value: user.findings,
+        href,
+      };
+    });
+  }, [overview?.topUsers, routes.riskOverview, location.search]);
 
   if (overviewQuery.isLoading) {
     return (
@@ -258,7 +337,7 @@ function SecurityOverviewContent() {
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <MetricCard
-            title="Messages Scanned"
+            title="Events Scanned"
             value={overview.messagesScanned}
             format="number"
             icon="scan-search"
@@ -286,16 +365,34 @@ function SecurityOverviewContent() {
 
       {overview.activePolicies > 0 && (
         <RiskActivitySection>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             <DashboardChartCard
               title="Top Risk Events by Category"
               empty={!hasFindings || topCategories.length === 0}
+              action={
+                <ViewAllLink
+                  href={categoriesIndexHref}
+                  label="View all categories"
+                />
+              }
             >
               <RankedBarList items={topCategories} />
             </DashboardChartCard>
             <DashboardChartCard
+              title="Top Risk Events by Rule"
+              empty={!hasFindings || topRules.length === 0}
+              action={
+                <ViewAllLink href={rulesIndexHref} label="View all rules" />
+              }
+            >
+              <RankedBarList items={topRules} />
+            </DashboardChartCard>
+            <DashboardChartCard
               title="Users with Most Findings"
               empty={!hasFindings || topUsers.length === 0}
+              action={
+                <ViewAllLink href={usersIndexHref} label="View all users" />
+              }
             >
               <RankedBarList items={topUsers} />
             </DashboardChartCard>
@@ -326,6 +423,25 @@ function SecurityOverviewContent() {
 
 function RiskActivitySection({ children }: { children: ReactNode }) {
   const routes = useRoutes();
+  const location = useLocation();
+
+  const carriedRangeParams = useMemo(() => {
+    const incoming = new URLSearchParams(location.search);
+    const next = new URLSearchParams();
+    for (const key of ["range", "from", "to"]) {
+      const value = incoming.get(key);
+      if (value) next.set(key, value);
+    }
+    return next;
+  }, [location.search]);
+
+  const agentsParams = new URLSearchParams(carriedRangeParams);
+  agentsParams.set("has_risk", "true");
+  const agentsHref = `${routes.logs.agents.href()}?${agentsParams.toString()}`;
+
+  const riskEventsHref = carriedRangeParams.toString()
+    ? `${routes.logs.riskEvents.href()}?${carriedRangeParams.toString()}`
+    : routes.logs.riskEvents.href();
 
   return (
     <Page.Section>
@@ -337,15 +453,15 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
       <Page.Section.CTA>
         <div className="flex items-center gap-2">
           <Button variant="secondary" asChild>
-            <Link to={routes.logs.agents.href()}>
-              <Button.Text>View All Sessions</Button.Text>
+            <Link to={agentsHref}>
+              <Button.Text>View Sessions with Risk</Button.Text>
               <Button.RightIcon>
                 <Icon name="arrow-right" />
               </Button.RightIcon>
             </Link>
           </Button>
           <Button variant="secondary" asChild>
-            <Link to={routes.logs.riskEvents.href()}>
+            <Link to={riskEventsHref}>
               <Button.Text>View All Events</Button.Text>
               <Button.RightIcon>
                 <Icon name="arrow-right" />
@@ -365,13 +481,15 @@ function DashboardChartCard({
   title,
   empty,
   children,
+  action,
 }: {
   title: string;
   empty: boolean;
   children: ReactNode;
+  action?: ReactNode;
 }) {
   return (
-    <DashboardCard title={title}>
+    <DashboardCard title={title} action={action}>
       {empty ? <ChartEmptyState /> : children}
     </DashboardCard>
   );
@@ -381,16 +499,27 @@ function ChartEmptyState() {
   return <p className="text-muted-foreground text-sm">No findings recorded</p>;
 }
 
+function ViewAllLink({ href, label }: { href: string; label: string }) {
+  if (!href) return null;
+  return (
+    <Link
+      to={href}
+      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+      aria-label={label}
+    >
+      <span>{label}</span>
+      <Icon name="arrow-right" className="size-3.5" />
+    </Link>
+  );
+}
+
 function RankedBarList({ items }: { items: BarDatum[] }) {
   const max = items[0]?.value || 1;
 
   return (
     <ul className="my-1 space-y-3">
-      {items.map((item, i) => (
-        <li key={item.key} className="flex items-center gap-3">
-          <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-            {i + 1}
-          </span>
+      {items.map((item, i) => {
+        const body = (
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center justify-between">
               <span className="truncate text-sm">{item.label}</span>
@@ -405,8 +534,25 @@ function RankedBarList({ items }: { items: BarDatum[] }) {
               />
             </div>
           </div>
-        </li>
-      ))}
+        );
+        return (
+          <li key={item.key} className="flex items-center gap-3">
+            <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
+              {i + 1}
+            </span>
+            {item.href ? (
+              <Link
+                to={item.href}
+                className="hover:bg-muted/40 -mx-2 flex min-w-0 flex-1 items-center rounded px-2 py-1 transition-colors"
+              >
+                {body}
+              </Link>
+            ) : (
+              body
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
