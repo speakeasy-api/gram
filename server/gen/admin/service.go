@@ -30,6 +30,8 @@ type Service interface {
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
 	// Returns full admin details for a single organization by id or slug.
 	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
+	// Lists members of an organization (admin view, no auth scoping).
+	ListOrganizationMembers(context.Context, *ListOrganizationMembersPayload) (res *AdminListOrganizationMembersResult, err error)
 	// Lists projects belonging to an organization (admin view, no auth scoping).
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
 	// Lists organizations for admin operations with optional search and filters.
@@ -56,7 +58,14 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationProjects", "listOrganizations"}
+var MethodNames = [9]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
+
+// AdminListOrganizationMembersResult is the result type of the admin service
+// listOrganizationMembers method.
+type AdminListOrganizationMembersResult struct {
+	// The members of the organization.
+	Members []*AdminOrganizationMember
+}
 
 // AdminListOrganizationProjectsResult is the result type of the admin service
 // listOrganizationProjects method.
@@ -100,6 +109,20 @@ type AdminOrganization struct {
 	// The creation date of the organization.
 	CreatedAt string
 	// The last update date of the organization.
+	UpdatedAt string
+}
+
+// Organization member surfaced to admin operators.
+type AdminOrganizationMember struct {
+	// User ID.
+	ID string
+	// User email address.
+	Email string
+	// User display name.
+	DisplayName string
+	// The time the user last logged in, if any.
+	LastLogin *string
+	CreatedAt string
 	UpdatedAt string
 }
 
@@ -184,6 +207,14 @@ type GetProjectPayload struct {
 	AdminSessionToken *string
 	// Project ID or slug.
 	IDOrSlug string
+}
+
+// ListOrganizationMembersPayload is the payload type of the admin service
+// listOrganizationMembers method.
+type ListOrganizationMembersPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	OrganizationID string
 }
 
 // ListOrganizationProjectsPayload is the payload type of the admin service

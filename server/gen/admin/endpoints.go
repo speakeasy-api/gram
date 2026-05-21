@@ -22,6 +22,7 @@ type Endpoints struct {
 	GetProject               goa.Endpoint
 	UpdateOrganization       goa.Endpoint
 	GetOrganization          goa.Endpoint
+	ListOrganizationMembers  goa.Endpoint
 	ListOrganizationProjects goa.Endpoint
 	ListOrganizations        goa.Endpoint
 }
@@ -37,6 +38,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetProject:               NewGetProjectEndpoint(s, a.APIKeyAuth),
 		UpdateOrganization:       NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
 		GetOrganization:          NewGetOrganizationEndpoint(s, a.APIKeyAuth),
+		ListOrganizationMembers:  NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationProjects: NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
 		ListOrganizations:        NewListOrganizationsEndpoint(s, a.APIKeyAuth),
 	}
@@ -50,6 +52,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetProject = m(e.GetProject)
 	e.UpdateOrganization = m(e.UpdateOrganization)
 	e.GetOrganization = m(e.GetOrganization)
+	e.ListOrganizationMembers = m(e.ListOrganizationMembers)
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
 	e.ListOrganizations = m(e.ListOrganizations)
 }
@@ -147,6 +150,29 @@ func NewGetOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.GetOrganization(ctx, p)
+	}
+}
+
+// NewListOrganizationMembersEndpoint returns an endpoint function that calls
+// the method "listOrganizationMembers" of service "admin".
+func NewListOrganizationMembersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOrganizationMembersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOrganizationMembers(ctx, p)
 	}
 }
 

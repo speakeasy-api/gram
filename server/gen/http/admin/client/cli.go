@@ -160,6 +160,26 @@ func BuildGetOrganizationPayload(adminGetOrganizationIDOrSlug string, adminGetOr
 	return v, nil
 }
 
+// BuildListOrganizationMembersPayload builds the payload for the admin
+// listOrganizationMembers endpoint from CLI flags.
+func BuildListOrganizationMembersPayload(adminListOrganizationMembersOrganizationID string, adminListOrganizationMembersAdminSessionToken string) (*admin.ListOrganizationMembersPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminListOrganizationMembersOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationMembersAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationMembersAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationMembersPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationProjectsPayload builds the payload for the admin
 // listOrganizationProjects endpoint from CLI flags.
 func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizationID string, adminListOrganizationProjectsAdminSessionToken string) (*admin.ListOrganizationProjectsPayload, error) {

@@ -96,6 +96,21 @@ WHERE organization_id = @organization_id
 ORDER BY created_at DESC
 LIMIT 200;
 
+-- name: AdminListOrganizationMembers :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+ORDER BY u.email ASC
+LIMIT 200;
+
 -- name: AdminGetOrganizationByIDOrSlug :one
 SELECT
     om.id,

@@ -25,6 +25,7 @@ type Server struct {
 	GetProject               http.Handler
 	UpdateOrganization       http.Handler
 	GetOrganization          http.Handler
+	ListOrganizationMembers  http.Handler
 	ListOrganizationProjects http.Handler
 	ListOrganizations        http.Handler
 }
@@ -62,6 +63,7 @@ func New(
 			{"GetProject", "GET", "/admin/project.get"},
 			{"UpdateOrganization", "POST", "/admin/organization.update"},
 			{"GetOrganization", "GET", "/admin/organization.get"},
+			{"ListOrganizationMembers", "GET", "/admin/organization.members"},
 			{"ListOrganizationProjects", "GET", "/admin/organization.projects"},
 			{"ListOrganizations", "GET", "/admin/organizations.list"},
 		},
@@ -71,6 +73,7 @@ func New(
 		GetProject:               NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
 		UpdateOrganization:       NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
 		GetOrganization:          NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationMembers:  NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationProjects: NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizations:        NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -87,6 +90,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetProject = m(s.GetProject)
 	s.UpdateOrganization = m(s.UpdateOrganization)
 	s.GetOrganization = m(s.GetOrganization)
+	s.ListOrganizationMembers = m(s.ListOrganizationMembers)
 	s.ListOrganizationProjects = m(s.ListOrganizationProjects)
 	s.ListOrganizations = m(s.ListOrganizations)
 }
@@ -102,6 +106,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetProjectHandler(mux, h.GetProject)
 	MountUpdateOrganizationHandler(mux, h.UpdateOrganization)
 	MountGetOrganizationHandler(mux, h.GetOrganization)
+	MountListOrganizationMembersHandler(mux, h.ListOrganizationMembers)
 	MountListOrganizationProjectsHandler(mux, h.ListOrganizationProjects)
 	MountListOrganizationsHandler(mux, h.ListOrganizations)
 }
@@ -406,6 +411,60 @@ func NewGetOrganizationHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganization")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListOrganizationMembersHandler configures the mux to serve the "admin"
+// service "listOrganizationMembers" endpoint.
+func MountListOrganizationMembersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.members", f)
+}
+
+// NewListOrganizationMembersHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "listOrganizationMembers"
+// endpoint.
+func NewListOrganizationMembersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListOrganizationMembersRequest(mux, decoder)
+		encodeResponse = EncodeListOrganizationMembersResponse(encoder)
+		encodeError    = EncodeListOrganizationMembersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listOrganizationMembers")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

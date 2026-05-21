@@ -93,6 +93,27 @@ var AdminProjectDetail = Type("AdminProjectDetail", func() {
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 })
 
+var AdminOrganizationMember = Type("AdminOrganizationMember", func() {
+	Description("Organization member surfaced to admin operators.")
+	Required("id", "email", "display_name", "created_at", "updated_at")
+
+	Attribute("id", String, "User ID.")
+	Attribute("email", String, "User email address.")
+	Attribute("display_name", String, "User display name.")
+	Attribute("last_login", String, func() {
+		Description("The time the user last logged in, if any.")
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, func() { Format(FormatDateTime) })
+})
+
+var AdminListOrganizationMembersResult = Type("AdminListOrganizationMembersResult", func() {
+	Required("members")
+
+	Attribute("members", ArrayOf(AdminOrganizationMember), "The members of the organization.")
+})
+
 var AdminListOrganizationProjectsResult = Type("AdminListOrganizationProjectsResult", func() {
 	Required("projects")
 
@@ -256,6 +277,28 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminGetOrganization")
+	})
+
+	Method("listOrganizationMembers", func() {
+		Description("Lists members of an organization (admin view, no auth scoping).")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+
+			Attribute("organization_id", String, "Organization ID.")
+		})
+
+		Result(AdminListOrganizationMembersResult)
+
+		HTTP(func() {
+			GET("/admin/organization.members")
+
+			Param("organization_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminListOrganizationMembers")
 	})
 
 	Method("listOrganizationProjects", func() {

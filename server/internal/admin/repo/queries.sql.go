@@ -192,6 +192,58 @@ func (q *Queries) AdminGetProjectDetailBySlug(ctx context.Context, slug string) 
 	return i, err
 }
 
+const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+ORDER BY u.email ASC
+LIMIT 200
+`
+
+type AdminListOrganizationMembersRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	LastLogin   pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListOrganizationMembers(ctx context.Context, organizationID string) ([]AdminListOrganizationMembersRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationMembers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationMembersRow
+	for rows.Next() {
+		var i AdminListOrganizationMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastLogin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizations = `-- name: AdminListOrganizations :many
 SELECT
     om.id,

@@ -39,6 +39,10 @@ type Client struct {
 	// getOrganization endpoint.
 	GetOrganizationDoer goahttp.Doer
 
+	// ListOrganizationMembers Doer is the HTTP client used to make requests to the
+	// listOrganizationMembers endpoint.
+	ListOrganizationMembersDoer goahttp.Doer
+
 	// ListOrganizationProjects Doer is the HTTP client used to make requests to
 	// the listOrganizationProjects endpoint.
 	ListOrganizationProjectsDoer goahttp.Doer
@@ -73,6 +77,7 @@ func NewClient(
 		GetProjectDoer:               doer,
 		UpdateOrganizationDoer:       doer,
 		GetOrganizationDoer:          doer,
+		ListOrganizationMembersDoer:  doer,
 		ListOrganizationProjectsDoer: doer,
 		ListOrganizationsDoer:        doer,
 		RestoreResponseBody:          restoreBody,
@@ -222,6 +227,30 @@ func (c *Client) GetOrganization() goa.Endpoint {
 		resp, err := c.GetOrganizationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOrganizationMembers returns an endpoint that makes HTTP requests to the
+// admin service listOrganizationMembers server.
+func (c *Client) ListOrganizationMembers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOrganizationMembersRequest(c.encoder)
+		decodeResponse = DecodeListOrganizationMembersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOrganizationMembersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOrganizationMembersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listOrganizationMembers", err)
 		}
 		return decodeResponse(resp)
 	}

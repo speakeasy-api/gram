@@ -350,6 +350,32 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	}, nil
 }
 
+func (s *Service) ListOrganizationMembers(ctx context.Context, payload *gen.ListOrganizationMembersPayload) (*gen.AdminListOrganizationMembersResult, error) {
+	rows, err := repo.New(s.db).AdminListOrganizationMembers(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list members for organization").Log(ctx, s.logger)
+	}
+
+	members := make([]*gen.AdminOrganizationMember, len(rows))
+	for i, row := range rows {
+		var lastLogin *string
+		if row.LastLogin.Valid {
+			s := row.LastLogin.Time.Format(time.RFC3339)
+			lastLogin = &s
+		}
+		members[i] = &gen.AdminOrganizationMember{
+			ID:          row.ID,
+			Email:       row.Email,
+			DisplayName: row.DisplayName,
+			LastLogin:   lastLogin,
+			CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:   row.UpdatedAt.Time.Format(time.RFC3339),
+		}
+	}
+
+	return &gen.AdminListOrganizationMembersResult{Members: members}, nil
+}
+
 func (s *Service) ListOrganizationProjects(ctx context.Context, payload *gen.ListOrganizationProjectsPayload) (*gen.AdminListOrganizationProjectsResult, error) {
 	rows, err := repo.New(s.db).AdminListProjectsForOrganization(ctx, payload.OrganizationID)
 	if err != nil {

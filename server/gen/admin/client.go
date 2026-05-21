@@ -21,12 +21,13 @@ type Client struct {
 	GetProjectEndpoint               goa.Endpoint
 	UpdateOrganizationEndpoint       goa.Endpoint
 	GetOrganizationEndpoint          goa.Endpoint
+	ListOrganizationMembersEndpoint  goa.Endpoint
 	ListOrganizationProjectsEndpoint goa.Endpoint
 	ListOrganizationsEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getProject, updateOrganization, getOrganization, listOrganizationProjects, listOrganizations goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getProject, updateOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                    login,
 		CallbackEndpoint:                 callback,
@@ -34,6 +35,7 @@ func NewClient(login, callback, logout, getProject, updateOrganization, getOrgan
 		GetProjectEndpoint:               getProject,
 		UpdateOrganizationEndpoint:       updateOrganization,
 		GetOrganizationEndpoint:          getOrganization,
+		ListOrganizationMembersEndpoint:  listOrganizationMembers,
 		ListOrganizationProjectsEndpoint: listOrganizationProjects,
 		ListOrganizationsEndpoint:        listOrganizations,
 	}
@@ -166,6 +168,29 @@ func (c *Client) GetOrganization(ctx context.Context, p *GetOrganizationPayload)
 		return
 	}
 	return ires.(*AdminOrganization), nil
+}
+
+// ListOrganizationMembers calls the "listOrganizationMembers" endpoint of the
+// "admin" service.
+// ListOrganizationMembers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListOrganizationMembers(ctx context.Context, p *ListOrganizationMembersPayload) (res *AdminListOrganizationMembersResult, err error) {
+	var ires any
+	ires, err = c.ListOrganizationMembersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListOrganizationMembersResult), nil
 }
 
 // ListOrganizationProjects calls the "listOrganizationProjects" endpoint of
