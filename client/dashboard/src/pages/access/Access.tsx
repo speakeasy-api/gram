@@ -15,17 +15,20 @@ import { Navigate, useLocation, useNavigate } from "react-router";
 import { ChallengesTab } from "./ChallengesTab";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
+import { ShadowMCPAccessTab } from "./ShadowMCPAccessTab";
 
 const tabFromPath: Record<string, string> = {
   roles: "roles",
   members: "members",
   challenges: "challenges",
+  "shadow-mcp": "shadow-mcp",
 };
 
 const tabDisplayNames: Record<string, string> = {
   roles: "Roles & Permissions",
   members: "Roles & Permissions",
   challenges: "Roles & Permissions",
+  "shadow-mcp": "Roles & Permissions",
 };
 
 export default function Access() {
@@ -106,6 +109,7 @@ export function AccessInner() {
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
+            <PageTabsTrigger value="shadow-mcp">Shadow MCP</PageTabsTrigger>
           </TabsList>
         </div>
 
@@ -119,6 +123,10 @@ export function AccessInner() {
 
         <TabsContent value="challenges" className="mt-6">
           <ChallengesTab />
+        </TabsContent>
+
+        <TabsContent value="shadow-mcp" className="mt-6">
+          <ShadowMCPAccessTab />
         </TabsContent>
       </Tabs>
     </>
