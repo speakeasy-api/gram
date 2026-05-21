@@ -24,9 +24,15 @@ export function PortalSettings() {
     { enabled: !!project.slug },
   );
 
+  // Bumped on every successful save so the preview iframe is forced to remount
+  // and re-fetch the portal. Query-cache invalidation alone does not refresh
+  // the iframe — it owns its own navigation state.
+  const [saveCount, setSaveCount] = useState(0);
+
   const update = useUpdatePortalMutation({
     onSuccess: async () => {
       await invalidateAllPortal(queryClient);
+      setSaveCount((c) => c + 1);
       toast.success("Portal settings saved");
     },
     onError: () => {
@@ -193,6 +199,7 @@ export function PortalSettings() {
             Preview
           </Type>
           <PortalPreview
+            key={saveCount}
             projectSlug={project.slug}
             className="h-[600px] w-full rounded-lg border"
           />
