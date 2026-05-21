@@ -769,6 +769,11 @@ const ORG_ROUTE_STRUCTURE = {
         url: "challenges",
         component: Access,
       },
+      shadowMCP: {
+        title: "Roles & Permissions",
+        url: "shadow-mcp",
+        component: Access,
+      },
     },
   },
   collections: {
