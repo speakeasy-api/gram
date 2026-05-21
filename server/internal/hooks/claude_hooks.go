@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -33,6 +34,8 @@ import (
 // logged, so we don't dump megabytes of OTLP into the logs on every bad
 // payload.
 const decodeBodySampleLimit = 1024
+
+const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call because the Claude session metadata is not available yet. Try again after the session initializes."
 
 // decoderFunc adapts a plain function to the goahttp.Decoder interface so we
 // can capture per-request context (logger, raw body, headers) in a closure
@@ -607,8 +610,18 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	}
 
 	allow := "allow"
+	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
+	denyUnverifiedMCP := func() (*gen.ClaudeHookResult, error) {
+		reason := claudeShadowMCPMetadataUnavailableReason
+		result.SystemMessage = &reason
+		if output != nil {
+			output.PermissionDecision = &deny
+			output.PermissionDecisionReason = &reason
+		}
+		return result, nil
+	}
 
 	// In Claude Code, MCP-routed tools are identified by the
 	// "mcp__<server>__<tool>" name convention; native tools (Read, Edit,
@@ -625,18 +638,20 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 	serverPrefix := parsed.Server
+	mcpToolName := parsed.Tool
 
 	sessionID := ""
 	if payload.SessionID != nil {
 		sessionID = *payload.SessionID
 	}
 	if sessionID == "" {
-		// No session yet to derive org from — fall back to allow rather than
-		// breaking the tool call. Hook event will still be buffered.
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
-		return result, nil
+		// No session yet to derive org/project from. Native tools are already
+		// skipped above; MCP calls must fail closed because buffered telemetry
+		// cannot undo an already-allowed tool call.
+		s.logger.WarnContext(ctx, "claude PreToolUse fired without session id; denying MCP tool call",
+			attr.SlogEvent("claude_hook_pretooluse_no_session"),
+		)
+		return denyUnverifiedMCP()
 	}
 	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
 	// org/project come from the auth context — same pattern as recordHook.
@@ -650,24 +665,22 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			SessionID:   sessionID,
 			ServiceName: "",
 			UserEmail:   "",
-			UserID:      "",
+			UserID:      authCtx.UserID,
 			ClaudeOrgID: "",
 			GramOrgID:   authCtx.ActiveOrganizationID,
 			ProjectID:   authCtx.ProjectID.String(),
 		}
 		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata.ServiceName = cached.ServiceName
-			metadata.UserEmail = cached.UserEmail
-			metadata.UserID = cached.UserID
-			metadata.ClaudeOrgID = cached.ClaudeOrgID
+			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
 		}
 	} else {
 		var err error
 		metadata, err = s.getSessionMetadata(ctx, sessionID)
 		if err != nil {
-			// OTEL path with no cached metadata yet — allow this call; the
-			// buffered hook will be re-persisted once metadata arrives.
-			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
+			// OTEL path with no cached metadata yet. Native tools are already
+			// skipped above; MCP calls must fail closed because buffered
+			// telemetry cannot undo an already-allowed tool call.
+			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; denying MCP tool call",
 				attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
 				attr.SlogHookSource("claude"),
 				attr.SlogHookEvent(payload.HookEventName),
@@ -675,10 +688,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 				attr.SlogToolName(rawToolName),
 				attr.SlogError(err),
 			)
-			if output != nil {
-				output.PermissionDecision = &allow
-			}
-			return result, nil
+			return denyUnverifiedMCP()
 		}
 	}
 
@@ -733,38 +743,57 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		// fail closed with a clear reason than silently allow.
 		detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
 	}
-	// Allowlist check: if the user has explicitly approved any identifier
-	// for this call (URL, command, or server-prefix), override the would-be
-	// deny. Approvals are a flat list of match strings, so a single lookup
-	// covers all sources — hook-time URL/Command blocks and batch-scanner
-	// server-prefix findings dedupe naturally. Failures from the cache fall
-	// through to the deny path so a flaky Redis can't silently let a real
-	// shadow server through.
+	// Access Rules can explicitly allow a shadow MCP server by URL, command,
+	// or server identity. Deny rules win inside EvaluateAccessRules.
 	if detail != "" {
-		approved, approvalErr := s.isMatchedMCPApproved(ctx, metadata.ProjectID, policy.ID, serverPrefix, matched)
-		if approvalErr != nil {
-			s.logger.WarnContext(ctx, "shadow-mcp allowlist lookup failed; treating as not approved",
-				attr.SlogEvent("claude_hook_allowlist_lookup_failed"),
-				attr.SlogError(approvalErr),
-			)
-		}
-		if approved {
-			matchedURL, matchedCommand := "", ""
-			if matched != nil {
-				matchedURL = matched.URL
-				matchedCommand = matched.Command
+		if s.shadowMCPClient == nil {
+			detail = "Shadow MCP validation is unavailable"
+		} else {
+			evidence := shadowmcp.AccessEvidence{
+				FullURL:        "",
+				URLHost:        "",
+				ServerIdentity: mcpServerIdentityFromToolName(rawToolName),
 			}
-			s.logger.InfoContext(ctx, "shadow-mcp call allowed via approval",
-				attr.SlogEvent("claude_hook_allowlist_allow"),
-				attr.SlogToolName(rawToolName),
-				attr.SlogRiskPolicyID(policy.ID),
+			if matched != nil {
+				evidence.FullURL = matched.URL
+				evidence.ServerIdentity = serverPrefix
+				if matched.URL == "" && matched.Command != "" {
+					evidence.ServerIdentity = matched.Command
+				}
+			}
+
+			decision := s.shadowMCPClient.EvaluateAccessRules(ctx, metadata.GramOrgID, metadata.ProjectID, evidence)
+			s.logger.InfoContext(ctx, "evaluated shadow mcp access rules",
+				attr.SlogEvent("shadow_mcp_access_rule_evaluated"),
+				attr.SlogOrganizationID(metadata.GramOrgID),
+				attr.SlogProjectID(metadata.ProjectID),
 				attr.SlogValueAny(map[string]any{
-					"serverPrefix":   serverPrefix,
-					"matchedURL":     matchedURL,
-					"matchedCommand": matchedCommand,
+					"outcome":                   decision.Outcome,
+					"shadow_mcp_access_rule_id": decision.RuleID,
+					"reason":                    decision.Reason,
+					"tool_name":                 mcpToolName,
 				}),
 			)
-			detail = ""
+			if decision.Allows() {
+				matchedURL, matchedCommand := "", ""
+				if matched != nil {
+					matchedURL = matched.URL
+					matchedCommand = matched.Command
+				}
+				s.logger.InfoContext(ctx, "shadow-mcp call allowed via approval",
+					attr.SlogEvent("claude_hook_allowlist_allow"),
+					attr.SlogToolName(rawToolName),
+					attr.SlogRiskPolicyID(policy.ID),
+					attr.SlogValueAny(map[string]any{
+						"serverPrefix":   serverPrefix,
+						"matchedURL":     matchedURL,
+						"matchedCommand": matchedCommand,
+					}),
+				)
+				detail = ""
+			} else if decision.Reason != "" {
+				detail = decision.Reason
+			}
 		}
 	}
 	if detail != "" {
@@ -814,6 +843,19 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	return result, nil
 }
 
+func mergeClaudeAuthContextMetadata(metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
+	metadata.ServiceName = cached.ServiceName
+	metadata.UserEmail = cached.UserEmail
+	if cached.UserID != "" {
+		metadata.UserID = cached.UserID
+	}
+	metadata.ClaudeOrgID = cached.ClaudeOrgID
+	return metadata
+}
+
+// claudeMCPToolName returns the bare tool name and true if rawName follows the
+// "mcp__<server>__<tool>" convention used by Claude Code for MCP-routed tools.
+// Returns ("", false) for native Claude Code tools (Read, Edit, Bash, etc.).
 func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }

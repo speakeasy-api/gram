@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // gramHostedMCPHost is the canonical host for Gram-managed MCP servers.
@@ -153,36 +152,6 @@ func (s *Service) isGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID st
 		return false
 	}
 	return isGramHostedMCPURL(rawURL, customDomain.Domain)
-}
-
-// isMatchedMCPApproved returns whether the call has been allowlisted
-// under (project, policy). The matcher passes every identifier the call
-// could reasonably be keyed on — URL, Command, server-prefix — so an
-// approval recorded against any one of them allows the call. The batch
-// scanner stores findings with serverPrefix as match, while hook-time
-// blocks store URL or Command; this unified lookup means a user who
-// excludes from either source covers both.
-func (s *Service) isMatchedMCPApproved(ctx context.Context, projectID, policyID, serverPrefix string, matched *MCPServerEntry) (bool, error) {
-	var candidates []string
-	if matched != nil {
-		if matched.URL != "" {
-			candidates = append(candidates, matched.URL)
-		}
-		if matched.Command != "" {
-			candidates = append(candidates, matched.Command)
-		}
-	}
-	if serverPrefix != "" {
-		candidates = append(candidates, serverPrefix)
-	}
-	if len(candidates) == 0 {
-		return false, nil
-	}
-	approved, err := shadowmcp.IsShadowMCPApproved(ctx, s.cache, projectID, policyID, candidates...)
-	if err != nil {
-		return false, fmt.Errorf("check shadow mcp approval: %w", err)
-	}
-	return approved, nil
 }
 
 // getCachedMCPList retrieves the parsed `claude mcp list` snapshot stored
