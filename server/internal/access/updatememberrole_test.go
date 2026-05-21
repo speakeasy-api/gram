@@ -142,8 +142,8 @@ func TestService_UpdateMemberRole_AuditLog(t *testing.T) {
 	require.NoError(t, err)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
-	require.Equal(t, adminID, beforeSnapshot["RoleID"])
-	require.Equal(t, builderID, afterSnapshot["RoleID"])
+	require.Equal(t, []any{adminID}, beforeSnapshot["RoleIds"])
+	require.Equal(t, []any{builderID}, afterSnapshot["RoleIds"])
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessMemberRoleUpdate)
 	require.NoError(t, err)
