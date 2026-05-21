@@ -446,6 +446,7 @@ function HooksInnerContent({
             onCustomRangeChange={onCustomRangeChange}
             onClearCustomRange={onClearCustomRange}
             projectSlug={projectSlug}
+            serverNameMappings={serverNameMappings}
           />
 
           <div className="flex min-h-0 flex-1 overflow-hidden">

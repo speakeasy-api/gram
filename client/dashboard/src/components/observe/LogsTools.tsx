@@ -323,6 +323,7 @@ function HooksInnerContent({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
   const orgRoutes = useOrgRoutes();
+
   return (
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -361,6 +362,7 @@ function HooksInnerContent({
             onCustomRangeChange={onCustomRangeChange}
             onClearCustomRange={onClearCustomRange}
             projectSlug={projectSlug}
+            serverNameMappings={serverNameMappings}
           />
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
