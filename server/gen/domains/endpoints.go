@@ -16,9 +16,10 @@ import (
 
 // Endpoints wraps the "domains" service endpoints.
 type Endpoints struct {
-	GetDomain    goa.Endpoint
-	CreateDomain goa.Endpoint
-	DeleteDomain goa.Endpoint
+	GetDomain        goa.Endpoint
+	CreateDomain     goa.Endpoint
+	DeleteDomain     goa.Endpoint
+	ListMcpEndpoints goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "domains" service with endpoints.
@@ -26,9 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetDomain:    NewGetDomainEndpoint(s, a.APIKeyAuth),
-		CreateDomain: NewCreateDomainEndpoint(s, a.APIKeyAuth),
-		DeleteDomain: NewDeleteDomainEndpoint(s, a.APIKeyAuth),
+		GetDomain:        NewGetDomainEndpoint(s, a.APIKeyAuth),
+		CreateDomain:     NewCreateDomainEndpoint(s, a.APIKeyAuth),
+		DeleteDomain:     NewDeleteDomainEndpoint(s, a.APIKeyAuth),
+		ListMcpEndpoints: NewListMcpEndpointsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -37,6 +39,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetDomain = m(e.GetDomain)
 	e.CreateDomain = m(e.CreateDomain)
 	e.DeleteDomain = m(e.DeleteDomain)
+	e.ListMcpEndpoints = m(e.ListMcpEndpoints)
 }
 
 // NewGetDomainEndpoint returns an endpoint function that calls the method
@@ -105,5 +108,28 @@ func NewDeleteDomainEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return nil, s.DeleteDomain(ctx, p)
+	}
+}
+
+// NewListMcpEndpointsEndpoint returns an endpoint function that calls the
+// method "listMcpEndpoints" of service "domains".
+func NewListMcpEndpointsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMcpEndpointsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMcpEndpoints(ctx, p)
 	}
 }
