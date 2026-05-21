@@ -11,12 +11,10 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useIsAdmin, useOrganization } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useIsAdmin } from "@/contexts/Auth";
 import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
-import { ExternalLink } from "lucide-react";
 import * as React from "react";
 
 function ScopeGatedNavItem({
@@ -56,22 +54,11 @@ function ScopeGatedTopLevelItem({
 
 export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const orgRoutes = useOrgRoutes();
-  const organization = useOrganization();
   const isAdmin = useIsAdmin();
-  const telemetry = useTelemetry();
   const { isRbacEnabled } = useRBAC();
-  const isTeamPageEnabled =
-    telemetry.isFeatureEnabled("gram-team-page") ?? false;
-
-  const externalTeamUrl =
-    organization?.userWorkspaceSlugs &&
-    organization.userWorkspaceSlugs.length > 0
-      ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
-      : "https://app.speakeasy.com";
 
   const settingsActive = [
     orgRoutes.billing,
-    orgRoutes.team,
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
@@ -94,8 +81,8 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const allOrgNavRoutes = [
     orgRoutes.home,
     orgRoutes.collections,
-    orgRoutes.billing,
     orgRoutes.team,
+    orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
@@ -111,7 +98,11 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarContent className="pt-5">
-        <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
+        <NavGroupProvider
+          activeGroup={activeGroup}
+          defaultOpenGroups={["Settings", "Secure"]}
+          activeItem={activeItem}
+        >
           <SidebarMenu className="gap-1 px-2">
             {/* Home — top-level */}
             <ScopeGatedTopLevelItem
@@ -125,6 +116,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               scope={["org:read", "org:admin"]}
             />
 
+            {/* Team — top-level */}
+            <ScopeGatedTopLevelItem
+              item={orgRoutes.team}
+              scope={["org:read", "org:admin"]}
+            />
+
             {/* Settings group */}
             <CollapsibleNavGroup
               label="Settings"
@@ -135,33 +132,6 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={orgRoutes.billing}
                 scope={["org:read", "org:admin"]}
               />
-              {isTeamPageEnabled ? (
-                <ScopeGatedNavItem
-                  item={orgRoutes.team}
-                  scope={["org:read", "org:admin"]}
-                />
-              ) : (
-                <RequireScope
-                  scope={["org:read", "org:admin"]}
-                  level="component"
-                  className="w-full"
-                >
-                  <li data-sidebar="menu-item">
-                    <NavButton
-                      title="Team"
-                      titleNode={
-                        <span className="flex items-center gap-1.5">
-                          Team
-                          <ExternalLink className="text-muted-foreground h-3 w-3" />
-                        </span>
-                      }
-                      href={externalTeamUrl}
-                      target="_blank"
-                      Icon={(props) => <Icon name="users-round" {...props} />}
-                    />
-                  </li>
-                </RequireScope>
-              )}
               <ScopeGatedNavItem item={orgRoutes.apiKeys} scope="org:admin" />
               <ScopeGatedNavItem
                 item={orgRoutes.domains}

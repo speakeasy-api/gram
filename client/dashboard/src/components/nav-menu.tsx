@@ -422,6 +422,7 @@ export function NavButton({
           variant="small"
           className={cn(
             "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
+            active && "font-semibold",
             isLoading && "nav-shimmer",
           )}
         >
