@@ -12,6 +12,18 @@ import {
 } from "./searchusersfilter.js";
 
 /**
+ * Grouping dimension for results
+ */
+export const GroupBy = {
+  Employee: "employee",
+  Role: "role",
+} as const;
+/**
+ * Grouping dimension for results
+ */
+export type GroupBy = ClosedEnum<typeof GroupBy>;
+
+/**
  * Sort order
  */
 export const SearchUsersPayloadSort = {
@@ -50,6 +62,10 @@ export type SearchUsersPayload = {
    */
   filter: SearchUsersFilter;
   /**
+   * Grouping dimension for results
+   */
+  groupBy?: GroupBy | undefined;
+  /**
    * Number of items to return (1-1000)
    */
   limit?: number | undefined;
@@ -62,6 +78,11 @@ export type SearchUsersPayload = {
    */
   userType: SearchUsersPayloadUserType;
 };
+
+/** @internal */
+export const GroupBy$outboundSchema: z.ZodMiniEnum<typeof GroupBy> = z.enum(
+  GroupBy,
+);
 
 /** @internal */
 export const SearchUsersPayloadSort$outboundSchema: z.ZodMiniEnum<
@@ -77,6 +98,7 @@ export const SearchUsersPayloadUserType$outboundSchema: z.ZodMiniEnum<
 export type SearchUsersPayload$Outbound = {
   cursor?: string | undefined;
   filter: SearchUsersFilter$Outbound;
+  group_by: string;
   limit: number;
   sort: string;
   user_type: string;
@@ -90,12 +112,14 @@ export const SearchUsersPayload$outboundSchema: z.ZodMiniType<
   z.object({
     cursor: z.optional(z.string()),
     filter: SearchUsersFilter$outboundSchema,
+    groupBy: z._default(GroupBy$outboundSchema, "employee"),
     limit: z._default(z.int(), 50),
     sort: z._default(SearchUsersPayloadSort$outboundSchema, "desc"),
     userType: SearchUsersPayloadUserType$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      groupBy: "group_by",
       userType: "user_type",
     });
   }),

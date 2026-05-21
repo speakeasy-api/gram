@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 74e39948cc7e39a510fdc2c69c824e37
+  docChecksum: 96a71f31f34705a087d22fa7bc18bb3b
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -368,6 +368,8 @@ trackedFiles:
     last_write_checksum: sha1:b34170a37ea86e5b08296226724d1a5e053cac2d
   docs/models/components/getusermetricssummaryresult.md:
     last_write_checksum: sha1:7b76f799d62fe0f3eefe3dc7727880167ca5dd71
+  docs/models/components/groupby.md:
+    last_write_checksum: sha1:bf3ea7c63423e3505c5c3faefe0e82e7db5d0b52
   docs/models/components/headerinput.md:
     last_write_checksum: sha1:adc9e1b54d733fb807511030368240cc0e7a2172
   docs/models/components/hookeventname.md:
@@ -750,6 +752,8 @@ trackedFiles:
     last_write_checksum: sha1:6f03a698bdceb20b54329bc771aac9bbc5beabd6
   docs/models/components/rolegrant.md:
     last_write_checksum: sha1:d8fb7d9018f5491a1df67ca32b4cd594827e1a5d
+  docs/models/components/rolesummary.md:
+    last_write_checksum: sha1:07d9353c739a9313bc52c8129a066347de1c839e
   docs/models/components/scope.md:
     last_write_checksum: sha1:18e20f25619d17dd879be5fd900115967511eebe
   docs/models/components/scopedefinition.md:
@@ -781,13 +785,13 @@ trackedFiles:
   docs/models/components/searchusersfilter.md:
     last_write_checksum: sha1:05fb82fdf396a31fd71436ac394fe474279ddd17
   docs/models/components/searchuserspayload.md:
-    last_write_checksum: sha1:6d6278085ddf1725cf08fc861fa9a37f1dd466e4
+    last_write_checksum: sha1:c9cb68804bb7b8c6f9de67a1328eac4c7cdccd41
   docs/models/components/searchuserspayloadsort.md:
     last_write_checksum: sha1:d4c931b9e88434c955bd2e326f5828bc5e50fb3f
   docs/models/components/searchuserspayloadusertype.md:
     last_write_checksum: sha1:4ac21a796e6018dc8d245caf9199704f50c8b8f3
   docs/models/components/searchusersresult.md:
-    last_write_checksum: sha1:56ee4b00c88b7a2f716e60637afbc398ddd3266b
+    last_write_checksum: sha1:041a857db17cfadff836fa90234e5fa177ef19ef
   docs/models/components/securityvariable.md:
     last_write_checksum: sha1:c9440e44db862ae2ab790d1f490d7a145a23cd9d
   docs/models/components/selector.md:
@@ -3980,7 +3984,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:c07b30c29d1792fa9d1bfae489d32bd6ec71811f
+    last_write_checksum: sha1:251965eaf09517eedcadb44fd178282e2aff73f3
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4388,6 +4392,8 @@ trackedFiles:
     last_write_checksum: sha1:fb3b36bda8162b32a2a016460bbc212483a38455
   src/models/components/rolegrant.ts:
     last_write_checksum: sha1:5e856c69083e8adb947ee336c5d1db72c7b4af9d
+  src/models/components/rolesummary.ts:
+    last_write_checksum: sha1:adc854cfc6995cc85e0d994ad3e853779099bf80
   src/models/components/scopedefinition.ts:
     last_write_checksum: sha1:d4fee06648f12ec4dfe9540f1768aa455d396b0b
   src/models/components/searchchatsfilter.ts:
@@ -4423,9 +4429,9 @@ trackedFiles:
   src/models/components/searchusersfilter.ts:
     last_write_checksum: sha1:74bd1837172173f9c563f0a8e456fe5a02a0a9a2
   src/models/components/searchuserspayload.ts:
-    last_write_checksum: sha1:2ce5989b9ab31b607295bcc3251c491faed35145
+    last_write_checksum: sha1:21182a5f388d46cc671da4a9be81d7b374c0a9ee
   src/models/components/searchusersresult.ts:
-    last_write_checksum: sha1:69fb6a06af407e8817fb5a3d55f3a5a2e053d226
+    last_write_checksum: sha1:3052a6691e68b7397bd9bfcba570711a91d3630a
   src/models/components/securityvariable.ts:
     id: 4aa96a84a4f9
     last_write_checksum: sha1:b6435b1d385bc4ce89a1a172f494119f689414cb
@@ -7956,7 +7962,7 @@ examples:
   searchUsers:
     speakeasy-default-search-users:
       requestBody:
-        application/json: {"filter": {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "limit": 50, "sort": "desc", "user_type": "external"}
+        application/json: {"filter": {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "group_by": "employee", "limit": 50, "sort": "desc", "user_type": "external"}
       responses:
         "200":
           application/json: {"users": []}

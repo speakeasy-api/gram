@@ -26,6 +26,7 @@ import (
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -40,6 +41,7 @@ type Service struct {
 	db                    *pgxpool.Pool
 	chatRepo              *chatRepo.Queries
 	hooksRepo             *hooksRepo.Queries
+	orgsRepo              *orgsRepo.Queries
 	chConn                clickhouse.Conn
 	chRepo                *repo.Queries
 	logger                *slog.Logger
@@ -83,6 +85,7 @@ func NewService(
 		db:                    db,
 		chatRepo:              chatRepo.New(db),
 		hooksRepo:             hooksRepo.New(db),
+		orgsRepo:              orgsRepo.New(db),
 		chConn:                chConn,
 		chRepo:                chRepo,
 		logger:                logger,
@@ -360,7 +363,15 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 }
 
 // SearchUsers retrieves user usage summaries grouped by user_id or external_user_id.
+// When group_by=role, it aggregates per-user costs by RBAC role.
 func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUsersPayload) (res *telem_gen.SearchUsersResult, err error) {
+	if payload.GroupBy == "role" {
+		return s.searchUsersByRole(ctx, payload)
+	}
+	return s.searchUsersByEmployee(ctx, payload)
+}
+
+func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
 	if err != nil {
 		return nil, err
@@ -444,8 +455,135 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 
 	return &telem_gen.SearchUsersResult{
 		Users:      users,
+		Roles:      nil,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// searchUsersByRole fetches all per-user costs from ClickHouse, joins with role
+// assignments from Postgres, and returns aggregates grouped by role.
+func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
+	if err != nil {
+		return nil, err
+	}
+
+	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
+
+	// Fetch per-user costs from ClickHouse and role assignments from Postgres
+	// concurrently — the two queries are independent.
+	var items []repo.UserSummary
+	var assignments []orgsRepo.ListActiveRoleAssignmentsByOrganizationRow
+
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		var fetchErr error
+		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
+			GramProjectID:    params.projectID,
+			TimeStart:        params.timeStart,
+			TimeEnd:          params.timeEnd,
+			GramDeploymentID: deploymentID,
+			EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
+			HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
+			GroupBy:          "user_id",
+			UserIDs:          payload.Filter.UserIds,
+			SortOrder:        "desc",
+			Cursor:           "",
+			Limit:            10001, // Upper bound; orgs rarely have >10k users
+		})
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var fetchErr error
+		assignments, fetchErr = s.orgsRepo.ListActiveRoleAssignmentsByOrganization(egCtx, params.organizationID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error fetching role assignments")
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching role usage data")
+	}
+
+	// Build user_id → role_id map. A user may have multiple role assignments;
+	// we take the first one encountered.
+	userToRoleID := make(map[string]string, len(assignments))
+	for _, a := range assignments {
+		if a.UserID.Valid {
+			if _, exists := userToRoleID[a.UserID.String]; !exists {
+				userToRoleID[a.UserID.String] = roleIDFromURN(a.RoleUrn)
+			}
+		}
+	}
+
+	// Single pass: aggregate per-user costs by role and build the response.
+	type roleAgg struct {
+		summary *telem_gen.RoleSummary
+	}
+	aggByRole := make(map[string]*roleAgg, len(userToRoleID))
+
+	const unassignedRoleID = "unassigned"
+	for _, item := range items {
+		roleID := unassignedRoleID
+		if id, ok := userToRoleID[item.UserID]; ok {
+			roleID = id
+		}
+		agg, exists := aggByRole[roleID]
+		if !exists {
+			agg = &roleAgg{summary: &telem_gen.RoleSummary{
+				RoleID:            roleID,
+				UserCount:         0,
+				TotalCost:         0,
+				CostPerUser:       0,
+				TotalInputTokens:  0,
+				TotalOutputTokens: 0,
+				TotalTokens:       0,
+				TotalChats:        0,
+			}}
+			aggByRole[roleID] = agg
+		}
+		s := agg.summary
+		s.UserCount++
+		s.TotalCost += item.TotalCost
+		s.TotalInputTokens += item.TotalInputTokens
+		s.TotalOutputTokens += item.TotalOutputTokens
+		s.TotalTokens += item.TotalTokens
+		s.TotalChats += int64(item.TotalChats) //nolint:gosec // Bounded count
+	}
+
+	roles := make([]*telem_gen.RoleSummary, 0, len(aggByRole))
+	for _, agg := range aggByRole {
+		rs := agg.summary
+		if rs.UserCount > 0 {
+			rs.CostPerUser = sanitizeFloat64(rs.TotalCost / float64(rs.UserCount))
+		}
+		rs.TotalCost = sanitizeFloat64(rs.TotalCost)
+		roles = append(roles, rs)
+	}
+
+	// Sort by total cost descending.
+	sort.Slice(roles, func(i, j int) bool {
+		return roles[i].TotalCost > roles[j].TotalCost
+	})
+
+	return &telem_gen.SearchUsersResult{
+		Users:      []*telem_gen.UserSummary{},
+		Roles:      roles,
+		NextCursor: nil,
+	}, nil
+}
+
+// roleIDFromURN extracts the role ID from a role URN like "role:organization:<id>"
+// or "role:global:<id>".
+func roleIDFromURN(urn string) string {
+	parts := strings.SplitN(urn, ":", 3)
+	if len(parts) == 3 {
+		return parts[2]
+	}
+	return urn
 }
 
 // GetProjectMetricsSummary retrieves aggregated metrics for an entire project.

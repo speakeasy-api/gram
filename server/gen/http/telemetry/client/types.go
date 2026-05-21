@@ -66,6 +66,8 @@ type SearchUsersRequestBody struct {
 	Filter *SearchUsersFilterRequestBody `form:"filter" json:"filter" xml:"filter"`
 	// Type of user identifier to group by
 	UserType string `form:"user_type" json:"user_type" xml:"user_type"`
+	// Grouping dimension for results
+	GroupBy string `form:"group_by" json:"group_by" xml:"group_by"`
 	// Cursor for pagination (user identifier from last item)
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Sort order
@@ -229,8 +231,10 @@ type SearchChatsResponseBody struct {
 // SearchUsersResponseBody is the type of the "telemetry" service "searchUsers"
 // endpoint HTTP response body.
 type SearchUsersResponseBody struct {
-	// List of user usage summaries
+	// List of user usage summaries (populated when group_by=employee)
 	Users []*UserSummaryResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+	// List of role usage summaries (populated when group_by=role)
+	Roles []*RoleSummaryResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -2985,6 +2989,26 @@ type HookSourceUsageResponseBody struct {
 	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
 
+// RoleSummaryResponseBody is used to define fields on response body types.
+type RoleSummaryResponseBody struct {
+	// Role identifier extracted from role URN
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// Number of users with this role
+	UserCount *int `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
+	// Total cost across all users with this role
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
+	// Average cost per user
+	CostPerUser *float64 `form:"cost_per_user,omitempty" json:"cost_per_user,omitempty" xml:"cost_per_user,omitempty"`
+	// Sum of input tokens across all users
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Sum of output tokens across all users
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Sum of all tokens across all users
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total chat sessions across all users
+	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
+}
+
 // ProjectSummaryResponseBody is used to define fields on response body types.
 type ProjectSummaryResponseBody struct {
 	// Earliest activity timestamp in Unix nanoseconds
@@ -3418,12 +3442,19 @@ func NewSearchChatsRequestBody(p *telemetry.SearchChatsPayload) *SearchChatsRequ
 func NewSearchUsersRequestBody(p *telemetry.SearchUsersPayload) *SearchUsersRequestBody {
 	body := &SearchUsersRequestBody{
 		UserType: p.UserType,
+		GroupBy:  p.GroupBy,
 		Cursor:   p.Cursor,
 		Sort:     p.Sort,
 		Limit:    p.Limit,
 	}
 	if p.Filter != nil {
 		body.Filter = marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody(p.Filter)
+	}
+	{
+		var zero string
+		if body.GroupBy == zero {
+			body.GroupBy = "employee"
+		}
 	}
 	{
 		var zero string
@@ -4123,6 +4154,16 @@ func NewSearchUsersResultOK(body *SearchUsersResponseBody) *telemetry.SearchUser
 			continue
 		}
 		v.Users[i] = unmarshalUserSummaryResponseBodyToTelemetryUserSummary(val)
+	}
+	if body.Roles != nil {
+		v.Roles = make([]*telemetry.RoleSummary, len(body.Roles))
+		for i, val := range body.Roles {
+			if val == nil {
+				v.Roles[i] = nil
+				continue
+			}
+			v.Roles[i] = unmarshalRoleSummaryResponseBodyToTelemetryRoleSummary(val)
+		}
 	}
 
 	return v
@@ -5874,6 +5915,13 @@ func ValidateSearchUsersResponseBody(body *SearchUsersResponseBody) (err error) 
 	for _, e := range body.Users {
 		if e != nil {
 			if err2 := ValidateUserSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Roles {
+		if e != nil {
+			if err2 := ValidateRoleSummaryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -9551,6 +9599,36 @@ func ValidateHookSourceUsageResponseBody(body *HookSourceUsageResponseBody) (err
 	}
 	if body.EventCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
+	}
+	return
+}
+
+// ValidateRoleSummaryResponseBody runs the validations defined on
+// RoleSummaryResponseBody
+func ValidateRoleSummaryResponseBody(body *RoleSummaryResponseBody) (err error) {
+	if body.RoleID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	}
+	if body.UserCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_count", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
+	}
+	if body.CostPerUser == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cost_per_user", "body"))
+	}
+	if body.TotalInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_input_tokens", "body"))
+	}
+	if body.TotalOutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_output_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.TotalChats == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))
 	}
 	return
 }

@@ -3546,6 +3546,26 @@ func unmarshalHookSourceUsageResponseBodyToTelemetryHookSourceUsage(v *HookSourc
 	return res
 }
 
+// unmarshalRoleSummaryResponseBodyToTelemetryRoleSummary builds a value of
+// type *telemetry.RoleSummary from a value of type *RoleSummaryResponseBody.
+func unmarshalRoleSummaryResponseBodyToTelemetryRoleSummary(v *RoleSummaryResponseBody) *telemetry.RoleSummary {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.RoleSummary{
+		RoleID:            *v.RoleID,
+		UserCount:         *v.UserCount,
+		TotalCost:         *v.TotalCost,
+		CostPerUser:       *v.CostPerUser,
+		TotalInputTokens:  *v.TotalInputTokens,
+		TotalOutputTokens: *v.TotalOutputTokens,
+		TotalTokens:       *v.TotalTokens,
+		TotalChats:        *v.TotalChats,
+	}
+
+	return res
+}
+
 // unmarshalProjectSummaryResponseBodyToTelemetryProjectSummary builds a value
 // of type *telemetry.ProjectSummary from a value of type
 // *ProjectSummaryResponseBody.
