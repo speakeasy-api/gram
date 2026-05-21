@@ -975,7 +975,7 @@ export function CreateRoleDialog({
                     {members.map((member) => {
                       const alreadyHasRole =
                         isEditing &&
-                        editingRole?.id &&
+                        !!editingRole?.id &&
                         member.roleIds.includes(editingRole.id);
                       return (
                         <label
