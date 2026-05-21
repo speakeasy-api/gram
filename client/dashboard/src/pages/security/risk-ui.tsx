@@ -4,6 +4,7 @@ import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
 import { humanizeRuleId } from "./rule-ids";
 import { Badge } from "@speakeasy-api/moonshine";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 export function CategoryLabel({
   source,
@@ -70,15 +71,15 @@ export function MaskedMatch({ value }: { value: string | undefined }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1">
-      <span className="font-mono text-xs">
-        {value.length > 40
-          ? `${value.slice(0, 20)}...${value.slice(-10)}`
-          : value}
-      </span>
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1">
+      <SimpleTooltip tooltip={value}>
+        <span className="min-w-0 overflow-x-auto font-mono text-xs whitespace-nowrap">
+          {value}
+        </span>
+      </SimpleTooltip>
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground shrink-0"
         onClick={(e) => {
           e.stopPropagation();
           setRevealed(false);

@@ -753,6 +753,7 @@ func (q *Queries) ListRiskOverviewTimeSeriesFindings(ctx context.Context, arg Li
 const listRiskOverviewTopUsers = `-- name: ListRiskOverviewTopUsers :many
 WITH user_findings AS (
   SELECT
+    COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::TEXT AS external_user_id,
     COALESCE(
       NULLIF(u.email, ''),
       CASE WHEN cm.external_user_id LIKE '%@%' THEN cm.external_user_id END,
@@ -768,9 +769,9 @@ WITH user_findings AS (
     AND rr.created_at >= $3
     AND rr.created_at < $4
 )
-SELECT email, COUNT(*)::BIGINT AS findings
+SELECT external_user_id, email, COUNT(*)::BIGINT AS findings
 FROM user_findings
-GROUP BY email
+GROUP BY external_user_id, email
 ORDER BY findings DESC, email ASC
 LIMIT $1
 `
@@ -783,8 +784,9 @@ type ListRiskOverviewTopUsersParams struct {
 }
 
 type ListRiskOverviewTopUsersRow struct {
-	Email    string
-	Findings int64
+	ExternalUserID string
+	Email          string
+	Findings       int64
 }
 
 func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, arg ListRiskOverviewTopUsersParams) ([]ListRiskOverviewTopUsersRow, error) {
@@ -801,7 +803,7 @@ func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, arg ListRiskOver
 	var items []ListRiskOverviewTopUsersRow
 	for rows.Next() {
 		var i ListRiskOverviewTopUsersRow
-		if err := rows.Scan(&i.Email, &i.Findings); err != nil {
+		if err := rows.Scan(&i.ExternalUserID, &i.Email, &i.Findings); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

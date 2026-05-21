@@ -2975,6 +2975,9 @@ type RiskOverviewCategoryResponseBody struct {
 type RiskOverviewUserResponseBody struct {
 	// User email, or Unknown user when unavailable.
 	Email string `form:"email" json:"email" xml:"email"`
+	// External user identifier as recorded on chats, when known. Empty when the
+	// finding cannot be attributed to an external user.
+	ExternalUserID string `form:"external_user_id" json:"external_user_id" xml:"external_user_id"`
 	// Finding count for this user.
 	Findings int64 `form:"findings" json:"findings" xml:"findings"`
 }

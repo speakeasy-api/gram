@@ -499,9 +499,10 @@ var RiskOverviewCategory = Type("RiskOverviewCategory", func() {
 
 var RiskOverviewUser = Type("RiskOverviewUser", func() {
 	Attribute("email", String, "User email, or Unknown user when unavailable.")
+	Attribute("external_user_id", String, "External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.")
 	Attribute("findings", Int64, "Finding count for this user.")
 
-	Required("email", "findings")
+	Required("email", "external_user_id", "findings")
 })
 
 var RiskOverviewTimeSeriesFinding = Type("RiskOverviewTimeSeriesFinding", func() {

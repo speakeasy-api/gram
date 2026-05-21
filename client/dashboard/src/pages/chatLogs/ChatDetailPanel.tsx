@@ -899,7 +899,11 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className="cursor-pointer">
+        <button
+          type="button"
+          className="cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Badge variant="destructive" className="text-xs">
             <Icon name="shield-alert" className="mr-1 size-3" />
             {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
@@ -909,6 +913,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
       <PopoverContent
         align="start"
         className="max-h-[70vh] w-80 overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="space-y-3">
           <div className="text-sm font-semibold">Risk Findings</div>

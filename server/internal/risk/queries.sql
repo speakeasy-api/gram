@@ -145,6 +145,7 @@ WHERE rr.project_id = @project_id
 -- name: ListRiskOverviewTopUsers :many
 WITH user_findings AS (
   SELECT
+    COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::TEXT AS external_user_id,
     COALESCE(
       NULLIF(u.email, ''),
       CASE WHEN cm.external_user_id LIKE '%@%' THEN cm.external_user_id END,
@@ -160,9 +161,9 @@ WITH user_findings AS (
     AND rr.created_at >= @from_time
     AND rr.created_at < @to_time
 )
-SELECT email, COUNT(*)::BIGINT AS findings
+SELECT external_user_id, email, COUNT(*)::BIGINT AS findings
 FROM user_findings
-GROUP BY email
+GROUP BY external_user_id, email
 ORDER BY findings DESC, email ASC
 LIMIT @row_limit;
 

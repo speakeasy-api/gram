@@ -3390,8 +3390,9 @@ func marshalRiskRiskOverviewCategoryToRiskOverviewCategoryResponseBody(v *risk.R
 // *risk.RiskOverviewUser.
 func marshalRiskRiskOverviewUserToRiskOverviewUserResponseBody(v *risk.RiskOverviewUser) *RiskOverviewUserResponseBody {
 	res := &RiskOverviewUserResponseBody{
-		Email:    v.Email,
-		Findings: v.Findings,
+		Email:          v.Email,
+		ExternalUserID: v.ExternalUserID,
+		Findings:       v.Findings,
 	}
 
 	return res

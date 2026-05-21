@@ -34345,12 +34345,16 @@ components:
         email:
           type: string
           description: User email, or Unknown user when unavailable.
+        external_user_id:
+          type: string
+          description: External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.
         findings:
           type: integer
           description: Finding count for this user.
           format: int64
       required:
         - email
+        - external_user_id
         - findings
     RiskPolicy:
       type: object

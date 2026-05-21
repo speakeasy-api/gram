@@ -2975,6 +2975,9 @@ type RiskOverviewCategoryResponseBody struct {
 type RiskOverviewUserResponseBody struct {
 	// User email, or Unknown user when unavailable.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// External user identifier as recorded on chats, when known. Empty when the
+	// finding cannot be attributed to an external user.
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// Finding count for this user.
 	Findings *int64 `form:"findings,omitempty" json:"findings,omitempty" xml:"findings,omitempty"`
 }
@@ -9331,6 +9334,9 @@ func ValidateRiskOverviewCategoryResponseBody(body *RiskOverviewCategoryResponse
 func ValidateRiskOverviewUserResponseBody(body *RiskOverviewUserResponseBody) (err error) {
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
+	}
+	if body.ExternalUserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("external_user_id", "body"))
 	}
 	if body.Findings == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("findings", "body"))

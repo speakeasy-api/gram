@@ -308,6 +308,9 @@ type RiskOverviewTimeSeriesFinding struct {
 type RiskOverviewUser struct {
 	// User email, or Unknown user when unavailable.
 	Email string
+	// External user identifier as recorded on chats, when known. Empty when the
+	// finding cannot be attributed to an external user.
+	ExternalUserID string
 	// Finding count for this user.
 	Findings int64
 }

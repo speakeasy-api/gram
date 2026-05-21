@@ -768,8 +768,9 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	topUsers := make([]*gen.RiskOverviewUser, 0, len(userRows))
 	for _, row := range userRows {
 		topUsers = append(topUsers, &gen.RiskOverviewUser{
-			Email:    row.Email,
-			Findings: row.Findings,
+			Email:          row.Email,
+			ExternalUserID: row.ExternalUserID,
+			Findings:       row.Findings,
 		})
 	}
 

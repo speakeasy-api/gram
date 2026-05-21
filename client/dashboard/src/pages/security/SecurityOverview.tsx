@@ -9,7 +9,7 @@ import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { Shield } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import { useRoutes } from "@/routes";
 import {
   formatDateRangeLabel,
@@ -88,6 +88,7 @@ type BarDatum = {
   key: string;
   label: string;
   value: number;
+  href?: string;
 };
 
 type TrendPoint = {
@@ -109,6 +110,10 @@ export default function SecurityOverview() {
       </Page>
     </RequireScope>
   );
+}
+
+export function RiskOverviewRoot() {
+  return <Outlet />;
 }
 
 function RiskOverviewShell({
@@ -164,6 +169,8 @@ function NoPoliciesEmptyState() {
 }
 
 function SecurityOverviewContent() {
+  const routes = useRoutes();
+  const location = useLocation();
   const {
     dateRange,
     customRange,
@@ -205,12 +212,26 @@ function SecurityOverviewContent() {
   }, [overview?.topCategories]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
-    return (overview?.topUsers ?? []).map((user) => ({
-      key: user.email,
-      label: user.email,
-      value: user.findings,
-    }));
-  }, [overview?.topUsers]);
+    const userDetailRoute = (
+      routes.riskOverview as unknown as {
+        userDetail?: { href: (...params: string[]) => string };
+      }
+    ).userDetail;
+    return (overview?.topUsers ?? []).map((user) => {
+      const href =
+        user.externalUserId && userDetailRoute
+          ? `${userDetailRoute.href(
+              encodeURIComponent(user.externalUserId),
+            )}${location.search}`
+          : undefined;
+      return {
+        key: user.externalUserId || user.email,
+        label: user.email,
+        value: user.findings,
+        href,
+      };
+    });
+  }, [overview?.topUsers, routes.riskOverview, location.search]);
 
   if (overviewQuery.isLoading) {
     return (
@@ -258,7 +279,7 @@ function SecurityOverviewContent() {
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <MetricCard
-            title="Messages Scanned"
+            title="Events Scanned"
             value={overview.messagesScanned}
             format="number"
             icon="scan-search"
@@ -386,11 +407,8 @@ function RankedBarList({ items }: { items: BarDatum[] }) {
 
   return (
     <ul className="my-1 space-y-3">
-      {items.map((item, i) => (
-        <li key={item.key} className="flex items-center gap-3">
-          <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
-            {i + 1}
-          </span>
+      {items.map((item, i) => {
+        const body = (
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center justify-between">
               <span className="truncate text-sm">{item.label}</span>
@@ -405,8 +423,25 @@ function RankedBarList({ items }: { items: BarDatum[] }) {
               />
             </div>
           </div>
-        </li>
-      ))}
+        );
+        return (
+          <li key={item.key} className="flex items-center gap-3">
+            <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
+              {i + 1}
+            </span>
+            {item.href ? (
+              <Link
+                to={item.href}
+                className="hover:bg-muted/40 -mx-2 flex min-w-0 flex-1 items-center rounded px-2 py-1 transition-colors"
+              >
+                {body}
+              </Link>
+            ) : (
+              body
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

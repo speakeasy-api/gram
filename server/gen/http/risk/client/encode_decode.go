@@ -3477,8 +3477,9 @@ func unmarshalRiskOverviewCategoryResponseBodyToRiskRiskOverviewCategory(v *Risk
 // *RiskOverviewUserResponseBody.
 func unmarshalRiskOverviewUserResponseBodyToRiskRiskOverviewUser(v *RiskOverviewUserResponseBody) *risk.RiskOverviewUser {
 	res := &risk.RiskOverviewUser{
-		Email:    *v.Email,
-		Findings: *v.Findings,
+		Email:          *v.Email,
+		ExternalUserID: *v.ExternalUserID,
+		Findings:       *v.Findings,
 	}
 
 	return res
