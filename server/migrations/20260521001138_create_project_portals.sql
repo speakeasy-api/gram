@@ -13,5 +13,5 @@ CREATE TABLE "project_portals" (
   CONSTRAINT "project_portals_logo_asset_id_fkey" FOREIGN KEY ("logo_asset_id") REFERENCES "assets" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "project_portals_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "project_portals_display_name_check" CHECK ((display_name IS NULL) OR ((display_name <> ''::text) AND (char_length(display_name) <= 64))),
-  CONSTRAINT "project_portals_tagline_check" CHECK ((tagline IS NULL) OR (char_length(tagline) <= 200))
+  CONSTRAINT "project_portals_tagline_check" CHECK ((tagline IS NULL) OR ((tagline <> ''::text) AND (char_length(tagline) <= 200)))
 );

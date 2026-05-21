@@ -2618,7 +2618,7 @@ CREATE TABLE IF NOT EXISTS project_portals (
   project_id      uuid NOT NULL,
   enabled         boolean NOT NULL DEFAULT false,
   display_name    TEXT CHECK (display_name IS NULL OR (display_name <> '' AND CHAR_LENGTH(display_name) <= 64)),
-  tagline         TEXT CHECK (tagline IS NULL OR CHAR_LENGTH(tagline) <= 200),
+  tagline         TEXT CHECK (tagline IS NULL OR (tagline <> '' AND CHAR_LENGTH(tagline) <= 200)),
   logo_asset_id   uuid,
   created_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
