@@ -1314,14 +1314,75 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 	}
 
 	if s.completionClient == nil {
-		return nil, oops.E(oops.CodeNotImplemented, nil, "LLM suggestion is not configured on this server")
+		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic suggestion")
+		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
 	}
 
 	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt, payload.ExistingRuleIds)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "suggest custom detection rule").Log(ctx, s.logger)
+		s.logger.WarnContext(ctx, "openrouter suggestion failed; returning heuristic suggestion", attr.SlogError(err))
+		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
 	}
 	return suggestion, nil
+}
+
+// heuristicCustomRuleSuggestion is the deterministic fallback when the LLM
+// is unavailable (no provisioned key, transport failure, etc). It produces
+// a usable starting point so the operator can finish the form rather than
+// hit a dead end.
+func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.SuggestCustomDetectionRuleResult {
+	slug := slugifyPrompt(prompt)
+	if slug == "" {
+		slug = "rule"
+	}
+	ruleID := "custom." + slug
+	if slices.Contains(existingIDs, ruleID) {
+		ruleID = ruleID + "_" + time.Now().UTC().Format("20060102150405")
+	}
+
+	title := titleizeSlug(slug)
+	if title == "" {
+		title = "Custom Rule"
+	}
+
+	return &gen.SuggestCustomDetectionRuleResult{
+		RuleID:      ruleID,
+		Title:       title,
+		Description: strings.TrimSpace(prompt),
+		Regex:       "",
+		Severity:    "medium",
+	}
+}
+
+var slugStripRE = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slugifyPrompt(prompt string) string {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	slug := slugStripRE.ReplaceAllString(lower, "_")
+	slug = strings.Trim(slug, "_")
+	if len(slug) > 40 {
+		slug = slug[:40]
+		slug = strings.TrimRight(slug, "_")
+	}
+	return slug
+}
+
+func titleizeSlug(slug string) string {
+	if slug == "" {
+		return ""
+	}
+	parts := strings.Split(slug, "_")
+	out := make([]string, 0, len(parts))
+	for i, p := range parts {
+		if i >= 5 {
+			break
+		}
+		if p == "" {
+			continue
+		}
+		out = append(out, strings.ToUpper(p[:1])+p[1:])
+	}
+	return strings.Join(out, " ")
 }
 
 // Severity returned by the LLM is constrained by the JSON schema; we still
