@@ -1013,6 +1013,9 @@ func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.E
 		if p.ExternalUserID != nil {
 			values.Add("external_user_id", *p.ExternalUserID)
 		}
+		if p.AssistantID != nil {
+			values.Add("assistant_id", *p.AssistantID)
+		}
 		if p.ResolutionStatus != nil {
 			values.Add("resolution_status", *p.ResolutionStatus)
 		}

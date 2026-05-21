@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 05f0cc1a9459dcb940d0a53dc96db8cf
+  docChecksum: b76b00a185bb8b0931a37cc62df1f491
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1903,7 +1903,7 @@ trackedFiles:
   docs/models/operations/listchatssecurityoption2.md:
     last_write_checksum: sha1:ac4329bd5c3d3cd40d37cbce5ac96671d710c3cc
   docs/models/operations/listchatswithresolutionsrequest.md:
-    last_write_checksum: sha1:78011871b0d6abcb08ce83492c4b0d5cc689ea03
+    last_write_checksum: sha1:049f8309f912e56df137041da45d037b460ff767
   docs/models/operations/listchatswithresolutionssecurity.md:
     last_write_checksum: sha1:7e130e49b8de4408cc9f7dc45f57459f9789ef64
   docs/models/operations/listchatswithresolutionssecurityoption1.md:
@@ -2981,7 +2981,7 @@ trackedFiles:
     last_write_checksum: sha1:52c467e5b7457addcc83ab385f7511f89195e165
     pristine_git_object: 814ef1470b3208dac27bc0c097002de03dbda395
   src/funcs/chatListChatsWithResolutions.ts:
-    last_write_checksum: sha1:06d2f35135151303ac3847c784f4a2f6bfc1df2d
+    last_write_checksum: sha1:7407dc429453e0cc5a7b86add1a899846a718f45
   src/funcs/chatLoad.ts:
     id: 79e579c74f00
     last_write_checksum: sha1:9f8e1b2b8dbcffa33bbf2a8d46a5acc4a0964512
@@ -5159,7 +5159,7 @@ trackedFiles:
     last_write_checksum: sha1:a25bdedbea7ff4479e003a0939eb5488cc3a8526
     pristine_git_object: ae806c76bc527b24fab19883a174e5a94f065fe2
   src/models/operations/listchatswithresolutions.ts:
-    last_write_checksum: sha1:f6de98842c26ec1a506c65ccd6d5f61870995023
+    last_write_checksum: sha1:751d9619ae6f925df35566551bdcb3f5a51b951a
   src/models/operations/listcollections.ts:
     last_write_checksum: sha1:7008055d09d615b4fe08ec3e801dc289b8cc34f3
   src/models/operations/listcollectionservers.ts:
@@ -5967,9 +5967,9 @@ trackedFiles:
     last_write_checksum: sha1:4296c9e2d9e0e658743349149c61fe6d88cee251
     pristine_git_object: bea716c86a525c16fb766cc3d523b64bcd0e67b6
   src/react-query/listChatsWithResolutions.core.ts:
-    last_write_checksum: sha1:fa29807e0f17cf9515837c32abf0a26b2b32bc47
+    last_write_checksum: sha1:0656541a46f30121f32c59eed8e12586a2010621
   src/react-query/listChatsWithResolutions.ts:
-    last_write_checksum: sha1:756bbeb1c52f2168d26a0c796443e9ed985dec0b
+    last_write_checksum: sha1:23a0a12abf9ecb0b5fc1282c861f29a629e6081a
   src/react-query/listCollections.core.ts:
     last_write_checksum: sha1:ffbfa28d9a9edac27a4609e5e61f8c5241af6bf0
   src/react-query/listCollections.ts:

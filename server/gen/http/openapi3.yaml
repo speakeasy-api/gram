@@ -5510,6 +5510,14 @@ paths:
                     description: Filter by external user ID
                     type: string
                 - allowEmptyValue: true
+                  description: Filter to chats produced by this assistant
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Filter to chats produced by this assistant
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Filter by resolution status
                   in: query
                   name: resolution_status

@@ -64,21 +64,30 @@ WHERE c.project_id = $1
   )
   AND (
     $6 = ''
+    OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = c.id
+        AND at.assistant_id = $6::uuid
+        AND at.deleted IS FALSE
+    )
+  )
+  AND (
+    $7 = ''
     OR (
-      $6 = 'unresolved' AND NOT EXISTS (
+      $7 = 'unresolved' AND NOT EXISTS (
         SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
       )
     )
     OR (
-      $6 != 'unresolved' AND EXISTS (
-        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $6
+      $7 != 'unresolved' AND EXISTS (
+        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $7
       )
     )
   )
   AND (
-    $7::text = ''
+    $8::text = ''
     OR (
-      $7::text = 'true' AND EXISTS (
+      $8::text = 'true' AND EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
         WHERE cm.chat_id = c.id
@@ -87,7 +96,7 @@ WHERE c.project_id = $1
       )
     )
     OR (
-      $7::text = 'false' AND NOT EXISTS (
+      $8::text = 'false' AND NOT EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
         WHERE cm.chat_id = c.id
@@ -104,6 +113,7 @@ type CountChatsWithResolutionsParams struct {
 	FromTime         pgtype.Timestamptz
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
+	AssistantID      interface{}
 	ResolutionStatus interface{}
 	HasRiskFilter    string
 }
@@ -115,6 +125,7 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 		arg.FromTime,
 		arg.ToTime,
 		arg.Search,
+		arg.AssistantID,
 		arg.ResolutionStatus,
 		arg.HasRiskFilter,
 	)
@@ -1201,21 +1212,30 @@ WITH limited_chats AS (
     )
     AND (
       $8 = ''
+      OR EXISTS (
+        SELECT 1 FROM assistant_threads at
+        WHERE at.chat_id = c.id
+          AND at.assistant_id = $8::uuid
+          AND at.deleted IS FALSE
+      )
+    )
+    AND (
+      $9 = ''
       OR (
-        $8 = 'unresolved' AND NOT EXISTS (
+        $9 = 'unresolved' AND NOT EXISTS (
           SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
         )
       )
       OR (
-        $8 != 'unresolved' AND EXISTS (
-          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $8
+        $9 != 'unresolved' AND EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $9
         )
       )
     )
     AND (
-      $9::text = ''
+      $10::text = ''
       OR (
-        $9::text = 'true' AND EXISTS (
+        $10::text = 'true' AND EXISTS (
           SELECT 1 FROM risk_results rr
           JOIN chat_messages cm ON cm.id = rr.chat_message_id
           WHERE cm.chat_id = c.id
@@ -1224,7 +1244,7 @@ WITH limited_chats AS (
         )
       )
       OR (
-        $9::text = 'false' AND NOT EXISTS (
+        $10::text = 'false' AND NOT EXISTS (
           SELECT 1 FROM risk_results rr
           JOIN chat_messages cm ON cm.id = rr.chat_message_id
           WHERE cm.chat_id = c.id
@@ -1241,8 +1261,8 @@ WITH limited_chats AS (
     CASE WHEN $1 = 'score' AND $2 = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
     c.created_at DESC
-  LIMIT $11
-  OFFSET $10
+  LIMIT $12
+  OFFSET $11
 )
 SELECT
     lc.id as chat_id,
@@ -1291,6 +1311,7 @@ type ListChatsWithResolutionsParams struct {
 	FromTime         pgtype.Timestamptz
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
+	AssistantID      interface{}
 	ResolutionStatus interface{}
 	HasRiskFilter    string
 	PageOffset       int32
@@ -1327,6 +1348,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 		arg.FromTime,
 		arg.ToTime,
 		arg.Search,
+		arg.AssistantID,
 		arg.ResolutionStatus,
 		arg.HasRiskFilter,
 		arg.PageOffset,

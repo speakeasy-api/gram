@@ -266,6 +266,15 @@ WHERE c.project_id = @project_id
     OR c.title ILIKE '%' || @search || '%'
   )
   AND (
+    @assistant_id = ''
+    OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = c.id
+        AND at.assistant_id = @assistant_id::uuid
+        AND at.deleted IS FALSE
+    )
+  )
+  AND (
     @resolution_status = ''
     OR (
       @resolution_status = 'unresolved' AND NOT EXISTS (
@@ -335,6 +344,15 @@ WITH limited_chats AS (
       OR c.id::text ILIKE '%' || @search || '%'
       OR c.external_user_id ILIKE '%' || @search || '%'
       OR c.title ILIKE '%' || @search || '%'
+    )
+    AND (
+      @assistant_id = ''
+      OR EXISTS (
+        SELECT 1 FROM assistant_threads at
+        WHERE at.chat_id = c.id
+          AND at.assistant_id = @assistant_id::uuid
+          AND at.deleted IS FALSE
+      )
     )
     AND (
       @resolution_status = ''

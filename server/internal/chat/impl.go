@@ -365,6 +365,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	// Convert optional filter parameters (use empty string for SQL NULL check)
 	search := conv.PtrValOr(payload.Search, "")
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 
@@ -388,6 +389,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		ProjectID:        *authCtx.ProjectID,
 		Search:           search,
 		ExternalUserID:   externalUserID,
+		AssistantID:      assistantID,
 		FromTime:         fromTime,
 		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
@@ -402,6 +404,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		ProjectID:        *authCtx.ProjectID,
 		Search:           search,
 		ExternalUserID:   externalUserID,
+		AssistantID:      assistantID,
 		FromTime:         fromTime,
 		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
