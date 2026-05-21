@@ -105,6 +105,7 @@ url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709957"
 
 [tools."github:FiloSottile/mkcert"."platforms.linux-x64"]
+checksum = "blake3:2337bf318a54e40d6fb36ee89306f031fcecc00e02dad69afa2bc2b579959f80"
 url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64"
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709955"
 
