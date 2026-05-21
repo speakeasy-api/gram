@@ -612,7 +612,7 @@ type RoleSummary struct {
 	UserCount int
 	// Total cost across all users with this role
 	TotalCost float64
-	// Average cost per user
+	// Average cost per user (total_cost / user_count)
 	CostPerUser float64
 	// Sum of input tokens across all users
 	TotalInputTokens int64

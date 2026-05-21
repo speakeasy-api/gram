@@ -726,7 +726,7 @@ var RoleSummaryType = Type("RoleSummary", func() {
 	Attribute("role_name", String, "Human-readable role name")
 	Attribute("user_count", Int, "Number of users with this role")
 	Attribute("total_cost", Float64, "Total cost across all users with this role")
-	Attribute("cost_per_user", Float64, "Average cost per user")
+	Attribute("cost_per_user", Float64, "Average cost per user (total_cost / user_count)")
 	Attribute("total_input_tokens", Int64, "Sum of input tokens across all users")
 	Attribute("total_output_tokens", Int64, "Sum of output tokens across all users")
 	Attribute("total_tokens", Int64, "Sum of all tokens across all users")

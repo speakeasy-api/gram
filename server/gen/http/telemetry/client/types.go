@@ -2999,7 +2999,7 @@ type RoleSummaryResponseBody struct {
 	UserCount *int `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
 	// Total cost across all users with this role
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
-	// Average cost per user
+	// Average cost per user (total_cost / user_count)
 	CostPerUser *float64 `form:"cost_per_user,omitempty" json:"cost_per_user,omitempty" xml:"cost_per_user,omitempty"`
 	// Sum of input tokens across all users
 	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`

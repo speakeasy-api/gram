@@ -34411,7 +34411,7 @@ components:
             properties:
                 cost_per_user:
                     type: number
-                    description: Average cost per user
+                    description: Average cost per user (total_cost / user_count)
                     format: double
                 role_id:
                     type: string

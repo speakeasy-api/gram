@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5c5e7f7aaa574e339b935e86f90f8ff1
+  docChecksum: 49c3dca7b97cd6a6c0dee62797a7a979
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -753,7 +753,7 @@ trackedFiles:
   docs/models/components/rolegrant.md:
     last_write_checksum: sha1:d8fb7d9018f5491a1df67ca32b4cd594827e1a5d
   docs/models/components/rolesummary.md:
-    last_write_checksum: sha1:22d002438e8341ead236d32fb4bca74876fbbdec
+    last_write_checksum: sha1:45d8d2e5a97e1fefeab1cd7edaceaff08ce21796
   docs/models/components/scope.md:
     last_write_checksum: sha1:18e20f25619d17dd879be5fd900115967511eebe
   docs/models/components/scopedefinition.md:
@@ -4393,7 +4393,7 @@ trackedFiles:
   src/models/components/rolegrant.ts:
     last_write_checksum: sha1:5e856c69083e8adb947ee336c5d1db72c7b4af9d
   src/models/components/rolesummary.ts:
-    last_write_checksum: sha1:ed6c1ee8e8518c9bf44cd94bcb4f4f6a629a405b
+    last_write_checksum: sha1:282676243abc03437f494ac392000ff98ea08145
   src/models/components/scopedefinition.ts:
     last_write_checksum: sha1:d4fee06648f12ec4dfe9540f1768aa455d396b0b
   src/models/components/searchchatsfilter.ts:

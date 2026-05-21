@@ -13,7 +13,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type RoleSummary = {
   /**
-   * Average cost per user
+   * Average cost per user (total_cost / user_count)
    */
   costPerUser: number;
   /**

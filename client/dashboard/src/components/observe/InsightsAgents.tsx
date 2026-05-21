@@ -1196,7 +1196,7 @@ function EmployeeCostTable({
                     direction={effectiveSortDir}
                     onSort={handleSort}
                   >
-                    Cost/User
+                    Avg Cost/User
                   </SortableHead>
                   <SortableHead
                     field="input"
