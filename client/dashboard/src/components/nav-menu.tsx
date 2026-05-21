@@ -2,7 +2,6 @@ import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
-import { Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import React from "react";
 import { Link } from "react-router";
@@ -58,8 +57,9 @@ type HighlightRect = {
 };
 
 type NavContextValue = {
-  openGroup: string | null;
-  setOpenGroup: (group: string | null) => void;
+  openGroups: Set<string>;
+  toggleGroup: (group: string) => void;
+  openGroup: (group: string) => void;
   hoveredItem: string | null;
   setHoveredItem: (item: string | null) => void;
   activeItem: string | null;
@@ -68,8 +68,9 @@ type NavContextValue = {
 };
 
 const NavGroupContext = React.createContext<NavContextValue>({
-  openGroup: null,
-  setOpenGroup: () => {},
+  openGroups: new Set(),
+  toggleGroup: () => {},
+  openGroup: () => {},
   hoveredItem: null,
   setHoveredItem: () => {},
   activeItem: null,
@@ -79,16 +80,21 @@ const NavGroupContext = React.createContext<NavContextValue>({
 
 export function NavGroupProvider({
   activeGroup,
+  defaultOpenGroups,
   activeItem,
   children,
 }: {
   activeGroup?: string;
+  defaultOpenGroups?: string[];
   activeItem?: string;
   children: React.ReactNode;
 }) {
-  const [openGroup, _setOpenGroup] = React.useState<string | null>(
-    activeGroup ?? null,
-  );
+  const defaultsRef = React.useRef(new Set(defaultOpenGroups ?? []));
+  const [openGroups, _setOpenGroups] = React.useState<Set<string>>(() => {
+    const initial = new Set(defaultOpenGroups ?? []);
+    if (activeGroup) initial.add(activeGroup);
+    return initial;
+  });
   const [hoveredItem, setHoveredItem] = React.useState<string | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const itemRefs = React.useRef<Map<string, HTMLElement>>(new Map());
@@ -96,18 +102,57 @@ export function NavGroupProvider({
     React.useState<HighlightRect | null>(null);
   const suppressUntilRef = React.useRef(0);
 
-  // Accordion animation takes ~200ms — suppress highlight recomputation
-  // during that window to avoid jitter on shifting sub-items.
   const ACCORDION_DURATION = 250;
 
-  const setOpenGroup = React.useCallback((group: string | null) => {
+  const toggleGroup = React.useCallback((group: string) => {
     suppressUntilRef.current = Date.now() + ACCORDION_DURATION;
-    _setOpenGroup(group);
+    _setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        // Opening a non-default group collapses defaults
+        if (!defaultsRef.current.has(group)) {
+          for (const d of defaultsRef.current) next.delete(d);
+        }
+        next.add(group);
+      }
+      return next;
+    });
+  }, []);
+
+  const openGroupFn = React.useCallback((group: string) => {
+    suppressUntilRef.current = Date.now() + ACCORDION_DURATION;
+    _setOpenGroups((prev) => {
+      if (prev.has(group)) return prev;
+      const next = new Set<string>();
+      // Opening a non-default group collapses defaults
+      if (!defaultsRef.current.has(group)) {
+        next.add(group);
+      } else {
+        for (const g of prev) next.add(g);
+        next.add(group);
+      }
+      return next;
+    });
   }, []);
 
   React.useEffect(() => {
+    defaultsRef.current = new Set(defaultOpenGroups ?? []);
+  }, [defaultOpenGroups]);
+
+  React.useEffect(() => {
     suppressUntilRef.current = Date.now() + ACCORDION_DURATION;
-    _setOpenGroup(activeGroup ?? null);
+    if (activeGroup) {
+      _setOpenGroups((prev) => {
+        if (prev.has(activeGroup)) return prev;
+        const next = new Set(prev);
+        next.add(activeGroup);
+        return next;
+      });
+    } else if (defaultsRef.current.size > 0) {
+      _setOpenGroups(new Set(defaultsRef.current));
+    }
   }, [activeGroup]);
 
   const resolvedActive = activeItem ?? activeGroup ?? null;
@@ -169,15 +214,23 @@ export function NavGroupProvider({
 
   const value = React.useMemo<NavContextValue>(
     () => ({
-      openGroup,
-      setOpenGroup,
+      openGroups,
+      toggleGroup,
+      openGroup: openGroupFn,
       hoveredItem,
       setHoveredItem,
       activeItem: resolvedActive,
       registerRef,
       containerRef,
     }),
-    [openGroup, setOpenGroup, hoveredItem, resolvedActive, registerRef],
+    [
+      openGroups,
+      toggleGroup,
+      openGroupFn,
+      hoveredItem,
+      resolvedActive,
+      registerRef,
+    ],
   );
 
   return (
@@ -208,32 +261,87 @@ export function NavGroupProvider({
 // Hook for registering item ref + hover handlers
 // ---------------------------------------------------------------------------
 
-const HOVER_INTENT_MS = 200;
+// Settle-based hover intent: only triggers when the mouse slows down
+// inside the centre vertical zone of the element, ignoring edge hovers
+// and fast drive-by movements.
+const SETTLE_INTERVAL_MS = 100;
+const SETTLE_THRESHOLD_PX = 4;
+const CENTER_ZONE = 0.3; // fraction of height from each edge to exclude
 
 function useNavItem(id: string) {
   const { registerRef, setHoveredItem } = React.useContext(NavGroupContext);
-  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const elRef = React.useRef<HTMLElement | null>(null);
   const ref = React.useCallback(
-    (el: HTMLElement | null) => registerRef(id, el),
+    (el: HTMLElement | null) => {
+      elRef.current = el;
+      registerRef(id, el);
+    },
     [id, registerRef],
   );
 
-  const onMouseEnter = React.useCallback(() => {
-    timerRef.current = setTimeout(() => setHoveredItem(id), HOVER_INTENT_MS);
-  }, [id, setHoveredItem]);
+  const stateRef = React.useRef({
+    intervalId: null as ReturnType<typeof setInterval> | null,
+    prevX: 0,
+    prevY: 0,
+    curX: 0,
+    curY: 0,
+  });
+
+  const onMouseMove = React.useCallback((e: React.MouseEvent) => {
+    stateRef.current.curX = e.clientX;
+    stateRef.current.curY = e.clientY;
+  }, []);
+
+  const onMouseEnter = React.useCallback(
+    (e: React.MouseEvent) => {
+      const s = stateRef.current;
+      s.prevX = e.clientX;
+      s.prevY = e.clientY;
+      s.curX = e.clientX;
+      s.curY = e.clientY;
+
+      if (s.intervalId) clearInterval(s.intervalId);
+      s.intervalId = setInterval(() => {
+        const dy = s.curY - s.prevY;
+        if (Math.abs(dy) < SETTLE_THRESHOLD_PX) {
+          // Check mouse is in centre vertical zone of the element
+          const el = elRef.current;
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            const margin = rect.height * CENTER_ZONE;
+            if (s.curY < rect.top + margin || s.curY > rect.bottom - margin) {
+              s.prevY = s.curY;
+              return; // too close to edge — keep waiting
+            }
+          }
+          if (s.intervalId) clearInterval(s.intervalId);
+          s.intervalId = null;
+          setHoveredItem(id);
+        }
+        s.prevX = s.curX;
+        s.prevY = s.curY;
+      }, SETTLE_INTERVAL_MS);
+    },
+    [id, setHoveredItem],
+  );
 
   const onMouseLeave = React.useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
+    const s = stateRef.current;
+    if (s.intervalId) {
+      clearInterval(s.intervalId);
+      s.intervalId = null;
+    }
     setHoveredItem(null);
   }, [setHoveredItem]);
 
   React.useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      const s = stateRef.current;
+      if (s.intervalId) clearInterval(s.intervalId);
     };
   }, []);
 
-  return { ref, onMouseEnter, onMouseLeave };
+  return { ref, onMouseEnter, onMouseLeave, onMouseMove };
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +396,7 @@ export function NavButton({
       ref={navItem.ref}
       onMouseEnter={navItem.onMouseEnter}
       onMouseLeave={navItem.onMouseLeave}
+      onMouseMove={navItem.onMouseMove}
     >
       <Link
         to={href ?? "#"}
@@ -301,21 +410,20 @@ export function NavButton({
             : "text-muted-foreground hover:text-foreground font-medium",
         )}
       >
-        {isLoading ? (
-          <Loader2 className="trans text-muted-foreground size-4 shrink-0 animate-spin" />
-        ) : (
-          Icon && (
-            <Icon
-              className={cn(
-                "trans size-4 shrink-0",
-                active ? "text-foreground" : "text-muted-foreground",
-              )}
-            />
-          )
+        {Icon && (
+          <Icon
+            className={cn(
+              "trans size-4 shrink-0",
+              active ? "text-foreground" : "text-muted-foreground",
+            )}
+          />
         )}
         <Type
           variant="small"
-          className="transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0"
+          className={cn(
+            "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
+            isLoading && "nav-shimmer",
+          )}
         >
           {titleNode ?? title}
         </Type>
@@ -324,7 +432,8 @@ export function NavButton({
           <ReleaseStageBadge
             stage={stage}
             size="xs"
-            className="ml-auto group-data-[collapsible=icon]:hidden"
+            noTooltip
+            className="-my-1 origin-left scale-75 group-data-[collapsible=icon]:hidden"
           />
         )}
       </Link>
@@ -349,26 +458,25 @@ export function CollapsibleNavGroup({
   isActive: boolean;
   children: React.ReactNode;
 }) {
-  const { openGroup, setOpenGroup } = React.useContext(NavGroupContext);
+  const { openGroups, toggleGroup, openGroup } =
+    React.useContext(NavGroupContext);
   const navItem = useNavItem(label);
-  const isOpen = openGroup === label || (openGroup === null && isActive);
+  const isOpen = openGroups.has(label);
 
   const handleClick = () => {
     if (!isOpen) {
-      setOpenGroup(label);
+      openGroup(label);
     }
   };
 
   return (
-    <Collapsible
-      open={isOpen}
-      onOpenChange={() => setOpenGroup(isOpen ? null : label)}
-    >
+    <Collapsible open={isOpen} onOpenChange={() => toggleGroup(label)}>
       <SidebarMenuItem>
         <div
           ref={navItem.ref}
           onMouseEnter={navItem.onMouseEnter}
           onMouseLeave={navItem.onMouseLeave}
+          onMouseMove={navItem.onMouseMove}
         >
           <Link
             to={defaultHref ?? "#"}
@@ -396,7 +504,21 @@ export function CollapsibleNavGroup({
 
         <CollapsibleContent className="data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden">
           <div className="border-border mt-1 ml-4 border-l pl-2 group-data-[collapsible=icon]:hidden">
-            <ul className="flex flex-col gap-0.5 py-0.5">{children}</ul>
+            <motion.ul
+              className="flex flex-col gap-0.5 py-0.5"
+              initial="closed"
+              animate={isOpen ? "open" : "closed"}
+              variants={{
+                open: {
+                  transition: { staggerChildren: 0.04, delayChildren: 0.05 },
+                },
+                closed: {
+                  transition: { staggerChildren: 0.02, staggerDirection: -1 },
+                },
+              }}
+            >
+              {children}
+            </motion.ul>
           </div>
         </CollapsibleContent>
       </SidebarMenuItem>
@@ -416,16 +538,45 @@ export function CollapsibleNavItem({
   stage?: ReleaseStage;
 }) {
   const navItem = useNavItem(item.title);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const handleClick = () => {
+    setIsLoading(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(
+      () => setIsLoading(false),
+      NAV_LOADING_DURATION_MS,
+    );
+  };
 
   return (
-    <li data-sidebar="menu-item">
+    <motion.li
+      data-sidebar="menu-item"
+      variants={{
+        open: {
+          opacity: 1,
+          y: 0,
+          transition: { duration: 0.15, ease: [0.4, 0, 0.2, 1] },
+        },
+        closed: { opacity: 0, y: -4, transition: { duration: 0.1 } },
+      }}
+    >
       <div
         ref={navItem.ref}
         onMouseEnter={navItem.onMouseEnter}
         onMouseLeave={navItem.onMouseLeave}
+        onMouseMove={navItem.onMouseMove}
       >
         <Link
           to={item.href()}
+          onClick={handleClick}
           className={cn(
             "relative z-[1] flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
             item.active
@@ -433,17 +584,20 @@ export function CollapsibleNavItem({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          <span className="truncate">{item.title}</span>
+          <span className={cn("truncate", isLoading && "nav-shimmer")}>
+            {item.title}
+          </span>
           {item.title === "Billing" && <ProductTierBadge />}
           {(stage ?? item.stage) && (
             <ReleaseStageBadge
               stage={(stage ?? item.stage)!}
               size="xs"
-              className="ml-auto"
+              noTooltip
+              className="-my-1 origin-left scale-75"
             />
           )}
         </Link>
       </div>
-    </li>
+    </motion.li>
   );
 }

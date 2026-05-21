@@ -126,7 +126,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarContent className="pt-5">
-        <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
+        <NavGroupProvider
+          activeGroup={activeGroup}
+          defaultOpenGroups={!activeGroup ? ["Connect", "Build"] : undefined}
+          activeItem={activeItem}
+        >
           <SidebarMenu className="gap-1 px-2">
             {/* Home — top-level, no group */}
             <ScopeGatedTopLevelItem item={routes.home} scope="project:read" />
