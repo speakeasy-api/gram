@@ -77,12 +77,13 @@ SELECT
   active_roles.workos_description,
   active_roles.workos_created_at,
   active_roles.workos_updated_at,
-  COUNT(ora.id)::bigint AS member_count
+  COUNT(DISTINCT ora.id)::bigint AS member_count
 FROM active_roles
 LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = $1
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
 GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
 ORDER BY active_roles.role_kind DESC
 LIMIT 1
@@ -150,26 +151,37 @@ func (q *Queries) GetGlobalRoleBySlug(ctx context.Context, workosSlug string) (G
 
 const getOrganizationRoleAssignmentByWorkosUser = `-- name: GetOrganizationRoleAssignmentByWorkosUser :one
 SELECT
-  ora.user_id,
-  ora.workos_user_id,
-  ora.workos_membership_id,
-  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
-  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
-  ora.created_at
-FROM organization_role_assignments AS ora
+  our.user_id,
+  users.workos_id::text AS workos_user_id,
+  our.workos_membership_id,
+  COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug, '')::text AS role_slug,
+  COALESCE(ora.created_at, our.created_at)::timestamptz AS created_at
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+LEFT JOIN LATERAL (
+  SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at
+  FROM organization_role_assignments
+  WHERE organization_role_assignments.organization_id = our.organization_id
+    AND organization_role_assignments.workos_user_id = users.workos_id
+    AND organization_role_assignments.deleted_at IS NULL
+  ORDER BY organization_role_assignments.created_at
+  LIMIT 1
+) AS ora ON TRUE
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.organization_id = our.organization_id
   AND organization_roles.deleted IS FALSE
   AND organization_roles.workos_deleted IS FALSE
 LEFT JOIN global_roles
   ON ora.role_urn = 'role:global:' || global_roles.id::text
   AND global_roles.deleted IS FALSE
   AND global_roles.workos_deleted IS FALSE
-WHERE ora.organization_id = $1
-  AND ora.workos_user_id = $2
-  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
-ORDER BY ora.created_at
+WHERE our.organization_id = $1
+  AND users.workos_id = $2::text
+  AND users.workos_id IS NOT NULL
+  AND our.deleted IS FALSE
 LIMIT 1
 `
 
@@ -182,7 +194,7 @@ type GetOrganizationRoleAssignmentByWorkosUserRow struct {
 	UserID             pgtype.Text
 	WorkosUserID       string
 	WorkosMembershipID pgtype.Text
-	RoleID             uuid.UUID
+	RoleID             string
 	RoleSlug           string
 	CreatedAt          pgtype.Timestamptz
 }
@@ -224,12 +236,13 @@ SELECT
   active_roles.workos_description,
   active_roles.workos_created_at,
   active_roles.workos_updated_at,
-  COUNT(ora.id)::bigint AS member_count
+  COUNT(DISTINCT ora.id)::bigint AS member_count
 FROM active_roles
 LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = $1
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
 GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
 ORDER BY active_roles.role_kind DESC
 LIMIT 1
@@ -422,22 +435,31 @@ SELECT
   users.display_name,
   users.email,
   users.photo_url,
-  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
-  ora.created_at AS joined_at
-FROM organization_role_assignments AS ora
+  COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id,
+  COALESCE(ora.created_at, our.created_at)::timestamptz AS joined_at
+FROM organization_user_relationships AS our
 JOIN users
-  ON users.id = ora.user_id
+  ON users.id = our.user_id
+LEFT JOIN LATERAL (
+  SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at
+  FROM organization_role_assignments
+  WHERE organization_role_assignments.organization_id = our.organization_id
+    AND organization_role_assignments.workos_user_id = users.workos_id
+    AND organization_role_assignments.deleted_at IS NULL
+  ORDER BY organization_role_assignments.created_at
+  LIMIT 1
+) AS ora ON TRUE
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.organization_id = our.organization_id
   AND organization_roles.deleted IS FALSE
   AND organization_roles.workos_deleted IS FALSE
 LEFT JOIN global_roles
   ON ora.role_urn = 'role:global:' || global_roles.id::text
   AND global_roles.deleted IS FALSE
   AND global_roles.workos_deleted IS FALSE
-WHERE ora.organization_id = $1
-  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
 ORDER BY users.email, users.id
 `
 
@@ -446,7 +468,7 @@ type ListAccessMembersRow struct {
 	DisplayName string
 	Email       string
 	PhotoUrl    pgtype.Text
-	RoleID      uuid.UUID
+	RoleID      string
 	JoinedAt    pgtype.Timestamptz
 }
 
@@ -498,12 +520,13 @@ SELECT
   active_roles.workos_description,
   active_roles.workos_created_at,
   active_roles.workos_updated_at,
-  COUNT(ora.id)::bigint AS member_count
+  COUNT(DISTINCT ora.id)::bigint AS member_count
 FROM active_roles
 LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = $1
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
 GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
 ORDER BY active_roles.workos_slug
 `
@@ -749,26 +772,38 @@ func (q *Queries) ListOrganizationRoleAssignmentsBySlug(ctx context.Context, arg
 
 const listOrganizationRoleAssignmentsByWorkosUsers = `-- name: ListOrganizationRoleAssignmentsByWorkosUsers :many
 SELECT
-  ora.user_id,
-  ora.workos_user_id,
-  ora.workos_membership_id,
-  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
-  ora.created_at
-FROM organization_role_assignments AS ora
+  our.user_id,
+  users.workos_id::text AS workos_user_id,
+  our.workos_membership_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug, '')::text AS role_slug,
+  COALESCE(ora.created_at, our.created_at)::timestamptz AS created_at
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+LEFT JOIN LATERAL (
+  SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at
+  FROM organization_role_assignments
+  WHERE organization_role_assignments.organization_id = our.organization_id
+    AND organization_role_assignments.workos_user_id = users.workos_id
+    AND organization_role_assignments.deleted_at IS NULL
+  ORDER BY organization_role_assignments.created_at
+  LIMIT 1
+) AS ora ON TRUE
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.organization_id = our.organization_id
   AND organization_roles.deleted IS FALSE
   AND organization_roles.workos_deleted IS FALSE
 LEFT JOIN global_roles
   ON ora.role_urn = 'role:global:' || global_roles.id::text
   AND global_roles.deleted IS FALSE
   AND global_roles.workos_deleted IS FALSE
-WHERE ora.organization_id = $1
-  AND ora.workos_user_id = ANY($2::text[])
-  AND ora.workos_membership_id IS NOT NULL
-  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
-ORDER BY ora.workos_user_id, role_slug
+WHERE our.organization_id = $1
+  AND users.workos_id = ANY($2::text[])
+  AND users.workos_id IS NOT NULL
+  AND our.workos_membership_id IS NOT NULL
+  AND our.deleted IS FALSE
+ORDER BY users.workos_id, role_slug
 `
 
 type ListOrganizationRoleAssignmentsByWorkosUsersParams struct {

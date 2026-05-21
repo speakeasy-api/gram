@@ -72,7 +72,7 @@ func TestRoleManager_MembersAndCounts(t *testing.T) {
 	manager := ti.service.roleMgr
 	members, err := manager.ListMembers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Len(t, members.Members, 2)
+	require.Len(t, members.Members, 3)
 
 	rolePrincipals, err := manager.MemberRolePrincipals(ctx, authCtx.ActiveOrganizationID, "user_2")
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestRoleManager_MembersAndCounts(t *testing.T) {
 	require.Equal(t, 1, counts["Custom Builder"])
 }
 
-func TestRoleManager_AssignMembersToRoleRequiresLocalAssignment(t *testing.T) {
+func TestRoleManager_AssignMembersToRoleAcceptsConnectedMemberWithoutAssignment(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -103,7 +103,6 @@ func TestRoleManager_AssignMembersToRoleRequiresLocalAssignment(t *testing.T) {
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "u1@example.com", "User 1", "user_1", "membership_1")
 
 	assigned, _, err := ti.service.roleMgr.assignMembersToRoleTx(ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder", []string{"local_user_1"})
-	require.Error(t, err)
-	require.Equal(t, 0, assigned)
-	require.Contains(t, err.Error(), "member role assignment not found")
+	require.NoError(t, err)
+	require.Equal(t, 1, assigned)
 }

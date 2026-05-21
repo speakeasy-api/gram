@@ -99,3 +99,21 @@ func TestService_ListRoles_ExcludesDisconnectedUsersFromMemberCounts(t *testing.
 	// Only user_1 should be counted — user_2 has a local account but no org connection.
 	require.Equal(t, 1, result.Roles[0].MemberCount)
 }
+
+func TestService_ListRoles_DoesNotCountConnectedUsersWithoutAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	_, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	memberID := seedGlobalRole(t, ctx, ti.conn, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
+
+	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Roles, 1)
+
+	require.Equal(t, memberID, result.Roles[0].ID)
+	require.Equal(t, "Member", result.Roles[0].Name)
+	require.Equal(t, 0, result.Roles[0].MemberCount)
+}

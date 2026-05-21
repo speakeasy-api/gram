@@ -169,6 +169,30 @@ func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizatio
 	return row.ID.String()
 }
 
+func seedGlobalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, role workos.Role) string {
+	t.Helper()
+
+	createdAt, err := time.Parse(time.RFC3339, role.CreatedAt)
+	require.NoError(t, err)
+	updatedAt, err := time.Parse(time.RFC3339, role.UpdatedAt)
+	require.NoError(t, err)
+
+	err = accessrepo.New(conn).UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
+		WorkosSlug:        role.Slug,
+		WorkosName:        role.Name,
+		WorkosDescription: conv.ToPGTextEmpty(role.Description),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(createdAt),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	row, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, role.Slug)
+	require.NoError(t, err)
+
+	return row.ID.String()
+}
+
 func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID string, member workos.Member) {
 	t.Helper()
 

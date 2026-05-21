@@ -89,7 +89,7 @@ func (r *RoleManager) GetRoleByID(ctx context.Context, gramOrgID, id string) (*g
 	return r.roleViewFromLocalRole(ctx, gramOrgID, role)
 }
 
-// ListMembers returns locally known organization members with role IDs resolved from local role assignments.
+// ListMembers returns locally known organization members and includes a role ID only when a local assignment exists.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
 	rows, err := repo.New(r.db).ListAccessMembers(ctx, gramOrgID)
 	if err != nil {
@@ -103,7 +103,7 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 			Name:     conv.Default(row.DisplayName, row.Email),
 			Email:    row.Email,
 			PhotoURL: conv.FromPGText[string](row.PhotoUrl),
-			RoleID:   row.RoleID.String(),
+			RoleID:   row.RoleID,
 			JoinedAt: conv.FromPGTimestamptz(row.JoinedAt),
 		})
 	}
@@ -528,7 +528,7 @@ func (r *RoleManager) UpdateMemberRole(ctx context.Context, gramOrgID, userID, r
 			Name:     memberName,
 			Email:    connectedUser.Email,
 			PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleID:   existing.RoleID.String(),
+			RoleID:   existing.RoleID,
 			JoinedAt: conv.FromPGTimestamptz(existing.CreatedAt),
 		},
 		After: &gen.AccessMember{

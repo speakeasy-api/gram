@@ -117,7 +117,7 @@ func TestService_ListMembers_AllowsOrgReadGrant(t *testing.T) {
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Members, 1)
+	require.Len(t, result.Members, 2)
 }
 
 func TestService_CreateRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {

@@ -26,7 +26,7 @@ func TestService_ListMembers(t *testing.T) {
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Members, 2)
+	require.Len(t, result.Members, 3)
 
 	byID := map[string]*gen.AccessMember{}
 	for _, member := range result.Members {
@@ -41,6 +41,8 @@ func TestService_ListMembers(t *testing.T) {
 
 	require.Equal(t, "Grace", byID["local_user_2"].Name)
 	require.Equal(t, builderID, byID["local_user_2"].RoleID)
+
+	require.Empty(t, byID[authCtx.UserID].RoleID)
 }
 
 func TestService_ListMembers_SkipsMembersWithoutLocalUser(t *testing.T) {
@@ -61,7 +63,7 @@ func TestService_ListMembers_SkipsMembersWithoutLocalUser(t *testing.T) {
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Members, 1)
+	require.Len(t, result.Members, 2)
 
 	byID := map[string]*gen.AccessMember{}
 	for _, member := range result.Members {
@@ -69,6 +71,22 @@ func TestService_ListMembers_SkipsMembersWithoutLocalUser(t *testing.T) {
 	}
 	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
 	require.Nil(t, byID["user_2"])
+	require.Empty(t, byID[authCtx.UserID].RoleID)
+}
+
+func TestService_ListMembers_IncludesConnectedUsersWithoutRoleAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Members, 1)
+
+	require.Equal(t, authCtx.UserID, result.Members[0].ID)
+	require.Empty(t, result.Members[0].RoleID)
+	require.NotEmpty(t, result.Members[0].Name)
 }
 
 func TestService_ListMembers_UsesDatabaseOnly(t *testing.T) {
@@ -81,5 +99,7 @@ func TestService_ListMembers_UsesDatabaseOnly(t *testing.T) {
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
-	require.Empty(t, result.Members)
+	require.Len(t, result.Members, 1)
+	require.Equal(t, authCtx.UserID, result.Members[0].ID)
+	require.Empty(t, result.Members[0].RoleID)
 }
