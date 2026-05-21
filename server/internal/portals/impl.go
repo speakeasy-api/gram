@@ -19,11 +19,12 @@ import (
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
+	tracer  trace.Tracer
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	auth    *auth.Auth
+	authz   *authz.Engine
+	siteURL string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -35,14 +36,16 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	siteURL string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("portals"))
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/portals"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/portals"),
+		logger:  logger,
+		db:      db,
+		auth:    auth.New(logger, db, sessions, authzEngine),
+		authz:   authzEngine,
+		siteURL: siteURL,
 	}
 }
 

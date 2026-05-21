@@ -56,6 +56,9 @@ func TestGetPortal_Enabled_ReturnsServers(t *testing.T) {
 	require.NotEmpty(t, resp.DisplayName)
 	require.Len(t, resp.Servers, 1)
 	require.Equal(t, endpointSlug, resp.Servers[0].Slug)
+	require.NotEmpty(t, resp.Servers[0].InstallURL)
+	require.Contains(t, resp.Servers[0].InstallURL, endpointSlug)
+	require.Contains(t, resp.Servers[0].InstallURL, testSiteURL)
 }
 
 func TestGetPortal_LogoFallsBackToProjectLogo(t *testing.T) {

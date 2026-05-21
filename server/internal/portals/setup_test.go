@@ -36,6 +36,11 @@ import (
 
 var infra *testenv.Environment
 
+// testSiteURL is the deterministic public-facing site URL used by the
+// portals service in tests. Matches the pattern other service tests use
+// (e.g. mcpmetadata/setup_test.go uses "http://0.0.0.0").
+const testSiteURL = "http://0.0.0.0"
+
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
@@ -82,7 +87,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	svc := portals.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache))
+	svc := portals.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), testSiteURL)
 
 	return ctx, &testInstance{
 		service:        svc,

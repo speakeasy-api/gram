@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -86,7 +85,7 @@ func (s *Service) GetPortal(ctx context.Context, payload *gen.GetPortalPayload) 
 			Name:        firstNonEmpty(conv.FromPGTextOrEmpty[string](sv.ServerName), conv.FromPGTextOrEmpty[string](sv.ToolsetName)),
 			Description: conv.FromPGText[string](sv.ToolsetDescription),
 			ToolCount:   toolCount,
-			InstallURL:  fmt.Sprintf("%s/x/mcp/%s/install", s.publicBaseURL(), sv.EndpointSlug),
+			InstallURL:  fmt.Sprintf("%s/x/mcp/%s/install", s.siteURL, sv.EndpointSlug),
 		})
 	}
 
@@ -137,10 +136,7 @@ func (s *Service) resolveLogoURL(row *repo.ProjectPortal, proj projectsrepo.Proj
 // assetServeURL constructs a management API URL that serves the given asset
 // via the assets.serveImage endpoint.
 func (s *Service) assetServeURL(assetID uuid.UUID) string {
-	return fmt.Sprintf("%s/rpc/assets.serveImage?id=%s",
-		conv.Default(os.Getenv("GRAM_SITE_URL"), "https://app.getgram.ai"),
-		assetID.String(),
-	)
+	return fmt.Sprintf("%s/rpc/assets.serveImage?id=%s", s.siteURL, assetID.String())
 }
 
 // toolCountFromInterface converts the interface{} value returned by sqlc for
@@ -164,10 +160,4 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
-}
-
-// publicBaseURL returns the public-facing base URL for constructing install URLs.
-// Falls back to the GRAM_SITE_URL env var or a sensible default.
-func (s *Service) publicBaseURL() string {
-	return conv.Default(os.Getenv("GRAM_SITE_URL"), "https://app.getgram.ai")
 }
