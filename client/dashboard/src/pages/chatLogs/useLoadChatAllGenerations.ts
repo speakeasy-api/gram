@@ -14,11 +14,14 @@ export interface LoadChatAllGenerationsResult {
   messages: ChatMessage[];
   isLoading: boolean;
   isFullyLoaded: boolean;
+  hasErrors: boolean;
 }
 
 // Loads a chat by paging across generations: latest first, then older
 // generations with up to three concurrent in-flight requests. Server returns
-// one generation per request to keep query cost bounded for long chats.
+// one generation per request to keep query cost bounded for long chats; the
+// window of queries we materialize grows as earlier ones settle so a chat with
+// many generations never pre-registers them all in React Query at once.
 export function useLoadChatAllGenerations(
   chatId: string,
 ): LoadChatAllGenerationsResult {
@@ -29,37 +32,42 @@ export function useLoadChatAllGenerations(
     {},
   );
 
-  const olderGenerations = useMemo(() => {
-    if (!latest) return [];
-    const maxGen = latest.maxGeneration;
-    return Array.from({ length: maxGen }, (_, i) => maxGen - 1 - i);
-  }, [latest]);
+  const maxGeneration = latest?.maxGeneration ?? 0;
 
-  const [enabledUpTo, setEnabledUpTo] = useState(0);
+  const [windowSize, setWindowSize] = useState(0);
 
   useEffect(() => {
-    setEnabledUpTo(0);
+    setWindowSize(0);
   }, [chatId]);
 
+  useEffect(() => {
+    if (latest && windowSize === 0 && maxGeneration > 0) {
+      setWindowSize(Math.min(PARALLELISM, maxGeneration));
+    }
+  }, [latest, windowSize, maxGeneration]);
+
+  const generationsToLoad = useMemo(() => {
+    if (!latest) return [];
+    return Array.from({ length: windowSize }, (_, i) => maxGeneration - 1 - i);
+  }, [latest, maxGeneration, windowSize]);
+
   const queries = useQueries({
-    queries: olderGenerations.map((generation, idx) => ({
+    queries: generationsToLoad.map((generation) => ({
       ...buildLoadChatQuery(client, { id: chatId, generation }),
-      enabled: idx < enabledUpTo,
     })),
   });
 
-  const settledCount = queries.filter((q) => q.isSuccess || q.isError).length;
+  const successCount = queries.filter((q) => q.isSuccess).length;
+  const hasErrors = queries.some((q) => q.isError);
 
   useEffect(() => {
-    if (!latest || olderGenerations.length === 0) return;
-    const desired = Math.min(
-      settledCount + PARALLELISM,
-      olderGenerations.length,
-    );
-    if (desired > enabledUpTo) {
-      setEnabledUpTo(desired);
+    if (!latest || windowSize === 0 || windowSize >= maxGeneration) return;
+    if (hasErrors) return;
+    const desired = Math.min(successCount + PARALLELISM, maxGeneration);
+    if (desired > windowSize) {
+      setWindowSize(desired);
     }
-  }, [latest, settledCount, enabledUpTo, olderGenerations.length]);
+  }, [latest, successCount, windowSize, maxGeneration, hasErrors]);
 
   const messages = useMemo(() => {
     if (!latest) return [];
@@ -72,15 +80,13 @@ export function useLoadChatAllGenerations(
     return merged;
   }, [latest, queries]);
 
-  const isFullyLoaded =
-    !!latest &&
-    enabledUpTo === olderGenerations.length &&
-    queries.every((q) => q.isSuccess || q.isError);
+  const isFullyLoaded = !!latest && successCount === maxGeneration;
 
   return {
     chat: latest,
     messages,
     isLoading: latestLoading,
     isFullyLoaded,
+    hasErrors,
   };
 }

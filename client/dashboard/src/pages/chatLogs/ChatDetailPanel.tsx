@@ -960,6 +960,7 @@ export function ChatDetailPanel({
     chat,
     messages: chatMessages,
     isLoading: chatLoading,
+    hasErrors: chatLoadHasErrors,
   } = useLoadChatAllGenerations(chatId);
 
   // Fetch telemetry logs for this chat
@@ -1241,6 +1242,14 @@ export function ChatDetailPanel({
               )}
             </div>
           </div>
+
+          {chatLoadHasErrors && (
+            <div className="border-destructive/30 bg-destructive/10 text-destructive border-b px-6 py-3 text-sm">
+              Some older conversation segments failed to load. The transcript
+              below is incomplete.
+            </div>
+          )}
+
 
           <EntryTypeFilterBar
             value={enabledEntryTypes}
