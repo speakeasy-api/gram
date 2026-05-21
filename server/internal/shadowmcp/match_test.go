@@ -69,6 +69,12 @@ func TestNormalizeMatchValue(t *testing.T) {
 			matchValue:   "  Linear MCP  ",
 			want:         "linear mcp",
 		},
+		{
+			name:         "server identity preserves separators while lowercasing",
+			matchBreadth: MatchBreadthServerIdentity,
+			matchValue:   "claude_ai_Calendly",
+			want:         "claude_ai_calendly",
+		},
 	}
 
 	for _, tt := range tests {
@@ -103,4 +109,17 @@ func TestNormalizeMatchValue_RejectsInvalidInput(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestNormalizeAccessEvidence_DerivesURLHostWithSchemeAwarePortNormalization(t *testing.T) {
+	t.Parallel()
+
+	got := NormalizeAccessEvidence(AccessEvidence{
+		FullURL:        "https://Example.COM:443/mcp",
+		URLHost:        "",
+		ServerIdentity: "",
+	})
+
+	require.Equal(t, "https://example.com/mcp", got.FullURL)
+	require.Equal(t, "example.com", got.URLHost)
 }
