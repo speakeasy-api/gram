@@ -218,6 +218,15 @@ function SecurityOverviewContent() {
     return r ? `${r.href()}${location.search}` : "";
   }, [routes.riskOverview, location.search]);
 
+  const rulesIndexHref = useMemo(() => {
+    const r = (
+      routes.riskOverview as unknown as {
+        rulesIndex?: { href: () => string };
+      }
+    ).rulesIndex;
+    return r ? `${r.href()}${location.search}` : "";
+  }, [routes.riskOverview, location.search]);
+
   const topCategories = useMemo<BarDatum[]>(() => {
     const categoryDetailRoute = (
       routes.riskOverview as unknown as {
@@ -372,6 +381,9 @@ function SecurityOverviewContent() {
             <DashboardChartCard
               title="Top Risk Events by Rule"
               empty={!hasFindings || topRules.length === 0}
+              action={
+                <ViewAllLink href={rulesIndexHref} label="View all rules" />
+              }
             >
               <RankedBarList items={topRules} />
             </DashboardChartCard>

@@ -806,7 +806,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		ProjectID: *authCtx.ProjectID,
 		FromTime:  window.from,
 		ToTime:    window.to,
-		RowLimit:  10,
+		// Returns enough rows for the "view all rules" page to show the long
+		// tail without pagination. The main /risk-overview widget only renders
+		// the top 10 of these.
+		RowLimit: 200,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top rules").Log(ctx, s.logger)

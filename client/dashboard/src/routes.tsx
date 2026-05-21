@@ -81,6 +81,7 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
+import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter from "./pages/security/PolicyCenter";
@@ -484,6 +485,11 @@ const ROUTE_STRUCTURE = {
         title: "Categories",
         url: "categories",
         component: RiskOverviewCategoriesIndex,
+      },
+      rulesIndex: {
+        title: "Rules",
+        url: "rules",
+        component: RiskOverviewRulesIndex,
       },
       categoryDetail: {
         title: "Category",
