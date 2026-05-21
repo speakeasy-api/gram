@@ -13,6 +13,7 @@ export interface LoadChatAllGenerationsResult {
   chat: Chat | undefined;
   messages: ChatMessage[];
   isLoading: boolean;
+  isLoadingMore: boolean;
   isFullyLoaded: boolean;
   hasErrors: boolean;
 }
@@ -41,8 +42,14 @@ export function useLoadChatAllGenerations(
     setWindowSize(0);
   }
 
+  // Only build queries once the latest page belongs to the current chat.
+  // During the in-flight render where chatId just changed, the cached
+  // windowSize is stale and could produce negative generation indices.
+  const isReady = !!latest && trackedChatId === chatId;
+  const effectiveWindowSize = isReady ? Math.min(windowSize, maxGeneration) : 0;
+
   const queries = useQueries({
-    queries: Array.from({ length: windowSize }, (_, i) => ({
+    queries: Array.from({ length: effectiveWindowSize }, (_, i) => ({
       ...buildLoadChatQuery(client, {
         id: chatId,
         generation: maxGeneration - 1 - i,
@@ -53,9 +60,10 @@ export function useLoadChatAllGenerations(
   const successCount = queries.filter((q) => q.isSuccess).length;
   const hasErrors = queries.some((q) => q.isError);
 
-  const desiredWindow = hasErrors
-    ? windowSize
-    : Math.min(successCount + PARALLELISM, maxGeneration);
+  const desiredWindow =
+    !isReady || hasErrors
+      ? effectiveWindowSize
+      : Math.min(successCount + PARALLELISM, maxGeneration);
   if (desiredWindow > windowSize) {
     setWindowSize(desiredWindow);
   }
@@ -71,11 +79,14 @@ export function useLoadChatAllGenerations(
     return merged;
   }, [latest, queries]);
 
+  const isFullyLoaded = !!latest && successCount === maxGeneration;
+
   return {
     chat: latest,
     messages,
     isLoading: latestLoading,
-    isFullyLoaded: !!latest && successCount === maxGeneration,
+    isLoadingMore: !!latest && !isFullyLoaded && !hasErrors,
+    isFullyLoaded,
     hasErrors,
   };
 }
