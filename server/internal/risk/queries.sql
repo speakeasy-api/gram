@@ -163,50 +163,20 @@ LIMIT @row_limit;
 -- queries.
 WITH user_findings AS (
   SELECT
-    CASE
-      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-      WHEN rr.rule_id IN (
-          'pii.us_ssn'
-        , 'pii.us_passport'
-        , 'pii.us_driver_license'
-        , 'pii.us_itin'
-        , 'pii.uk_nhs'
-        , 'pii.uk_nino'
-        , 'pii.uk_passport'
-        , 'pii.es_nif'
-        , 'pii.it_fiscal_code'
-        , 'pii.au_tfn'
-        , 'pii.in_pan'
-        , 'pii.in_aadhaar'
-        , 'pii.sg_nric_fin'
-      ) THEN 'government_ids'
-      WHEN rr.rule_id IN (
-          'pii.medical_license'
-        , 'pii.us_mbi'
-        , 'pii.us_npi'
-        , 'pii.medical_disease_disorder'
-        , 'pii.medical_medication'
-        , 'pii.medical_therapeutic_procedure'
-        , 'pii.medical_clinical_event'
-        , 'pii.medical_biological_attribute'
-        , 'pii.medical_family_history'
-      ) THEN 'healthcare'
-      WHEN rr.rule_id IN (
-          'pii.harmful_content_request'
-        , 'pii.policy_violation'
-        , 'pii.unauthorized_action'
-        , 'pii.topic_boundary_violation'
-      ) THEN 'off_policy'
-      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-      -- Scanner-source fallbacks: keep these LAST so any prefixed
-      -- rule_id wins. Stay in sync with the Go classifier in
-      -- internal/risk/categories.
-      WHEN rr.source = 'gitleaks' THEN 'secrets'
-      WHEN rr.source = 'presidio' THEN 'pii'
-      ELSE 'custom'
-    END AS category
+    -- Classify via the risk_category_lookup TEMP TABLE populated from the
+    -- Go classifier in internal/risk/categories. See bootstrap.go and the
+    -- pgxpool AfterConnect hook in cmd/gram/deps.go.
+    COALESCE(
+      (
+        SELECT rcl.category FROM risk_category_lookup rcl
+        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
+           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        ORDER BY rcl.priority ASC
+        LIMIT 1
+      ),
+      'custom'
+    )::text AS category
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -246,50 +216,20 @@ WITH categorized AS (
   SELECT
     COALESCE(rr.rule_id, '')::TEXT AS rule_id,
     rr.source,
-    CASE
-      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-      WHEN rr.rule_id IN (
-          'pii.us_ssn'
-        , 'pii.us_passport'
-        , 'pii.us_driver_license'
-        , 'pii.us_itin'
-        , 'pii.uk_nhs'
-        , 'pii.uk_nino'
-        , 'pii.uk_passport'
-        , 'pii.es_nif'
-        , 'pii.it_fiscal_code'
-        , 'pii.au_tfn'
-        , 'pii.in_pan'
-        , 'pii.in_aadhaar'
-        , 'pii.sg_nric_fin'
-      ) THEN 'government_ids'
-      WHEN rr.rule_id IN (
-          'pii.medical_license'
-        , 'pii.us_mbi'
-        , 'pii.us_npi'
-        , 'pii.medical_disease_disorder'
-        , 'pii.medical_medication'
-        , 'pii.medical_therapeutic_procedure'
-        , 'pii.medical_clinical_event'
-        , 'pii.medical_biological_attribute'
-        , 'pii.medical_family_history'
-      ) THEN 'healthcare'
-      WHEN rr.rule_id IN (
-          'pii.harmful_content_request'
-        , 'pii.policy_violation'
-        , 'pii.unauthorized_action'
-        , 'pii.topic_boundary_violation'
-      ) THEN 'off_policy'
-      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-      -- Scanner-source fallbacks: keep these LAST so any prefixed
-      -- rule_id wins. Stay in sync with the Go classifier in
-      -- internal/risk/categories.
-      WHEN rr.source = 'gitleaks' THEN 'secrets'
-      WHEN rr.source = 'presidio' THEN 'pii'
-      ELSE 'custom'
-    END AS category
+    -- Classify via the risk_category_lookup TEMP TABLE populated from the
+    -- Go classifier in internal/risk/categories. See bootstrap.go and the
+    -- pgxpool AfterConnect hook in cmd/gram/deps.go.
+    COALESCE(
+      (
+        SELECT rcl.category FROM risk_category_lookup rcl
+        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
+           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        ORDER BY rcl.priority ASC
+        LIMIT 1
+      ),
+      'custom'
+    )::text AS category
   FROM risk_results rr
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE
@@ -338,50 +278,17 @@ WITH buckets AS (
 categorized AS (
   SELECT
       date_trunc('hour', rr.created_at)::timestamptz AS bucket_start
-    , CASE
-        WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-        WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-        WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-        WHEN rr.rule_id IN (
-            'pii.us_ssn'
-          , 'pii.us_passport'
-          , 'pii.us_driver_license'
-          , 'pii.us_itin'
-          , 'pii.uk_nhs'
-          , 'pii.uk_nino'
-          , 'pii.uk_passport'
-          , 'pii.es_nif'
-          , 'pii.it_fiscal_code'
-          , 'pii.au_tfn'
-          , 'pii.in_pan'
-          , 'pii.in_aadhaar'
-          , 'pii.sg_nric_fin'
-        ) THEN 'government_ids'
-        WHEN rr.rule_id IN (
-            'pii.medical_license'
-          , 'pii.us_mbi'
-          , 'pii.us_npi'
-          , 'pii.medical_disease_disorder'
-          , 'pii.medical_medication'
-          , 'pii.medical_therapeutic_procedure'
-          , 'pii.medical_clinical_event'
-          , 'pii.medical_biological_attribute'
-          , 'pii.medical_family_history'
-        ) THEN 'healthcare'
-        WHEN rr.rule_id IN (
-            'pii.harmful_content_request'
-          , 'pii.policy_violation'
-          , 'pii.unauthorized_action'
-          , 'pii.topic_boundary_violation'
-        ) THEN 'off_policy'
-        WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-        -- Scanner-source fallbacks: keep these LAST so any prefixed
-        -- rule_id wins. Stay in sync with the Go classifier in
-        -- internal/risk/categories.
-        WHEN rr.source = 'gitleaks' THEN 'secrets'
-        WHEN rr.source = 'presidio' THEN 'pii'
-        ELSE 'custom'
-      END AS category
+    , COALESCE(
+        (
+          SELECT rcl.category FROM risk_category_lookup rcl
+          WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
+             OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
+             OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+          ORDER BY rcl.priority ASC
+          LIMIT 1
+        ),
+        'custom'
+      )::text AS category
   FROM risk_results rr
   WHERE rr.project_id = sqlc.arg(project_id)::uuid
     AND rr.found IS TRUE
@@ -527,52 +434,17 @@ FROM (
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
-    AND (@category::text = '' OR (
-    CASE
-      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
-      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
-      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
-      WHEN rr.rule_id IN (
-          'pii.us_ssn'
-        , 'pii.us_passport'
-        , 'pii.us_driver_license'
-        , 'pii.us_itin'
-        , 'pii.uk_nhs'
-        , 'pii.uk_nino'
-        , 'pii.uk_passport'
-        , 'pii.es_nif'
-        , 'pii.it_fiscal_code'
-        , 'pii.au_tfn'
-        , 'pii.in_pan'
-        , 'pii.in_aadhaar'
-        , 'pii.sg_nric_fin'
-      ) THEN 'government_ids'
-      WHEN rr.rule_id IN (
-          'pii.medical_license'
-        , 'pii.us_mbi'
-        , 'pii.us_npi'
-        , 'pii.medical_disease_disorder'
-        , 'pii.medical_medication'
-        , 'pii.medical_therapeutic_procedure'
-        , 'pii.medical_clinical_event'
-        , 'pii.medical_biological_attribute'
-        , 'pii.medical_family_history'
-      ) THEN 'healthcare'
-      WHEN rr.rule_id IN (
-          'pii.harmful_content_request'
-        , 'pii.policy_violation'
-        , 'pii.unauthorized_action'
-        , 'pii.topic_boundary_violation'
-      ) THEN 'off_policy'
-      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
-      -- Scanner-source fallbacks: keep these LAST so any prefixed
-      -- rule_id wins. Stay in sync with the Go classifier in
-      -- internal/risk/categories.
-      WHEN rr.source = 'gitleaks' THEN 'secrets'
-      WHEN rr.source = 'presidio' THEN 'pii'
-      ELSE 'custom'
-    END
-  ) = @category::text)
+    AND (@category::text = '' OR COALESCE(
+      (
+        SELECT rcl.category FROM risk_category_lookup rcl
+        WHERE (rcl.source IS NOT NULL AND rcl.source = rr.source)
+           OR (rcl.rule_id IS NOT NULL AND rcl.rule_id = rr.rule_id)
+           OR (rcl.rule_prefix IS NOT NULL AND rr.rule_id LIKE rcl.rule_prefix || '%')
+        ORDER BY rcl.priority ASC
+        LIMIT 1
+      ),
+      'custom'
+    ) = @category::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
