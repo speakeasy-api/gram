@@ -5,15 +5,16 @@ import {
 } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { useRoutes } from "@/routes";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import {
   useListChatsWithResolutions,
   useRiskOverview,
 } from "@gram/client/react-query/index.js";
 import { Icon } from "@speakeasy-api/moonshine";
-import { useMemo } from "react";
-import { Link, useParams } from "react-router";
+import { useCallback, useMemo } from "react";
+import { useParams, useSearchParams } from "react-router";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "15m",
@@ -47,7 +48,26 @@ function RiskOverviewUserDetailContent() {
     externalUserId: string;
   }>();
   const externalUserId = decodeURIComponent(encodedExternalUserId);
-  const routes = useRoutes();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedChatId = searchParams.get("chat_id");
+  const setSelectedChatId = useCallback(
+    (chatId: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (chatId) {
+            next.set("chat_id", chatId);
+          } else {
+            next.delete("chat_id");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const {
     dateRange,
     customRange,
@@ -100,37 +120,57 @@ function RiskOverviewUserDetailContent() {
   );
 
   return (
-    <Page.Section>
-      <Page.Section.Title stage="beta">{userLabel}</Page.Section.Title>
-      <Page.Section.Description>
-        Risk findings and chat sessions for this user
-        {rangeLabel && ` across ${rangeLabel}.`}
-      </Page.Section.Description>
-      <Page.Section.CTA>{controls}</Page.Section.CTA>
-      <Page.Section.Body>
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-            <MetricCard
-              title="Findings"
-              value={userEntry?.findings ?? 0}
-              format="number"
-              icon="flag"
-            />
-            <MetricCard
-              title="Chat Sessions"
-              value={totalChats}
-              format="number"
-              icon="message-square"
+    <>
+      <Page.Section>
+        <Page.Section.Title stage="beta">{userLabel}</Page.Section.Title>
+        <Page.Section.Description>
+          Risk findings and chat sessions for this user
+          {rangeLabel && ` across ${rangeLabel}.`}
+        </Page.Section.Description>
+        <Page.Section.CTA>{controls}</Page.Section.CTA>
+        <Page.Section.Body>
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+              <MetricCard
+                title="Findings"
+                value={userEntry?.findings ?? 0}
+                format="number"
+                icon="flag"
+              />
+              <MetricCard
+                title="Chat Sessions"
+                value={totalChats}
+                format="number"
+                icon="message-square"
+              />
+            </div>
+            <ChatList
+              chats={chats}
+              isLoading={chatsQuery.isLoading}
+              onSelectChat={setSelectedChatId}
             />
           </div>
-          <ChatList
-            chats={chats}
-            isLoading={chatsQuery.isLoading}
-            agentsHref={routes.logs.agents.href()}
-          />
-        </div>
-      </Page.Section.Body>
-    </Page.Section>
+        </Page.Section.Body>
+      </Page.Section>
+
+      <Drawer
+        open={!!selectedChatId}
+        onOpenChange={(open) => !open && setSelectedChatId(null)}
+        direction="right"
+      >
+        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
+          {selectedChatId && (
+            <ChatDetailPanel
+              chatId={selectedChatId}
+              resolutions={[]}
+              onClose={() => setSelectedChatId(null)}
+              onDelete={() => setSelectedChatId(null)}
+              collapseNonRisk
+            />
+          )}
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }
 
@@ -145,11 +185,11 @@ type Chat = {
 function ChatList({
   chats,
   isLoading,
-  agentsHref,
+  onSelectChat,
 }: {
   chats: Chat[];
   isLoading: boolean;
-  agentsHref: string;
+  onSelectChat: (chatId: string) => void;
 }) {
   if (isLoading) {
     return (
@@ -177,9 +217,10 @@ function ChatList({
     <ul className="divide-border divide-y rounded-lg border">
       {chats.map((chat) => (
         <li key={chat.id}>
-          <Link
-            to={`${agentsHref}?chatId=${encodeURIComponent(chat.id)}`}
-            className="hover:bg-muted/40 flex items-center gap-3 px-4 py-3 transition-colors"
+          <button
+            type="button"
+            onClick={() => onSelectChat(chat.id)}
+            className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
           >
             <Icon
               name="message-square"
@@ -203,7 +244,7 @@ function ChatList({
               name="chevron-right"
               className="text-muted-foreground size-4 shrink-0"
             />
-          </Link>
+          </button>
         </li>
       ))}
     </ul>
