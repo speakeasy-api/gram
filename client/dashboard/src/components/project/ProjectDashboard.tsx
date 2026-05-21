@@ -274,7 +274,7 @@ export function ProjectDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
                   title="Top Users"
-                  tooltip="End users ranked by total token consumption (input + output tokens) in the selected period."
+                  tooltip="Employees ranked by total token consumption (input + output tokens) in the selected period."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
