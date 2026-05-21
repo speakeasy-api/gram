@@ -1,0 +1,25 @@
+provider:
+  users:
+    - email: eng@speakeasyapi.dev
+      name: Engineering User
+      hd: speakeasyapi.dev
+      picture: https://lh3.googleusercontent.com/a/default-user
+      email_verified: true
+    - email: marketing@speakeasy.com
+      name: Marketing User
+      hd: speakeasy.com
+      picture: https://lh3.googleusercontent.com/a/default-user
+      email_verified: true
+    - email: notallowed@gmail.com
+      name: External user
+      picture: https://lh3.googleusercontent.com/a/default-user
+    - email: unverified@speakeasy.com
+      name: Unverified User
+      picture: https://lh3.googleusercontent.com/a/default-user
+      email_verified: false
+  oauth_clients:
+    - client_id: gram-local.apps.googleusercontent.com
+      client_secret: GOCSPX-example_secret
+      name: Gram (Google)
+      redirect_uris:
+        - "https://localhost:8083/admin/auth.callback"
