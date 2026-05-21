@@ -301,7 +301,7 @@ func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, org
 		Description:       pgtype.Text{String: "", Valid: false},
 		Match:             pgtype.Text{String: match, Valid: match != ""},
 		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
-		EndPos:            pgtype.Int4{Int32: int32(len(match)), Valid: true}, //nolint:gosec // test fixture, match len is bounded
+		EndPos:            pgtype.Int4{Int32: int32(len(match)), Valid: true},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 		Tags:              nil,
 	}})
