@@ -45,6 +45,7 @@ var _ = Service("aiIntegrations", func() {
 			security.SessionPayload()
 			Attribute("provider", String, "AI provider identifier. Initially only cursor is supported.")
 			Required("provider")
+			Meta("openapi:typename", "GetAIIntegrationConfigRequest")
 		})
 
 		Result(Config)
@@ -77,6 +78,7 @@ var _ = Service("aiIntegrations", func() {
 			Attribute("api_key", String, "Provider API key. Stored encrypted at rest; never returned on reads.")
 			Attribute("enabled", Boolean, "Whether the integration should be active.")
 			Required("provider", "api_key", "enabled")
+			Meta("openapi:typename", "UpsertAIIntegrationConfigRequest")
 		})
 
 		Result(Config)
@@ -106,6 +108,7 @@ var _ = Service("aiIntegrations", func() {
 			security.SessionPayload()
 			Attribute("provider", String, "AI provider identifier. Initially only cursor is supported.")
 			Required("provider")
+			Meta("openapi:typename", "DeleteAIIntegrationConfigRequest")
 		})
 
 		Result(Empty)

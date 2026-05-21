@@ -1510,7 +1510,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DeleteConfigRequestBody'
+              $ref: '#/components/schemas/DeleteAIIntegrationConfigRequest'
         required: true
       responses:
         "204":
@@ -1700,7 +1700,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertConfigRequestBody'
+              $ref: '#/components/schemas/UpsertAIIntegrationConfigRequest'
         required: true
       responses:
         "200":
@@ -12923,7 +12923,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertConfigRequestBody2'
+              $ref: '#/components/schemas/UpsertConfigRequestBody'
         required: true
       responses:
         "200":
@@ -29753,7 +29753,7 @@ components:
         - created_at
         - updated_at
         - is_updating
-    DeleteConfigRequestBody:
+    DeleteAIIntegrationConfigRequest:
       type: object
       properties:
         provider:
@@ -38281,6 +38281,22 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
+    UpsertAIIntegrationConfigRequest:
+      type: object
+      properties:
+        api_key:
+          type: string
+          description: Provider API key. Stored encrypted at rest; never returned on reads.
+        enabled:
+          type: boolean
+          description: Whether the integration should be active.
+        provider:
+          type: string
+          description: AI provider identifier. Initially only cursor is supported.
+      required:
+        - provider
+        - api_key
+        - enabled
     UpsertAllowedOriginForm:
       type: object
       properties:
@@ -38306,22 +38322,6 @@ components:
       required:
         - allowed_origin
     UpsertConfigRequestBody:
-      type: object
-      properties:
-        api_key:
-          type: string
-          description: Provider API key. Stored encrypted at rest; never returned on reads.
-        enabled:
-          type: boolean
-          description: Whether the integration should be active.
-        provider:
-          type: string
-          description: AI provider identifier. Initially only cursor is supported.
-      required:
-        - provider
-        - api_key
-        - enabled
-    UpsertConfigRequestBody2:
       type: object
       properties:
         enabled:

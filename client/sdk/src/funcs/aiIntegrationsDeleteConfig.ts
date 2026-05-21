@@ -94,7 +94,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.DeleteConfigRequestBody, {
+  const body = encodeJSON("body", payload.DeleteAIIntegrationConfigRequest, {
     explode: true,
   });
 

@@ -20,7 +20,7 @@ export type UpsertAIIntegrationConfigRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  upsertConfigRequestBody: components.UpsertConfigRequestBody;
+  upsertAIIntegrationConfigRequest: components.UpsertAIIntegrationConfigRequest;
 };
 
 /** @internal */
@@ -60,7 +60,8 @@ export function upsertAIIntegrationConfigSecurityToJSON(
 export type UpsertAIIntegrationConfigRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  UpsertConfigRequestBody: components.UpsertConfigRequestBody$Outbound;
+  UpsertAIIntegrationConfigRequest:
+    components.UpsertAIIntegrationConfigRequest$Outbound;
 };
 
 /** @internal */
@@ -71,13 +72,14 @@ export const UpsertAIIntegrationConfigRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    upsertConfigRequestBody: components.UpsertConfigRequestBody$outboundSchema,
+    upsertAIIntegrationConfigRequest:
+      components.UpsertAIIntegrationConfigRequest$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
-      upsertConfigRequestBody: "UpsertConfigRequestBody",
+      upsertAIIntegrationConfigRequest: "UpsertAIIntegrationConfigRequest",
     });
   }),
 );
