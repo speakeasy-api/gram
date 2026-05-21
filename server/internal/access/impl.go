@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -30,35 +28,18 @@ import (
 	chrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	pfRepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-var (
-	errConnectedUserNotFound = errors.New("connected user not found")
-	// Custom role names become stable slugs and user-facing identifiers, so keep
-	// them to a predictable ASCII set instead of silently normalizing symbols.
-	validRoleNamePattern = regexp.MustCompile(`^[A-Za-z0-9 _-]+$`)
-)
-
-type RoleProvider interface {
-	ListRoles(ctx context.Context, orgID string) ([]workos.Role, error)
-	CreateRole(ctx context.Context, orgID string, opts workos.CreateRoleOpts) (*workos.Role, error)
-	UpdateRole(ctx context.Context, orgID string, roleSlug string, opts workos.UpdateRoleOpts) (*workos.Role, error)
-	DeleteRole(ctx context.Context, orgID string, roleSlug string) error
-	ListMembers(ctx context.Context, orgID string) ([]workos.Member, error)
-	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
-	GetUser(ctx context.Context, userID string) (*workos.User, error)
-	ListOrgUsers(ctx context.Context, orgID string) (map[string]workos.User, error)
-	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
-}
+var errConnectedUserNotFound = errors.New("connected user not found")
 
 // FeatureCacheWriter updates the Redis cache entry for a feature flag after a
 // direct DB write, keeping the cache consistent with the authoritative state.
@@ -73,7 +54,7 @@ type Service struct {
 	chConn       driver.Conn
 	auth         *auth.Auth
 	authz        *authz.Engine
-	roles        RoleProvider
+	roleMgr      *RoleManager
 	featureCache FeatureCacheWriter
 	audit        *audit.Logger
 }
@@ -87,7 +68,7 @@ func NewService(
 	db *pgxpool.Pool,
 	chConn driver.Conn,
 	sessions *sessions.Manager,
-	roles RoleProvider,
+	roleMgr *RoleManager,
 	authz *authz.Engine,
 	featureCache FeatureCacheWriter,
 	auditLogger *audit.Logger,
@@ -101,7 +82,7 @@ func NewService(
 		chConn:       chConn,
 		auth:         auth.New(logger, db, sessions, authz),
 		authz:        authz,
-		roles:        roles,
+		roleMgr:      roleMgr,
 		featureCache: featureCache,
 		audit:        auditLogger,
 	}
@@ -121,10 +102,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// ListRoles treats WorkOS as the source of truth for role records while Gram
-// remains the source of truth for role grants.
+// ListRoles reads local role records and enriches them with Gram's local grant state.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
-	ac, workosOrgID, err := s.roleOrgContext(ctx)
+	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -136,36 +116,13 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 		attr.UserID(ac.UserID),
 	)
 
-	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
-	}
-
-	members, err := s.roles.ListMembers(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
-	}
-	memberCounts, err := s.localMemberCounts(ctx, ac.ActiveOrganizationID, members)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, s.logger)
-	}
-
-	roles := make([]*gen.Role, 0, len(wRoles))
-	for _, wr := range wRoles {
-		role, err := buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, wr, memberCounts[wr.Slug])
-		if err != nil {
-			return nil, err
-		}
-		roles = append(roles, role)
-	}
-
-	return &gen.ListRolesResult{Roles: roles}, nil
+	return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 }
 
-// GetRole returns the WorkOS role definition enriched with Gram's local grant
+// GetRole returns the role definition enriched with Gram's local grant
 // state so callers see the complete effective role configuration in one place.
 func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*gen.Role, error) {
-	ac, workosOrgID, err := s.roleOrgContext(ctx)
+	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -178,35 +135,9 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 		attr.AccessRoleID(payload.ID),
 	)
 
-	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
-	}
-
-	role, ok := findRoleByID(wRoles, payload.ID)
-	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
-	}
-
-	members, err := s.roles.ListMembers(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
-	}
-
-	memberCounts, err := s.localMemberCounts(ctx, ac.ActiveOrganizationID, members)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, s.logger)
-	}
-
-	return buildRole(ctx, s.logger, s.db, ac.ActiveOrganizationID, role, memberCounts[role.Slug])
+	return s.roleMgr.GetRoleByID(ctx, ac.ActiveOrganizationID, payload.ID)
 }
 
-// CreateRole creates a role for a user of a given organization.
-// It is an idempotent operation intentionally ordered so that member assignment happens last.
-// If WorkOS role creation succeeds but local grant sync fails, we return an
-// error with no users assigned to the new role. That leaves a partially
-// created role behind, but keeps the outcome safe and retryable: repeating the
-// request can finish configuration without having granted accidental access.
 func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload) (*gen.Role, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -216,138 +147,22 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		return nil, err
 	}
 
-	roleSlug, slugErr := slugify(payload.Name)
-	if slugErr != nil {
-		return nil, slugErr
-	}
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessRoleSlug(roleSlug),
-	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
-		attr.AccessRoleSlug(roleSlug),
 	)
 
-	wr, err := s.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
-		Name:        payload.Name,
-		Slug:        roleSlug,
-		Description: payload.Description,
-	})
-	var apiErr *workos.APIError
-	switch {
-	case errors.As(err, &apiErr) && apiErr.StatusCode == 409:
-		wRoles, listErr := s.roles.ListRoles(ctx, workosOrgID)
-		if listErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, listErr, "list roles after create conflict").Log(ctx, logger)
-		}
-
-		var existingRole workos.Role
-		ok := false
-		for _, candidate := range wRoles {
-			if candidate.Slug == roleSlug {
-				existingRole = candidate
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return nil, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, logger)
-		}
-
-		wr = &existingRole
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, logger)
-	}
-	trace.SpanFromContext(ctx).SetAttributes(
-		attr.OrganizationID(ac.ActiveOrganizationID),
-		attr.UserID(ac.UserID),
-		attr.AccessRoleID(wr.ID),
-	)
-
-	// Stop before assigning members if grant sync fails. That can leave behind a
-	// newly created WorkOS role with no local grants, but it avoids assigning users
-	// to a role whose effective permissions are incomplete or unknown. Returning an
-	// error makes the setup retryable without creating accidental access.
-	if err := authz.SyncGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID, wr.Slug, roleGrantPayloads(payload.Grants)); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, logger)
-	}
-
-	assignedWorkosIDs := make([]string, 0, len(payload.MemberIds))
-	if len(payload.MemberIds) > 0 {
-		// payload.MemberIds are Gram user IDs (returned by ListMembers).
-		// Resolve them to WorkOS user IDs so we can look up WorkOS memberships.
-		gramToWorkos, err := gramToWorkosIDMap(ctx, s.db, payload.MemberIds)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve gram user ids to workos ids").Log(ctx, logger)
-		}
-
-		members, err := s.roles.ListMembers(ctx, workosOrgID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
-		}
-
-		memberByUser := membersByUserID(members)
-
-		for _, gramID := range payload.MemberIds {
-			workosID, ok := gramToWorkos[gramID]
-			if !ok {
-				continue
-			}
-			existing, ok := memberByUser[workosID]
-			if !ok {
-				continue
-			}
-
-			// Add the new role to the member's existing roles rather than replacing them.
-			newSlugs := addRoleSlug(existing.RoleSlugs, wr.Slug)
-			if _, err := s.roles.UpdateMemberRoles(ctx, existing.ID, newSlugs); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, logger)
-			}
-
-			assignedWorkosIDs = append(assignedWorkosIDs, workosID)
-		}
-		s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
-	}
-
-	// Only count assigned members who have local Gram accounts and are
-	// connected to this org, consistent with how ListMembers filters users.
-	assignedCount := 0
-	if len(assignedWorkosIDs) > 0 {
-		localRows, err := usersrepo.New(s.db).GetConnectedUsersByWorkosIDs(ctx, usersrepo.GetConnectedUsersByWorkosIDsParams{
-			WorkosIds:      assignedWorkosIDs,
-			OrganizationID: ac.ActiveOrganizationID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get connected users by workos ids: %w", err), "resolve local assigned members").Log(ctx, logger)
-		}
-		assignedCount = len(localRows)
-	}
-
-	createdRole, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, *wr, assignedCount)
+	created, err := s.roleMgr.CreateRole(ctx, ac.ActiveOrganizationID, workosOrgID, accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+	}, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.audit.LogAccessRoleCreate(ctx, s.db, audit.LogAccessRoleCreateEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		RoleID:           wr.ID,
-		RoleName:         createdRole.Name,
-		RoleSlug:         wr.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log access role creation").Log(ctx, logger)
-	}
-
-	return createdRole, nil
+	return created.Role, nil
 }
 
-// UpdateRole preserves the same split of responsibilities as creation: WorkOS
-// owns role identity and membership, while Gram owns the role's grant set.
 func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload) (*gen.Role, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -356,140 +171,24 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessRoleID(payload.ID),
-	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessRoleID(payload.ID),
 	)
 
-	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
-	}
-
-	currentRole, ok := findRoleByID(wRoles, payload.ID)
-	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
-	}
-	logger = logger.With(attr.SlogAccessRoleSlug(currentRole.Slug))
-	trace.SpanFromContext(ctx).SetAttributes(
-		attr.OrganizationID(ac.ActiveOrganizationID),
-		attr.UserID(ac.UserID),
-		attr.AccessRoleSlug(currentRole.Slug),
-	)
-	sysRole := isSystemRole(currentRole.Slug)
-	if sysRole && (payload.Name != nil || payload.Description != nil || payload.Grants != nil) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "system role properties cannot be updated, only member assignment is allowed").Log(ctx, logger)
-	}
-	if sysRole && payload.MemberIds == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "system role update requires member_ids").Log(ctx, logger)
-	}
-	if payload.Name != nil {
-		if _, err := slugify(*payload.Name); err != nil {
-			return nil, err
-		}
-	}
-
-	membersBefore, err := s.roles.ListMembers(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
-	}
-	memberCountsBefore, err := s.localMemberCounts(ctx, ac.ActiveOrganizationID, membersBefore)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, logger)
-	}
-	existingRole, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, currentRole, memberCountsBefore[currentRole.Slug])
+	updated, err := s.roleMgr.UpdateRole(ctx, ac.ActiveOrganizationID, workosOrgID, accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+	}, payload)
 	if err != nil {
 		return nil, err
 	}
+	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(updated.Role.Slug))
 
-	// System roles are immutable in WorkOS — skip the role update call and grant sync.
-	var updatedRole *workos.Role
-	if sysRole {
-		updatedRole = &currentRole
-	} else {
-		updatedRole, err = s.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
-			Name:        payload.Name,
-			Description: payload.Description,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "update role in workos").Log(ctx, logger)
-		}
-
-		// As with role creation, member reassignment happens after local grant sync so
-		// a failed sync never leaves users attached to a role with incomplete access.
-		if payload.Grants != nil {
-			if err := authz.SyncGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID, currentRole.Slug, roleGrantPayloads(payload.Grants)); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, logger)
-			}
-		}
-	}
-
-	if payload.MemberIds != nil {
-		gramToWorkos, err := gramToWorkosIDMap(ctx, s.db, payload.MemberIds)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve gram user ids to workos ids").Log(ctx, logger)
-		}
-
-		memberByUser := membersByUserID(membersBefore)
-
-		for _, gramID := range payload.MemberIds {
-			workosID, ok := gramToWorkos[gramID]
-			if !ok {
-				continue
-			}
-			existing, ok := memberByUser[workosID]
-			if !ok {
-				continue
-			}
-
-			// Add the role to the member's existing roles rather than replacing them.
-			newSlugs := addRoleSlug(existing.RoleSlugs, currentRole.Slug)
-			if _, err := s.roles.UpdateMemberRoles(ctx, existing.ID, newSlugs); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "assign members to updated role").Log(ctx, logger)
-			}
-		}
-		s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
-	}
-
-	members, err := s.roles.ListMembers(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
-	}
-
-	memberCounts, err := s.localMemberCounts(ctx, ac.ActiveOrganizationID, members)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, logger)
-	}
-	updatedRoleView, err := buildRole(ctx, logger, s.db, ac.ActiveOrganizationID, *updatedRole, memberCounts[updatedRole.Slug])
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.audit.LogAccessRoleUpdate(ctx, s.db, audit.LogAccessRoleUpdateEvent{
-		OrganizationID:     ac.ActiveOrganizationID,
-		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName:   ac.Email,
-		ActorSlug:          nil,
-		RoleID:             updatedRole.ID,
-		RoleName:           updatedRoleView.Name,
-		RoleSlug:           updatedRole.Slug,
-		RoleSnapshotBefore: existingRole,
-		RoleSnapshotAfter:  updatedRoleView,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log access role update").Log(ctx, logger)
-	}
-
-	return updatedRoleView, nil
+	return updated.After, nil
 }
 
-// DeleteRole removes local grants before deleting the WorkOS role so retries can
-// still complete cleanup if the external delete fails.
 func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload) error {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -498,86 +197,20 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
 	}
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessRoleID(payload.ID),
-	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessRoleID(payload.ID),
 	)
 
-	wRoles, err := s.roles.ListRoles(ctx, workosOrgID)
+	deleted, err := s.roleMgr.DeleteRole(ctx, ac.ActiveOrganizationID, workosOrgID, payload.ID, accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
+		return err
 	}
-
-	currentRole, ok := findRoleByID(wRoles, payload.ID)
-	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
-	}
-	logger = logger.With(attr.SlogAccessRoleSlug(currentRole.Slug))
-	trace.SpanFromContext(ctx).SetAttributes(
-		attr.OrganizationID(ac.ActiveOrganizationID),
-		attr.UserID(ac.UserID),
-		attr.AccessRoleSlug(currentRole.Slug),
-	)
-	if isSystemRole(currentRole.Slug) {
-		return oops.E(oops.CodeBadRequest, nil, "system roles cannot be deleted").Log(ctx, logger)
-	}
-
-	// WorkOS rejects deleting a role that still has members assigned, so remove
-	// the deleted role from each member's role set. If that leaves zero roles,
-	// fall back to the default "member" role.
-	members, err := s.roles.ListMembers(ctx, workosOrgID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
-	}
-	reassigned := false
-	for _, m := range members {
-		if !hasRoleSlug(m.RoleSlugs, currentRole.Slug) {
-			continue
-		}
-		remaining := removeRoleSlug(m.RoleSlugs, currentRole.Slug)
-		if len(remaining) == 0 {
-			remaining = []string{authz.SystemRoleMember}
-		}
-		if _, err := s.roles.UpdateMemberRoles(ctx, m.ID, remaining); err != nil {
-			if reassigned {
-				s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
-			}
-			return oops.E(oops.CodeUnexpected, err, "reassign member to default role").Log(ctx, logger)
-		}
-		reassigned = true
-	}
-	if reassigned {
-		s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
-	}
-
-	if _, err := repo.New(s.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, currentRole.Slug),
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete grants for deleted role").Log(ctx, logger)
-	}
-
-	if err := s.roles.DeleteRole(ctx, workosOrgID, currentRole.Slug); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete role in workos").Log(ctx, logger)
-	}
-
-	if err := s.audit.LogAccessRoleDelete(ctx, s.db, audit.LogAccessRoleDeleteEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		RoleID:           currentRole.ID,
-		RoleName:         currentRole.Name,
-		RoleSlug:         currentRole.Slug,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log access role deletion").Log(ctx, logger)
-	}
+	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(deleted.Slug))
 
 	return nil
 }
@@ -613,8 +246,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 // ListMembers follows the original access API contract by returning WorkOS user
 // identifiers while decorating them with the role information the UI needs.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
-	_, workosOrgID, err := s.roleOrgContext(ctx)
-	ac, _ := s.authContext(ctx)
+	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -626,78 +258,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		attr.UserID(ac.UserID),
 	)
 
-	roles, err := s.roles.ListRoles(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
-	}
-	roleIDBySlug := make(map[string]string, len(roles))
-	for _, role := range roles {
-		roleIDBySlug[role.Slug] = role.ID
-	}
-
-	members, err := s.roles.ListMembers(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, s.logger)
-	}
-
-	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, s.logger)
-	}
-
-	// Batch-resolve WorkOS user IDs to local Gram users, filtering to only
-	// those connected to this organization via organization_user_relationships.
-	// This single joined query prevents the list from surfacing users who
-	// exist in Gram but aren't connected to the current org (which would
-	// cause UpdateMemberRoles to fail).
-	workosIDs := make([]string, 0, len(users))
-	for workosUID := range users {
-		workosIDs = append(workosIDs, workosUID)
-	}
-	localUserRows, err := usersrepo.New(s.db).GetConnectedUsersByWorkosIDs(ctx, usersrepo.GetConnectedUsersByWorkosIDsParams{
-		WorkosIds:      workosIDs,
-		OrganizationID: ac.ActiveOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve connected users by workos ids").Log(ctx, s.logger)
-	}
-	localUsers := make(map[string]usersrepo.User, len(localUserRows))
-	for _, u := range localUserRows {
-		if u.WorkosID.Valid {
-			localUsers[u.WorkosID.String] = u
-		}
-	}
-
-	result := make([]*gen.AccessMember, 0, len(members))
-	for _, member := range members {
-		user, ok := users[member.UserID]
-		if !ok {
-			continue
-		}
-
-		local, ok := localUsers[member.UserID]
-		if !ok {
-			continue
-		}
-
-		roleIDs := make([]string, 0, len(member.RoleSlugs))
-		for _, slug := range member.RoleSlugs {
-			if id, ok := roleIDBySlug[slug]; ok {
-				roleIDs = append(roleIDs, id)
-			}
-		}
-
-		result = append(result, &gen.AccessMember{
-			ID:       local.ID,
-			Name:     formatUserName(user),
-			Email:    user.Email,
-			PhotoURL: conv.FromPGText[string](local.PhotoUrl),
-			RoleIds:  roleIDs,
-			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-		})
-	}
-
-	return &gen.ListMembersResult{Members: result}, nil
+	return s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
 }
 
 // ListGrants returns the effective grants for the current user by combining
@@ -717,7 +278,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
 	}
 
-	ac, workosOrgID, err := s.roleOrgContext(ctx)
+	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -751,12 +312,20 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	}
 
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)}
-	roleSlugs, err := s.memberRoleSlugs(ctx, workosOrgID, connectedUser.WorkosID.String)
+	rolePrincipals, err := s.roleMgr.MemberRolePrincipals(ctx, ac.ActiveOrganizationID, connectedUser.WorkosID.String)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list member roles").Log(ctx, logger)
 	}
-	for _, roleSlug := range roleSlugs {
-		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	roleSlugs := make([]string, 0, len(rolePrincipals))
+	for _, role := range rolePrincipals {
+		// Effective-grant responses must include grants stored under either the
+		// canonical role URN or the legacy role slug during the migration.
+		rolePrincipalURNs, err := authz.RolePrincipals(role.RoleSlug, role.PrincipalUrn)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
+		}
+		principals = append(principals, rolePrincipalURNs...)
+		roleSlugs = append(roleSlugs, role.RoleSlug)
 	}
 	if len(roleSlugs) == 1 {
 		logger = logger.With(attr.SlogAccessRoleSlug(roleSlugs[0]))
@@ -771,11 +340,11 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	return &gen.ListUserGrantsResult{Grants: listRoleGrantsFromGrants(grants)}, nil
 }
 
-// UpdateMemberRoles is intentionally stricter than member listing: it only
-// mutates access for users Gram knows are connected to the local organization.
-// It accepts multiple role IDs and performs a full replacement of the user's roles.
+// UpdateMemberRoles replaces all role assignments for a member. It is
+// intentionally stricter than member listing: it only mutates access for users
+// Gram knows are connected to the local organization.
 func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemberRolesPayload) (*gen.AccessMember, error) {
-	ac, workosOrgID, err := s.roleOrgContext(ctx)
+	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -785,137 +354,29 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 	if len(payload.RoleIds) == 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one role is required").Log(ctx, s.logger)
 	}
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessMemberID(payload.UserID),
-	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessMemberID(payload.UserID),
 	)
 
-	roles, err := s.roles.ListRoles(ctx, workosOrgID)
+	// TODO: support assigning multiple roles simultaneously in RoleManager.
+	// For now, delegate to the single-role replacement path using the first role.
+	memberUpdate, err := s.roleMgr.UpdateMemberRole(ctx, ac.ActiveOrganizationID, payload.UserID, payload.RoleIds[0], accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, logger)
+		return nil, err
 	}
+	roleSlug := memberUpdate.RoleSlug
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessRoleSlug(roleSlug),
+	)
 
-	roleIDBySlug := make(map[string]string, len(roles))
-	roleSlugByID := make(map[string]string, len(roles))
-	for _, role := range roles {
-		roleIDBySlug[role.Slug] = role.ID
-		roleSlugByID[role.ID] = role.Slug
-	}
-
-	roleSlugs := make([]string, 0, len(payload.RoleIds))
-	for _, roleID := range payload.RoleIds {
-		slug, ok := roleSlugByID[roleID]
-		if !ok {
-			return nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, logger)
-		}
-		roleSlugs = append(roleSlugs, slug)
-	}
-
-	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
-	switch {
-	case errors.Is(err, errConnectedUserNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").Log(ctx, logger)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
-	}
-	if !connectedUser.WorkosID.Valid || connectedUser.WorkosID.String == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").Log(ctx, logger)
-	}
-
-	members, err := s.roles.ListMembers(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
-	}
-
-	membershipID := ""
-	var existingMember workos.Member
-	for _, member := range members {
-		if member.UserID == connectedUser.WorkosID.String {
-			membershipID = member.ID
-			existingMember = member
-			break
-		}
-	}
-	if membershipID == "" {
-		return nil, oops.E(oops.CodeNotFound, nil, "member not found").Log(ctx, logger)
-	}
-
-	// Admin protection: if we're removing the admin role from this user,
-	// ensure at least one other member still has it.
-	existingAdminRole := slices.Contains(existingMember.RoleSlugs, authz.SystemRoleAdmin)
-	newAdminRole := slices.Contains(roleSlugs, authz.SystemRoleAdmin)
-	if existingAdminRole && !newAdminRole {
-		adminCount := 0
-		for _, m := range members {
-			if slices.Contains(m.RoleSlugs, authz.SystemRoleAdmin) {
-				adminCount++
-			}
-		}
-		if adminCount <= 1 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "cannot remove the last admin role").Log(ctx, logger)
-		}
-	}
-
-	updatedMember, err := s.roles.UpdateMemberRoles(ctx, membershipID, roleSlugs)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update member roles in workos").Log(ctx, logger)
-	}
-	s.authz.InvalidateRoleCache(ctx, payload.UserID, ac.ActiveOrganizationID)
-
-	users, err := s.roles.ListOrgUsers(ctx, workosOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list org users from workos").Log(ctx, logger)
-	}
-	user, ok := users[updatedMember.UserID]
-	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "member user not found").Log(ctx, logger)
-	}
-
-	beforeRoleIDs := make([]string, 0, len(existingMember.RoleSlugs))
-	for _, slug := range existingMember.RoleSlugs {
-		if id, ok := roleIDBySlug[slug]; ok {
-			beforeRoleIDs = append(beforeRoleIDs, id)
-		}
-	}
-
-	beforeMember := &gen.AccessMember{
-		ID:       connectedUser.ID,
-		Name:     formatUserName(user),
-		Email:    user.Email,
-		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-		RoleIds:  beforeRoleIDs,
-		JoinedAt: conv.Default(existingMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-	}
-	afterMember := &gen.AccessMember{
-		ID:       connectedUser.ID,
-		Name:     formatUserName(user),
-		Email:    user.Email,
-		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-		RoleIds:  payload.RoleIds,
-		JoinedAt: conv.Default(updatedMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-	}
-
-	if err := s.audit.LogAccessMemberRoleUpdate(ctx, s.db, audit.LogAccessMemberRoleUpdateEvent{
-		OrganizationID:       ac.ActiveOrganizationID,
-		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName:     ac.Email,
-		ActorSlug:            nil,
-		MemberID:             connectedUser.ID,
-		MemberName:           afterMember.Name,
-		MemberEmail:          afterMember.Email,
-		MemberSnapshotBefore: beforeMember,
-		MemberSnapshotAfter:  afterMember,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log access member role update").Log(ctx, logger)
-	}
-
-	return afterMember, nil
+	return memberUpdate.After, nil
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -1021,164 +482,6 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	return s
 }
 
-func formatUserName(user workos.User) string {
-	switch {
-	case user.FirstName != "" && user.LastName != "":
-		return user.FirstName + " " + user.LastName
-	case user.FirstName != "":
-		return user.FirstName
-	case user.LastName != "":
-		return user.LastName
-	default:
-		return user.Email
-	}
-}
-
-// localMemberCounts counts WorkOS members per role slug, but only for members
-// who have a local Gram account and are connected to the given organization
-// via organization_user_relationships. This ensures counts match what
-// ListMembers returns.
-func (s *Service) localMemberCounts(ctx context.Context, organizationID string, members []workos.Member) (map[string]int, error) {
-	workosIDs := make([]string, 0, len(members))
-	for _, m := range members {
-		workosIDs = append(workosIDs, m.UserID)
-	}
-	localRows, err := usersrepo.New(s.db).GetConnectedUsersByWorkosIDs(ctx, usersrepo.GetConnectedUsersByWorkosIDsParams{
-		WorkosIds:      workosIDs,
-		OrganizationID: organizationID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get connected users by workos ids: %w", err)
-	}
-	localSet := make(map[string]struct{}, len(localRows))
-	for _, u := range localRows {
-		if u.WorkosID.Valid {
-			localSet[u.WorkosID.String] = struct{}{}
-		}
-	}
-	counts := make(map[string]int)
-	for _, m := range members {
-		if _, ok := localSet[m.UserID]; ok {
-			for _, slug := range m.RoleSlugs {
-				counts[slug]++
-			}
-		}
-	}
-	return counts, nil
-}
-
-// gramToWorkosIDMap resolves Gram user IDs to WorkOS user IDs.
-// Dashboard sends Gram IDs (from ListMembers), but WorkOS membership lookups
-// require WorkOS user IDs.
-func gramToWorkosIDMap(ctx context.Context, db *pgxpool.Pool, gramIDs []string) (map[string]string, error) {
-	users, err := usersrepo.New(db).GetUsersByIDs(ctx, gramIDs)
-	if err != nil {
-		return nil, fmt.Errorf("get users by ids: %w", err)
-	}
-	m := make(map[string]string, len(users))
-	for _, u := range users {
-		if u.WorkosID.Valid && u.WorkosID.String != "" {
-			m[u.ID] = u.WorkosID.String
-		}
-	}
-	return m, nil
-}
-
-func membersByUserID(members []workos.Member) map[string]workos.Member {
-	byUser := make(map[string]workos.Member, len(members))
-	for _, m := range members {
-		byUser[m.UserID] = m
-	}
-	return byUser
-}
-
-func addRoleSlug(existing []string, slug string) []string {
-	if slices.Contains(existing, slug) {
-		return existing
-	}
-	return append(existing, slug)
-}
-
-func removeRoleSlug(slugs []string, remove string) []string {
-	result := make([]string, 0, len(slugs))
-	for _, s := range slugs {
-		if s != remove {
-			result = append(result, s)
-		}
-	}
-	return result
-}
-
-func hasRoleSlug(slugs []string, slug string) bool {
-	return slices.Contains(slugs, slug)
-}
-
-func (s *Service) memberRoleSlugs(ctx context.Context, workosOrgID string, workosUserID string) ([]string, error) {
-	if workosUserID == "" {
-		return nil, nil
-	}
-
-	members, err := s.roles.ListMembers(ctx, workosOrgID)
-	if err != nil {
-		return nil, fmt.Errorf("list members for role lookup: %w", err)
-	}
-
-	seen := make(map[string]struct{})
-	var roleSlugs []string
-
-	for _, member := range members {
-		if member.UserID != workosUserID {
-			continue
-		}
-		for _, slug := range member.RoleSlugs {
-			if slug == "" {
-				continue
-			}
-			if _, ok := seen[slug]; ok {
-				continue
-			}
-			seen[slug] = struct{}{}
-			roleSlugs = append(roleSlugs, slug)
-		}
-	}
-
-	return roleSlugs, nil
-}
-
-func findRoleByID(roles []workos.Role, id string) (workos.Role, bool) {
-	for _, role := range roles {
-		if role.ID == id {
-			return role, true
-		}
-	}
-
-	var zero workos.Role
-	return zero, false
-}
-
-func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string, role workos.Role, memberCount int) (*gen.Role, error) {
-	grants, err := authz.GrantsForRole(ctx, logger, db, organizationID, role.Slug)
-	if err != nil {
-		return nil, err
-	}
-	genGrants := make([]*gen.RoleGrant, 0, len(grants))
-	for _, g := range grants {
-		genGrants = append(genGrants, scopedGrantToGenRoleGrant(g))
-	}
-
-	return &gen.Role{
-		ID:          role.ID,
-		Name:        role.Name,
-		Slug:        role.Slug,
-		Description: role.Description,
-		IsSystem:    isSystemRole(role.Slug),
-		Grants:      genGrants,
-		MemberCount: memberCount,
-		CreatedAt:   conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-		UpdatedAt:   conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-	}, nil
-}
-
 func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 	var selectors []*gen.Selector
 	for _, sel := range g.Selectors {
@@ -1216,7 +519,7 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	return out
 }
 
-func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {
+func connectedUser(ctx context.Context, db database.DBTX, organizationID string, userID string) (usersrepo.User, error) {
 	hasRelationship, err := orgrepo.New(db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
 		UserID:         conv.ToPGText(userID),
@@ -1329,21 +632,6 @@ func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthCon
 		return nil, oops.C(oops.CodeForbidden)
 	}
 	return ac, nil
-}
-
-func slugify(name string) (string, error) {
-	slug := conv.ToSlug(strings.ReplaceAll(name, "_", " "))
-	if slug == "" {
-		return "", oops.E(oops.CodeBadRequest, nil, "role name must contain at least one letter or digit")
-	}
-	if !validRoleNamePattern.MatchString(name) {
-		return "", oops.E(oops.CodeBadRequest, nil, "role name contains invalid characters")
-	}
-	if !strings.HasPrefix(slug, "org-") {
-		slug = "org-" + slug
-	}
-
-	return slug, nil
 }
 
 type challengeUserInfo struct {

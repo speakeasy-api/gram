@@ -101,7 +101,6 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 			authztest.RBACAlwaysEnabled,
 			authztest.ChallengeLoggingAlwaysDisabled,
 			workos.NewStubClient(),
-			cache.NoopCache,
 		),
 		auditLogger,
 	)

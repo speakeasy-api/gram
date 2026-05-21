@@ -418,7 +418,6 @@ func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organiza
 		}); err != nil {
 			return fmt.Errorf("sync invite role assignments: %w", err)
 		}
-		s.authz.InvalidateRoleCache(ctx, gramUserID, invite.OrganizationID)
 	}
 
 	if err := s.sessions.InvalidateUserInfoCache(ctx, gramUserID); err != nil {

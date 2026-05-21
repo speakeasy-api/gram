@@ -1,16 +1,12 @@
 package access
 
 import (
-	"errors"
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func TestService_ListMembers(t *testing.T) {
@@ -23,22 +19,14 @@ func TestService_ListMembers(t *testing.T) {
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-		mockRole("role_builder", "Builder", "custom-builder", ""),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
-	}, nil).Once()
-	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
-		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
-		"user_2": mockUser("user_2", "Grace", "", "grace@example.com"),
-	}, nil).Once()
+	adminID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	builderID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_builder", "Builder", "custom-builder", ""))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember("", "membership_2", "user_2", "custom-builder"))
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Members, 2)
+	require.Len(t, result.Members, 3)
 
 	byID := map[string]*gen.AccessMember{}
 	for _, member := range result.Members {
@@ -48,46 +36,16 @@ func TestService_ListMembers(t *testing.T) {
 	// IDs should be Gram user IDs, not WorkOS user IDs.
 	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
 	require.Equal(t, "ada@example.com", byID["local_user_1"].Email)
-	require.Equal(t, []string{"role_admin"}, byID["local_user_1"].RoleIds)
-	require.Equal(t, "2024-11-15T15:04:05Z", byID["local_user_1"].JoinedAt)
+	require.Equal(t, []string{adminID}, byID["local_user_1"].RoleIds)
+	require.NotEmpty(t, byID["local_user_1"].JoinedAt)
 
 	require.Equal(t, "Grace", byID["local_user_2"].Name)
-	require.Equal(t, []string{"role_builder"}, byID["local_user_2"].RoleIds)
+	require.Equal(t, []string{builderID}, byID["local_user_2"].RoleIds)
+
+	require.Empty(t, byID[authCtx.UserID].RoleIds)
 }
 
-func TestService_ListMembers_MultiRoleMember(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-
-	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
-
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-		mockRole("role_builder", "Builder", "custom-builder", ""),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		{
-			ID:             "membership_1",
-			UserID:         "user_1",
-			OrganizationID: mockidp.MockOrgID,
-			RoleSlug:       "admin",
-			RoleSlugs:      []string{"admin", "custom-builder"},
-			CreatedAt:      mockMembershipTimestamp,
-		},
-	}, nil).Once()
-	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
-		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
-	}, nil).Once()
-
-	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
-	require.NoError(t, err)
-	require.Len(t, result.Members, 1)
-	require.Equal(t, []string{"role_admin", "role_builder"}, result.Members[0].RoleIds)
-}
-
-func TestService_ListMembers_ExcludesDisconnectedUsers(t *testing.T) {
+func TestService_ListMembers_SkipsMembersWithoutLocalUser(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -99,38 +57,49 @@ func TestService_ListMembers_ExcludesDisconnectedUsers(t *testing.T) {
 	// to this org — no row in organization_user_relationships.
 	seedDisconnectedUser(t, ctx, ti.conn, "local_user_2", "grace@example.com", "Grace", "user_2")
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "admin"),
-	}, nil).Once()
-	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
-		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
-		"user_2": mockUser("user_2", "Grace", "", "grace@example.com"),
-	}, nil).Once()
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember("", "membership_2", "user_2", "admin"))
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Members, 1, "disconnected user should be excluded")
-	require.Equal(t, "local_user_1", result.Members[0].ID)
-	require.Equal(t, "Ada Lovelace", result.Members[0].Name)
+	require.Len(t, result.Members, 2)
+
+	byID := map[string]*gen.AccessMember{}
+	for _, member := range result.Members {
+		byID[member.ID] = member
+	}
+	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
+	require.Nil(t, byID["user_2"])
+	require.Empty(t, byID[authCtx.UserID].RoleIds)
 }
 
-func TestService_ListMembers_WorkOSUsersFailure(t *testing.T) {
+func TestService_ListMembers_IncludesConnectedUsersWithoutRoleAssignments(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-	}, nil).Once()
-	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User(nil), errors.New("workos unavailable")).Once()
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "list org users from workos")
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Members, 1)
+
+	require.Equal(t, authCtx.UserID, result.Members[0].ID)
+	require.Empty(t, result.Members[0].RoleIds)
+	require.NotEmpty(t, result.Members[0].Name)
+}
+
+func TestService_ListMembers_UsesDatabaseOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember("", "membership_1", "user_1", "admin"))
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Members, 1)
+	require.Equal(t, authCtx.UserID, result.Members[0].ID)
+	require.Empty(t, result.Members[0].RoleIds)
 }
