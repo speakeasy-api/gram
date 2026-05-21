@@ -743,25 +743,24 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		// fail closed with a clear reason than silently allow.
 		detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
 	}
+	evidence := shadowmcp.AccessEvidence{
+		FullURL:        "",
+		URLHost:        "",
+		ServerIdentity: mcpServerIdentityFromToolName(rawToolName),
+	}
+	if matched != nil {
+		evidence.FullURL = matched.URL
+		evidence.ServerIdentity = serverPrefix
+		if matched.URL == "" && matched.Command != "" {
+			evidence.ServerIdentity = matched.Command
+		}
+	}
 	// Access Rules can explicitly allow a shadow MCP server by URL, command,
 	// or server identity. Deny rules win inside EvaluateAccessRules.
 	if detail != "" {
 		if s.shadowMCPClient == nil {
 			detail = "Shadow MCP validation is unavailable"
 		} else {
-			evidence := shadowmcp.AccessEvidence{
-				FullURL:        "",
-				URLHost:        "",
-				ServerIdentity: mcpServerIdentityFromToolName(rawToolName),
-			}
-			if matched != nil {
-				evidence.FullURL = matched.URL
-				evidence.ServerIdentity = serverPrefix
-				if matched.URL == "" && matched.Command != "" {
-					evidence.ServerIdentity = matched.Command
-				}
-			}
-
 			decision := s.shadowMCPClient.EvaluateAccessRules(ctx, metadata.GramOrgID, metadata.ProjectID, evidence)
 			s.logger.InfoContext(ctx, "evaluated shadow mcp access rules",
 				attr.SlogEvent("shadow_mcp_access_rule_evaluated"),
@@ -798,7 +797,17 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	}
 	if detail != "" {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-		userReason := renderUserBlockReason(policy.UserMessage, auditReason)
+		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+			OrganizationID:  metadata.GramOrgID,
+			ProjectID:       metadata.ProjectID,
+			RequesterUserID: metadata.UserID,
+			UserMessage:     policy.UserMessage,
+			AuditReason:     auditReason,
+			Evidence:        evidence,
+			ToolName:        mcpToolName,
+			ToolInput:       payload.ToolInput,
+			RiskPolicyID:    policy.ID,
+		})
 		matchedURL := ""
 		if matched != nil {
 			matchedURL = matched.URL

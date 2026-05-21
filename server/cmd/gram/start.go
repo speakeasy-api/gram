@@ -954,7 +954,7 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				memorySvc,
 			))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter, siteURL, c.String("jwt-signing-key")))
 			otelforwarding.Attach(mux, otelforwarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, otelForwardClient))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(

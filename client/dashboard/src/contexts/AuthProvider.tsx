@@ -49,9 +49,15 @@ import type { ProjectEntry } from "@gram/client/models/components";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
-const UNAUTHENTICATED_PATHS = ["/login", "/register", "/book-demo"];
+const UNAUTHENTICATED_PATHS = [
+  "/login",
+  "/register",
+  "/invite",
+  "/book-demo",
+  "/shadow-mcp/request",
+];
 
-const SLUG_EXEMPT_PATHS = ["/slack/register"];
+const SLUG_EXEMPT_PATHS = ["/slack/register", "/shadow-mcp/request"];
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
