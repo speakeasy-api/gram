@@ -21,7 +21,7 @@ type UpdatePortalRequestBody struct {
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Short tagline shown under the title. Empty string clears.
 	Tagline *string `form:"tagline,omitempty" json:"tagline,omitempty" xml:"tagline,omitempty"`
-	// UUID of an asset to use as the logo. Empty string clears.
+	// UUID of an asset to use as the logo. Empty string clears the override.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 }
 
@@ -790,13 +790,4 @@ func NewUpdatePortalPayload(body *UpdatePortalRequestBody, sessionToken *string,
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
-}
-
-// ValidateUpdatePortalRequestBody runs the validations defined on
-// UpdatePortalRequestBody
-func ValidateUpdatePortalRequestBody(body *UpdatePortalRequestBody) (err error) {
-	if body.LogoAssetID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
-	}
-	return
 }

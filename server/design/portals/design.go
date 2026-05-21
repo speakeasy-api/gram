@@ -72,9 +72,7 @@ var UpdatePortalForm = Type("UpdatePortalForm", func() {
 	Attribute("enabled", Boolean, "Whether the portal is publicly reachable to org members.")
 	Attribute("display_name", String, "Override for the portal's display name. Empty string clears the override.")
 	Attribute("tagline", String, "Short tagline shown under the title. Empty string clears.")
-	Attribute("logo_asset_id", String, "UUID of an asset to use as the logo. Empty string clears.", func() {
-		Format(FormatUUID)
-	})
+	Attribute("logo_asset_id", String, "UUID of an asset to use as the logo. Empty string clears the override.")
 })
 
 var Portal = Type("Portal", func() {

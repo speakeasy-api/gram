@@ -15,7 +15,7 @@ export type UpdatePortalForm = {
    */
   enabled?: boolean | undefined;
   /**
-   * UUID of an asset to use as the logo. Empty string clears.
+   * UUID of an asset to use as the logo. Empty string clears the override.
    */
   logoAssetId?: string | undefined;
   /**

@@ -148,16 +148,16 @@ func seedMcpServerAndEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.P
 	require.NoError(t, err)
 }
 
-// seedProjectLogoAsset inserts an asset row for the project and points the
-// project's logo_asset_id at it. Returns the asset's UUID. The asset is not
-// backed by real storage — getPortal only constructs a URL from the UUID and
-// does not fetch bytes, so storage is not required for these tests.
-func seedProjectLogoAsset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+// seedAsset inserts an asset row for the given project and returns its UUID.
+// The asset is not backed by real storage — getPortal only constructs a URL
+// from the UUID and does not fetch bytes, so storage is not required for
+// these tests.
+func seedAsset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 
 	asset, err := assetsrepo.New(conn).CreateAsset(ctx, assetsrepo.CreateAssetParams{
-		Name:          "portal-test-logo.png",
-		Url:           "memory://portal-test-logo-" + uuid.NewString(),
+		Name:          "portal-test-asset.png",
+		Url:           "memory://portal-test-asset-" + uuid.NewString(),
 		ProjectID:     projectID,
 		Sha256:        "portal-test-" + uuid.NewString(),
 		Kind:          "image",
@@ -165,14 +165,23 @@ func seedProjectLogoAsset(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 		ContentLength: 32,
 	})
 	require.NoError(t, err)
+	return asset.ID
+}
 
-	_, err = projectsrepo.New(conn).UploadProjectLogo(ctx, projectsrepo.UploadProjectLogoParams{
-		LogoAssetID: uuid.NullUUID{UUID: asset.ID, Valid: true},
+// seedProjectLogoAsset inserts an asset row for the project and points the
+// project's logo_asset_id at it. Returns the asset's UUID.
+func seedProjectLogoAsset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	assetID := seedAsset(t, ctx, conn, projectID)
+
+	_, err := projectsrepo.New(conn).UploadProjectLogo(ctx, projectsrepo.UploadProjectLogoParams{
+		LogoAssetID: uuid.NullUUID{UUID: assetID, Valid: true},
 		ProjectID:   projectID,
 	})
 	require.NoError(t, err)
 
-	return asset.ID
+	return assetID
 }
 
 // newSiblingOrgContext creates a brand-new organization (different from the

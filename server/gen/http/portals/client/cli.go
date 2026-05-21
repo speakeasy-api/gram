@@ -65,7 +65,7 @@ func BuildUpdatePortalPayload(portalsUpdatePortalBody string, portalsUpdatePorta
 	{
 		err = json.Unmarshal([]byte(portalsUpdatePortalBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"enabled\": false,\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tagline\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"enabled\": false,\n      \"logo_asset_id\": \"abc123\",\n      \"tagline\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string

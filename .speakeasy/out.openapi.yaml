@@ -36850,8 +36850,7 @@ components:
           description: Whether the portal is publicly reachable to org members.
         logo_asset_id:
           type: string
-          description: UUID of an asset to use as the logo. Empty string clears.
-          format: uuid
+          description: UUID of an asset to use as the logo. Empty string clears the override.
         tagline:
           type: string
           description: Short tagline shown under the title. Empty string clears.

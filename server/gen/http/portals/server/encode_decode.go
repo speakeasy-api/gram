@@ -284,10 +284,6 @@ func DecodeUpdatePortalRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateUpdatePortalRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
 
 		var (
 			sessionToken     *string

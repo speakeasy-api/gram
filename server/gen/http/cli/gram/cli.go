@@ -8072,7 +8072,7 @@ func portalsUpdatePortalUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "portals update-portal --body '{\n      \"display_name\": \"abc123\",\n      \"enabled\": false,\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tagline\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "portals update-portal --body '{\n      \"display_name\": \"abc123\",\n      \"enabled\": false,\n      \"logo_asset_id\": \"abc123\",\n      \"tagline\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.

@@ -92,6 +92,50 @@ func TestUpdatePortal_EmptyStringClears(t *testing.T) {
 	require.Nil(t, resp2.Tagline)
 }
 
+func TestUpdatePortal_LogoEmptyStringClearsExistingOverride(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Seed an asset that the caller will set as the portal-level logo override.
+	overrideAssetID := seedAsset(t, ctx, ti.conn, *authCtx.ProjectID)
+
+	enabled := true
+	overrideStr := overrideAssetID.String()
+	resp1, err := ti.service.UpdatePortal(ctx, &gen.UpdatePortalPayload{
+		ProjectSlugInput: authCtx.ProjectSlug,
+		Enabled:          &enabled,
+		LogoAssetID:      &overrideStr,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp1.LogoURL)
+	require.Contains(t, *resp1.LogoURL, overrideAssetID.String(),
+		"logo_url should reference the portal-level override")
+
+	// Explicit clear via empty string must reach the handler now that the
+	// Goa UUID format validator no longer rejects "" upstream.
+	cleared := ""
+	resp2, err := ti.service.UpdatePortal(ctx, &gen.UpdatePortalPayload{
+		ProjectSlugInput: authCtx.ProjectSlug,
+		LogoAssetID:      &cleared,
+	})
+	require.NoError(t, err)
+	// No project logo was set, so after clearing the override the resolved
+	// logo_url is nil.
+	require.Nil(t, resp2.LogoURL)
+
+	// Read again to confirm persistence.
+	resp3, err := ti.service.GetPortal(ctx, &gen.GetPortalPayload{
+		ProjectSlugInput: authCtx.ProjectSlug,
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp3.LogoURL)
+}
+
 func TestUpdatePortal_InvalidLogoAssetID(t *testing.T) {
 	t.Parallel()
 

@@ -97,7 +97,7 @@ type UpdatePortalPayload struct {
 	DisplayName *string
 	// Short tagline shown under the title. Empty string clears.
 	Tagline *string
-	// UUID of an asset to use as the logo. Empty string clears.
+	// UUID of an asset to use as the logo. Empty string clears the override.
 	LogoAssetID *string
 }
 
