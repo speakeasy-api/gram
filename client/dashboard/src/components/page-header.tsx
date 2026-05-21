@@ -134,10 +134,12 @@ function PageHeaderBreadcrumbs({
       }
 
       let display = decoded;
-      if (allSubstitutions[segment]) {
-        display = allSubstitutions[segment];
-      } else if (allSubstitutions[decoded]) {
-        display = allSubstitutions[decoded];
+      const subSegment = allSubstitutions[segment];
+      const subDecoded = allSubstitutions[decoded];
+      if (subSegment !== undefined) {
+        display = subSegment;
+      } else if (subDecoded !== undefined) {
+        display = subDecoded;
       } else if (!toPreserve.includes(decoded) && !decoded.includes("@")) {
         // Only synthesize a Title-Case display for path-segment slugs.
         // Route params and email-like identifiers keep their original casing.

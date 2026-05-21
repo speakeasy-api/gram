@@ -696,16 +696,17 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
+	empty := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	if raw == nil {
-		return pgtype.Timestamptz{}, nil
+		return empty, nil
 	}
 	trimmed := strings.TrimSpace(*raw)
 	if trimmed == "" {
-		return pgtype.Timestamptz{}, nil
+		return empty, nil
 	}
 	parsed, err := time.Parse(time.RFC3339Nano, trimmed)
 	if err != nil {
-		return pgtype.Timestamptz{}, err
+		return empty, fmt.Errorf("parse timestamp: %w", err)
 	}
 	return pgtype.Timestamptz{Time: parsed.UTC(), InfinityModifier: pgtype.Finite, Valid: true}, nil
 }

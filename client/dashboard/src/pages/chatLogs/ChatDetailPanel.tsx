@@ -16,7 +16,7 @@ import type {
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
-import { useRevealAll } from "@/pages/security/risk-ui";
+import { useRevealAll } from "@/pages/security/reveal-all-context";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
@@ -851,17 +851,20 @@ function MaskedContent({ onReveal }: { onReveal: () => void }) {
 
 function MaskedMatchInline({ value }: { value: string }) {
   const reveal = useRevealAll();
-  const [revealed, setRevealed] = useState(reveal?.revealAll ?? false);
+  // Read individual fields into stable scalars so the effect depends on
+  // primitives (not the per-render object useRevealAll returns).
+  const generation = reveal?.generation;
+  const revealAll = reveal?.revealAll ?? false;
+  const [revealed, setRevealed] = useState(revealAll);
   // Only sync when the global toggle actually fires (generation changes).
-  // useRevealAll() returns a fresh object each render, so depending on it
-  // directly would clobber per-row clicks immediately after they happen.
-  const lastSyncedGeneration = useRef(reveal?.generation);
+  // Depending on the context object would clobber per-row clicks immediately.
+  const lastSyncedGeneration = useRef(generation);
   useEffect(() => {
-    if (!reveal) return;
-    if (lastSyncedGeneration.current === reveal.generation) return;
-    lastSyncedGeneration.current = reveal.generation;
-    setRevealed(reveal.revealAll);
-  });
+    if (generation === undefined) return;
+    if (lastSyncedGeneration.current === generation) return;
+    lastSyncedGeneration.current = generation;
+    setRevealed(revealAll);
+  }, [generation, revealAll]);
 
   if (!revealed) {
     return (

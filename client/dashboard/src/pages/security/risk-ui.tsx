@@ -1,8 +1,6 @@
 import { Eye, EyeOff } from "lucide-react";
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -13,6 +11,11 @@ import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
 import { Badge } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  RevealAllContext,
+  useRevealAll,
+  type RevealAllContextValue,
+} from "./reveal-all-context";
 
 export function CategoryLabel({
   source,
@@ -50,17 +53,6 @@ export function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
   );
 }
 
-type RevealAllContextValue = {
-  revealAll: boolean;
-  setRevealAll: (next: boolean) => void;
-  // Bumps when revealAll is toggled. MaskedMatch listens to this so a global
-  // toggle resets any per-row state, even when the new value matches the row's
-  // current local state.
-  generation: number;
-};
-
-const RevealAllContext = createContext<RevealAllContextValue | null>(null);
-
 export function RevealAllProvider({ children }: { children: ReactNode }) {
   const [revealAll, setRevealAllState] = useState(false);
   const [generation, setGeneration] = useState(0);
@@ -68,7 +60,7 @@ export function RevealAllProvider({ children }: { children: ReactNode }) {
     setRevealAllState(next);
     setGeneration((g) => g + 1);
   }, []);
-  const value = useMemo(
+  const value = useMemo<RevealAllContextValue>(
     () => ({ revealAll, setRevealAll, generation }),
     [revealAll, setRevealAll, generation],
   );
@@ -79,20 +71,8 @@ export function RevealAllProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Hook for other components (e.g. ChatDetailPanel's MaskedMatchInline) to opt
-// into the page-level reveal-all toggle. Returns null when no provider is in
-// the tree so consumers can fall back to local-only state.
-export function useRevealAll(): {
-  revealAll: boolean;
-  generation: number;
-} | null {
-  const ctx = useContext(RevealAllContext);
-  if (!ctx) return null;
-  return { revealAll: ctx.revealAll, generation: ctx.generation };
-}
-
 export function RevealAllToggle({ className }: { className?: string }) {
-  const ctx = useContext(RevealAllContext);
+  const ctx = useRevealAll();
   if (!ctx) return null;
   const { revealAll, setRevealAll } = ctx;
   return (
@@ -117,17 +97,20 @@ export function RevealAllToggle({ className }: { className?: string }) {
 }
 
 export function MaskedMatch({ value }: { value: string | undefined }) {
-  const ctx = useContext(RevealAllContext);
-  const [revealed, setRevealed] = useState(ctx?.revealAll ?? false);
+  const ctx = useRevealAll();
+  const generation = ctx?.generation;
+  const revealAll = ctx?.revealAll ?? false;
+  const [revealed, setRevealed] = useState(revealAll);
   // Only sync when the global toggle actually fires (generation changes).
-  // Depending on ctx directly would clobber per-row clicks on every render.
-  const lastSyncedGeneration = useRef(ctx?.generation);
+  // Depending on the context object would clobber per-row clicks on every
+  // render.
+  const lastSyncedGeneration = useRef(generation);
   useEffect(() => {
-    if (!ctx) return;
-    if (lastSyncedGeneration.current === ctx.generation) return;
-    lastSyncedGeneration.current = ctx.generation;
-    setRevealed(ctx.revealAll);
-  });
+    if (generation === undefined) return;
+    if (lastSyncedGeneration.current === generation) return;
+    lastSyncedGeneration.current = generation;
+    setRevealed(revealAll);
+  }, [generation, revealAll]);
 
   if (!value) return <span>-</span>;
 

@@ -14,7 +14,7 @@ import {
   useChatDeleteMutation,
   invalidateAllListChatsWithResolutions,
 } from "@gram/client/react-query";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
