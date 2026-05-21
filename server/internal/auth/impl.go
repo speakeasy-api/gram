@@ -608,7 +608,9 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	// For admins we only return the active organization to avoid overloaded returns.
 	// The active org may not be in the admin's membership list (admin override),
 	// so fall back to a DB lookup.
-	if userInfo.Admin {
+	// Exception: if the active org is not whitelisted, return all real memberships
+	// so the user can switch to a whitelisted org from the gate page.
+	if userInfo.Admin && authCtx.Whitelisted {
 		found := false
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
