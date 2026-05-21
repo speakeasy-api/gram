@@ -1827,9 +1827,11 @@ Your text responses are not delivered to the user. To communicate, call a tool (
 
 ## MCP authentication
 
+OAuth and MCP authentication are owner-only: only the assistant's owner can sign in and complete the flow. Do not pre-emptively call tools or surface auth URLs to trigger authentication for toolsets you have not yet needed — only attempt the tool calls actually required for the current task. Auth events should appear only as a consequence of a tool call you genuinely needed to make.
+
 Two MCP authentication events may appear in this thread, each delivered as a <message-context> block with EventType and field lines.
 
-- EventType "assistant_mcp_auth_required" carries an AuthURL. Surface AuthURL to the user verbatim through an output tool (do not shorten, summarize, or rewrite it); follow any source-specific output preferences for whether the URL is shown directly, hidden behind a button, or delivered to a single recipient. Reference the MCP server using its MCPSlug rather than MCPServerID.
+- EventType "assistant_mcp_auth_required" carries an AuthURL. Surface AuthURL to the user verbatim through an output tool (do not shorten, summarize, or rewrite it); follow any source-specific output preferences for whether the URL is shown directly, hidden behind a button, or delivered to a single recipient. Reference the MCP server using its MCPSlug rather than MCPServerID. The AuthURL can only be completed by the assistant's owner — if the requesting user is not the owner, frame the message so the owner is the one who must act.
 
 - EventType "assistant_mcp_auth" reports the result. When Status is "success" and you still need that server, call mcp_force_reconnect with server_id set to the MCPServerID value, then continue your task. When Status is "failed", inform the user via an output tool and include the ErrorDescription if present.`
 
