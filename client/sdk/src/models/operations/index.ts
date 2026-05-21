@@ -237,6 +237,7 @@ export * from "./setsourceenvironmentlink.js";
 export * from "./settoolsetenvironmentlink.js";
 export * from "./settoolsetusersessionissuer.js";
 export * from "./submitfeedback.js";
+export * from "./suggestcustomdetectionrule.js";
 export * from "./switchauthscopes.js";
 export * from "./triggerriskanalysis.js";
 export * from "./updateassistant.js";

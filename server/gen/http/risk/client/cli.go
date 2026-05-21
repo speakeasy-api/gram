@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	risk "github.com/speakeasy-api/gram/server/gen/risk"
 	goa "goa.design/goa/v3/pkg"
@@ -1025,6 +1026,60 @@ func BuildTriggerRiskAnalysisPayload(riskTriggerRiskAnalysisBody string, riskTri
 		var zero int32
 		if v.Limit == zero {
 			v.Limit = 100
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSuggestCustomDetectionRulePayload builds the payload for the risk
+// suggestCustomDetectionRule endpoint from CLI flags.
+func BuildSuggestCustomDetectionRulePayload(riskSuggestCustomDetectionRuleBody string, riskSuggestCustomDetectionRuleApikeyToken string, riskSuggestCustomDetectionRuleSessionToken string, riskSuggestCustomDetectionRuleProjectSlugInput string) (*risk.SuggestCustomDetectionRulePayload, error) {
+	var err error
+	var body SuggestCustomDetectionRuleRequestBody
+	{
+		err = json.Unmarshal([]byte(riskSuggestCustomDetectionRuleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"existing_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Prompt) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 3, true))
+		}
+		if utf8.RuneCountInString(body.Prompt) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskSuggestCustomDetectionRuleApikeyToken != "" {
+			apikeyToken = &riskSuggestCustomDetectionRuleApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskSuggestCustomDetectionRuleSessionToken != "" {
+			sessionToken = &riskSuggestCustomDetectionRuleSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskSuggestCustomDetectionRuleProjectSlugInput != "" {
+			projectSlugInput = &riskSuggestCustomDetectionRuleProjectSlugInput
+		}
+	}
+	v := &risk.SuggestCustomDetectionRulePayload{
+		Prompt: body.Prompt,
+	}
+	if body.ExistingRuleIds != nil {
+		v.ExistingRuleIds = make([]string, len(body.ExistingRuleIds))
+		for i, val := range body.ExistingRuleIds {
+			v.ExistingRuleIds[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

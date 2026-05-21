@@ -96,3 +96,8 @@ func RevokeShadowMCPApprovalRiskPath() string {
 func TriggerRiskAnalysisRiskPath() string {
 	return "/rpc/risk.policies.trigger"
 }
+
+// SuggestCustomDetectionRuleRiskPath returns the URL path to the risk service suggestCustomDetectionRule HTTP endpoint.
+func SuggestCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.suggest"
+}

@@ -23,9 +23,17 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@speakeasy-api/moonshine";
-import { ChevronRight, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Loader2,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useRiskSuggestCustomRuleMutation } from "@gram/client/react-query/index.js";
 import {
   BUILTIN_RULES_BY_CATEGORY,
   resolveSeverity,
@@ -618,6 +626,8 @@ function DetailField({
 /*  Create custom rule sheet                                                   */
 /* -------------------------------------------------------------------------- */
 
+type CreateStep = "prompt" | "review";
+
 function CreateCustomRuleSheet({
   open,
   onOpenChange,
@@ -635,11 +645,69 @@ function CreateCustomRuleSheet({
     severity: SeverityLevel;
   }) => void;
 }) {
+  const [step, setStep] = useState<CreateStep>("prompt");
+  const [askPrompt, setAskPrompt] = useState("");
   const [id, setId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [regex, setRegex] = useState("");
   const [severity, setSeverity] = useState<SeverityLevel>("medium");
+
+  const reset = () => {
+    setStep("prompt");
+    setAskPrompt("");
+    setId("");
+    setTitle("");
+    setDescription("");
+    setRegex("");
+    setSeverity("medium");
+  };
+
+  const suggestMutation = useRiskSuggestCustomRuleMutation({
+    onSuccess: (data) => {
+      const next = data;
+      setId(next.ruleId);
+      setTitle(next.title);
+      setDescription(next.description);
+      setRegex(next.regex);
+      setSeverity(
+        (SEVERITY_LEVELS as readonly string[]).includes(next.severity)
+          ? (next.severity as SeverityLevel)
+          : "medium",
+      );
+      setStep("review");
+    },
+    onError: (err) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to generate suggestion";
+      toast.error(message);
+    },
+  });
+
+  const handleSuggest = () => {
+    const prompt = askPrompt.trim();
+    if (prompt.length < 3) {
+      toast.error("Tell us what you want to detect first.");
+      return;
+    }
+    suggestMutation.mutate({
+      request: {
+        suggestCustomDetectionRuleRequestBody: {
+          prompt,
+          existingRuleIds: existingCustomIds,
+        },
+      },
+    });
+  };
+
+  const handleManual = () => {
+    setId("");
+    setTitle("");
+    setDescription("");
+    setRegex("");
+    setSeverity("medium");
+    setStep("review");
+  };
 
   const idError = useMemo(
     () => (id ? validateCustomRuleId(id, existingCustomIds) : null),
@@ -671,11 +739,7 @@ function CreateCustomRuleSheet({
       regex: regex.trim(),
       severity,
     });
-    setId("");
-    setTitle("");
-    setDescription("");
-    setRegex("");
-    setSeverity("medium");
+    reset();
   };
 
   return (
@@ -683,107 +747,151 @@ function CreateCustomRuleSheet({
       open={open}
       onOpenChange={(next) => {
         onOpenChange(next);
-        if (!next) {
-          setId("");
-          setTitle("");
-          setDescription("");
-          setRegex("");
-          setSeverity("medium");
-        }
+        if (!next) reset();
       }}
     >
       <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader className="px-6 pt-6">
           <SheetTitle>New Custom Detection Rule</SheetTitle>
           <SheetDescription>
-            Define a regex pattern that risk policies can include alongside
-            built-in detectors.
+            {step === "prompt"
+              ? "Describe what you want to detect. We'll suggest the rule ID, regex, and severity, you tweak before saving."
+              : "Review the suggested rule. Adjust any field before saving."}
           </SheetDescription>
         </SheetHeader>
-        <div className="flex-1 space-y-5 px-6 py-4">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Rule ID</Label>
-            <Input
-              value={id}
-              onChange={setId}
-              placeholder="e.g. custom.internal_token"
-              className="font-mono text-xs"
-            />
-            {idError ? (
-              <p className="text-destructive text-xs">{idError}</p>
-            ) : (
-              <p className="text-muted-foreground text-xs">
-                Stable identifier used in policies and findings. Cannot collide
-                with built-in or existing custom rules.
-              </p>
-            )}
-          </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Title</Label>
-            <Input
-              value={title}
-              onChange={setTitle}
-              placeholder="e.g. Internal API Token"
-            />
-          </div>
+        {step === "prompt" ? (
+          <>
+            <div className="flex-1 space-y-5 px-6 py-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  What do you want to detect?
+                </Label>
+                <TextArea
+                  value={askPrompt}
+                  onChange={setAskPrompt}
+                  rows={5}
+                  placeholder="e.g. internal Acme service tokens that look like acme_ followed by 32 lowercase hex characters"
+                  autoFocus
+                />
+                <p className="text-muted-foreground text-xs">
+                  Tip: include a sample value or the format so the model picks a
+                  tight regex.
+                </p>
+              </div>
+            </div>
+            <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
+              <Button variant="ghost" size="sm" onClick={handleManual}>
+                Skip, fill manually
+              </Button>
+              <Button
+                disabled={
+                  askPrompt.trim().length < 3 || suggestMutation.isPending
+                }
+                onClick={handleSuggest}
+              >
+                {suggestMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                Suggest with AI
+              </Button>
+            </SheetFooter>
+          </>
+        ) : (
+          <>
+            <div className="flex-1 space-y-5 px-6 py-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Rule ID</Label>
+                <Input
+                  value={id}
+                  onChange={setId}
+                  placeholder="e.g. custom.internal_token"
+                  className="font-mono text-xs"
+                />
+                {idError ? (
+                  <p className="text-destructive text-xs">{idError}</p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Stable identifier used in policies and findings. Cannot
+                    collide with built-in or existing custom rules.
+                  </p>
+                )}
+              </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Description</Label>
-            <TextArea
-              value={description}
-              onChange={setDescription}
-              rows={3}
-              placeholder="Explain what this rule detects so reviewers know how to act on findings"
-            />
-          </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Title</Label>
+                <Input
+                  value={title}
+                  onChange={setTitle}
+                  placeholder="e.g. Internal API Token"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Regex</Label>
-            <TextArea
-              value={regex}
-              onChange={setRegex}
-              rows={3}
-              className="font-mono text-xs"
-              placeholder="e.g. acme_[a-z0-9]{32}"
-            />
-            {regexError ? (
-              <p className="text-destructive text-xs">{regexError}</p>
-            ) : (
-              <p className="text-muted-foreground text-xs">
-                Anchors are not required, the pattern is matched against the
-                full scanned payload.
-              </p>
-            )}
-          </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Description</Label>
+                <TextArea
+                  value={description}
+                  onChange={setDescription}
+                  rows={3}
+                  placeholder="Explain what this rule detects so reviewers know how to act on findings"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Default severity</Label>
-            <Select
-              value={severity}
-              onValueChange={(v) => setSeverity(v as SeverityLevel)}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SEVERITY_LEVELS.map((level) => (
-                  <SelectItem key={level} value={level}>
-                    {SEVERITY_META[level].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <SheetFooter className="border-border border-t px-6 py-4">
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button disabled={!canSubmit} onClick={handleSubmit}>
-            Create rule
-          </Button>
-        </SheetFooter>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Regex</Label>
+                <TextArea
+                  value={regex}
+                  onChange={setRegex}
+                  rows={3}
+                  className="font-mono text-xs"
+                  placeholder="e.g. acme_[a-z0-9]{32}"
+                />
+                {regexError ? (
+                  <p className="text-destructive text-xs">{regexError}</p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Anchors are not required, the pattern is matched against the
+                    full scanned payload.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Default severity</Label>
+                <Select
+                  value={severity}
+                  onValueChange={(v) => setSeverity(v as SeverityLevel)}
+                >
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEVERITY_LEVELS.map((level) => (
+                      <SelectItem key={level} value={level}>
+                        {SEVERITY_META[level].label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setStep("prompt")}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+              <Button disabled={!canSubmit} onClick={handleSubmit}>
+                Create rule
+              </Button>
+            </SheetFooter>
+          </>
+        )}
       </SheetContent>
     </Sheet>
   );
