@@ -93,40 +93,42 @@ function DetectionRulesContent() {
   );
 
   return (
-    <Page.Section>
-      <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
-      <Page.Section.Description>
-        Built-in detection rules grouped by category. Click a rule to view its
-        description and override the default severity, or add your own custom
-        regex rule.
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Custom Detection Rule
-        </Button>
-      </Page.Section.CTA>
-      <Page.Section.Body>
-        <div className="space-y-8">
-          {customRules.length > 0 && (
-            <CustomRulesSection
-              rules={customRules}
-              expanded={expanded === "custom"}
-              onToggle={() =>
-                setExpanded(expanded === "custom" ? null : "custom")
-              }
-              onSelect={(rule) => setSelected({ kind: "custom", rule })}
-            />
-          )}
+    <>
+      <Page.Section>
+        <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
+        <Page.Section.Description>
+          Built-in detection rules grouped by category. Click a rule to view its
+          description and override the default severity, or add your own custom
+          regex rule.
+        </Page.Section.Description>
+        <Page.Section.CTA>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Custom Detection Rule
+          </Button>
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          <div className="space-y-8">
+            {customRules.length > 0 && (
+              <CustomRulesSection
+                rules={customRules}
+                expanded={expanded === "custom"}
+                onToggle={() =>
+                  setExpanded(expanded === "custom" ? null : "custom")
+                }
+                onSelect={(rule) => setSelected({ kind: "custom", rule })}
+              />
+            )}
 
-          <BuiltinRulesSection
-            severityOverrides={severityOverrides}
-            expanded={expanded}
-            onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
-            onSelect={(rule) => setSelected({ kind: "builtin", rule })}
-          />
-        </div>
-      </Page.Section.Body>
+            <BuiltinRulesSection
+              severityOverrides={severityOverrides}
+              expanded={expanded}
+              onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
+              onSelect={(rule) => setSelected({ kind: "builtin", rule })}
+            />
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
 
       <RuleDetailSheet
         selection={selected}
@@ -151,7 +153,7 @@ function DetectionRulesContent() {
           toast.success(`Created custom rule ${rule.id}`);
         }}
       />
-    </Page.Section>
+    </>
   );
 }
 

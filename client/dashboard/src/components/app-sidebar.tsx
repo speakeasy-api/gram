@@ -220,6 +220,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Secure"
               Icon={(p) => <Icon {...p} name="shield" />}
               defaultHref={routes.riskOverview.href()}
+              stage="beta"
             >
               <ScopeGatedNavItem
                 item={routes.riskOverview}
