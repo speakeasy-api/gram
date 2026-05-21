@@ -313,6 +313,31 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskOverview"}`)
 	})
 
+	Method("listRiskCategories", func() {
+		Description("Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RiskCategoriesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.categories")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskCategories")
+		Meta("openapi:extension:x-speakeasy-group", "risk.categories")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCategories"}`)
+	})
+
 	Method("getRiskUserBreakdown", func() {
 		Description("Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.")
 
@@ -582,6 +607,28 @@ var RiskOverviewCategory = Type("RiskOverviewCategory", func() {
 	Attribute("findings", Int64, "Finding count for this category.")
 
 	Required("category", "findings")
+})
+
+var RiskCategoryDefinition = Type("RiskCategoryDefinition", func() {
+	Description("One canonical risk category and how findings are classified into it.")
+
+	Attribute("key", String, "Canonical category key (e.g. 'secrets', 'pii', 'shadow_mcp').")
+	Attribute("label", String, "Human-readable category label for UI rendering.")
+	Attribute("description", String, "Plain-English description of what this category covers.")
+	Attribute("icon", String, "Lucide icon name suggested for this category.")
+	Attribute("source", String, "When non-empty, findings whose source equals this value belong to this category.")
+	Attribute("rule_ids", ArrayOf(String), "When non-empty, findings whose rule_id is in this exact list belong to this category. Checked before rule_id_prefix.")
+	Attribute("rule_id_prefix", String, "When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').")
+
+	Required("key", "label", "description", "icon", "source", "rule_ids", "rule_id_prefix")
+})
+
+var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
+	Description("Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.")
+
+	Attribute("categories", ArrayOf(RiskCategoryDefinition), "Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.")
+
+	Required("categories")
 })
 
 var RiskRuleBreakdownEntry = Type("RiskRuleBreakdownEntry", func() {

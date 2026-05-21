@@ -2209,6 +2209,244 @@ func DecodeGetRiskOverviewResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildListRiskCategoriesRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listRiskCategories" endpoint
+func (c *Client) BuildListRiskCategoriesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRiskCategoriesRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "listRiskCategories", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRiskCategoriesRequest returns an encoder for requests sent to the
+// risk listRiskCategories server.
+func EncodeListRiskCategoriesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ListRiskCategoriesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "listRiskCategories", "*risk.ListRiskCategoriesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListRiskCategoriesResponse returns a decoder for responses returned by
+// the risk listRiskCategories endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListRiskCategoriesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRiskCategoriesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRiskCategoriesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			res := NewListRiskCategoriesRiskCategoriesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRiskCategoriesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRiskCategoriesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRiskCategoriesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRiskCategoriesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRiskCategoriesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRiskCategoriesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRiskCategoriesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRiskCategoriesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+				}
+				err = ValidateListRiskCategoriesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+				}
+				return nil, NewListRiskCategoriesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRiskCategoriesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+				}
+				err = ValidateListRiskCategoriesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+				}
+				return nil, NewListRiskCategoriesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "listRiskCategories", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRiskCategoriesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "listRiskCategories", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRiskUserBreakdownRequest instantiates a HTTP request object with
 // method and path set to call the "risk" service "getRiskUserBreakdown"
 // endpoint
@@ -4017,6 +4255,26 @@ func unmarshalRiskOverviewTimeSeriesFindingResponseBodyToRiskRiskOverviewTimeSer
 		BucketStart: *v.BucketStart,
 		Category:    *v.Category,
 		Findings:    *v.Findings,
+	}
+
+	return res
+}
+
+// unmarshalRiskCategoryDefinitionResponseBodyToRiskRiskCategoryDefinition
+// builds a value of type *risk.RiskCategoryDefinition from a value of type
+// *RiskCategoryDefinitionResponseBody.
+func unmarshalRiskCategoryDefinitionResponseBodyToRiskRiskCategoryDefinition(v *RiskCategoryDefinitionResponseBody) *risk.RiskCategoryDefinition {
+	res := &risk.RiskCategoryDefinition{
+		Key:          *v.Key,
+		Label:        *v.Label,
+		Description:  *v.Description,
+		Icon:         *v.Icon,
+		Source:       *v.Source,
+		RuleIDPrefix: *v.RuleIDPrefix,
+	}
+	res.RuleIds = make([]string, len(v.RuleIds))
+	for i, val := range v.RuleIds {
+		res.RuleIds[i] = val
 	}
 
 	return res

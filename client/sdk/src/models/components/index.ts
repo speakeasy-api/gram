@@ -277,6 +277,8 @@ export * from "./resource.js";
 export * from "./resourceentry.js";
 export * from "./responsefilter.js";
 export * from "./riskcapabilitiesresult.js";
+export * from "./riskcategoriesresult.js";
+export * from "./riskcategorydefinition.js";
 export * from "./riskchatsummary.js";
 export * from "./riskoverviewcategory.js";
 export * from "./riskoverviewresult.js";

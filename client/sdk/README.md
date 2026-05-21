@@ -419,6 +419,10 @@ run();
 
 * [get](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 
+### [Risk.Categories](docs/sdks/categories/README.md)
+
+* [list](docs/sdks/categories/README.md#list) - listRiskCategories risk
+
 ### [Risk.Overview](docs/sdks/overview/README.md)
 
 * [get](docs/sdks/overview/README.md#get) - getRiskOverview risk
@@ -744,6 +748,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskApprovalsDelete`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
 - [`riskApprovalsList`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
 - [`riskCapabilitiesGet`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
+- [`riskCategoriesList`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`riskOverviewRules`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
 - [`riskOverviewUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
@@ -1037,6 +1042,7 @@ To learn about this feature and how to get started, check
 - [`useRiskApprovalsDeleteMutation`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
 - [`useRiskApproveShadowMCPMutation`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
 - [`useRiskCapabilities`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
+- [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk

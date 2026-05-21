@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -1033,6 +1034,32 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		}
 	}
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
+}
+
+func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskCategoriesPayload) (*gen.RiskCategoriesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	defs := categories.All()
+	out := make([]*gen.RiskCategoryDefinition, 0, len(defs))
+	for _, def := range defs {
+		ruleIDs := def.RuleIDs
+		if ruleIDs == nil {
+			ruleIDs = []string{}
+		}
+		out = append(out, &gen.RiskCategoryDefinition{
+			Key:          string(def.Category),
+			Label:        def.Label,
+			Description:  def.Description,
+			Icon:         def.Icon,
+			Source:       def.Source,
+			RuleIds:      ruleIDs,
+			RuleIDPrefix: def.RulePrefix,
+		})
+	}
+	return &gen.RiskCategoriesResult{Categories: out}, nil
 }
 
 func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRiskUserBreakdownPayload) (*gen.RiskUserBreakdownResult, error) {

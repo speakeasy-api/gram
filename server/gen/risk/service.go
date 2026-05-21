@@ -35,6 +35,11 @@ type Service interface {
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
 	// Get risk overview metrics and trend data for the current project.
 	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
+	// Return the canonical risk category definitions: metadata
+	// (label/description/icon) plus the classification (source / rule_id list /
+	// rule_id prefix) used to bucket findings. Dashboards and CLIs should call
+	// this instead of maintaining their own copy of the mapping.
+	ListRiskCategories(context.Context, *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error)
 	// Per-user breakdowns of findings by category and by rule_id within a time
 	// window. Powers the user drill-down on /risk-overview.
 	GetRiskUserBreakdown(context.Context, *GetRiskUserBreakdownPayload) (res *RiskUserBreakdownResult, err error)
@@ -80,7 +85,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
+var MethodNames = [17]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -203,6 +208,14 @@ type GetRiskUserBreakdownPayload struct {
 	To *string
 }
 
+// ListRiskCategoriesPayload is the payload type of the risk service
+// listRiskCategories method.
+type ListRiskCategoriesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // ListRiskPoliciesPayload is the payload type of the risk service
 // listRiskPolicies method.
 type ListRiskPoliciesPayload struct {
@@ -313,6 +326,35 @@ type RevokeShadowMCPApprovalPayload struct {
 type RiskCapabilitiesResult struct {
 	// Whether the prompt-injection ML classifier is configured on this server.
 	PiClassifierEnabled bool
+}
+
+// RiskCategoriesResult is the result type of the risk service
+// listRiskCategories method.
+type RiskCategoriesResult struct {
+	// Categories in classification-priority order. The last entry is the 'custom'
+	// fallback for findings that match none of the others.
+	Categories []*RiskCategoryDefinition
+}
+
+// One canonical risk category and how findings are classified into it.
+type RiskCategoryDefinition struct {
+	// Canonical category key (e.g. 'secrets', 'pii', 'shadow_mcp').
+	Key string
+	// Human-readable category label for UI rendering.
+	Label string
+	// Plain-English description of what this category covers.
+	Description string
+	// Lucide icon name suggested for this category.
+	Icon string
+	// When non-empty, findings whose source equals this value belong to this
+	// category.
+	Source string
+	// When non-empty, findings whose rule_id is in this exact list belong to this
+	// category. Checked before rule_id_prefix.
+	RuleIds []string
+	// When non-empty, findings whose rule_id starts with this prefix belong to
+	// this category. The catch-all for a family (e.g. 'pii.').
+	RuleIDPrefix string
 }
 
 type RiskOverviewCategory struct {

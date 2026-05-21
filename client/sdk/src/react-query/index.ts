@@ -192,6 +192,7 @@ export * from "./revokeUserSessionConsent.js";
 export * from "./riskApprovalsDelete.js";
 export * from "./riskApproveShadowMCP.js";
 export * from "./riskCapabilities.js";
+export * from "./riskCategories.js";
 export * from "./riskCreatePolicy.js";
 export * from "./riskListPolicies.js";
 export * from "./riskListResults.js";

@@ -18281,6 +18281,106 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: RiskCapabilities
+  /rpc/risk.categories:
+    get:
+      description: 'Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.'
+      operationId: listRiskCategories
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskCategoriesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listRiskCategories risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.categories
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: RiskCategories
   /rpc/risk.overview.get:
     get:
       description: Get risk overview metrics and trend data for the current project.
@@ -34539,6 +34639,52 @@ components:
           description: Whether the prompt-injection ML classifier is configured on this server.
       required:
         - pi_classifier_enabled
+    RiskCategoriesResult:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskCategoryDefinition'
+          description: Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.
+      description: Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.
+      required:
+        - categories
+    RiskCategoryDefinition:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Plain-English description of what this category covers.
+        icon:
+          type: string
+          description: Lucide icon name suggested for this category.
+        key:
+          type: string
+          description: Canonical category key (e.g. 'secrets', 'pii', 'shadow_mcp').
+        label:
+          type: string
+          description: Human-readable category label for UI rendering.
+        rule_id_prefix:
+          type: string
+          description: When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').
+        rule_ids:
+          type: array
+          items:
+            type: string
+          description: When non-empty, findings whose rule_id is in this exact list belong to this category. Checked before rule_id_prefix.
+        source:
+          type: string
+          description: When non-empty, findings whose source equals this value belong to this category.
+      description: One canonical risk category and how findings are classified into it.
+      required:
+        - key
+        - label
+        - description
+        - icon
+        - source
+        - rule_ids
+        - rule_id_prefix
     RiskChatSummary:
       type: object
       properties:

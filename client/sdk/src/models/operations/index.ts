@@ -167,6 +167,7 @@ export * from "./listremotesessionclients.js";
 export * from "./listremotesessionissuers.js";
 export * from "./listremotesessions.js";
 export * from "./listresources.js";
+export * from "./listriskcategories.js";
 export * from "./listriskpolicies.js";
 export * from "./listriskresults.js";
 export * from "./listriskresultsbychat.js";
