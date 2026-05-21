@@ -605,21 +605,18 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
-	// For admins we only return the active organization to avoid overloaded returns.
-	// The active org may not be in the admin's membership list (admin override),
-	// so fall back to a DB lookup.
-	// Exception: if the active org is not whitelisted, return all real memberships
-	// so the user can switch to a whitelisted org from the gate page.
-	if userInfo.Admin && authCtx.Whitelisted {
-		found := false
+	// For admins overriding into a foreign org (one not in their own membership list),
+	// return only that org to avoid overloaded returns. When admins are in one of their
+	// own orgs, return all real memberships so the org-switcher works normally.
+	if userInfo.Admin {
+		inOwnOrg := false
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
-				userInfo.Organizations = []sessions.Organization{org}
-				found = true
+				inOwnOrg = true
 				break
 			}
 		}
-		if !found {
+		if !inOwnOrg {
 			orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
 			if err == nil {
 				userInfo.Organizations = []sessions.Organization{{
