@@ -78,6 +78,8 @@ const NavGroupContext = React.createContext<NavContextValue>({
   containerRef: { current: null },
 });
 
+const ACCORDION_DURATION = 250;
+
 export function NavGroupProvider({
   activeGroup,
   defaultOpenGroups,
@@ -101,8 +103,6 @@ export function NavGroupProvider({
   const [highlightRect, setHighlightRect] =
     React.useState<HighlightRect | null>(null);
   const suppressUntilRef = React.useRef(0);
-
-  const ACCORDION_DURATION = 250;
 
   const toggleGroup = React.useCallback((group: string) => {
     suppressUntilRef.current = Date.now() + ACCORDION_DURATION;

@@ -92,15 +92,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     (r) => r.active,
   );
 
-  const activeGroup = connectActive
-    ? "Connect"
-    : buildActive
-      ? "Build"
-      : observeActive
-        ? "Observe"
-        : securityActive
-          ? "Secure"
-          : undefined;
+  let activeGroup: string | undefined;
+  switch (true) {
+    case connectActive:
+      activeGroup = "Connect";
+      break;
+    case buildActive:
+      activeGroup = "Build";
+      break;
+    case observeActive:
+      activeGroup = "Observe";
+      break;
+    case securityActive:
+      activeGroup = "Secure";
+      break;
+  }
 
   // Find the specific active route title for the sliding highlight
   const allNavRoutes = [
