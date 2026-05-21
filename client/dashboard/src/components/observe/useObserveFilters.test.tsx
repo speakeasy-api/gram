@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useNavigate } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AccessMember, Role } from "@gram/client/models/components";
@@ -25,6 +25,8 @@ function useObserveFiltersWithNavigation() {
 }
 
 describe("useObserveFilters", () => {
+  afterEach(() => vi.clearAllMocks());
+
   const mockMembers: AccessMember[] = [
     {
       id: "m1",
@@ -72,14 +74,20 @@ describe("useObserveFilters", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    vi.mocked(useMembers).mockReturnValue({
+    const membersResult = {
       data: { members: mockMembers },
       isLoading: false,
-    } as unknown as ReturnType<typeof useMembers>);
-    vi.mocked(useRoles).mockReturnValue({
+    } satisfies Pick<ReturnType<typeof useMembers>, "data" | "isLoading">;
+    const rolesResult = {
       data: { roles: mockRoles },
       isLoading: false,
-    } as unknown as ReturnType<typeof useRoles>);
+    } satisfies Pick<ReturnType<typeof useRoles>, "data" | "isLoading">;
+    vi.mocked(useMembers).mockReturnValue(
+      membersResult as unknown as ReturnType<typeof useMembers>,
+    );
+    vi.mocked(useRoles).mockReturnValue(
+      rolesResult as unknown as ReturnType<typeof useRoles>,
+    );
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={qc}>
@@ -94,14 +102,20 @@ describe("useObserveFilters", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    vi.mocked(useMembers).mockReturnValue({
+    const membersResult = {
       data: { members: [] },
       isLoading: false,
-    } as unknown as ReturnType<typeof useMembers>);
-    vi.mocked(useRoles).mockReturnValue({
+    } satisfies Pick<ReturnType<typeof useMembers>, "data" | "isLoading">;
+    const rolesResult = {
       data: { roles: [] },
       isLoading: false,
-    } as unknown as ReturnType<typeof useRoles>);
+    } satisfies Pick<ReturnType<typeof useRoles>, "data" | "isLoading">;
+    vi.mocked(useMembers).mockReturnValue(
+      membersResult as unknown as ReturnType<typeof useMembers>,
+    );
+    vi.mocked(useRoles).mockReturnValue(
+      rolesResult as unknown as ReturnType<typeof useRoles>,
+    );
     function RouterWrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={qc}>
@@ -160,14 +174,20 @@ describe("useObserveFilters", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    vi.mocked(useMembers).mockReturnValue({
+    const membersResult = {
       data: { members: [] },
       isLoading: false,
-    } as unknown as ReturnType<typeof useMembers>);
-    vi.mocked(useRoles).mockReturnValue({
+    } satisfies Pick<ReturnType<typeof useMembers>, "data" | "isLoading">;
+    const rolesResult = {
       data: { roles: [] },
       isLoading: false,
-    } as unknown as ReturnType<typeof useRoles>);
+    } satisfies Pick<ReturnType<typeof useRoles>, "data" | "isLoading">;
+    vi.mocked(useMembers).mockReturnValue(
+      membersResult as unknown as ReturnType<typeof useMembers>,
+    );
+    vi.mocked(useRoles).mockReturnValue(
+      rolesResult as unknown as ReturnType<typeof useRoles>,
+    );
     function RouterWrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={qc}>
