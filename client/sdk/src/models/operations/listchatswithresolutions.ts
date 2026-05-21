@@ -68,6 +68,10 @@ export type ListChatsWithResolutionsRequest = {
    */
   externalUserId?: string | undefined;
   /**
+   * Filter to chats produced by this assistant
+   */
+  assistantId?: string | undefined;
+  /**
    * Filter by resolution status
    */
   resolutionStatus?: string | undefined;
@@ -237,6 +241,7 @@ export const SortOrder$outboundSchema: z.ZodMiniEnum<typeof SortOrder> = z.enum(
 export type ListChatsWithResolutionsRequest$Outbound = {
   search?: string | undefined;
   external_user_id?: string | undefined;
+  assistant_id?: string | undefined;
   resolution_status?: string | undefined;
   has_risk?: string | undefined;
   from?: string | undefined;
@@ -258,6 +263,7 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     search: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
+    assistantId: z.optional(z.string()),
     resolutionStatus: z.optional(z.string()),
     hasRisk: z.optional(HasRisk$outboundSchema),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
@@ -273,6 +279,7 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       externalUserId: "external_user_id",
+      assistantId: "assistant_id",
       resolutionStatus: "resolution_status",
       hasRisk: "has_risk",
       sortBy: "sort_by",
