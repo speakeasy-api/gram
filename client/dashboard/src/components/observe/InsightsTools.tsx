@@ -193,6 +193,10 @@ export function InsightsToolsContent() {
     setDateRangeParam,
     setCustomRangeParam,
     clearCustomRange,
+    selectedRoleIds,
+    roleOptions,
+    handleRoleSelectionChange,
+    roleFilterPending,
   } = useObserveFilters();
 
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
@@ -213,6 +217,7 @@ export function InsightsToolsContent() {
         "hooks-traces",
         activeFilters,
         selectedHookTypes,
+        selectedRoleIds,
         from.toISOString(),
         to.toISOString(),
       ],
@@ -233,6 +238,7 @@ export function InsightsToolsContent() {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      enabled: !roleFilterPending,
       throwOnError: false,
     }),
   );
@@ -265,6 +271,7 @@ export function InsightsToolsContent() {
           },
         }),
       ),
+    enabled: !roleFilterPending,
     throwOnError: false,
   });
 
@@ -328,6 +335,9 @@ export function InsightsToolsContent() {
           addFilter={addFilter}
           selectedHookTypes={selectedHookTypes}
           onHookTypesChange={handleHookTypesChange}
+          roleOptions={roleOptions}
+          selectedRoleIds={selectedRoleIds}
+          onRoleSelectionChange={handleRoleSelectionChange}
           selectedLog={selectedLog}
           setSelectedLog={setSelectedLog}
           dateRange={dateRange}
@@ -359,6 +369,9 @@ function HooksInnerContent({
   addFilter,
   selectedHookTypes,
   onHookTypesChange,
+  roleOptions,
+  selectedRoleIds,
+  onRoleSelectionChange,
   selectedLog,
   setSelectedLog,
   dateRange,
@@ -385,6 +398,9 @@ function HooksInnerContent({
   addFilter: (chip: FilterChip) => void;
   selectedHookTypes: TypesToInclude[];
   onHookTypesChange: (types: TypesToInclude[]) => void;
+  roleOptions: Array<{ id: string; name: string }>;
+  selectedRoleIds: string[];
+  onRoleSelectionChange: (values: string[]) => void;
   selectedLog: TelemetryLogRecord | null;
   setSelectedLog: (log: TelemetryLogRecord | null) => void;
   dateRange: DateRangePreset;
@@ -439,6 +455,9 @@ function HooksInnerContent({
             activeFilters={activeFilters}
             selectedTypes={selectedHookTypes}
             onTypesChange={onHookTypesChange}
+            roleOptions={roleOptions}
+            selectedRoleIds={selectedRoleIds}
+            onRoleSelectionChange={onRoleSelectionChange}
             dateRange={dateRange}
             customRange={customRange}
             customRangeLabel={customRangeLabel}
@@ -462,7 +481,9 @@ function HooksInnerContent({
                   <Spinner className="mr-0 size-5" />
                   <span>Loading hook events...</span>
                 </div>
-              ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
+              ) : groupedTraces.length === 0 &&
+                activeFilters.length === 0 &&
+                selectedRoleIds.length === 0 ? (
                 <HooksEmptyState
                   title="No Insights Generated"
                   subtitle="Install Observability plugin in your AI agent to start generating tool insights"
