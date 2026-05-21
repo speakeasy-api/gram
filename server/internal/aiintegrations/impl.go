@@ -120,11 +120,17 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		return nil, err
 	}
 	apiKey := strings.TrimSpace(payload.APIKey)
+	apiKeySupplied := apiKey != ""
 	if apiKey == "" {
 		if beforeRow == nil || before.APIKey == "" {
 			return nil, oops.E(oops.CodeInvalid, nil, "api_key is required")
 		}
 		apiKey = before.APIKey
+	}
+	var resetPollWatermarkAt *time.Time
+	if shouldResetUsagePollWatermark(beforeRow != nil, apiKeySupplied) {
+		watermark := initialUsagePollWatermark(time.Now())
+		resetPollWatermarkAt = &watermark
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -133,7 +139,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	cfg, row, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, payload.Enabled)
+	cfg, row, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, payload.Enabled, resetPollWatermarkAt)
 	if err != nil {
 		return nil, err
 	}
@@ -226,6 +232,10 @@ func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	}
 }
 
+func shouldResetUsagePollWatermark(hasExistingConfig bool, apiKeySupplied bool) bool {
+	return !hasExistingConfig || apiKeySupplied
+}
+
 func emptyView(orgID, provider string) *gen.AIIntegrationConfig {
 	return &gen.AIIntegrationConfig{
 		ID:             nil,
@@ -243,9 +253,13 @@ func emptyView(orgID, provider string) *gen.AIIntegrationConfig {
 func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 	id := idValue.String()
 	projectID := cfg.ProjectID.String()
-	lastPolledAt := cfg.LastPolledAt.Format(time.RFC3339)
 	createdAt := cfg.CreatedAt.Format(time.RFC3339)
 	updatedAt := cfg.UpdatedAt.Format(time.RFC3339)
+	var lastPolledAt *string
+	if !cfg.LastPollSuccessAt.IsZero() {
+		formatted := cfg.LastPollSuccessAt.Format(time.RFC3339)
+		lastPolledAt = &formatted
+	}
 	return &gen.AIIntegrationConfig{
 		ID:             &id,
 		OrganizationID: cfg.OrganizationID,
@@ -253,7 +267,7 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		ProjectID:      &projectID,
 		Enabled:        cfg.Enabled,
 		HasAPIKey:      cfg.APIKey != "",
-		LastPolledAt:   &lastPolledAt,
+		LastPolledAt:   lastPolledAt,
 		CreatedAt:      &createdAt,
 		UpdatedAt:      &updatedAt,
 	}

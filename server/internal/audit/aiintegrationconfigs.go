@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -74,7 +75,7 @@ func (l *Logger) LogAIIntegrationUpsert(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AIIntegrationV1})
 }
 
 type LogAIIntegrationDeleteEvent struct {
@@ -112,5 +113,5 @@ func (l *Logger) LogAIIntegrationDelete(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AIIntegrationV1})
 }

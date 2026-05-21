@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -45,6 +46,7 @@ import (
 type Activities struct {
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
+	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollCursorUsageMetrics          *activities.PollCursorUsageMetrics
 	customDomainIngress             *activities.CustomDomainIngress
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
@@ -135,6 +137,7 @@ func NewActivities(
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
+		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger, guardianPolicy, tracerProvider),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
@@ -261,16 +264,16 @@ func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs [
 	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
 }
 
-func (a *Activities) ListAIIntegrationUsagePollCandidates(ctx context.Context, input activities.ListAIIntegrationUsagePollCandidatesInput) ([]activities.AIIntegrationUsagePollConfig, error) {
-	configs, err := a.pollCursorUsageMetrics.ListAIIntegrationUsagePollCandidates(ctx, input)
+func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
+	candidates, err := a.getAIIntegrationsCandidates.Do(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("list ai integration usage poll candidates: %w", err)
+		return nil, fmt.Errorf("get ai integrations candidates: %w", err)
 	}
-	return configs, nil
+	return candidates, nil
 }
 
 func (a *Activities) SyncAIIntegrationUsage(ctx context.Context, input activities.SyncAIIntegrationUsageInput) error {
-	if err := a.pollCursorUsageMetrics.SyncAIIntegrationUsage(ctx, input); err != nil {
+	if err := a.pollCursorUsageMetrics.Do(ctx, input); err != nil {
 		return fmt.Errorf("sync ai integration usage: %w", err)
 	}
 	return nil

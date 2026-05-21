@@ -62,8 +62,8 @@ type AIIntegrationConfig struct {
 	Enabled bool
 	// Whether an API key is currently stored. The key itself is never returned.
 	HasAPIKey bool
-	// ISO 8601 timestamp for the usage sync high-water mark. Omitted when no
-	// config is set.
+	// ISO 8601 timestamp for the last successful usage poll. Omitted until a poll
+	// succeeds.
 	LastPolledAt *string
 	// ISO 8601 timestamp when the config was created. Omitted when no config is
 	// set.

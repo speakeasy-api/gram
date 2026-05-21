@@ -99,9 +99,8 @@ export function AIIntegrationsSection() {
           <ReleaseStageBadge stage="preview" />
         </Stack>
         <Type muted small>
-          Connect AI providers to Gram. Provider integrations can power usage
-          and cost reporting, with room for more use cases as providers expose
-          more data.
+          Connect AI providers for usage and cost reporting, with room for more
+          use cases as providers expose more data.
         </Type>
       </div>
 
@@ -115,9 +114,9 @@ export function AIIntegrationsSection() {
               </Type>
             </Stack>
             <Type variant="body" className="text-muted-foreground ml-6 text-sm">
-              Connect a Cursor team Admin API key so Gram can sync hourly token
-              and cost data. Synced usage is attributed to the
-              organization&apos;s first-created project.
+              Connect a Cursor team Admin API key to sync hourly token and cost
+              data. Synced usage is attributed to the organization&apos;s
+              first-created project.
             </Type>
           </Stack>
           <RequireScope scope="org:admin" level="component">

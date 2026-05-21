@@ -221,6 +221,11 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
+	aiUsageWorker := worker.New(env.Client(), AIIntegrationUsageSyncTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: perPodAIIntegrationUsageSyncConcurrency,
+	})
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -274,8 +279,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
-	temporalWorker.RegisterActivity(activities.ListAIIntegrationUsagePollCandidates)
-	temporalWorker.RegisterActivity(activities.SyncAIIntegrationUsage)
+	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
+	aiUsageWorker.RegisterActivity(activities.SyncAIIntegrationUsage)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -403,7 +408,7 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -414,19 +419,31 @@ func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-risk-analysis"
 }
 
-// Workers bundles the main and risk-analysis Temporal workers.
+const perPodAIIntegrationUsageSyncConcurrency = 5
+
+func AIIntegrationUsageSyncTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-ai-integration-usage"
+}
+
+// Workers bundles the main and dedicated Temporal workers.
 type Workers struct {
 	main         worker.Worker
 	riskAnalysis worker.Worker
+	aiUsage      worker.Worker
 }
 
-// Run starts the risk-analysis worker, then blocks running the main worker
-// until interruptCh receives.
+// Run starts dedicated workers, then blocks running the main worker until
+// interruptCh receives.
 func (w *Workers) Run(interruptCh <-chan any) error {
 	if err := w.riskAnalysis.Start(); err != nil {
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
 	defer w.riskAnalysis.Stop()
+
+	if err := w.aiUsage.Start(); err != nil {
+		return fmt.Errorf("start ai integration usage worker: %w", err)
+	}
+	defer w.aiUsage.Stop()
 
 	if err := w.main.Run(interruptCh); err != nil {
 		return fmt.Errorf("run main worker: %w", err)
@@ -434,7 +451,7 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 	return nil
 }
 
-// Start starts both workers without blocking. Pair with Stop (used by tests).
+// Start starts all workers without blocking. Pair with Stop (used by tests).
 func (w *Workers) Start() error {
 	if err := w.main.Start(); err != nil {
 		return fmt.Errorf("start main worker: %w", err)
@@ -443,10 +460,16 @@ func (w *Workers) Start() error {
 		w.main.Stop()
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
+	if err := w.aiUsage.Start(); err != nil {
+		w.riskAnalysis.Stop()
+		w.main.Stop()
+		return fmt.Errorf("start ai integration usage worker: %w", err)
+	}
 	return nil
 }
 
 func (w *Workers) Stop() {
+	w.aiUsage.Stop()
 	w.riskAnalysis.Stop()
 	w.main.Stop()
 }

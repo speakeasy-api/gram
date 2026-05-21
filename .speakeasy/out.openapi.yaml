@@ -27177,7 +27177,7 @@ components:
           description: Config ID. Omitted when no config is set for the provider.
         last_polled_at:
           type: string
-          description: ISO 8601 timestamp for the usage sync high-water mark. Omitted when no config is set.
+          description: ISO 8601 timestamp for the last successful usage poll. Omitted until a poll succeeds.
           format: date-time
         organization_id:
           type: string

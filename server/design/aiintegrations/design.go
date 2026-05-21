@@ -16,7 +16,7 @@ var Config = Type("AIIntegrationConfig", func() {
 	Attribute("project_id", String, "Project used as the telemetry write target. Omitted when no config is set.")
 	Attribute("enabled", Boolean, "Whether the provider integration is active.")
 	Attribute("has_api_key", Boolean, "Whether an API key is currently stored. The key itself is never returned.")
-	Attribute("last_polled_at", String, "ISO 8601 timestamp for the usage sync high-water mark. Omitted when no config is set.", func() {
+	Attribute("last_polled_at", String, "ISO 8601 timestamp for the last successful usage poll. Omitted until a poll succeeds.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("created_at", String, "ISO 8601 timestamp when the config was created. Omitted when no config is set.", func() {

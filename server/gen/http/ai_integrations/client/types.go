@@ -45,8 +45,8 @@ type GetConfigResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether an API key is currently stored. The key itself is never returned.
 	HasAPIKey *bool `form:"has_api_key,omitempty" json:"has_api_key,omitempty" xml:"has_api_key,omitempty"`
-	// ISO 8601 timestamp for the usage sync high-water mark. Omitted when no
-	// config is set.
+	// ISO 8601 timestamp for the last successful usage poll. Omitted until a poll
+	// succeeds.
 	LastPolledAt *string `form:"last_polled_at,omitempty" json:"last_polled_at,omitempty" xml:"last_polled_at,omitempty"`
 	// ISO 8601 timestamp when the config was created. Omitted when no config is
 	// set.
@@ -70,8 +70,8 @@ type UpsertConfigResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether an API key is currently stored. The key itself is never returned.
 	HasAPIKey *bool `form:"has_api_key,omitempty" json:"has_api_key,omitempty" xml:"has_api_key,omitempty"`
-	// ISO 8601 timestamp for the usage sync high-water mark. Omitted when no
-	// config is set.
+	// ISO 8601 timestamp for the last successful usage poll. Omitted until a poll
+	// succeeds.
 	LastPolledAt *string `form:"last_polled_at,omitempty" json:"last_polled_at,omitempty" xml:"last_polled_at,omitempty"`
 	// ISO 8601 timestamp when the config was created. Omitted when no config is
 	// set.

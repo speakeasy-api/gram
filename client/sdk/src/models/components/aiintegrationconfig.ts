@@ -29,7 +29,7 @@ export type AIIntegrationConfig = {
    */
   id?: string | undefined;
   /**
-   * ISO 8601 timestamp for the usage sync high-water mark. Omitted when no config is set.
+   * ISO 8601 timestamp for the last successful usage poll. Omitted until a poll succeeds.
    */
   lastPolledAt?: Date | undefined;
   /**

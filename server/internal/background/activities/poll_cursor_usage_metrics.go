@@ -27,10 +27,9 @@ import (
 )
 
 const (
-	cursorUsageMetricsURN     = "cursor:usage:metrics"
-	cursorUsageWindowStartGap = time.Millisecond
-	cursorHeartbeatInterval   = 10 * time.Second
-	cursorRateLimitFallback   = time.Minute
+	cursorUsageMetricsURN             = "cursor:usage:metrics"
+	cursorHeartbeatInterval           = 10 * time.Second
+	SyncAIIntegrationUsageMaxAttempts = 3
 )
 
 var (
@@ -51,9 +50,6 @@ type PollCursorUsageMetrics struct {
 }
 
 func NewPollCursorUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, encryptionClient *encryption.Client, telemetryLogger *telemetry.Logger, guardianPolicy *guardian.Policy, tracerProvider trace.TracerProvider) *PollCursorUsageMetrics {
-	if guardianPolicy == nil {
-		guardianPolicy = guardian.NewDefaultPolicy(tracerProvider)
-	}
 	return &PollCursorUsageMetrics{
 		logger:          logger.With(attr.SlogComponent("poll_cursor_usage_metrics")),
 		db:              db,
@@ -63,97 +59,70 @@ func NewPollCursorUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, encryption
 	}
 }
 
-type AIIntegrationUsagePollConfig struct {
-	ID             string
-	OrganizationID string
-	Provider       string
-	ProjectID      string
-	APIKey         string
-	LastPolledAt   time.Time
-}
-
-type CursorUsageEvent = cursorapi.UsageEvent
-
-type AIIntegrationUsagePollCursor struct {
-	LastPolledAt   time.Time
-	OrganizationID string
-	Provider       string
-}
-
-type ListAIIntegrationUsagePollCandidatesInput struct {
-	Provider string
-	EndTime  time.Time
-	Limit    int32
-	Cursor   *AIIntegrationUsagePollCursor
-}
-
 type SyncAIIntegrationUsageInput struct {
-	Config  AIIntegrationUsagePollConfig
-	EndTime time.Time
+	ConfigID string
+	EndTime  time.Time
 }
 
-func (c *PollCursorUsageMetrics) ListAIIntegrationUsagePollCandidates(ctx context.Context, input ListAIIntegrationUsagePollCandidatesInput) ([]AIIntegrationUsagePollConfig, error) {
-	var cursor *aiintegrations.UsagePollCandidateCursor
-	if input.Cursor != nil {
-		cursor = &aiintegrations.UsagePollCandidateCursor{
-			LastPolledAt:   input.Cursor.LastPolledAt,
-			OrganizationID: input.Cursor.OrganizationID,
-			Provider:       input.Cursor.Provider,
-		}
-	}
-	configs, err := c.integrations.ListUsagePollCandidates(ctx, input.Provider, input.EndTime, input.Limit, cursor)
-	if err != nil {
-		return nil, fmt.Errorf("list usage poll candidates: %w", err)
-	}
-
-	out := make([]AIIntegrationUsagePollConfig, 0, len(configs))
-	for _, cfg := range configs {
-		out = append(out, AIIntegrationUsagePollConfig{
-			ID:             cfg.ID.String(),
-			OrganizationID: cfg.OrganizationID,
-			Provider:       cfg.Provider,
-			ProjectID:      cfg.ProjectID.String(),
-			APIKey:         cfg.APIKey,
-			LastPolledAt:   cfg.LastPolledAt,
-		})
-	}
-	return out, nil
-}
-
-func (c *PollCursorUsageMetrics) SyncAIIntegrationUsage(ctx context.Context, input SyncAIIntegrationUsageInput) error {
-	if input.Config.Provider != aiintegrations.ProviderCursor {
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", input.Config.Provider)
-	}
-
-	events, err := c.fetchCursorUsageWindow(ctx, input.Config, input.EndTime)
-	if err != nil {
-		return fmt.Errorf("fetch cursor usage window: %w", err)
-	}
-
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("cursor usage sync canceled before write: %w", err)
-	}
-	if err := c.writeCursorUsageTelemetry(ctx, input.Config, events); err != nil {
-		return fmt.Errorf("write cursor usage telemetry: %w", err)
-	}
-
-	id, err := uuid.Parse(input.Config.ID)
+func (c *PollCursorUsageMetrics) Do(ctx context.Context, input SyncAIIntegrationUsageInput) error {
+	id, err := uuid.Parse(input.ConfigID)
 	if err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid ai integration config id")
 	}
-	if err := c.integrations.UpdateUsagePollWatermark(ctx, id, input.EndTime); err != nil {
-		return fmt.Errorf("update usage poll watermark: %w", err)
+
+	cfg, err := c.integrations.GetUsagePollConfig(ctx, id)
+	if err != nil {
+		return fmt.Errorf("load ai integration usage poll config: %w", err)
+	}
+	if cfg.Provider != aiintegrations.ProviderCursor {
+		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
+	}
+
+	events, err := c.fetchUsageEvents(ctx, cfg, input.EndTime)
+	if err != nil {
+		return c.recordFailureAfterFinalAttempt(ctx, id, cfg, input.EndTime, fmt.Errorf("fetch cursor usage window: %w", err))
+	}
+
+	if err := ctx.Err(); err != nil {
+		return c.recordFailureAfterFinalAttempt(ctx, id, cfg, input.EndTime, fmt.Errorf("cursor usage sync canceled before write: %w", err))
+	}
+	if err := c.writeCursorUsageTelemetry(ctx, cfg, events); err != nil {
+		return c.recordFailureAfterFinalAttempt(ctx, id, cfg, input.EndTime, fmt.Errorf("write cursor usage telemetry: %w", err))
+	}
+
+	if err := c.integrations.RecordUsagePollSuccess(ctx, id, input.EndTime); err != nil {
+		return c.recordFailureAfterFinalAttempt(ctx, id, cfg, input.EndTime, fmt.Errorf("record usage poll success: %w", err))
 	}
 	return nil
 }
 
-func (c *PollCursorUsageMetrics) fetchCursorUsageWindow(ctx context.Context, cfg AIIntegrationUsagePollConfig, endTime time.Time) ([]CursorUsageEvent, error) {
-	startTime := cursorUsageWindowStart(cfg.LastPolledAt)
+func (c *PollCursorUsageMetrics) recordFailureAfterFinalAttempt(ctx context.Context, configID uuid.UUID, cfg aiintegrations.Config, endTime time.Time, cause error) error {
+	if activity.GetInfo(ctx).Attempt < SyncAIIntegrationUsageMaxAttempts {
+		return cause
+	}
+
+	if err := c.integrations.RecordUsagePollFailure(ctx, configID, endTime, cause); err != nil {
+		return fmt.Errorf("%w; record usage poll failure: %v", cause, err)
+	}
+
+	c.logger.WarnContext(ctx, "cursor usage sync failed after final attempt; recorded failure",
+		attr.SlogError(cause),
+		slog.String("ai_integration_config_id", configID.String()),
+		attr.SlogOrganizationID(cfg.OrganizationID),
+		attr.SlogProjectID(cfg.ProjectID.String()),
+		slog.Time("next_poll_after", endTime.Add(time.Hour)),
+	)
+	return cause
+}
+
+func (c *PollCursorUsageMetrics) fetchUsageEvents(ctx context.Context, cfg aiintegrations.Config, endTime time.Time) ([]cursorapi.UsageEvent, error) {
+	// Cursor includes both time bounds, so advance past our stored inclusive watermark.
+	startTime := cfg.PollWatermarkAt.Add(time.Millisecond)
 	seen := make(map[string]struct{})
-	events := make([]CursorUsageEvent, 0)
+	events := make([]cursorapi.UsageEvent, 0)
 	for pageNum := 1; ; {
 		activity.RecordHeartbeat(ctx, map[string]any{
-			"config_id": cfg.ID,
+			"config_id": cfg.ID.String(),
 			"provider":  cfg.Provider,
 			"page":      pageNum,
 		})
@@ -165,7 +134,11 @@ func (c *PollCursorUsageMetrics) fetchCursorUsageWindow(ctx context.Context, cfg
 		if err != nil {
 			var rateLimitErr *cursorapi.RateLimitError
 			if errors.As(err, &rateLimitErr) {
-				sleepFor := cursorRetryDelay(rateLimitErr.RetryAfter)
+				retryAfter := rateLimitErr.RetryAfter
+				if retryAfter <= 0 {
+					retryAfter = time.Minute
+				}
+				sleepFor := retryAfter + time.Duration(time.Now().UnixNano()%int64(time.Second))
 				c.logger.InfoContext(ctx, "cursor usage request rate limited",
 					attr.SlogOrganizationID(cfg.OrganizationID),
 					attr.SlogPaginationLimit(pageNum),
@@ -194,7 +167,7 @@ func (c *PollCursorUsageMetrics) fetchCursorUsageWindow(ctx context.Context, cfg
 	}
 }
 
-func (c *PollCursorUsageMetrics) writeCursorUsageTelemetry(ctx context.Context, cfg AIIntegrationUsagePollConfig, events []CursorUsageEvent) error {
+func (c *PollCursorUsageMetrics) writeCursorUsageTelemetry(ctx context.Context, cfg aiintegrations.Config, events []cursorapi.UsageEvent) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -209,9 +182,9 @@ func (c *PollCursorUsageMetrics) writeCursorUsageTelemetry(ctx context.Context, 
 		}
 		userEmail := strings.ToLower(strings.TrimSpace(event.UserEmail))
 		attrs := map[attr.Key]any{
-			attr.EventSourceKey:                        "polling",
+			attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
 			attr.LogBodyKey:                            "Cursor usage metrics",
-			attr.ProjectIDKey:                          cfg.ProjectID,
+			attr.ProjectIDKey:                          cfg.ProjectID.String(),
 			attr.OrganizationIDKey:                     cfg.OrganizationID,
 			attr.ResourceURNKey:                        cursorUsageMetricsURN,
 			attr.HookSourceKey:                         "cursor",
@@ -238,7 +211,7 @@ func (c *PollCursorUsageMetrics) writeCursorUsageTelemetry(ctx context.Context, 
 			ToolInfo: telemetry.ToolInfo{
 				Name:           "cursor",
 				OrganizationID: cfg.OrganizationID,
-				ProjectID:      cfg.ProjectID,
+				ProjectID:      cfg.ProjectID.String(),
 				ID:             "",
 				URN:            cursorUsageMetricsURN,
 				DeploymentID:   "",
@@ -252,19 +225,6 @@ func (c *PollCursorUsageMetrics) writeCursorUsageTelemetry(ctx context.Context, 
 		return oops.E(oops.CodeUnexpected, err, "insert cursor usage telemetry logs")
 	}
 	return nil
-}
-
-func cursorUsageWindowStart(lastPolledAt time.Time) time.Time {
-	// Cursor includes both time bounds, so advance past our stored inclusive watermark.
-	return lastPolledAt.Add(cursorUsageWindowStartGap)
-}
-
-func cursorRetryDelay(retryAfter time.Duration) time.Duration {
-	if retryAfter <= 0 {
-		retryAfter = cursorRateLimitFallback
-	}
-	jitter := time.Duration(time.Now().UnixNano() % int64(time.Second))
-	return retryAfter + jitter
 }
 
 func sleepWithActivityHeartbeat(ctx context.Context, d time.Duration) error {
@@ -288,7 +248,7 @@ func sleepWithActivityHeartbeat(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func hashCursorUsageEvent(event CursorUsageEvent) string {
+func hashCursorUsageEvent(event cursorapi.UsageEvent) string {
 	var b strings.Builder
 	b.WriteString(event.Timestamp)
 	b.WriteByte('|')
@@ -312,7 +272,7 @@ func hashCursorUsageEvent(event CursorUsageEvent) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (c *PollCursorUsageMetrics) resolveUserIDsByEmail(ctx context.Context, orgID string, events []CursorUsageEvent) map[string]string {
+func (c *PollCursorUsageMetrics) resolveUserIDsByEmail(ctx context.Context, orgID string, events []cursorapi.UsageEvent) map[string]string {
 	out := make(map[string]string)
 	seen := make(map[string]struct{})
 	emails := make([]string, 0, len(events))

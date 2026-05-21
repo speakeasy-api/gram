@@ -2,7 +2,12 @@
 SELECT
     c.*
   , s.id AS sync_id
-  , s.last_polled_at
+  , s.poll_watermark_at
+  , s.next_poll_after
+  , s.last_poll_error
+  , s.last_poll_failed_at
+  , s.last_poll_success_at
+  , s.consecutive_failures
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -70,7 +75,12 @@ WHERE organization_id = @organization_id
 SELECT
     c.*
   , s.id AS sync_id
-  , s.last_polled_at
+  , s.poll_watermark_at
+  , s.next_poll_after
+  , s.last_poll_error
+  , s.last_poll_failed_at
+  , s.last_poll_success_at
+  , s.consecutive_failures
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -81,39 +91,67 @@ WHERE c.provider = @provider
   AND c.api_key_encrypted IS NOT NULL
 ORDER BY c.organization_id, c.provider;
 
--- name: UpdateSyncLastPolledAt :exec
+-- name: ResetUsagePollState :exec
 UPDATE ai_integration_syncs
-SET last_polled_at = @last_polled_at,
+SET poll_watermark_at = @poll_watermark_at,
+    next_poll_after = @next_poll_after,
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    last_poll_success_at = NULL,
+    consecutive_failures = 0,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;
 
 -- name: ListUsagePollCandidates :many
 SELECT
-    c.*
-  , s.id AS sync_id
-  , s.last_polled_at
-  , s.created_at AS sync_created_at
-  , s.updated_at AS sync_updated_at
+    c.id
+  , c.organization_id
+  , c.provider
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 WHERE c.provider = @provider
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
-  AND s.last_polled_at < @last_polled_before
-  AND (
-    sqlc.narg('cursor_last_polled_at')::timestamptz IS NULL
-    OR (s.last_polled_at, c.organization_id, c.provider) > (
-      sqlc.narg('cursor_last_polled_at')::timestamptz,
-      sqlc.narg('cursor_organization_id')::text,
-      sqlc.narg('cursor_provider')::text
-    )
-  )
-ORDER BY s.last_polled_at ASC, c.organization_id ASC, c.provider ASC
+  AND s.next_poll_after <= @poll_due_before
+ORDER BY s.next_poll_after ASC, c.organization_id ASC, c.provider ASC
 LIMIT @limit_count;
 
--- name: UpdateUsagePollWatermark :exec
+-- name: GetUsagePollConfigByID :one
+SELECT
+    c.*
+  , s.id AS sync_id
+  , s.poll_watermark_at
+  , s.next_poll_after
+  , s.last_poll_error
+  , s.last_poll_failed_at
+  , s.last_poll_success_at
+  , s.consecutive_failures
+  , s.created_at AS sync_created_at
+  , s.updated_at AS sync_updated_at
+FROM ai_integration_configs c
+JOIN ai_integration_syncs s ON s.ai_integration_config_id = c.id
+WHERE c.id = @ai_integration_config_id
+  AND c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND c.api_key_encrypted IS NOT NULL;
+
+-- name: RecordUsagePollSuccess :exec
 UPDATE ai_integration_syncs
-SET last_polled_at = @last_polled_at,
+SET poll_watermark_at = @poll_watermark_at,
+    next_poll_after = @next_poll_after,
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    last_poll_success_at = clock_timestamp(),
+    consecutive_failures = 0,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id;
+
+-- name: RecordUsagePollFailure :exec
+UPDATE ai_integration_syncs
+SET next_poll_after = @next_poll_after,
+    last_poll_error = @last_poll_error,
+    last_poll_failed_at = clock_timestamp(),
+    consecutive_failures = consecutive_failures + 1,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;

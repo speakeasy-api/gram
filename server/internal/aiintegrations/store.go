@@ -20,6 +20,12 @@ import (
 
 const ProviderCursor = "cursor"
 
+const (
+	initialUsagePollLookback = time.Hour
+	usagePollInterval        = time.Hour
+	maxUsagePollErrorMessage = 4000
+)
+
 type Store struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
@@ -28,15 +34,26 @@ type Store struct {
 }
 
 type Config struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	Provider            string
+	ProjectID           uuid.UUID
+	APIKey              string
+	Enabled             bool
+	PollWatermarkAt     time.Time
+	NextPollAfter       time.Time
+	LastPollError       string
+	LastPollFailedAt    time.Time
+	LastPollSuccessAt   time.Time
+	ConsecutiveFailures int32
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type UsagePollCandidate struct {
 	ID             uuid.UUID
 	OrganizationID string
 	Provider       string
-	ProjectID      uuid.UUID
-	APIKey         string
-	Enabled        bool
-	LastPolledAt   time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
 }
 
 func NewStore(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Store {
@@ -83,7 +100,7 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 	return cfg, &row, nil
 }
 
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, enabled bool) (Config, *repo.AiIntegrationConfig, error) {
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, enabled bool, resetPollWatermarkAt *time.Time) (Config, *repo.AiIntegrationConfig, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
@@ -118,8 +135,23 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
 	}
+	if resetPollWatermarkAt != nil {
+		syncRow.PollWatermarkAt = timestamptz(*resetPollWatermarkAt)
+		syncRow.NextPollAfter = timestamptz(nextUsagePollAfter(*resetPollWatermarkAt))
+		syncRow.LastPollError = pgtype.Text{}
+		syncRow.LastPollFailedAt = pgtype.Timestamptz{}
+		syncRow.LastPollSuccessAt = pgtype.Timestamptz{}
+		syncRow.ConsecutiveFailures = 0
+		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
+			AiIntegrationConfigID: row.ID,
+			PollWatermarkAt:       syncRow.PollWatermarkAt,
+			NextPollAfter:         syncRow.NextPollAfter,
+		}); err != nil {
+			return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to reset ai integration sync watermark")
+		}
+	}
 
-	cfg, err := s.configFromRows(row, syncRow.LastPolledAt)
+	cfg, err := s.configFromRows(row, syncRow)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
@@ -167,27 +199,7 @@ func (s *Store) ListEnabledConfigsByProvider(ctx context.Context, provider strin
 	return configs, nil
 }
 
-func (s *Store) UpdateSyncLastPolledAt(ctx context.Context, configID uuid.UUID, t time.Time) error {
-	if err := s.repo.UpdateSyncLastPolledAt(ctx, repo.UpdateSyncLastPolledAtParams{
-		AiIntegrationConfigID: configID,
-		LastPolledAt: pgtype.Timestamptz{
-			Time:             t.UTC(),
-			InfinityModifier: pgtype.Finite,
-			Valid:            true,
-		},
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to update ai integration sync watermark")
-	}
-	return nil
-}
-
-type UsagePollCandidateCursor struct {
-	LastPolledAt   time.Time
-	OrganizationID string
-	Provider       string
-}
-
-func (s *Store) ListUsagePollCandidates(ctx context.Context, provider string, endTime time.Time, limit int32, cursor *UsagePollCandidateCursor) ([]Config, error) {
+func (s *Store) ListUsagePollCandidates(ctx context.Context, provider string, pollDueBefore time.Time, limit int32) ([]UsagePollCandidate, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return nil, err
@@ -197,41 +209,9 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, provider string, en
 	}
 
 	params := repo.ListUsagePollCandidatesParams{
-		Provider: provider,
-		LastPolledBefore: pgtype.Timestamptz{
-			Time:             endTime.UTC().Add(-time.Millisecond),
-			InfinityModifier: pgtype.Finite,
-			Valid:            true,
-		},
-		CursorLastPolledAt: pgtype.Timestamptz{
-			Time:             time.Time{},
-			InfinityModifier: pgtype.Finite,
-			Valid:            false,
-		},
-		CursorOrganizationID: pgtype.Text{
-			String: "",
-			Valid:  false,
-		},
-		CursorProvider: pgtype.Text{
-			String: "",
-			Valid:  false,
-		},
-		LimitCount: limit,
-	}
-	if cursor != nil {
-		params.CursorLastPolledAt = pgtype.Timestamptz{
-			Time:             cursor.LastPolledAt.UTC(),
-			InfinityModifier: pgtype.Finite,
-			Valid:            true,
-		}
-		params.CursorOrganizationID = pgtype.Text{
-			String: cursor.OrganizationID,
-			Valid:  true,
-		}
-		params.CursorProvider = pgtype.Text{
-			String: cursor.Provider,
-			Valid:  true,
-		}
+		Provider:      provider,
+		PollDueBefore: timestamptz(pollDueBefore),
+		LimitCount:    limit,
 	}
 
 	rows, err := s.repo.ListUsagePollCandidates(ctx, params)
@@ -239,34 +219,86 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, provider string, en
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list ai integration usage poll candidates")
 	}
 
-	configs := make([]Config, 0, len(rows))
+	candidates := make([]UsagePollCandidate, 0, len(rows))
 	for _, row := range rows {
-		cfg, err := s.configFromUsagePollCandidateRow(row)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to decrypt ai integration usage poll candidate",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(row.OrganizationID),
-				attr.SlogProjectID(row.ProjectID.String()),
-			)
-			continue
-		}
-		configs = append(configs, cfg)
+		candidates = append(candidates, UsagePollCandidate{
+			ID:             row.ID,
+			OrganizationID: row.OrganizationID,
+			Provider:       row.Provider,
+		})
 	}
-	return configs, nil
+	return candidates, nil
 }
 
-func (s *Store) UpdateUsagePollWatermark(ctx context.Context, configID uuid.UUID, t time.Time) error {
-	if err := s.repo.UpdateUsagePollWatermark(ctx, repo.UpdateUsagePollWatermarkParams{
+func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Config, error) {
+	row, err := s.repo.GetUsagePollConfigByID(ctx, configID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return Config{}, oops.E(oops.CodeNotFound, err, "ai integration usage poll config not found")
+	case err != nil:
+		return Config{}, oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
+	}
+	cfg, err := s.configFromUsagePollConfigRow(row)
+	if err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, t time.Time) error {
+	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
 		AiIntegrationConfigID: configID,
-		LastPolledAt: pgtype.Timestamptz{
-			Time:             t.UTC(),
-			InfinityModifier: pgtype.Finite,
-			Valid:            true,
-		},
+		PollWatermarkAt:       timestamptz(t),
+		NextPollAfter:         timestamptz(nextUsagePollAfter(t)),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to update ai integration usage poll watermark")
+		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
 	}
 	return nil
+}
+
+func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, t time.Time, cause error) error {
+	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
+		AiIntegrationConfigID: configID,
+		NextPollAfter:         timestamptz(nextUsagePollAfter(t)),
+		LastPollError:         nullableText(truncateUsagePollError(cause)),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll failure")
+	}
+	return nil
+}
+
+func initialUsagePollWatermark(now time.Time) time.Time {
+	return now.UTC().Add(-initialUsagePollLookback)
+}
+
+func nextUsagePollAfter(t time.Time) time.Time {
+	return t.UTC().Add(usagePollInterval)
+}
+
+func timestamptz(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{
+		Time:             t.UTC(),
+		InfinityModifier: pgtype.Finite,
+		Valid:            true,
+	}
+}
+
+func nullableText(s string) pgtype.Text {
+	return pgtype.Text{
+		String: s,
+		Valid:  s != "",
+	}
+}
+
+func truncateUsagePollError(cause error) string {
+	if cause == nil {
+		return ""
+	}
+	msg := strings.TrimSpace(cause.Error())
+	if len(msg) <= maxUsagePollErrorMessage {
+		return msg
+	}
+	return msg[:maxUsagePollErrorMessage]
 }
 
 func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
@@ -275,15 +307,20 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
 	return Config{
-		ID:             row.ID,
-		OrganizationID: row.OrganizationID,
-		Provider:       row.Provider,
-		ProjectID:      row.ProjectID,
-		APIKey:         apiKey,
-		Enabled:        row.Enabled,
-		LastPolledAt:   row.LastPolledAt.Time,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
+		ID:                  row.ID,
+		OrganizationID:      row.OrganizationID,
+		Provider:            row.Provider,
+		ProjectID:           row.ProjectID,
+		APIKey:              apiKey,
+		Enabled:             row.Enabled,
+		PollWatermarkAt:     row.PollWatermarkAt.Time,
+		NextPollAfter:       row.NextPollAfter.Time,
+		LastPollError:       row.LastPollError.String,
+		LastPollFailedAt:    row.LastPollFailedAt.Time,
+		LastPollSuccessAt:   row.LastPollSuccessAt.Time,
+		ConsecutiveFailures: row.ConsecutiveFailures,
+		CreatedAt:           row.CreatedAt.Time,
+		UpdatedAt:           row.UpdatedAt.Time,
 	}, nil
 }
 
@@ -293,51 +330,66 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
 	return Config{
-		ID:             row.ID,
-		OrganizationID: row.OrganizationID,
-		Provider:       row.Provider,
-		ProjectID:      row.ProjectID,
-		APIKey:         apiKey,
-		Enabled:        row.Enabled,
-		LastPolledAt:   row.LastPolledAt.Time,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
+		ID:                  row.ID,
+		OrganizationID:      row.OrganizationID,
+		Provider:            row.Provider,
+		ProjectID:           row.ProjectID,
+		APIKey:              apiKey,
+		Enabled:             row.Enabled,
+		PollWatermarkAt:     row.PollWatermarkAt.Time,
+		NextPollAfter:       row.NextPollAfter.Time,
+		LastPollError:       row.LastPollError.String,
+		LastPollFailedAt:    row.LastPollFailedAt.Time,
+		LastPollSuccessAt:   row.LastPollSuccessAt.Time,
+		ConsecutiveFailures: row.ConsecutiveFailures,
+		CreatedAt:           row.CreatedAt.Time,
+		UpdatedAt:           row.UpdatedAt.Time,
 	}, nil
 }
 
-func (s *Store) configFromUsagePollCandidateRow(row repo.ListUsagePollCandidatesRow) (Config, error) {
+func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow) (Config, error) {
 	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
 	return Config{
-		ID:             row.ID,
-		OrganizationID: row.OrganizationID,
-		Provider:       row.Provider,
-		ProjectID:      row.ProjectID,
-		APIKey:         apiKey,
-		Enabled:        row.Enabled,
-		LastPolledAt:   row.LastPolledAt.Time,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
+		ID:                  row.ID,
+		OrganizationID:      row.OrganizationID,
+		Provider:            row.Provider,
+		ProjectID:           row.ProjectID,
+		APIKey:              apiKey,
+		Enabled:             row.Enabled,
+		PollWatermarkAt:     row.PollWatermarkAt.Time,
+		NextPollAfter:       row.NextPollAfter.Time,
+		LastPollError:       row.LastPollError.String,
+		LastPollFailedAt:    row.LastPollFailedAt.Time,
+		LastPollSuccessAt:   row.LastPollSuccessAt.Time,
+		ConsecutiveFailures: row.ConsecutiveFailures,
+		CreatedAt:           row.CreatedAt.Time,
+		UpdatedAt:           row.UpdatedAt.Time,
 	}, nil
 }
 
-func (s *Store) configFromRows(row repo.AiIntegrationConfig, lastPolledAt pgtype.Timestamptz) (Config, error) {
+func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
 	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
 	return Config{
-		ID:             row.ID,
-		OrganizationID: row.OrganizationID,
-		Provider:       row.Provider,
-		ProjectID:      row.ProjectID,
-		APIKey:         apiKey,
-		Enabled:        row.Enabled,
-		LastPolledAt:   lastPolledAt.Time,
-		CreatedAt:      row.CreatedAt.Time,
-		UpdatedAt:      row.UpdatedAt.Time,
+		ID:                  row.ID,
+		OrganizationID:      row.OrganizationID,
+		Provider:            row.Provider,
+		ProjectID:           row.ProjectID,
+		APIKey:              apiKey,
+		Enabled:             row.Enabled,
+		PollWatermarkAt:     syncRow.PollWatermarkAt.Time,
+		NextPollAfter:       syncRow.NextPollAfter.Time,
+		LastPollError:       syncRow.LastPollError.String,
+		LastPollFailedAt:    syncRow.LastPollFailedAt.Time,
+		LastPollSuccessAt:   syncRow.LastPollSuccessAt.Time,
+		ConsecutiveFailures: syncRow.ConsecutiveFailures,
+		CreatedAt:           row.CreatedAt.Time,
+		UpdatedAt:           row.UpdatedAt.Time,
 	}, nil
 }
 
@@ -366,14 +418,19 @@ func (s *Store) decryptAPIKey(stored string) (string, error) {
 
 func emptyConfig(orgID string, provider string) Config {
 	return Config{
-		ID:             uuid.Nil,
-		OrganizationID: orgID,
-		Provider:       provider,
-		ProjectID:      uuid.Nil,
-		APIKey:         "",
-		Enabled:        false,
-		LastPolledAt:   time.Time{},
-		CreatedAt:      time.Time{},
-		UpdatedAt:      time.Time{},
+		ID:                  uuid.Nil,
+		OrganizationID:      orgID,
+		Provider:            provider,
+		ProjectID:           uuid.Nil,
+		APIKey:              "",
+		Enabled:             false,
+		PollWatermarkAt:     time.Time{},
+		NextPollAfter:       time.Time{},
+		LastPollError:       "",
+		LastPollFailedAt:    time.Time{},
+		LastPollSuccessAt:   time.Time{},
+		ConsecutiveFailures: 0,
+		CreatedAt:           time.Time{},
+		UpdatedAt:           time.Time{},
 	}
 }

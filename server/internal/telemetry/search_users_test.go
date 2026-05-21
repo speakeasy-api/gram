@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -728,7 +729,7 @@ func insertPollingLogWithEmail(t *testing.T, ctx context.Context, projectID, dep
 	require.NoError(t, err)
 
 	attributes := map[string]any{
-		"gram.event.source":          "polling",
+		"gram.event.source":          string(tm.EventSourceAPI),
 		"gram.hook.source":           "cursor",
 		"user.email":                 email,
 		"gen_ai.usage.input_tokens":  inputTokens,
