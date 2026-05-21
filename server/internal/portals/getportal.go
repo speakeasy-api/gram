@@ -115,10 +115,27 @@ func resolveTagline(row *repo.ProjectPortal) *string {
 	return conv.FromPGText[string](row.Tagline)
 }
 
-// resolveLogoURL returns the portal's logo URL. In v1 we return an empty
-// string (logo upload is a follow-up). Task 2.6 replaces this stub.
-func resolveLogoURL(_ *repo.ProjectPortal) *string {
-	return nil
+// resolveLogoURL returns the portal's logo URL.
+// Preference order:
+//  1. Portal-specific logo_asset_id (if set).
+//  2. No logo (project logo fallback is a future enhancement).
+//
+// Asset URLs are served via the management API assets.serveImage endpoint
+// following the same pattern as mcpmetadata.
+func resolveLogoURL(row *repo.ProjectPortal) *string {
+	if row == nil {
+		return nil
+	}
+	if !row.LogoAssetID.Valid {
+		return nil
+	}
+	// Construct the asset serve URL. The base URL is resolved at runtime via
+	// GRAM_SITE_URL (same host for dashboard + API in production).
+	u := fmt.Sprintf("%s/rpc/assets.serveImage?id=%s",
+		conv.Default(os.Getenv("GRAM_SITE_URL"), "https://app.getgram.ai"),
+		row.LogoAssetID.UUID.String(),
+	)
+	return &u
 }
 
 // toolCountFromInterface converts the interface{} value returned by sqlc for
