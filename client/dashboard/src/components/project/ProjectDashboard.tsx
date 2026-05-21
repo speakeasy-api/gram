@@ -113,12 +113,17 @@ export function ProjectDashboard() {
     if (!topUsersSearchData) return [];
     const memberById = new Map(members.map((m) => [m.id, m]));
     return [...topUsersSearchData]
-      .sort((a, b) => b.totalTokens - a.totalTokens)
+      .sort(
+        (a, b) =>
+          b.totalInputTokens +
+          b.totalOutputTokens -
+          (a.totalInputTokens + a.totalOutputTokens),
+      )
       .slice(0, 5)
       .map((u) => ({
         key: u.userId,
         label: memberById.get(u.userId)?.name ?? u.userId,
-        value: u.totalTokens,
+        value: u.totalInputTokens + u.totalOutputTokens,
       }));
   }, [topUsersSearchData, members]);
 
@@ -269,7 +274,7 @@ export function ProjectDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
                   title="Top Users"
-                  tooltip="End users ranked by activity in the selected period. Activity is measured in tool calls, skill invocations or in chat messages when agent sessions exist."
+                  tooltip="End users ranked by total token consumption (input + output tokens) in the selected period."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
