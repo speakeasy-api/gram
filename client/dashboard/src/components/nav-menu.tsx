@@ -335,8 +335,8 @@ function useNavItem(id: string) {
   }, [setHoveredItem]);
 
   React.useEffect(() => {
+    const s = stateRef.current;
     return () => {
-      const s = stateRef.current;
       if (s.intervalId) clearInterval(s.intervalId);
     };
   }, []);
@@ -449,13 +449,13 @@ export function CollapsibleNavGroup({
   label,
   Icon,
   defaultHref,
-  isActive,
   children,
 }: {
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   defaultHref?: string;
-  isActive: boolean;
+  /** @deprecated No longer used — open state managed by NavGroupProvider */
+  isActive?: boolean;
   children: React.ReactNode;
 }) {
   const { openGroups, toggleGroup, openGroup } =
