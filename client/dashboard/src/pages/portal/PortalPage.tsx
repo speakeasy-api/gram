@@ -1,8 +1,9 @@
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
+import { useSession } from "@/contexts/Auth";
 import { usePortal } from "@gram/client/react-query/portal";
 import { Stack } from "@speakeasy-api/moonshine";
-import { useParams, useSearchParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { PortalCard } from "./PortalCard";
 import { PortalHeader } from "./PortalHeader";
 
@@ -33,7 +34,7 @@ export function PortalPage() {
     <Stack className="mx-auto max-w-5xl p-8" gap={6}>
       <PortalHeader portal={portal} />
       {portal.servers.length === 0 ? (
-        <PortalEmptyState />
+        <PortalEmptyState projectSlug={projectSlug} />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {portal.servers.map((s) => (
@@ -65,10 +66,33 @@ function PortalNotFound() {
   );
 }
 
-function PortalEmptyState() {
+function PortalEmptyState({ projectSlug }: { projectSlug: string }) {
+  const session = useSession();
+  const orgSlug = session.organization.slug;
+  const catalogHref =
+    orgSlug && projectSlug
+      ? `/${orgSlug}/projects/${projectSlug}/catalog`
+      : undefined;
+
   return (
     <div className="rounded-xl border p-8 text-center">
-      <Type muted>No MCP servers have been added to this project yet.</Type>
+      <Type muted>
+        No MCP servers in this project yet.{" "}
+        {catalogHref ? (
+          <>
+            Add servers from the{" "}
+            <Link
+              to={catalogHref}
+              className="hover:text-foreground underline underline-offset-2"
+            >
+              catalog
+            </Link>{" "}
+            to populate the portal.
+          </>
+        ) : (
+          "Add servers from the catalog to populate the portal."
+        )}
+      </Type>
     </div>
   );
 }
