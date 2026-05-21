@@ -36,6 +36,9 @@ export function ObserveFilterBar({
   onServerSelectionChange,
   userEmailOptions,
   onUserEmailSelectionChange,
+  roleOptions,
+  selectedRoleIds,
+  onRoleSelectionChange,
   activeFilters,
   selectedTypes,
   onTypesChange,
@@ -52,6 +55,9 @@ export function ObserveFilterBar({
   onServerSelectionChange: (values: string[]) => void;
   userEmailOptions: string[];
   onUserEmailSelectionChange: (values: string[]) => void;
+  roleOptions: Array<{ id: string; name: string }>;
+  selectedRoleIds: string[];
+  onRoleSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
   selectedTypes: TypesToInclude[];
   onTypesChange: (types: TypesToInclude[]) => void;
@@ -101,6 +107,15 @@ export function ObserveFilterBar({
         onValueChange={onUserEmailSelectionChange}
         placeholder="Filter by user email"
         className="min-w-[200px] flex-1"
+        hideSelectAll
+        singleLine
+      />
+      <MultiSelect
+        options={roleOptions.map((r) => ({ label: r.name, value: r.id }))}
+        defaultValue={selectedRoleIds}
+        onValueChange={onRoleSelectionChange}
+        placeholder="Filter by role"
+        className="min-w-[160px] flex-1"
         hideSelectAll
         singleLine
       />
