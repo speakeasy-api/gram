@@ -64,6 +64,7 @@ import {
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
+import { useDetectionRulesStore } from "./detection-rules-data";
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -164,6 +165,8 @@ function PolicyCenterContent() {
   const { data, isLoading } = useRiskListPolicies();
   const policies = data?.policies ?? [];
 
+  const { customRules } = useDetectionRulesStore();
+
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
   const [formName, setFormName] = useState("");
@@ -171,6 +174,9 @@ function PolicyCenterContent() {
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(new Set<RuleCategory>(["secrets", "pii"]));
+  const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
+    Set<string>
+  >(new Set<string>());
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
@@ -209,6 +215,7 @@ function PolicyCenterContent() {
     setFormName("");
     setFormEnabled(true);
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
+    setSelectedCustomRuleIds(new Set<string>());
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
@@ -222,6 +229,7 @@ function PolicyCenterContent() {
     setSelectedCategories(
       policyToCategories(policy.sources, policy.presidioEntities),
     );
+    setSelectedCustomRuleIds(new Set<string>());
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
@@ -480,6 +488,9 @@ function PolicyCenterContent() {
                 setFormEnabled={setFormEnabled}
                 selectedCategories={selectedCategories}
                 setSelectedCategories={setSelectedCategories}
+                customRules={customRules}
+                selectedCustomRuleIds={selectedCustomRuleIds}
+                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
                 formAction={formAction}
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
@@ -545,6 +556,9 @@ function PolicySheetBody({
   setFormEnabled,
   selectedCategories,
   setSelectedCategories,
+  customRules,
+  selectedCustomRuleIds,
+  setSelectedCustomRuleIds,
   formAction,
   setFormAction,
   formAutoName,
@@ -558,6 +572,9 @@ function PolicySheetBody({
   setFormEnabled: (v: boolean) => void;
   selectedCategories: Set<RuleCategory>;
   setSelectedCategories: (v: Set<RuleCategory>) => void;
+  customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
+  selectedCustomRuleIds: Set<string>;
+  setSelectedCustomRuleIds: (v: Set<string>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
@@ -565,9 +582,9 @@ function PolicySheetBody({
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
 }) {
-  const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
-    null,
-  );
+  const [expandedCategory, setExpandedCategory] = useState<
+    RuleCategory | "custom" | null
+  >(null);
   const destructiveToolsSelected = selectedCategories.has("destructive_tool");
   const actionValue =
     destructiveToolsSelected && formAction === "block" ? "flag" : formAction;
@@ -710,6 +727,18 @@ function PolicySheetBody({
           })}
         </div>
       </div>
+
+      {customRules.length > 0 && (
+        <CustomRulesPicker
+          customRules={customRules}
+          selectedCustomRuleIds={selectedCustomRuleIds}
+          setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+          expanded={expandedCategory === "custom"}
+          onToggle={() =>
+            setExpandedCategory(expandedCategory === "custom" ? null : "custom")
+          }
+        />
+      )}
 
       {/* Action */}
       <div className="space-y-2">
@@ -971,4 +1000,113 @@ const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
 function ActionBadge({ action }: { action: PolicyAction }) {
   const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
   return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  CustomRulesPicker                                                          */
+/* -------------------------------------------------------------------------- */
+
+function CustomRulesPicker({
+  customRules,
+  selectedCustomRuleIds,
+  setSelectedCustomRuleIds,
+  expanded,
+  onToggle,
+}: {
+  customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
+  selectedCustomRuleIds: Set<string>;
+  setSelectedCustomRuleIds: (v: Set<string>) => void;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const meta = RULE_CATEGORY_META.custom;
+  const allSelected =
+    customRules.length > 0 &&
+    customRules.every((r) => selectedCustomRuleIds.has(r.id));
+  const someSelected =
+    !allSelected && customRules.some((r) => selectedCustomRuleIds.has(r.id));
+  return (
+    <div className="space-y-3">
+      <Label className="text-sm font-medium">Custom Rules</Label>
+      <div className="border-border divide-border divide-y rounded-lg border">
+        <div
+          className="flex cursor-pointer items-center gap-3 px-4 py-3"
+          onClick={onToggle}
+        >
+          <ChevronRight
+            className={cn(
+              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+              expanded && "rotate-90",
+            )}
+          />
+          <Icon
+            name={meta.icon as IconName}
+            className="text-muted-foreground size-4 shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <span className="text-sm font-medium">{meta.label}</span>
+            <p className="text-muted-foreground text-xs">
+              {customRules.length} organization-defined rule
+              {customRules.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <Checkbox
+            checked={
+              allSelected ? true : someSelected ? "indeterminate" : false
+            }
+            onCheckedChange={(checked) => {
+              const next = new Set(selectedCustomRuleIds);
+              if (checked) {
+                customRules.forEach((r) => next.add(r.id));
+              } else {
+                customRules.forEach((r) => next.delete(r.id));
+              }
+              setSelectedCustomRuleIds(next);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+        {expanded && (
+          <div className="bg-muted/30 border-border border-t px-4 py-2">
+            <div className="space-y-2 py-1">
+              {customRules.map((rule) => {
+                const checked = selectedCustomRuleIds.has(rule.id);
+                return (
+                  <div
+                    key={rule.id}
+                    className="flex items-center gap-3 py-1 pl-8"
+                  >
+                    <Checkbox
+                      id={`custom-${rule.id}`}
+                      checked={checked}
+                      onCheckedChange={(next) => {
+                        const set = new Set(selectedCustomRuleIds);
+                        if (next) {
+                          set.add(rule.id);
+                        } else {
+                          set.delete(rule.id);
+                        }
+                        setSelectedCustomRuleIds(set);
+                      }}
+                    />
+                    <label
+                      htmlFor={`custom-${rule.id}`}
+                      className="cursor-pointer text-xs"
+                    >
+                      <span className="text-foreground">
+                        {rule.title || rule.id}
+                      </span>
+                      <span className="text-muted-foreground ml-2 font-mono text-[10px]">
+                        {rule.id}
+                      </span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
