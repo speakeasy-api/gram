@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
+import { ImageUpload } from "@/components/upload";
 import { useProject } from "@/contexts/Auth";
 import { PortalPreview } from "@/pages/portal/PortalPreview";
 import { usePortal } from "@gram/client/react-query/portal";
@@ -36,12 +37,24 @@ export function PortalSettings() {
   const [displayName, setDisplayName] = useState("");
   const [tagline, setTagline] = useState("");
   const [enabled, setEnabled] = useState(false);
+  // logoAssetId tracks user-driven changes:
+  //   undefined = no change since load (preserve existing logo)
+  //   ""        = user cleared the logo (send empty string to clear)
+  //   <uuid>    = user uploaded a new logo
+  const [logoAssetId, setLogoAssetId] = useState<string | undefined>(undefined);
+  // logoPreviewUrl mirrors what the form should currently show.
+  // Seeded from portal.logoUrl on load; cleared when the user removes the logo.
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     if (!portal) return;
     setDisplayName(portal.displayName);
     setTagline(portal.tagline ?? "");
     setEnabled(portal.enabled);
+    setLogoPreviewUrl(portal.logoUrl || undefined);
+    setLogoAssetId(undefined);
   }, [portal]);
 
   const onSave = () => {
@@ -51,6 +64,8 @@ export function PortalSettings() {
           enabled,
           displayName,
           tagline,
+          // Only send logoAssetId if the user actually changed it (upload or clear).
+          ...(logoAssetId !== undefined ? { logoAssetId } : {}),
         },
       },
     });
@@ -82,6 +97,44 @@ export function PortalSettings() {
             onChange={setDisplayName}
             placeholder={project.name}
           />
+        </Stack>
+
+        <Stack gap={2}>
+          <Label>Logo</Label>
+          {logoAssetId === undefined && logoPreviewUrl ? (
+            // Show the resolved URL from the read API until the user interacts.
+            // Clicking removes the logo (mirrors ImageUpload's clear-on-click behaviour).
+            <button
+              type="button"
+              onClick={() => {
+                setLogoAssetId("");
+                setLogoPreviewUrl(undefined);
+              }}
+              className="group relative h-16 w-16 cursor-pointer"
+              aria-label="Remove logo"
+            >
+              <img
+                src={logoPreviewUrl}
+                alt=""
+                className="h-16 w-16 rounded object-contain"
+              />
+              <div className="absolute inset-0 flex items-center justify-center rounded bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="text-xs font-medium text-white">Change</span>
+              </div>
+            </button>
+          ) : (
+            <ImageUpload
+              onUpload={(asset) => {
+                // ImageUpload signals "cleared" with id: ""
+                setLogoAssetId(asset.id);
+                if (!asset.id) {
+                  setLogoPreviewUrl(undefined);
+                }
+              }}
+              existingAssetId={logoAssetId || undefined}
+              className="h-16 w-16"
+            />
+          )}
         </Stack>
 
         <Stack gap={2}>
