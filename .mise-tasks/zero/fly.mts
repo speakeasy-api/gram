@@ -47,6 +47,15 @@ function isExistingConfigComplete(): boolean {
   }
 
   const content = readFileSync(configPath, "utf-8");
+  const functionsProvider = configValue(content, "GRAM_FUNCTIONS_PROVIDER");
+
+  // Skip was chosen previously — local provider with assistant runtime placeholders
+  if (functionsProvider === "local") {
+    return (
+      configValue(content, "GRAM_ASSISTANT_RUNTIME_PROVIDER") !== undefined
+    );
+  }
+
   const requiredKeys = [
     "GRAM_FUNCTIONS_PROVIDER",
     "GRAM_FUNCTIONS_FLYIO_API_TOKEN",
