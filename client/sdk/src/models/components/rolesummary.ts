@@ -13,13 +13,17 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type RoleSummary = {
   /**
-   * Average cost per user
+   * Average cost per user (total_cost / user_count)
    */
   costPerUser: number;
   /**
    * Role identifier extracted from role URN
    */
   roleId: string;
+  /**
+   * Human-readable role name
+   */
+  roleName: string;
   /**
    * Total chat sessions across all users
    */
@@ -52,6 +56,7 @@ export const RoleSummary$inboundSchema: z.ZodMiniType<RoleSummary, unknown> = z
     z.object({
       cost_per_user: z.number(),
       role_id: z.string(),
+      role_name: z.string(),
       total_chats: z.int(),
       total_cost: z.number(),
       total_input_tokens: z.int(),
@@ -63,6 +68,7 @@ export const RoleSummary$inboundSchema: z.ZodMiniType<RoleSummary, unknown> = z
       return remap$(v, {
         "cost_per_user": "costPerUser",
         "role_id": "roleId",
+        "role_name": "roleName",
         "total_chats": "totalChats",
         "total_cost": "totalCost",
         "total_input_tokens": "totalInputTokens",

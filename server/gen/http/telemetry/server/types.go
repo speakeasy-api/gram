@@ -2893,11 +2893,13 @@ type HookSourceUsageResponseBody struct {
 type RoleSummaryResponseBody struct {
 	// Role identifier extracted from role URN
 	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
+	// Human-readable role name
+	RoleName string `form:"role_name" json:"role_name" xml:"role_name"`
 	// Number of users with this role
 	UserCount int `form:"user_count" json:"user_count" xml:"user_count"`
 	// Total cost across all users with this role
 	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
-	// Average cost per user
+	// Average cost per user (total_cost / user_count)
 	CostPerUser float64 `form:"cost_per_user" json:"cost_per_user" xml:"cost_per_user"`
 	// Sum of input tokens across all users
 	TotalInputTokens int64 `form:"total_input_tokens" json:"total_input_tokens" xml:"total_input_tokens"`

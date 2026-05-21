@@ -34411,11 +34411,14 @@ components:
             properties:
                 cost_per_user:
                     type: number
-                    description: Average cost per user
+                    description: Average cost per user (total_cost / user_count)
                     format: double
                 role_id:
                     type: string
                     description: Role identifier extracted from role URN
+                role_name:
+                    type: string
+                    description: Human-readable role name
                 total_chats:
                     type: integer
                     description: Total chat sessions across all users
@@ -34443,6 +34446,7 @@ components:
             description: Aggregated usage summary for a role
             required:
                 - role_id
+                - role_name
                 - user_count
                 - total_cost
                 - cost_per_user

@@ -2993,11 +2993,13 @@ type HookSourceUsageResponseBody struct {
 type RoleSummaryResponseBody struct {
 	// Role identifier extracted from role URN
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// Human-readable role name
+	RoleName *string `form:"role_name,omitempty" json:"role_name,omitempty" xml:"role_name,omitempty"`
 	// Number of users with this role
 	UserCount *int `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
 	// Total cost across all users with this role
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
-	// Average cost per user
+	// Average cost per user (total_cost / user_count)
 	CostPerUser *float64 `form:"cost_per_user,omitempty" json:"cost_per_user,omitempty" xml:"cost_per_user,omitempty"`
 	// Sum of input tokens across all users
 	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
@@ -9608,6 +9610,9 @@ func ValidateHookSourceUsageResponseBody(body *HookSourceUsageResponseBody) (err
 func ValidateRoleSummaryResponseBody(body *RoleSummaryResponseBody) (err error) {
 	if body.RoleID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	}
+	if body.RoleName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_name", "body"))
 	}
 	if body.UserCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_count", "body"))

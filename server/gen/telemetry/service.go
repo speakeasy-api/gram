@@ -606,11 +606,13 @@ type ProjectSummary struct {
 type RoleSummary struct {
 	// Role identifier extracted from role URN
 	RoleID string
+	// Human-readable role name
+	RoleName string
 	// Number of users with this role
 	UserCount int
 	// Total cost across all users with this role
 	TotalCost float64
-	// Average cost per user
+	// Average cost per user (total_cost / user_count)
 	CostPerUser float64
 	// Sum of input tokens across all users
 	TotalInputTokens int64
