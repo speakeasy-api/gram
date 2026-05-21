@@ -4803,6 +4803,17 @@ paths:
             description: Filter by resolution status
             type: string
         - allowEmptyValue: true
+          description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+          in: query
+          name: has_risk
+          schema:
+            description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+            enum:
+              - ""
+              - "true"
+              - "false"
+            type: string
+        - allowEmptyValue: true
           description: Filter chats created after this timestamp (ISO 8601)
           in: query
           name: from
@@ -18270,6 +18281,106 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: RiskCapabilities
+  /rpc/risk.categories:
+    get:
+      description: 'Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.'
+      operationId: listRiskCategories
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskCategoriesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listRiskCategories risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.categories
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: RiskCategories
   /rpc/risk.overview.get:
     get:
       description: Get risk overview metrics and trend data for the current project.
@@ -18386,6 +18497,254 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: RiskOverview
+  /rpc/risk.overview.rules:
+    get:
+      description: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
+      operationId: getRiskRuleBreakdown
+      parameters:
+        - allowEmptyValue: true
+          description: Required category key to break down by rule_id (e.g. secrets, pii).
+          in: query
+          name: category
+          required: true
+          schema:
+            description: Required category key to break down by rule_id (e.g. secrets, pii).
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+          in: query
+          name: from
+          schema:
+            description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive end of the window. Defaults to now.
+          in: query
+          name: to
+          schema:
+            description: Exclusive end of the window. Defaults to now.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRuleBreakdownResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getRiskRuleBreakdown risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.overview
+      x-speakeasy-name-override: rules
+      x-speakeasy-react-hook:
+        name: RiskRuleBreakdown
+  /rpc/risk.overview.userBreakdown:
+    get:
+      description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+      operationId: getRiskUserBreakdown
+      parameters:
+        - allowEmptyValue: true
+          description: External user identifier to scope the breakdown to.
+          in: query
+          name: external_user_id
+          required: true
+          schema:
+            description: External user identifier to scope the breakdown to.
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+          in: query
+          name: from
+          schema:
+            description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive end of the window. Defaults to now.
+          in: query
+          name: to
+          schema:
+            description: Exclusive end of the window. Defaults to now.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskUserBreakdownResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getRiskUserBreakdown risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.overview
+      x-speakeasy-name-override: userBreakdown
+      x-speakeasy-react-hook:
+        name: RiskUserBreakdown
   /rpc/risk.policies.create:
     post:
       description: Create a new risk analysis policy for the current project.
@@ -19251,6 +19610,43 @@ paths:
           schema:
             description: Optional chat ID to filter by.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Optional rule category key to filter by (e.g. secrets, pii, financial).
+          in: query
+          name: category
+          schema:
+            description: Optional rule category key to filter by (e.g. secrets, pii, financial).
+            type: string
+        - allowEmptyValue: true
+          description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+          in: query
+          name: rule_id
+          schema:
+            description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+            type: string
+        - allowEmptyValue: true
+          description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+          in: query
+          name: unique_match
+          schema:
+            description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+            type: boolean
+        - allowEmptyValue: true
+          description: Filter results to messages created at or after this timestamp (ISO 8601).
+          in: query
+          name: from
+          schema:
+            description: Filter results to messages created at or after this timestamp (ISO 8601).
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Filter results to messages created strictly before this timestamp (ISO 8601).
+          in: query
+          name: to
+          schema:
+            description: Filter results to messages created strictly before this timestamp (ISO 8601).
+            format: date-time
             type: string
         - allowEmptyValue: true
           description: Cursor to fetch the next page of results.
@@ -27463,6 +27859,10 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        risk_findings_count:
+          type: integer
+          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+          format: int64
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -27564,6 +27964,10 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        risk_findings_count:
+          type: integer
+          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+          format: int64
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -27626,6 +28030,10 @@ components:
           items:
             $ref: '#/components/schemas/ChatResolution'
           description: List of resolutions for this chat
+        risk_findings_count:
+          type: integer
+          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+          format: int64
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -34231,6 +34639,52 @@ components:
           description: Whether the prompt-injection ML classifier is configured on this server.
       required:
         - pi_classifier_enabled
+    RiskCategoriesResult:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskCategoryDefinition'
+          description: Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.
+      description: Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.
+      required:
+        - categories
+    RiskCategoryDefinition:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Plain-English description of what this category covers.
+        icon:
+          type: string
+          description: Lucide icon name suggested for this category.
+        key:
+          type: string
+          description: Canonical category key (e.g. 'secrets', 'pii', 'shadow_mcp').
+        label:
+          type: string
+          description: Human-readable category label for UI rendering.
+        rule_id_prefix:
+          type: string
+          description: When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').
+        rule_ids:
+          type: array
+          items:
+            type: string
+          description: When non-empty, findings whose rule_id is in this exact list belong to this category. Checked before rule_id_prefix.
+        source:
+          type: string
+          description: When non-empty, findings whose source equals this value belong to this category.
+      description: One canonical risk category and how findings are classified into it.
+      required:
+        - key
+        - label
+        - description
+        - icon
+        - source
+        - rule_ids
+        - rule_id_prefix
     RiskChatSummary:
       type: object
       properties:
@@ -34306,6 +34760,11 @@ components:
           items:
             $ref: '#/components/schemas/RiskOverviewCategory'
           description: Top policy categories by finding count.
+        top_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskRuleBreakdownEntry'
+          description: Top rule_ids by finding count.
         top_users:
           type: array
           items:
@@ -34320,6 +34779,7 @@ components:
         - active_policies
         - top_categories
         - top_users
+        - top_rules
         - time_series_findings
     RiskOverviewTimeSeriesFinding:
       type: object
@@ -34345,12 +34805,16 @@ components:
         email:
           type: string
           description: User email, or Unknown user when unavailable.
+        external_user_id:
+          type: string
+          description: External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.
         findings:
           type: integer
           description: Finding count for this user.
           format: int64
       required:
         - email
+        - external_user_id
         - findings
     RiskPolicy:
       type: object
@@ -34541,6 +35005,87 @@ components:
         - chat_message_id
         - source
         - created_at
+    RiskRuleBreakdownEntry:
+      type: object
+      properties:
+        findings:
+          type: integer
+          description: Finding count for this rule within the window.
+          format: int64
+        rule_id:
+          type: string
+          description: Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has no rule_id (treat as 'unspecified').
+        source:
+          type: string
+          description: Source bucket the rule belongs to (gitleaks, presidio, etc.) for label/icon resolution on the dashboard.
+      required:
+        - rule_id
+        - source
+        - findings
+    RiskRuleBreakdownResult:
+      type: object
+      properties:
+        category:
+          type: string
+          description: Category the breakdown is scoped to.
+        from:
+          type: string
+          description: Inclusive start of the window used.
+          format: date-time
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskRuleBreakdownEntry'
+          description: Rules in this category, ordered by finding count descending.
+        to:
+          type: string
+          description: Exclusive end of the window used.
+          format: date-time
+        total:
+          type: integer
+          description: Total findings across all rules in this category and window.
+          format: int64
+      required:
+        - from
+        - to
+        - category
+        - rules
+        - total
+    RiskUserBreakdownResult:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskOverviewCategory'
+          description: Category breakdown for this user, ordered by finding count descending.
+        external_user_id:
+          type: string
+          description: External user the breakdown is scoped to.
+        findings:
+          type: integer
+          description: Total findings for this user in the window.
+          format: int64
+        from:
+          type: string
+          description: Inclusive start of the window used.
+          format: date-time
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskRuleBreakdownEntry'
+          description: Rule_id breakdown for this user, ordered by finding count descending.
+        to:
+          type: string
+          description: Exclusive end of the window used.
+          format: date-time
+      required:
+        - from
+        - to
+        - external_user_id
+        - findings
+        - categories
+        - rules
     Role:
       type: object
       properties:

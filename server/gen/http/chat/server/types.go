@@ -69,6 +69,10 @@ type LoadChatResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -1407,6 +1411,10 @@ type ChatOverviewResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1469,6 +1477,10 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // ChatResolutionResponseBody is used to define fields on response body types.
@@ -1525,6 +1537,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		TotalTokens:          res.TotalTokens,
 		TotalCost:            res.TotalCost,
 		LastMessageTimestamp: res.LastMessageTimestamp,
+		RiskFindingsCount:    res.RiskFindingsCount,
 	}
 	if res.Messages != nil {
 		body.Messages = make([]*ChatMessageResponseBody, len(res.Messages))
@@ -2623,11 +2636,12 @@ func NewCreditUsagePayload(sessionToken *string) *chat.CreditUsagePayload {
 
 // NewListChatsWithResolutionsPayload builds a chat service
 // listChatsWithResolutions endpoint payload.
-func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, resolutionStatus *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
+func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, resolutionStatus *string, hasRisk *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
 	v := &chat.ListChatsWithResolutionsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.ResolutionStatus = resolutionStatus
+	v.HasRisk = hasRisk
 	v.From = from
 	v.To = to
 	v.Limit = limit

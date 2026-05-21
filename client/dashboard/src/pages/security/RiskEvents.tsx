@@ -1,4 +1,5 @@
 import { LogWorkbench } from "@/components/log-workbench";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   Select,
@@ -16,15 +17,30 @@ import {
   invalidateAllRiskListShadowMCPApprovals,
   useRiskApproveShadowMCPMutation,
   useRiskListPolicies,
+  useRiskOverview,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { RefreshCw, ShieldOff } from "lucide-react";
-import { useCallback, useMemo, useRef, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-ui";
+import {
+  CategoryLabel,
+  MaskedMatch,
+  RevealAllProvider,
+  RevealAllToggle,
+  RuleLabel,
+} from "./risk-ui";
 
 const RISK_EVENTS_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
@@ -35,6 +51,8 @@ export default function RiskEvents() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
   const policyFilter = searchParams.get("policy_id") ?? "";
+  const ruleFilter = searchParams.get("rule_id") ?? "";
+  const uniqueOnly = searchParams.get("unique") === "1";
   const containerRef = useRef<HTMLDivElement>(null);
 
   const setSelectedChatId = useCallback(
@@ -74,29 +92,78 @@ export default function RiskEvents() {
     [setSearchParams],
   );
 
+  const setRuleFilter = useCallback(
+    (ruleId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (ruleId) {
+            next.set("rule_id", ruleId);
+          } else {
+            next.delete("rule_id");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+      containerRef.current?.scrollTo({ top: 0 });
+    },
+    [setSearchParams],
+  );
+
+  const setUniqueOnly = useCallback(
+    (next: boolean) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next) {
+            params.set("unique", "1");
+          } else {
+            params.delete("unique");
+          }
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const { data: policiesData, isLoading: policiesLoading } =
     useRiskListPolicies();
   const policies = useMemo(
     () => policiesData?.policies ?? [],
     [policiesData?.policies],
   );
-  const policyMessageById = useMemo(() => {
+
+  // Powers the rule_id filter autocomplete: surface only rules that actually
+  // have findings in this project's recent window.
+  const { data: overviewData } = useRiskOverview({}, undefined, {
+    throwOnError: false,
+  });
+  const ruleSuggestions = useMemo(
+    () => (overviewData?.topRules ?? []).map((r) => r.ruleId).filter(Boolean),
+    [overviewData?.topRules],
+  );
+  const policyNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const policy of policies) {
-      if (policy.userMessage && policy.userMessage.trim() !== "") {
-        m.set(policy.id, policy.userMessage);
+      if (policy.name && policy.name.trim() !== "") {
+        m.set(policy.id, policy.name);
       }
     }
     return m;
   }, [policies]);
 
   const resultsQuery = useInfiniteQuery({
-    queryKey: ["risk", "results", "list", policyFilter],
+    queryKey: ["risk", "results", "list", policyFilter, ruleFilter, uniqueOnly],
     queryFn: async ({ pageParam }) => {
       return client.risk.results.list({
         cursor: pageParam,
         limit: 50,
         policyId: policyFilter || undefined,
+        ruleId: ruleFilter || undefined,
+        uniqueMatch: uniqueOnly || undefined,
       });
     },
     initialPageParam: undefined as string | undefined,
@@ -158,106 +225,187 @@ export default function RiskEvents() {
   );
 
   return (
-    <LogWorkbench
-      title="Risk Events"
-      description="Review policy findings across recent analyzed chats."
-      actions={
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => resultsQuery.refetch()}
-          disabled={resultsQuery.isFetching}
-          aria-label="Refresh risk events"
-        >
-          <Button.LeftIcon>
-            <RefreshCw
-              className={cn(
-                "h-4 w-4",
-                resultsQuery.isFetching && "animate-spin",
-              )}
-            />
-          </Button.LeftIcon>
-          <Button.Text>Refresh</Button.Text>
-        </Button>
-      }
-      filters={
-        <Select
-          value={policyFilter || "all"}
-          onValueChange={(value) =>
-            setPolicyFilter(value === "all" ? "" : value)
-          }
-        >
-          <SelectTrigger className="w-[260px]">
-            <SelectValue placeholder="Filter by policy" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All policies</SelectItem>
-            {policies.map((policy) => (
-              <SelectItem key={policy.id} value={policy.id}>
-                {policy.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      }
-      status={
-        resultsQuery.isFetching && results.length > 0 ? (
-          <div className="bg-primary/20 h-1 shrink-0">
-            <div className="bg-primary h-full animate-pulse" />
+    <RevealAllProvider>
+      <LogWorkbench
+        title="Risk Events"
+        description="Review policy findings across recent analyzed chats."
+        actions={
+          <div className="flex items-center gap-2">
+            <RevealAllToggle />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => resultsQuery.refetch()}
+              disabled={resultsQuery.isFetching}
+              aria-label="Refresh risk events"
+            >
+              <Button.LeftIcon>
+                <RefreshCw
+                  className={cn(
+                    "h-4 w-4",
+                    resultsQuery.isFetching && "animate-spin",
+                  )}
+                />
+              </Button.LeftIcon>
+              <Button.Text>Refresh</Button.Text>
+            </Button>
           </div>
-        ) : null
-      }
-      header={
-        <div className="min-w-[1120px]">
-          <RiskEventsHeader />
-        </div>
-      }
-      footer={
-        results.length > 0 ? (
-          <RiskEventsFooter
-            count={results.length}
-            totalCount={totalCount}
-            hasNextPage={resultsQuery.hasNextPage}
-            isFetchingNextPage={resultsQuery.isFetchingNextPage}
-            onLoadMore={() => resultsQuery.fetchNextPage()}
-          />
-        ) : null
-      }
-      detail={
-        <Drawer
-          open={!!selectedChatId}
-          onOpenChange={(open) => !open && setSelectedChatId(null)}
-          direction="right"
-        >
-          <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
-            {selectedChatId && (
-              <ChatDetailPanel
-                chatId={selectedChatId}
-                resolutions={[]}
-                onClose={() => setSelectedChatId(null)}
-                onDelete={() => setSelectedChatId(null)}
-                collapseNonRisk
+        }
+        filters={
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={policyFilter || "all"}
+              onValueChange={(value) =>
+                setPolicyFilter(value === "all" ? "" : value)
+              }
+            >
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="Filter by policy" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All policies</SelectItem>
+                {policies.map((policy) => (
+                  <SelectItem key={policy.id} value={policy.id}>
+                    {policy.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <RuleIdFilter
+              value={ruleFilter}
+              onChange={setRuleFilter}
+              suggestions={ruleSuggestions}
+            />
+            <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
+              <Checkbox
+                checked={uniqueOnly}
+                onCheckedChange={(next) => setUniqueOnly(next === true)}
+                aria-label="Unique matches only"
               />
-            )}
-          </DrawerContent>
-        </Drawer>
-      }
-      scrollRef={containerRef}
-      onScroll={handleScroll}
-      surfaceClassName="overflow-x-auto"
-      contentClassName="min-w-[1120px]"
-    >
-      <RiskEventsRows
-        error={resultsQuery.error}
-        isLoading={isInitialLoading}
-        results={results}
-        policyMessageById={policyMessageById}
-        isExcluding={approveMutation.isPending}
+              <span>Unique matches only</span>
+            </label>
+          </div>
+        }
+        status={
+          resultsQuery.isFetching && results.length > 0 ? (
+            <div className="bg-primary/20 h-1 shrink-0">
+              <div className="bg-primary h-full animate-pulse" />
+            </div>
+          ) : null
+        }
+        header={
+          <div className="min-w-[1120px]">
+            <RiskEventsHeader />
+          </div>
+        }
+        footer={
+          results.length > 0 ? (
+            <RiskEventsFooter
+              count={results.length}
+              totalCount={totalCount}
+              hasNextPage={resultsQuery.hasNextPage}
+              isFetchingNextPage={resultsQuery.isFetchingNextPage}
+              onLoadMore={() => resultsQuery.fetchNextPage()}
+            />
+          ) : null
+        }
+        detail={
+          <Drawer
+            open={!!selectedChatId}
+            onOpenChange={(open) => !open && setSelectedChatId(null)}
+            direction="right"
+          >
+            <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
+              {selectedChatId && (
+                <ChatDetailPanel
+                  chatId={selectedChatId}
+                  resolutions={[]}
+                  onClose={() => setSelectedChatId(null)}
+                  onDelete={() => setSelectedChatId(null)}
+                  collapseNonRisk
+                />
+              )}
+            </DrawerContent>
+          </Drawer>
+        }
         scrollRef={containerRef}
-        onSelectChat={setSelectedChatId}
-        onExclude={handleExclude}
+        onScroll={handleScroll}
+        surfaceClassName="overflow-x-auto"
+        contentClassName="min-w-[1120px]"
+      >
+        <RiskEventsRows
+          error={resultsQuery.error}
+          isLoading={isInitialLoading}
+          results={results}
+          policyNameById={policyNameById}
+          isExcluding={approveMutation.isPending}
+          scrollRef={containerRef}
+          onSelectChat={setSelectedChatId}
+          onExclude={handleExclude}
+        />
+      </LogWorkbench>
+    </RevealAllProvider>
+  );
+}
+
+function RuleIdFilter({
+  value,
+  onChange,
+  suggestions,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  suggestions?: string[];
+}) {
+  const [local, setLocal] = useState(value);
+  const listId = useId();
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  useEffect(() => {
+    if (local === value) return;
+    const t = setTimeout(() => onChange(local), 350);
+    return () => clearTimeout(t);
+  }, [local, value, onChange]);
+
+  // Dedup and only include non-empty suggestions. Browser-native <datalist>
+  // does the substring matching client-side using these as candidates.
+  const options = useMemo(
+    () => Array.from(new Set((suggestions ?? []).filter(Boolean))),
+    [suggestions],
+  );
+
+  return (
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
+      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
+      <input
+        type="text"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        placeholder="Rule ID contains..."
+        className="placeholder:text-muted-foreground w-[200px] bg-transparent text-sm outline-none"
+        aria-label="Filter by rule ID"
+        list={options.length > 0 ? listId : undefined}
+        autoComplete="off"
       />
-    </LogWorkbench>
+      {options.length > 0 && (
+        <datalist id={listId}>
+          {options.map((opt) => (
+            <option key={opt} value={opt} />
+          ))}
+        </datalist>
+      )}
+      {local && (
+        <button
+          type="button"
+          onClick={() => setLocal("")}
+          className="text-muted-foreground hover:text-foreground"
+          aria-label="Clear rule filter"
+        >
+          <Icon name="x" className="size-3.5" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -275,7 +423,7 @@ function RiskEventsHeader() {
       <div className="min-w-0">Session Name</div>
       <div className="min-w-0">User</div>
       <div className="min-w-0">Match</div>
-      <div className="min-w-0">Policy Note</div>
+      <div className="min-w-0">Policy</div>
       <div className="flex min-w-0 justify-center">Actions</div>
     </div>
   );
@@ -285,7 +433,7 @@ function RiskEventsRows({
   error,
   isLoading,
   results,
-  policyMessageById,
+  policyNameById,
   isExcluding,
   scrollRef,
   onSelectChat,
@@ -294,7 +442,7 @@ function RiskEventsRows({
   error: Error | null;
   isLoading: boolean;
   results: RiskResult[];
-  policyMessageById: Map<string, string>;
+  policyNameById: Map<string, string>;
   isExcluding: boolean;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
@@ -367,7 +515,7 @@ function RiskEventsRows({
           >
             <RiskEventsRow
               result={result}
-              policyNote={policyMessageById.get(result.policyId)}
+              policyName={policyNameById.get(result.policyId)}
               isExcluding={isExcluding}
               onSelectChat={onSelectChat}
               onExclude={onExclude}
@@ -381,13 +529,13 @@ function RiskEventsRows({
 
 function RiskEventsRow({
   result,
-  policyNote,
+  policyName,
   isExcluding,
   onSelectChat,
   onExclude,
 }: {
   result: RiskResult;
-  policyNote: string | undefined;
+  policyName: string | undefined;
   isExcluding: boolean;
   onSelectChat: (chatId: string | null) => void;
   onExclude: (policyId: string, match: string, serverName?: string) => void;
@@ -436,8 +584,8 @@ function RiskEventsRow({
           <MaskedMatch value={result.match} />
         )}
       </div>
-      <div className="min-w-0 truncate" title={policyNote}>
-        {policyNote ?? "-"}
+      <div className="min-w-0 truncate" title={policyName}>
+        {policyName ?? "-"}
       </div>
       <div className="flex min-w-0 justify-center">
         {isShadowMCP && result.match ? (
