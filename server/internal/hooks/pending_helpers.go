@@ -168,9 +168,11 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	// guess.
 	if parsed := parseClaudeToolName(toolName); parsed.IsMCP && payload.SessionID != nil && *payload.SessionID != "" {
 		if entries, err := s.getCachedMCPList(ctx, *payload.SessionID); err == nil {
-			if v := resolvedMCPMatch(matchCachedMCPEntry(entries, parsed.Server), parsed.Server); v != "" {
+			matched := matchCachedMCPEntry(entries, parsed.Server)
+			if v := resolvedMCPMatch(matched, parsed.Server); v != "" {
 				attrs[attr.MCPMatchKey] = v
 			}
+			applyMCPInventoryAttrs(attrs, matched)
 		}
 	}
 
