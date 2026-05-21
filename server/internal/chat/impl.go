@@ -570,39 +570,34 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
-	// Chat-wide aggregates (count, source, last message timestamp, ClickHouse
-	// metrics) are only computed when the caller requests the latest generation
-	// — i.e. omits `generation`. Older pages skip the work because the dashboard
-	// already pulled chat-level meta from the first request and discards it on
-	// subsequent pages.
+	// Chat-wide aggregates (count + most recent message timestamp) are computed
+	// from a single cheap query so every paginated response carries the chat's
+	// real totals regardless of which page was requested. Source inference and
+	// ClickHouse metric enrichment only run on the latest-page request because
+	// they depend on the latest generation's message slice and the dashboard
+	// only consumes them from the first response.
+	stats, err := s.repo.GetChatMessageStats(ctx, repo.GetChatMessageStatsParams{
+		ChatID:    chat.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat message stats").Log(ctx, s.logger)
+	}
+
+	lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
+	if stats.LastMessageAt.Valid {
+		lastMessageTimestamp = stats.LastMessageAt.Time.Format(time.RFC3339)
+	}
+
 	isLatestRequest := payload.Generation == nil
-
-	numMessages := len(messages)
 	var source *string
-	lastMessageTimestamp := chat.UpdatedAt.Time.Format(time.RFC3339)
-
 	if isLatestRequest {
-		total, err := s.repo.CountChatMessages(ctx, repo.CountChatMessagesParams{
-			ChatID:    chat.ID,
-			ProjectID: *authCtx.ProjectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to count chat messages").Log(ctx, s.logger)
-		}
-		numMessages = int(total)
-
 		for i := len(messages) - 1; i >= 0; i-- {
 			if messages[i].Source.Valid && messages[i].Source.String != "" {
 				s := messages[i].Source.String
 				source = &s
 				break
 			}
-		}
-
-		if len(messages) > 0 {
-			lastMessageTimestamp = messages[len(messages)-1].CreatedAt.Time.Format(time.RFC3339)
-		} else {
-			lastMessageTimestamp = chat.CreatedAt.Time.Format(time.RFC3339)
 		}
 	}
 
@@ -612,7 +607,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UserID:               &chat.UserID.String,
 		ExternalUserID:       &chat.ExternalUserID.String,
 		Source:               source,
-		NumMessages:          numMessages,
+		NumMessages:          int(stats.Total),
 		CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
