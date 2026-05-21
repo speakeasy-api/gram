@@ -68,7 +68,7 @@ export function useObserveFilters() {
   const [knownServers, setKnownServers] = useState<string[]>([]);
   const [knownUserEmails, setKnownUserEmails] = useState<string[]>([]);
 
-  const { data: membersData } = useMembers();
+  const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData } = useRoles();
 
   const urlRange = searchParams.get("range");
@@ -163,6 +163,8 @@ export function useObserveFilters() {
     () => buildLogFilters(activeFilters, roleEmails),
     [activeFilters, roleEmails],
   );
+
+  const roleFilterPending = selectedRoleIds.length > 0 && membersLoading;
 
   const addKnownServers = useCallback((names: string[]) => {
     if (names.length === 0) return;
@@ -326,5 +328,6 @@ export function useObserveFilters() {
     selectedRoleIds,
     roleOptions,
     handleRoleSelectionChange,
+    roleFilterPending,
   };
 }

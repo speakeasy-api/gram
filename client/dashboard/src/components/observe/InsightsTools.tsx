@@ -196,6 +196,7 @@ export function InsightsToolsContent() {
     selectedRoleIds,
     roleOptions,
     handleRoleSelectionChange,
+    roleFilterPending,
   } = useObserveFilters();
 
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
@@ -237,6 +238,7 @@ export function InsightsToolsContent() {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      enabled: !roleFilterPending,
       throwOnError: false,
     }),
   );
@@ -269,6 +271,7 @@ export function InsightsToolsContent() {
           },
         }),
       ),
+    enabled: !roleFilterPending,
     throwOnError: false,
   });
 
@@ -477,7 +480,9 @@ function HooksInnerContent({
                   <Spinner className="mr-0 size-5" />
                   <span>Loading hook events...</span>
                 </div>
-              ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
+              ) : groupedTraces.length === 0 &&
+                activeFilters.length === 0 &&
+                selectedRoleIds.length === 0 ? (
                 <HooksEmptyState
                   title="No Insights Generated"
                   subtitle="Install Observability plugin in your AI agent to start generating tool insights"

@@ -95,6 +95,7 @@ export function LogsTools() {
     selectedRoleIds,
     roleOptions,
     handleRoleSelectionChange,
+    roleFilterPending,
   } = useObserveFilters();
 
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
@@ -141,6 +142,7 @@ export function LogsTools() {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      enabled: !roleFilterPending,
       throwOnError: false,
     }),
   );
@@ -407,6 +409,7 @@ function HooksInnerContent({
                     isLoading={isLoading}
                     groupedTraces={groupedTraces}
                     activeFilters={activeFilters}
+                    selectedRoleIds={selectedRoleIds}
                     expandedTraceId={expandedTraceId}
                     isFetchingNextPage={isFetchingNextPage}
                     onToggleExpand={toggleExpand}
@@ -444,6 +447,7 @@ export function LogsToolsContent({
   isLoading,
   groupedTraces,
   activeFilters,
+  selectedRoleIds,
   expandedTraceId,
   isFetchingNextPage,
   onToggleExpand,
@@ -454,6 +458,7 @@ export function LogsToolsContent({
   isLoading: boolean;
   groupedTraces: HookTrace[];
   activeFilters: FilterChip[];
+  selectedRoleIds: string[];
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
   onToggleExpand: (traceId: string) => void;
@@ -480,7 +485,7 @@ export function LogsToolsContent({
   }
 
   if (groupedTraces.length === 0) {
-    const hasFilters = activeFilters.length > 0;
+    const hasFilters = activeFilters.length > 0 || selectedRoleIds.length > 0;
 
     if (!hasFilters) {
       return <HooksEmptyState />;
