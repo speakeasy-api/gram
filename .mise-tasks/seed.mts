@@ -3,9 +3,7 @@
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
-import { createServer } from "node:http";
 import crypto from "node:crypto";
-import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -84,116 +82,42 @@ const SEED_PROJECTS: {
   },
 ];
 
-async function authenticateViaMockIDP(serverURL: string): Promise<string> {
-  const idpAddress = process.env["SPEAKEASY_SERVER_ADDRESS"];
-  if (!idpAddress) {
-    throw new Error("SPEAKEASY_SERVER_ADDRESS is not set");
-  }
-
-  const secretKey = process.env["SPEAKEASY_SECRET_KEY"];
-  if (!secretKey) {
-    throw new Error("SPEAKEASY_SECRET_KEY is not set");
-  }
-
-  // Step 1: Hit the mock IDP login endpoint to get an auth code.
-  // Use a dummy return_url — we only need the code from the redirect Location.
-  const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=http://localhost/callback`;
-  const loginRes = await fetch(loginURL, { redirect: "manual" });
-  const location = loginRes.headers.get("location");
-  if (!location) {
-    throw new Error("Mock IDP login did not return a redirect");
-  }
-
-  // Check if the redirect contains a code (mock mode) or points elsewhere (OIDC mode).
-  const redirectUrl = new URL(location);
-  const code = redirectUrl.searchParams.get("code");
-
-  if (code) {
-    // Mock mode: the IDP returned a code directly.
-    return exchangeCodeWithServer(serverURL, code);
-  }
-
-  // OIDC mode: the IDP redirected to an external provider (e.g. WorkOS).
-  // We need a browser-based flow to complete authentication.
-  log.info("OIDC mode detected — opening browser for authentication...");
-  return authenticateViaBrowser(serverURL, idpAddress);
-}
-
-/**
- * Opens a browser for the user to complete OIDC authentication.
- * Starts a temporary local HTTP server to capture the redirect code.
- */
-async function authenticateViaBrowser(
-  serverURL: string,
-  idpAddress: string,
-): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const server = createServer((req, res) => {
-      const url = new URL(req.url!, `http://localhost`);
-      const code = url.searchParams.get("code");
-
-      if (!code) {
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end("<h1>Error</h1><p>No code received. Please try again.</p>");
-        return;
-      }
-
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(
-        "<h1>Authenticated!</h1><p>You can close this tab and return to the terminal.</p>",
-      );
-
-      server.close();
-
-      exchangeCodeWithServer(serverURL, code).then(resolve).catch(reject);
-    });
-
-    // Listen on a random available port
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      if (!addr || typeof addr === "string") {
-        reject(new Error("Failed to start local callback server"));
-        return;
-      }
-      const callbackUrl = `http://127.0.0.1:${addr.port}/callback`;
-      const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=${encodeURIComponent(callbackUrl)}`;
-
-      // Open the browser
-      const openCmd =
-        process.platform === "darwin"
-          ? "open"
-          : process.platform === "win32"
-            ? "start"
-            : "xdg-open";
-      exec(`${openCmd} '${loginURL}'`, (err) => {
-        if (err) {
-          log.warn(
-            `Could not open browser automatically. Please visit:\n${loginURL}`,
-          );
-        }
-      });
-    });
-
-    // Timeout after 2 minutes (unref so it doesn't block exit)
-    const timeout = setTimeout(() => {
-      server.close();
-      reject(new Error("Authentication timed out after 2 minutes"));
-    }, 120_000);
-    timeout.unref();
+async function authenticateViaDevIDP(serverURL: string): Promise<string> {
+  // Step 1: Hit auth.login to get the OAuth2 authorize URL and nonce cookie.
+  const loginRes = await fetch(`${serverURL}/rpc/auth.login`, {
+    redirect: "manual",
   });
-}
+  const authorizeURL = loginRes.headers.get("location");
+  if (!authorizeURL) {
+    throw new Error("auth.login did not return a redirect");
+  }
 
-/** Exchange an auth code with the Gram server's callback endpoint. */
-async function exchangeCodeWithServer(
-  serverURL: string,
-  code: string,
-): Promise<string> {
-  const callbackURL = `${serverURL}/rpc/auth.callback?code=${encodeURIComponent(code)}`;
-  const callbackRes = await fetch(callbackURL, { redirect: "manual" });
+  // Extract the gram_auth_nonce cookie — needed for callback validation.
+  const nonceCookie = loginRes.headers
+    .getSetCookie()
+    .find((c) => c.startsWith("gram_auth_nonce="));
+  if (!nonceCookie) {
+    throw new Error("auth.login did not set gram_auth_nonce cookie");
+  }
+  const nonceCookieValue = nonceCookie.split(";")[0]; // "gram_auth_nonce=<value>"
+
+  // Step 2: Follow the redirect to dev-idp's /oauth2/authorize.
+  // dev-idp auto-resolves the current user and redirects back with code+state.
+  const authorizeRes = await fetch(authorizeURL, { redirect: "manual" });
+  const callbackLocation = authorizeRes.headers.get("location");
+  if (!callbackLocation) {
+    throw new Error("dev-idp authorize did not return a redirect");
+  }
+
+  // Step 3: Hit auth.callback with the code, state, and nonce cookie.
+  const callbackRes = await fetch(callbackLocation, {
+    redirect: "manual",
+    headers: { cookie: nonceCookieValue },
+  });
   const sessionToken = callbackRes.headers.get("gram-session");
   if (!sessionToken) {
     throw new Error(
-      `Server callback did not return a session (status=${callbackRes.status})`,
+      `auth.callback did not return a session (status=${callbackRes.status})`,
     );
   }
   return sessionToken;
@@ -221,9 +145,9 @@ async function seed() {
 
   const gram = new GramCore({ serverURL });
 
-  // Authenticate via the mock IDP to get a session token.
-  log.info("Authenticating via mock IDP...");
-  const sessionId = await authenticateViaMockIDP(serverURL);
+  // Authenticate via the dev-idp to get a session token.
+  log.info("Authenticating via dev-idp...");
+  const sessionId = await authenticateViaDevIDP(serverURL);
   log.info("Authenticated successfully.");
 
   const res = await authInfo(gram, undefined, {
@@ -266,6 +190,19 @@ async function seed() {
     const err = e as { stderr?: string; message?: string };
     log.warn(
       `Failed to seed MCP registry: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  // Set active org as whitelisted
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET whitelisted = TRUE WHERE id = '${activeOrgID}';"`.quiet();
+    log.info("Set active org as whitelisted");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Failed to set org whitelisted: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
 

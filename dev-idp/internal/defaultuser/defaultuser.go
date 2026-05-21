@@ -100,6 +100,19 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 		return uuid.Nil, fmt.Errorf("upsert default user: %w", err)
 	}
 
+	// Ensure the default dev user is always an admin.
+	if !user.Admin {
+		user, err = queries.UpdateUser(ctx, repo.UpdateUserParams{
+			ID:          user.ID,
+			Admin:       true,
+			Whitelisted: user.Whitelisted,
+			Ts:          now,
+		})
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("set default user as admin: %w", err)
+		}
+	}
+
 	org, err := queries.UpsertOrganizationBySlug(ctx, repo.UpsertOrganizationBySlugParams{
 		ID:   uuid.New(),
 		Name: DefaultOrgName,
