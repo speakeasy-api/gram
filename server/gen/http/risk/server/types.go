@@ -231,6 +231,29 @@ type ListRiskResultsByChatResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// GetRiskOverviewResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body.
+type GetRiskOverviewResponseBody struct {
+	// Inclusive start of the overview window.
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive end of the overview window.
+	To string `form:"to" json:"to" xml:"to"`
+	// Messages analyzed by risk policies in the window.
+	MessagesScanned int64 `form:"messages_scanned" json:"messages_scanned" xml:"messages_scanned"`
+	// Policy findings in the window.
+	Findings int64 `form:"findings" json:"findings" xml:"findings"`
+	// Chat sessions with at least one finding in the window.
+	FlaggedSessions int64 `form:"flagged_sessions" json:"flagged_sessions" xml:"flagged_sessions"`
+	// Enabled risk policies for the current project.
+	ActivePolicies int64 `form:"active_policies" json:"active_policies" xml:"active_policies"`
+	// Top policy categories by finding count.
+	TopCategories []*RiskOverviewCategoryResponseBody `form:"top_categories" json:"top_categories" xml:"top_categories"`
+	// Top users by finding count.
+	TopUsers []*RiskOverviewUserResponseBody `form:"top_users" json:"top_users" xml:"top_users"`
+	// Time-series finding counts by category in the window.
+	TimeSeriesFindings []*RiskOverviewTimeSeriesFindingResponseBody `form:"time_series_findings" json:"time_series_findings" xml:"time_series_findings"`
+}
+
 // GetRiskPolicyStatusResponseBody is the type of the "risk" service
 // "getRiskPolicyStatus" endpoint HTTP response body.
 type GetRiskPolicyStatusResponseBody struct {
@@ -1739,6 +1762,188 @@ type ListRiskResultsByChatGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetRiskOverviewUnauthorizedResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body for the "unauthorized" error.
+type GetRiskOverviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewForbiddenResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body for the "forbidden" error.
+type GetRiskOverviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewBadRequestResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body for the "bad_request" error.
+type GetRiskOverviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewNotFoundResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body for the "not_found" error.
+type GetRiskOverviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewConflictResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body for the "conflict" error.
+type GetRiskOverviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewUnsupportedMediaResponseBody is the type of the "risk"
+// service "getRiskOverview" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRiskOverviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewInvalidResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body for the "invalid" error.
+type GetRiskOverviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewInvariantViolationResponseBody is the type of the "risk"
+// service "getRiskOverview" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRiskOverviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewUnexpectedResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body for the "unexpected" error.
+type GetRiskOverviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskOverviewGatewayErrorResponseBody is the type of the "risk" service
+// "getRiskOverview" endpoint HTTP response body for the "gateway_error" error.
+type GetRiskOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetRiskPolicyStatusUnauthorizedResponseBody is the type of the "risk"
 // service "getRiskPolicyStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2757,6 +2962,34 @@ type RiskChatSummaryResponseBody struct {
 	LatestDetected string `form:"latest_detected" json:"latest_detected" xml:"latest_detected"`
 }
 
+// RiskOverviewCategoryResponseBody is used to define fields on response body
+// types.
+type RiskOverviewCategoryResponseBody struct {
+	// Policy category key.
+	Category string `form:"category" json:"category" xml:"category"`
+	// Finding count for this category.
+	Findings int64 `form:"findings" json:"findings" xml:"findings"`
+}
+
+// RiskOverviewUserResponseBody is used to define fields on response body types.
+type RiskOverviewUserResponseBody struct {
+	// User email, or Unknown user when unavailable.
+	Email string `form:"email" json:"email" xml:"email"`
+	// Finding count for this user.
+	Findings int64 `form:"findings" json:"findings" xml:"findings"`
+}
+
+// RiskOverviewTimeSeriesFindingResponseBody is used to define fields on
+// response body types.
+type RiskOverviewTimeSeriesFindingResponseBody struct {
+	// Time bucket start.
+	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
+	// Policy category key.
+	Category string `form:"category" json:"category" xml:"category"`
+	// Finding count for this category and time bucket.
+	Findings int64 `form:"findings" json:"findings" xml:"findings"`
+}
+
 // ShadowMCPApprovalResponseBody is used to define fields on response body
 // types.
 type ShadowMCPApprovalResponseBody struct {
@@ -2961,6 +3194,56 @@ func NewListRiskResultsByChatResponseBody(res *risk.ListRiskResultsByChatResult)
 		}
 	} else {
 		body.Chats = []*RiskChatSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewGetRiskOverviewResponseBody builds the HTTP response body from the result
+// of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewResponseBody(res *risk.RiskOverviewResult) *GetRiskOverviewResponseBody {
+	body := &GetRiskOverviewResponseBody{
+		From:            res.From,
+		To:              res.To,
+		MessagesScanned: res.MessagesScanned,
+		Findings:        res.Findings,
+		FlaggedSessions: res.FlaggedSessions,
+		ActivePolicies:  res.ActivePolicies,
+	}
+	if res.TopCategories != nil {
+		body.TopCategories = make([]*RiskOverviewCategoryResponseBody, len(res.TopCategories))
+		for i, val := range res.TopCategories {
+			if val == nil {
+				body.TopCategories[i] = nil
+				continue
+			}
+			body.TopCategories[i] = marshalRiskRiskOverviewCategoryToRiskOverviewCategoryResponseBody(val)
+		}
+	} else {
+		body.TopCategories = []*RiskOverviewCategoryResponseBody{}
+	}
+	if res.TopUsers != nil {
+		body.TopUsers = make([]*RiskOverviewUserResponseBody, len(res.TopUsers))
+		for i, val := range res.TopUsers {
+			if val == nil {
+				body.TopUsers[i] = nil
+				continue
+			}
+			body.TopUsers[i] = marshalRiskRiskOverviewUserToRiskOverviewUserResponseBody(val)
+		}
+	} else {
+		body.TopUsers = []*RiskOverviewUserResponseBody{}
+	}
+	if res.TimeSeriesFindings != nil {
+		body.TimeSeriesFindings = make([]*RiskOverviewTimeSeriesFindingResponseBody, len(res.TimeSeriesFindings))
+		for i, val := range res.TimeSeriesFindings {
+			if val == nil {
+				body.TimeSeriesFindings[i] = nil
+				continue
+			}
+			body.TimeSeriesFindings[i] = marshalRiskRiskOverviewTimeSeriesFindingToRiskOverviewTimeSeriesFindingResponseBody(val)
+		}
+	} else {
+		body.TimeSeriesFindings = []*RiskOverviewTimeSeriesFindingResponseBody{}
 	}
 	return body
 }
@@ -4152,6 +4435,146 @@ func NewListRiskResultsByChatGatewayErrorResponseBody(res *goa.ServiceError) *Li
 	return body
 }
 
+// NewGetRiskOverviewUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewUnauthorizedResponseBody(res *goa.ServiceError) *GetRiskOverviewUnauthorizedResponseBody {
+	body := &GetRiskOverviewUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewForbiddenResponseBody builds the HTTP response body from
+// the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewForbiddenResponseBody(res *goa.ServiceError) *GetRiskOverviewForbiddenResponseBody {
+	body := &GetRiskOverviewForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewBadRequestResponseBody builds the HTTP response body from
+// the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewBadRequestResponseBody(res *goa.ServiceError) *GetRiskOverviewBadRequestResponseBody {
+	body := &GetRiskOverviewBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewNotFoundResponseBody builds the HTTP response body from
+// the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewNotFoundResponseBody(res *goa.ServiceError) *GetRiskOverviewNotFoundResponseBody {
+	body := &GetRiskOverviewNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewConflictResponseBody builds the HTTP response body from
+// the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewConflictResponseBody(res *goa.ServiceError) *GetRiskOverviewConflictResponseBody {
+	body := &GetRiskOverviewConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRiskOverviewUnsupportedMediaResponseBody {
+	body := &GetRiskOverviewUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewInvalidResponseBody builds the HTTP response body from the
+// result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewInvalidResponseBody(res *goa.ServiceError) *GetRiskOverviewInvalidResponseBody {
+	body := &GetRiskOverviewInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewInvariantViolationResponseBody(res *goa.ServiceError) *GetRiskOverviewInvariantViolationResponseBody {
+	body := &GetRiskOverviewInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewUnexpectedResponseBody(res *goa.ServiceError) *GetRiskOverviewUnexpectedResponseBody {
+	body := &GetRiskOverviewUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskOverviewGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getRiskOverview" endpoint of the "risk" service.
+func NewGetRiskOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetRiskOverviewGatewayErrorResponseBody {
+	body := &GetRiskOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetRiskPolicyStatusUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
 func NewGetRiskPolicyStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusUnauthorizedResponseBody {
@@ -5020,6 +5443,19 @@ func NewListRiskResultsByChatPayload(cursor *string, limit *int, apikeyToken *st
 	v := &risk.ListRiskResultsByChatPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetRiskOverviewPayload builds a risk service getRiskOverview endpoint
+// payload.
+func NewGetRiskOverviewPayload(from *string, to *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskOverviewPayload {
+	v := &risk.GetRiskOverviewPayload{}
+	v.From = from
+	v.To = to
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -359,3 +359,35 @@ func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConf
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
 	return err
 }
+
+const updateChatMessageCreatedAt = `-- name: UpdateChatMessageCreatedAt :exec
+UPDATE chat_messages
+SET created_at = $1
+WHERE id = $2
+`
+
+type UpdateChatMessageCreatedAtParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+func (q *Queries) UpdateChatMessageCreatedAt(ctx context.Context, arg UpdateChatMessageCreatedAtParams) error {
+	_, err := q.db.Exec(ctx, updateChatMessageCreatedAt, arg.CreatedAt, arg.ID)
+	return err
+}
+
+const updateRiskResultCreatedAt = `-- name: UpdateRiskResultCreatedAt :exec
+UPDATE risk_results
+SET created_at = $1
+WHERE id = $2
+`
+
+type UpdateRiskResultCreatedAtParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+func (q *Queries) UpdateRiskResultCreatedAt(ctx context.Context, arg UpdateRiskResultCreatedAtParams) error {
+	_, err := q.db.Exec(ctx, updateRiskResultCreatedAt, arg.CreatedAt, arg.ID)
+	return err
+}
