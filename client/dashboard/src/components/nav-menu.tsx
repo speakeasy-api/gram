@@ -504,7 +504,7 @@ export function CollapsibleNavGroup({
           <div className="border-border mt-1 ml-4 border-l pl-2 group-data-[collapsible=icon]:hidden">
             <motion.ul
               className="flex flex-col gap-0.5 py-0.5"
-              initial="closed"
+              initial={isOpen ? "open" : "closed"}
               animate={isOpen ? "open" : "closed"}
               variants={{
                 open: {
