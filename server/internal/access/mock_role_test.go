@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -25,19 +26,21 @@ func newMockRoleProvider(t *testing.T) *MockRoleProvider {
 
 	roles := &MockRoleProvider{}
 	t.Cleanup(func() {
-		require.True(t, roles.AssertExpectations(t))
+		require.Eventually(t, func() bool {
+			return roles.AssertExpectations(mockExpectationProbe{})
+		}, 2*time.Second, 10*time.Millisecond)
 	})
 
 	return roles
 }
 
-func (m *MockRoleProvider) ListRoles(ctx context.Context, orgID string) ([]thirdpartyworkos.Role, error) {
-	args := m.Called(ctx, orgID)
-	if roles, ok := args.Get(0).([]thirdpartyworkos.Role); ok {
-		return roles, mockErr(args, 1)
-	}
-	return nil, mockErr(args, 1)
-}
+type mockExpectationProbe struct{}
+
+func (mockExpectationProbe) Logf(string, ...any) {}
+
+func (mockExpectationProbe) Errorf(string, ...any) {}
+
+func (mockExpectationProbe) FailNow() {}
 
 func (m *MockRoleProvider) CreateRole(ctx context.Context, orgID string, opts thirdpartyworkos.CreateRoleOpts) (*thirdpartyworkos.Role, error) {
 	args := m.Called(ctx, orgID, opts)
@@ -60,34 +63,10 @@ func (m *MockRoleProvider) DeleteRole(ctx context.Context, orgID string, roleSlu
 	return mockErr(args, 0)
 }
 
-func (m *MockRoleProvider) ListMembers(ctx context.Context, orgID string) ([]thirdpartyworkos.Member, error) {
-	args := m.Called(ctx, orgID)
-	if members, ok := args.Get(0).([]thirdpartyworkos.Member); ok {
-		return members, mockErr(args, 1)
-	}
-	return nil, mockErr(args, 1)
-}
-
 func (m *MockRoleProvider) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*thirdpartyworkos.Member, error) {
 	args := m.Called(ctx, membershipID, roleSlug)
 	if member, ok := args.Get(0).(*thirdpartyworkos.Member); ok {
 		return member, mockErr(args, 1)
-	}
-	return nil, mockErr(args, 1)
-}
-
-func (m *MockRoleProvider) GetUser(ctx context.Context, userID string) (*thirdpartyworkos.User, error) {
-	args := m.Called(ctx, userID)
-	if user, ok := args.Get(0).(*thirdpartyworkos.User); ok {
-		return user, mockErr(args, 1)
-	}
-	return nil, mockErr(args, 1)
-}
-
-func (m *MockRoleProvider) ListOrgUsers(ctx context.Context, orgID string) (map[string]thirdpartyworkos.User, error) {
-	args := m.Called(ctx, orgID)
-	if users, ok := args.Get(0).(map[string]thirdpartyworkos.User); ok {
-		return users, mockErr(args, 1)
 	}
 	return nil, mockErr(args, 1)
 }
@@ -131,14 +110,5 @@ func mockMember(orgID, membershipID, userID, roleSlug string) thirdpartyworkos.M
 		OrganizationID: orgID,
 		RoleSlug:       roleSlug,
 		CreatedAt:      mockMembershipTimestamp,
-	}
-}
-
-func mockUser(id, firstName, lastName, email string) thirdpartyworkos.User {
-	return thirdpartyworkos.User{
-		ID:        id,
-		FirstName: firstName,
-		LastName:  lastName,
-		Email:     email,
 	}
 }

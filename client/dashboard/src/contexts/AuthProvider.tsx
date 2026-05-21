@@ -4,19 +4,11 @@ import { PageHeader } from "@/components/page-header";
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
 import BookDemo from "@/pages/demo/BookDemo";
-import { Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsAdminRef } from "@/contexts/Sdk";
@@ -264,28 +256,23 @@ export const ProjectProvider = ({
   );
 };
 
-/** Static nav items matching the real sidebar groups — no auth context needed. */
-const LOADING_NAV = {
-  project: [{ label: "Home", icon: "house" as const }],
-  connect: [
-    { label: "Sources", icon: "file-code" as const },
-    { label: "Catalog", icon: "store" as const },
-    { label: "Playground", icon: "message-circle" as const },
-  ],
-  build: [
-    { label: "Chat Elements", icon: "message-circle" as const },
-    { label: "MCP", icon: "network" as const },
-    { label: "Assistants", icon: "bot" as const },
-    { label: "Skills", icon: "terminal" as const },
-  ],
-  observe: [
-    { label: "Insights", icon: "layout-dashboard" as const },
-    { label: "MCP Logs", icon: "file-text" as const },
-    { label: "Agent Sessions", icon: "messages-square" as const },
-    { label: "Hooks", icon: "webhook" as const },
-  ],
-  settings: [{ label: "Settings", icon: "settings" as const }],
-};
+/** Skeleton nav group matching the new collapsible sidebar style. */
+const SkeletonNavItem = ({ width = "w-20" }: { width?: string }) => (
+  <div className="flex items-center gap-2 px-2 py-2">
+    <Skeleton className="h-4 w-4 shrink-0 rounded" />
+    <Skeleton className={`h-3.5 ${width}`} />
+  </div>
+);
+
+const SkeletonNavGroup = () => (
+  <div className="border-border mt-1 ml-4 border-l pl-2">
+    <div className="flex flex-col gap-0.5 py-0.5">
+      <Skeleton className="mx-2 my-1.5 h-3 w-16" />
+      <Skeleton className="mx-2 my-1.5 h-3 w-20" />
+      <Skeleton className="mx-2 my-1.5 h-3 w-14" />
+    </div>
+  </div>
+);
 
 /**
  * Lightweight shell that mirrors the real AppLayout structure,
@@ -317,29 +304,20 @@ const AppLoadingShell = () => (
       {/* Body */}
       <div className="flex w-full flex-1 overflow-hidden pt-2">
         <Sidebar collapsible="offcanvas" variant="inset">
-          <SidebarContent className="pt-2">
-            {Object.entries(LOADING_NAV).map(([group, items]) => (
-              <SidebarGroup key={group}>
-                <SidebarGroupLabel className="text-sidebar-foreground">
-                  {group}
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {items.map((item) => (
-                      <SidebarMenuItem key={item.label}>
-                        <SidebarMenuButton>
-                          <Icon
-                            name={item.icon}
-                            className="text-muted-foreground"
-                          />
-                          <Type variant="small">{item.label}</Type>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            ))}
+          <SidebarContent className="pt-5">
+            <div className="flex flex-col gap-1 px-2">
+              {/* Home */}
+              <SkeletonNavItem width="w-16" />
+              {/* Connect group */}
+              <SkeletonNavItem width="w-20" />
+              <SkeletonNavGroup />
+              {/* Build group */}
+              <SkeletonNavItem width="w-14" />
+              {/* Observe group */}
+              <SkeletonNavItem width="w-20" />
+              {/* Security group */}
+              <SkeletonNavItem width="w-18" />
+            </div>
           </SidebarContent>
         </Sidebar>
         <SidebarInset>

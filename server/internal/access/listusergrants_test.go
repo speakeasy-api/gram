@@ -1,12 +1,8 @@
 package access
 
 import (
-	"errors"
 	"testing"
 
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
-
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -15,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,12 +37,10 @@ func TestService_ListGrants(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, mockMember("", "membership_1", "workos_user_member", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeProjectRead, "project_123")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
-
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "workos_user_member", "custom-builder"),
-	}, nil).Once()
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
@@ -62,7 +55,7 @@ func TestService_ListGrants(t *testing.T) {
 	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
 }
 
-func TestService_ListGrants_MultipleRoles(t *testing.T) {
+func TestService_ListGrants_RoleGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -73,13 +66,10 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, mockMember("", "membership_1", "workos_user_member", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project_123")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-mcp"), authz.ScopeMCPConnect, "tool_456")
-
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "workos_user_member", "custom-builder"),
-		mockMember(mockidp.MockOrgID, "membership_2", "workos_user_member", "custom-mcp"),
-	}, nil).Once()
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
@@ -187,7 +177,7 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles, nil)
+	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
@@ -233,7 +223,7 @@ func TestService_ListGrants_EnterpriseWithoutSessionReturnsFullAccess(t *testing
 	}
 }
 
-func TestService_ListGrants_WorkOSMembersFailure(t *testing.T) {
+func TestService_ListGrants_NoRoleAssignments(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -245,9 +235,7 @@ func TestService_ListGrants_WorkOSMembersFailure(t *testing.T) {
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
 
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member(nil), errors.New("workos unavailable")).Once()
-
-	_, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "list members from workos")
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, result.Grants)
 }
