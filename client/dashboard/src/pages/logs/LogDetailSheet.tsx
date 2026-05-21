@@ -132,9 +132,7 @@ function LogDetailContent({
         path,
         label,
         value: getNestedValue(attrs, path),
-      })).filter((h): h is { path: string; label: string; value: string } =>
-        Boolean(h.value),
-      )
+      })).filter((h): h is typeof h & { value: string } => Boolean(h.value))
     : [];
 
   // Remove surfaced keys from attributes to avoid duplication in the generic section
