@@ -162,10 +162,14 @@ func AddAIIntegrationUsageSyncSchedule(ctx context.Context, temporalEnv *tenv.En
 			schedule.Spec = &options.Spec
 			schedule.Action = options.Action
 			if schedule.Policy == nil {
-				schedule.Policy = &client.SchedulePolicies{}
+				schedule.Policy = &client.SchedulePolicies{
+					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+					CatchupWindow:  0,
+					PauseOnFailure: false,
+				}
 			}
 			schedule.Policy.Overlap = options.Overlap
-			return &client.ScheduleUpdate{Schedule: &schedule}, nil
+			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
 		},
 	}); err != nil {
 		return fmt.Errorf("update ai integration usage polling schedule: %w", err)

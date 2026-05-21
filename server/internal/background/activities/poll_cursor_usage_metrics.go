@@ -102,15 +102,15 @@ func (c *PollCursorUsageMetrics) recordFailureAfterFinalAttempt(ctx context.Cont
 	}
 
 	if err := c.integrations.RecordUsagePollFailure(ctx, configID, endTime, cause); err != nil {
-		return fmt.Errorf("%w; record usage poll failure: %v", cause, err)
+		return errors.Join(cause, fmt.Errorf("record usage poll failure: %w", err))
 	}
 
 	c.logger.WarnContext(ctx, "cursor usage sync failed after final attempt; recorded failure",
 		attr.SlogError(cause),
-		slog.String("ai_integration_config_id", configID.String()),
+		attr.SlogAIIntegrationConfigID(configID.String()),
 		attr.SlogOrganizationID(cfg.OrganizationID),
 		attr.SlogProjectID(cfg.ProjectID.String()),
-		slog.Time("next_poll_after", endTime.Add(time.Hour)),
+		attr.SlogAIIntegrationUsagePollNextAfter(endTime.Add(time.Hour)),
 	)
 	return cause
 }

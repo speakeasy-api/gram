@@ -353,6 +353,9 @@ const (
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
 
 	GitHubUsernameKey = attribute.Key("gram.github.username")
+
+	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration_config.id")
+	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
 )
 
 const (
@@ -1499,3 +1502,15 @@ func SlogChatToolNames(v any) slog.Attr      { return slog.Any(string(ChatToolNa
 
 func GitHubUsername(v string) attribute.KeyValue { return GitHubUsernameKey.String(v) }
 func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(GitHubUsernameKey), v) }
+
+func AIIntegrationConfigID(v string) attribute.KeyValue { return AIIntegrationConfigIDKey.String(v) }
+func SlogAIIntegrationConfigID(v string) slog.Attr {
+	return slog.String(string(AIIntegrationConfigIDKey), v)
+}
+
+func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
+	return AIIntegrationUsagePollNextAfterKey.String(v.Format(time.RFC3339))
+}
+func SlogAIIntegrationUsagePollNextAfter(v time.Time) slog.Attr {
+	return slog.Time(string(AIIntegrationUsagePollNextAfterKey), v)
+}

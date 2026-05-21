@@ -138,9 +138,9 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = timestamptz(*resetPollWatermarkAt)
 		syncRow.NextPollAfter = timestamptz(nextUsagePollAfter(*resetPollWatermarkAt))
-		syncRow.LastPollError = pgtype.Text{}
-		syncRow.LastPollFailedAt = pgtype.Timestamptz{}
-		syncRow.LastPollSuccessAt = pgtype.Timestamptz{}
+		syncRow.LastPollError = pgtype.Text{String: "", Valid: false}
+		syncRow.LastPollFailedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+		syncRow.LastPollSuccessAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.ConsecutiveFailures = 0
 		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
 			AiIntegrationConfigID: row.ID,
