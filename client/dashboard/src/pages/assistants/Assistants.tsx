@@ -22,54 +22,30 @@ import {
   useGetPeriodUsage,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
-import { QueryKey, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Info, Plus } from "lucide-react";
 import { MouseEvent } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
 
+function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
 export function AssistantsRoot() {
   return <Outlet />;
 }
-
-type AssistantsListData = { assistants: Assistant[] };
-type StatusToggleContext = {
-  snapshots: Array<[QueryKey, AssistantsListData | undefined]>;
-};
 
 function StatusToggle({ assistant }: { assistant: Assistant }) {
   const queryClient = useQueryClient();
   const isActive = assistant.status === AssistantStatus.Active;
 
   const updateAssistant = useAssistantsUpdateMutation({
-    onMutate: async ({ request }): Promise<StatusToggleContext | undefined> => {
-      const nextStatus = request.updateAssistantForm.status;
-      if (!nextStatus) return;
-      await queryClient.cancelQueries({
-        queryKey: ["@gram/client", "assistants", "list"],
-      });
-      const snapshots = queryClient.getQueriesData<AssistantsListData>({
-        queryKey: ["@gram/client", "assistants", "list"],
-      });
-      for (const [key, data] of snapshots) {
-        if (!data) continue;
-        queryClient.setQueryData<AssistantsListData>(key, {
-          ...data,
-          assistants: data.assistants.map((a) =>
-            a.id === request.updateAssistantForm.id
-              ? { ...a, status: nextStatus }
-              : a,
-          ),
-        });
-      }
-      return { snapshots };
-    },
-    onError: (_err, _vars, context) => {
-      const ctx = context as StatusToggleContext | undefined;
-      for (const [key, data] of ctx?.snapshots ?? []) {
-        queryClient.setQueryData<AssistantsListData>(key, data);
-      }
+    onSuccess: () => {
       invalidateAllAssistantsList(queryClient);
+    },
+    onError: () => {
       toast.error("Failed to update assistant status");
     },
   });
@@ -85,17 +61,13 @@ function StatusToggle({ assistant }: { assistant: Assistant }) {
     });
   };
 
-  const stopLinkNavigation = (e: MouseEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
   return (
     <Stack direction="horizontal" gap={2} align="center">
       <div onClick={stopLinkNavigation}>
         <Switch
           checked={isActive}
           onCheckedChange={handleToggle}
+          disabled={updateAssistant.isPending}
           aria-label={`${isActive ? "Pause" : "Activate"} assistant ${assistant.name}`}
         />
       </div>
