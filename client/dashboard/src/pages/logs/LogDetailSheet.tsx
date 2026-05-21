@@ -48,6 +48,17 @@ const TOOL_IO_ATTR_KEYS = {
 
 const HOOK_BLOCK_REASON_KEY = "gram.hook.block_reason";
 
+/** Attributes surfaced as a prominent labeled row above Tool Input. Kept
+ *  separate from the generic Attributes section to avoid duplication. */
+const HIGHLIGHT_ATTR_KEYS = [
+  { path: "gram.tool_call.source", label: "Server" },
+  { path: "gram.tool.name", label: "Tool" },
+  { path: "gram.hook.source", label: "LLM Client" },
+  { path: "gram.mcp.server_url", label: "MCP Server URL" },
+] as const;
+
+const HOOK_ERROR_KEY = "gram.hook.error";
+
 /**
  * Extract a deeply nested value from an object using a dot-separated path.
  * e.g. getNestedValue(obj, "gram.tool_call.input.content")
@@ -115,6 +126,16 @@ function LogDetailContent({
   const blockReason = attrs
     ? getNestedValue(attrs, HOOK_BLOCK_REASON_KEY)
     : undefined;
+  const toolError = attrs ? getNestedValue(attrs, HOOK_ERROR_KEY) : undefined;
+  const highlights = attrs
+    ? HIGHLIGHT_ATTR_KEYS.map(({ path, label }) => ({
+        path,
+        label,
+        value: getNestedValue(attrs, path),
+      })).filter((h): h is { path: string; label: string; value: string } =>
+        Boolean(h.value),
+      )
+    : [];
 
   // Remove surfaced keys from attributes to avoid duplication in the generic section
   let filteredAttrs = attrs;
@@ -126,6 +147,14 @@ function LogDetailContent({
   }
   if (filteredAttrs && blockReason) {
     filteredAttrs = removeNestedKey(filteredAttrs, HOOK_BLOCK_REASON_KEY);
+  }
+  if (filteredAttrs && toolError) {
+    filteredAttrs = removeNestedKey(filteredAttrs, HOOK_ERROR_KEY);
+  }
+  for (const h of highlights) {
+    if (filteredAttrs) {
+      filteredAttrs = removeNestedKey(filteredAttrs, h.path);
+    }
   }
 
   return (
@@ -216,17 +245,40 @@ function LogDetailContent({
         </TabsList>
 
         <TabsContent value="details" className="mt-5 flex flex-col gap-5">
-          {/* Message */}
-          <div className="flex flex-col gap-2">
-            <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-              Message
+          {/* Tool Error — destructive styling so failures pop visually */}
+          {toolError && (
+            <div className="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3">
+              <Icon
+                name="circle-alert"
+                className="text-destructive-default mt-0.5 size-4 shrink-0"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="text-destructive-default text-xs font-semibold tracking-wide uppercase">
+                  Tool Error
+                </div>
+                <div className="text-foreground text-sm break-words">
+                  {toolError}
+                </div>
+              </div>
             </div>
-            <div className="bg-muted border-border rounded-lg border p-4">
-              <pre className="font-mono text-sm break-words whitespace-pre-wrap">
-                {log.body || "(no message)"}
-              </pre>
+          )}
+
+          {/* Highlights — prominent labeled rows pulled out of attributes */}
+          {highlights.length > 0 && (
+            <div className="border-border bg-muted/40 grid grid-cols-1 gap-x-4 gap-y-2 rounded-lg border p-4 sm:grid-cols-[max-content_minmax(0,1fr)]">
+              {highlights.map((h) => (
+                <div
+                  key={h.path}
+                  className="contents [&>div:first-child]:text-muted-foreground [&>div:first-child]:text-xs [&>div:first-child]:font-medium [&>div:first-child]:tracking-wide [&>div:first-child]:uppercase [&>div:first-child]:self-center"
+                >
+                  <div>{h.label}</div>
+                  <div className="text-foreground font-mono text-sm break-all">
+                    {h.value}
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
 
           {/* Tool Input */}
           {toolInput && (
@@ -238,7 +290,7 @@ function LogDetailContent({
             <CollapsibleBodySection title="Tool Output" content={toolOutput} />
           )}
 
-          {/* Attributes (with tool I/O keys removed) */}
+          {/* Attributes (with tool I/O + highlighted keys removed) */}
           {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
             <AttributesSection
               title="Attributes"
@@ -257,6 +309,17 @@ function LogDetailContent({
                 data={log.resourceAttributes as Record<string, unknown>}
               />
             )}
+
+          {/* Message — demoted to a collapsed section below attributes. The
+              body is the OTEL log body, which for tool-call events is just a
+              "Tool: X, Hook: Y" stub that duplicates info now shown above. */}
+          {log.body && (
+            <CollapsibleBodySection
+              title="Message"
+              content={log.body}
+              defaultOpen={false}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="raw" className="mt-5 flex flex-col gap-3">
@@ -275,7 +338,7 @@ function LogDetailContent({
               <Copy className="size-4" />
             </button>
           </div>
-          <div className="bg-muted border-border flex-1 overflow-y-auto rounded-lg border p-4">
+          <div className="bg-muted/40 border-border flex-1 overflow-y-auto rounded-lg border p-4">
             <pre className="font-mono text-sm break-all whitespace-pre-wrap">
               {JSON.stringify(log, null, 2)}
             </pre>
@@ -289,11 +352,13 @@ function LogDetailContent({
 function CollapsibleBodySection({
   title,
   content,
+  defaultOpen = true,
 }: {
   title: string;
   content: string;
+  defaultOpen?: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   // Try to pretty-print JSON content
   let displayContent = content;
@@ -332,7 +397,7 @@ function CollapsibleBodySection({
         </div>
       </button>
       {isOpen && (
-        <div className="bg-muted border-border max-h-96 overflow-y-auto rounded-lg border p-4">
+        <div className="bg-muted/40 border-border max-h-96 overflow-y-auto rounded-lg border p-4">
           <pre className="font-mono text-sm break-words whitespace-pre-wrap">
             {displayContent}
           </pre>
@@ -471,7 +536,7 @@ function AttributesSection({
           <Copy className="size-4" />
         </button>
       </div>
-      <div className="bg-muted border-border divide-border divide-y rounded-lg border">
+      <div className="bg-muted/40 border-border divide-border divide-y rounded-lg border">
         {flatEntries.map((entry) => {
           const isFilterable = entry.filterValue !== null;
 
