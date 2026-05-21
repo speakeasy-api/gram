@@ -1,5 +1,23 @@
 # server
 
+## 0.57.0
+
+### Minor Changes
+
+- 3db9f30: Deleting a custom domain now soft-deletes every `mcp_endpoints` row registered under it across all projects in the org, emits one `mcp-endpoint:delete` audit event per cascaded row, and the dashboard delete-confirmation modal previews the impacted endpoints via the new `/rpc/domain.listMcpEndpoints` endpoint.
+- 3531836: Add a nullable `audience` column to `remote_session_clients` and surface it on the remoteSessionClients management API. When set, the upstream OAuth dance attaches the `audience` parameter to the authorize redirect, the authorization-code → token exchange, and every refresh-token request; when unset the parameter is omitted entirely.
+- 3531836: Add a nullable `scope` column to `remote_session_clients` and surface it on the remoteSessionClients management API. When set, the upstream OAuth dance requests these scopes instead of echoing the issuer's full `scopes_supported`, which avoids over-granting Gram access on providers that advertise broad scope sets.
+- 3452d17: Cron triggers now accept an optional `note` field, matching wake triggers. The note is included in every scheduled tick the assistant sees, letting one assistant carry multiple cron triggers with distinct per-schedule steering (e.g. "run daily digest" vs "check deploy status").
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings.
+
+### Patch Changes
+
+- 4f00967: Fix token graph blanking when filtering by agent type on /insights/costs. Claude Code usage metrics were missing the hook_source attribute, causing the filter to return no data for non-cursor agents.
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings
+- 35a7938: Improved server names in hooks logs. Improved UI for inspecting indiivudal logs
+- bf85fad: Slack-triggered assistant chats now open a fresh assistant thread for each top-level message instead of folding distinct conversations onto a single per-channel thread. Top-level Slack messages and DMs used to share one Gram thread (and one Fly runtime) per channel, so unrelated users' messages bled into the same context window.
+- 99d3d7f: Assistants on Slack now surface MCP OAuth re-auth via an ephemeral Block Kit button instead of dumping the raw URL into the thread, so only the user that needs to authenticate sees the prompt.
+
 ## 0.56.0
 
 ### Minor Changes

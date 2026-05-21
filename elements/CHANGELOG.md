@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.33.1
+
+### Patch Changes
+
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings
+
 ## 1.33.0
 
 ### Minor Changes
