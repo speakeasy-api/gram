@@ -111,7 +111,6 @@ export function LogsAgentsContent() {
   const urlTo = searchParams.get("to");
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
-  const urlStatus = searchParams.get("status");
   const urlHasRisk = searchParams.get("has_risk");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
@@ -135,7 +134,6 @@ export function LogsAgentsContent() {
   }, [urlFrom, urlTo]);
 
   const searchQuery = urlSearch ?? "";
-  const resolutionStatus = urlStatus ?? "";
 
   const timeRange = useMemo(() => {
     if (customRange) {
@@ -191,13 +189,6 @@ export function LogsAgentsContent() {
     [updateSearchParams],
   );
 
-  const setResolutionStatus = useCallback(
-    (value: string) => {
-      updateSearchParams({ status: value || null });
-    },
-    [updateSearchParams],
-  );
-
   const setHasRisk = useCallback(
     (value: string) => {
       updateSearchParams({ has_risk: value || null });
@@ -228,7 +219,6 @@ export function LogsAgentsContent() {
       useListChatsWithResolutions(
         {
           search: searchQuery || undefined,
-          resolutionStatus: resolutionStatus || undefined,
           hasRisk: toApiHasRisk(hasRisk),
           from: timeRange.from,
           to: timeRange.to,
@@ -294,9 +284,9 @@ export function LogsAgentsContent() {
         year: "numeric",
       });
     return `Viewing logs from ${formatDate(timeRange.from)} to ${formatDate(timeRange.to)}${
-      resolutionStatus ? `. Filtered to ${resolutionStatus} status.` : ""
-    }${searchQuery ? ` Search query: "${searchQuery}"` : ""}`;
-  }, [timeRange.from, timeRange.to, resolutionStatus, searchQuery]);
+      searchQuery ? ` Search query: "${searchQuery}"` : ""
+    }`;
+  }, [timeRange.from, timeRange.to, searchQuery]);
 
   return (
     <>
@@ -335,8 +325,6 @@ export function LogsAgentsContent() {
         clearCustomRange={clearCustomRange}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        resolutionStatus={resolutionStatus}
-        setResolutionStatus={setResolutionStatus}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
         sortField={sortField}
@@ -369,8 +357,6 @@ function AgentSessionsPageContent({
   clearCustomRange,
   searchQuery,
   setSearchQuery,
-  resolutionStatus,
-  setResolutionStatus,
   hasRisk,
   setHasRisk,
   sortField,
@@ -398,8 +384,6 @@ function AgentSessionsPageContent({
   clearCustomRange: () => void;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
-  resolutionStatus: string;
-  setResolutionStatus: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
   sortField: SortField;
@@ -458,8 +442,6 @@ function AgentSessionsPageContent({
             <ChatLogsFilters
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
-              resolutionStatus={resolutionStatus}
-              onResolutionStatusChange={setResolutionStatus}
               hasRisk={hasRisk}
               onHasRiskChange={setHasRisk}
             />

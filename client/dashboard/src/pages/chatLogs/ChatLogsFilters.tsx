@@ -8,34 +8,6 @@ import {
 } from "@/components/ui/select";
 import { useState, useEffect } from "react";
 
-const resolutionStatusOptions = [
-  {
-    value: "all",
-    label: "All Statuses",
-    description: "Show all agent sessions regardless of outcome",
-  },
-  {
-    value: "success",
-    label: "Success",
-    description: "AI analysis confirmed the user completed their task",
-  },
-  {
-    value: "failure",
-    label: "Failure",
-    description: "AI analysis found the user did not complete their task",
-  },
-  {
-    value: "partial",
-    label: "Partial",
-    description: "User completed some but not all of their intended goals",
-  },
-  {
-    value: "unresolved",
-    label: "Unresolved",
-    description: "Chat not yet analyzed or outcome could not be determined",
-  },
-];
-
 const hasRiskOptions = [
   {
     value: "all",
@@ -57,8 +29,6 @@ const hasRiskOptions = [
 interface ChatLogsFiltersProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
-  resolutionStatus: string;
-  onResolutionStatusChange: (value: string) => void;
   hasRisk: string;
   onHasRiskChange: (value: string) => void;
   disabled?: boolean;
@@ -67,8 +37,6 @@ interface ChatLogsFiltersProps {
 export function ChatLogsFilters({
   searchQuery,
   onSearchQueryChange,
-  resolutionStatus,
-  onResolutionStatusChange,
   hasRisk,
   onHasRiskChange,
   disabled,
@@ -82,7 +50,6 @@ export function ChatLogsFilters({
 
   // Debounced auto-submit
   useEffect(() => {
-    // Skip if already in sync to avoid unnecessary updates
     if (localSearch === searchQuery) return;
 
     const timer = setTimeout(() => {
@@ -91,11 +58,6 @@ export function ChatLogsFilters({
 
     return () => clearTimeout(timer);
   }, [localSearch, searchQuery, onSearchQueryChange]);
-
-  const handleStatusChange = (value: string) => {
-    // Convert "all" back to empty string for the API
-    onResolutionStatusChange(value === "all" ? "" : value);
-  };
 
   const handleHasRiskChange = (value: string) => {
     onHasRiskChange(value === "all" ? "" : value);
@@ -110,30 +72,6 @@ export function ChatLogsFilters({
         className="!h-10 flex-1"
         disabled={disabled}
       />
-
-      <Select
-        value={resolutionStatus || "all"}
-        onValueChange={handleStatusChange}
-        disabled={disabled}
-      >
-        <SelectTrigger
-          className="border-border !h-10 w-[150px]"
-          disabled={disabled}
-        >
-          <SelectValue placeholder="All Statuses" />
-        </SelectTrigger>
-        <SelectContent className="w-[280px]">
-          {resolutionStatusOptions.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              description={option.description}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
 
       <Select
         value={hasRisk || "all"}
