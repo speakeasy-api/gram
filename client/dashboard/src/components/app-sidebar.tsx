@@ -99,7 +99,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       : observeActive
         ? "Observe"
         : securityActive
-          ? "Security"
+          ? "Secure"
           : undefined;
 
   // Find the specific active route title for the sliding highlight
@@ -197,7 +197,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
             {/* Security group */}
             <CollapsibleNavGroup
-              label="Security"
+              label="Secure"
               Icon={(p) => <Icon {...p} name="shield" />}
               defaultHref={routes.riskOverview.href()}
               isActive={securityActive}

@@ -88,7 +88,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const activeGroup = settingsActive
     ? "Settings"
     : secureActive
-      ? "Security"
+      ? "Secure"
       : undefined;
 
   const allOrgNavRoutes = [
@@ -181,7 +181,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
             {/* Secure group */}
             <CollapsibleNavGroup
-              label="Security"
+              label="Secure"
               Icon={(p) => <Icon {...p} name="shield-check" />}
               defaultHref={orgRoutes.auditLogs.href()}
               isActive={secureActive}

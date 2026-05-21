@@ -193,9 +193,8 @@ export function NavGroupProvider({
               height: highlightRect.height,
             }}
             transition={{
-              type: "spring",
-              bounce: 0.15,
-              duration: 0.3,
+              duration: 0.25,
+              ease: [0.4, 0, 0.2, 1],
             }}
           />
         )}
@@ -209,7 +208,7 @@ export function NavGroupProvider({
 // Hook for registering item ref + hover handlers
 // ---------------------------------------------------------------------------
 
-const HOVER_INTENT_MS = 600;
+const HOVER_INTENT_MS = 200;
 
 function useNavItem(id: string) {
   const { registerRef, setHoveredItem } = React.useContext(NavGroupContext);
@@ -299,7 +298,7 @@ export function NavButton({
           "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2!",
           active
             ? "text-foreground font-semibold"
-            : "text-muted-foreground font-medium",
+            : "text-muted-foreground hover:text-foreground font-medium",
         )}
       >
         {isLoading ? (
@@ -380,7 +379,7 @@ export function CollapsibleNavGroup({
               "cursor-pointer outline-hidden",
               isOpen
                 ? "text-foreground font-semibold"
-                : "text-muted-foreground font-medium",
+                : "text-muted-foreground hover:text-foreground font-medium",
             )}
           >
             <Icon
@@ -431,7 +430,7 @@ export function CollapsibleNavItem({
             "relative z-[1] flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
             item.active
               ? "text-foreground font-semibold"
-              : "text-muted-foreground",
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           <span className="truncate">{item.title}</span>
