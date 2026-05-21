@@ -62,6 +62,13 @@ function toApiSortOrder(order: SortOrder): ApiSortOrder {
   return order === "asc" ? ApiSortOrder.Asc : ApiSortOrder.Desc;
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string | null): value is string {
+  return !!value && UUID_RE.test(value);
+}
+
 export function LogsAgentsContent() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -137,7 +144,7 @@ export function LogsAgentsContent() {
   }, [urlFrom, urlTo]);
 
   const searchQuery = urlSearch ?? "";
-  const assistantId = urlAssistantId ?? "";
+  const assistantId = isUuid(urlAssistantId) ? urlAssistantId : "";
 
   const { data: filteredAssistant } = useAssistantsGet(
     { id: assistantId },
