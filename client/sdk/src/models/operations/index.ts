@@ -114,6 +114,7 @@ export * from "./getriskoverview.js";
 export * from "./getriskpolicy.js";
 export * from "./getriskpolicystatus.js";
 export * from "./getriskrulebreakdown.js";
+export * from "./getriskuserbreakdown.js";
 export * from "./getrole.js";
 export * from "./getslackapp.js";
 export * from "./getsourceenvironment.js";

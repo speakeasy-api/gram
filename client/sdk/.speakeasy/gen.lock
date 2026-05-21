@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 9059bf025c9899cefe23933959fbc275
+  docChecksum: ef22342f73d27611e29be9f84edfd50e
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -735,7 +735,7 @@ trackedFiles:
   docs/models/components/riskoverviewcategory.md:
     last_write_checksum: sha1:55aedc1ad4b6702d6e8c2a6886d22ecfe7b025a3
   docs/models/components/riskoverviewresult.md:
-    last_write_checksum: sha1:521bfad9745f63a98dd9d9ac49f29dc0455ed780
+    last_write_checksum: sha1:e0b68096b53585d1f4237f1b6d03ca31b53af964
   docs/models/components/riskoverviewtimeseriesfinding.md:
     last_write_checksum: sha1:0afdaa6e2fcd1ae1b74f06cac2286d58a0364544
   docs/models/components/riskoverviewuser.md:
@@ -752,6 +752,8 @@ trackedFiles:
     last_write_checksum: sha1:aef2c541f251a072a6dc773df40baadfb8041be7
   docs/models/components/riskrulebreakdownresult.md:
     last_write_checksum: sha1:c1e2229fa35d47b5a96d056c40f66ea1fdb6d2ff
+  docs/models/components/riskuserbreakdownresult.md:
+    last_write_checksum: sha1:c2aca44d9079416a4a520e104fe7f7407b877304
   docs/models/components/role.md:
     last_write_checksum: sha1:6f03a698bdceb20b54329bc771aac9bbc5beabd6
   docs/models/components/rolegrant.md:
@@ -1734,6 +1736,14 @@ trackedFiles:
     last_write_checksum: sha1:0fdcb81c7d5ac05da9e25386f9fd097314914713
   docs/models/operations/getriskrulebreakdownsecurityoption2.md:
     last_write_checksum: sha1:cbc51e9f5412ed789bf99d0f709bf9382287941b
+  docs/models/operations/getriskuserbreakdownrequest.md:
+    last_write_checksum: sha1:7aa647012720bf849598341d39a73aa332a78d2f
+  docs/models/operations/getriskuserbreakdownsecurity.md:
+    last_write_checksum: sha1:2b8cd3c40bd7a9ee4271cc42ea8ee8c241348f0c
+  docs/models/operations/getriskuserbreakdownsecurityoption1.md:
+    last_write_checksum: sha1:b7396b82e954e40e13acf547d48aae781e477a25
+  docs/models/operations/getriskuserbreakdownsecurityoption2.md:
+    last_write_checksum: sha1:550e4db8a61366edff96dd9ef25a1a0cf7c81bfd
   docs/models/operations/getrolerequest.md:
     last_write_checksum: sha1:1c43a6023513f2280a60b25161106740adb42afc
   docs/models/operations/getrolesecurity.md:
@@ -2737,7 +2747,7 @@ trackedFiles:
   docs/sdks/otelforwarding/README.md:
     last_write_checksum: sha1:9599fbb87a1e733dbaf6180a1602c3ed20e46953
   docs/sdks/overview/README.md:
-    last_write_checksum: sha1:7e7d7f684cab8ed94034d03cbfad93e12535a810
+    last_write_checksum: sha1:4f11b734c3192b06e98d626ec3a843e3c9ae1418
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/plugins/README.md:
@@ -3318,6 +3328,8 @@ trackedFiles:
     last_write_checksum: sha1:10dc0bdfc2d651c3b001ddb50ce4fe7c0a9a2307
   src/funcs/riskOverviewRules.ts:
     last_write_checksum: sha1:82c067707b4b746103da35ad0e8099186d7def06
+  src/funcs/riskOverviewUserBreakdown.ts:
+    last_write_checksum: sha1:782c399244be30dde9b02e52d53a3f0f27cd230a
   src/funcs/riskPoliciesCreate.ts:
     last_write_checksum: sha1:d548436503ebb9b176d75d6726928685d2f7f122
   src/funcs/riskPoliciesDelete.ts:
@@ -4000,7 +4012,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:e91014c51b100b5c38a203c66b042a7641b5b470
+    last_write_checksum: sha1:82cb0d1b9771f1052cf32daf2e2d0b9b191f95d5
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4393,7 +4405,7 @@ trackedFiles:
   src/models/components/riskoverviewcategory.ts:
     last_write_checksum: sha1:22329e90df9b5ab55672520447c182dfb625e4da
   src/models/components/riskoverviewresult.ts:
-    last_write_checksum: sha1:cc5e34b4c10f440caf256b73d1dbcde66e4d17f3
+    last_write_checksum: sha1:d56d4080a1477b32b86c68ffaa65db6356fea8a5
   src/models/components/riskoverviewtimeseriesfinding.ts:
     last_write_checksum: sha1:82f57d664bc8ae3c93578578b1bd9ff950efbb7e
   src/models/components/riskoverviewuser.ts:
@@ -4408,6 +4420,8 @@ trackedFiles:
     last_write_checksum: sha1:1a504cb8dc34c5139ea90058a885a339f581a2c9
   src/models/components/riskrulebreakdownresult.ts:
     last_write_checksum: sha1:6a9605a763b84d7f6ebc4d1fdc5e786c11ca2de6
+  src/models/components/riskuserbreakdownresult.ts:
+    last_write_checksum: sha1:8eb12073e8221606906bcbd25abea020551cec87
   src/models/components/role.ts:
     last_write_checksum: sha1:fb3b36bda8162b32a2a016460bbc212483a38455
   src/models/components/rolegrant.ts:
@@ -5032,6 +5046,8 @@ trackedFiles:
     last_write_checksum: sha1:3b9930142e346fab2a52d191c554ed00f95189d2
   src/models/operations/getriskrulebreakdown.ts:
     last_write_checksum: sha1:4583946f769ac4231ce4ddacd6d63073cad48e9c
+  src/models/operations/getriskuserbreakdown.ts:
+    last_write_checksum: sha1:e74ad976f354475475ed1416203b39bf296e5dca
   src/models/operations/getrole.ts:
     last_write_checksum: sha1:abc068429f77a080d7d1b7f55db371b84f858760
   src/models/operations/getslackapp.ts:
@@ -5072,7 +5088,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:f4043a82a532b6ffe1439073d2e7497bb1e6d59d
+    last_write_checksum: sha1:47b027b3f9d5e70dc4e64f2e48993e8a4164e75e
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5842,7 +5858,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:f5bd33a7615cccb63c1f278bd6e2c6ac8564d424
+    last_write_checksum: sha1:9d11ddd7f6b5fe6c35d038e2f5ae25b74f4c94da
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6246,6 +6262,10 @@ trackedFiles:
     last_write_checksum: sha1:e691913aeef1951fab6b615644c91765d3ce6fa0
   src/react-query/riskRuleBreakdown.ts:
     last_write_checksum: sha1:90bd93108a9af0b99ab38e994c0113ce6be5a28b
+  src/react-query/riskUserBreakdown.core.ts:
+    last_write_checksum: sha1:7c85b66341262c046ec720d4b1d210ff6f8ec836
+  src/react-query/riskUserBreakdown.ts:
+    last_write_checksum: sha1:383f0b3ce12bc26771b348f23b31e8c6dbb5e542
   src/react-query/role.core.ts:
     last_write_checksum: sha1:a9274b43865562043787b65fe4607e3a166879a5
   src/react-query/role.ts:
@@ -6569,7 +6589,7 @@ trackedFiles:
   src/sdk/otelforwarding.ts:
     last_write_checksum: sha1:bdff0a0685140d557a23b72fe543fdc8dbd95996
   src/sdk/overview.ts:
-    last_write_checksum: sha1:bff003c5352fc6c5aa283de694d0cb9848ebf2c0
+    last_write_checksum: sha1:621c4e58757ba91d3135277bd7960ebffefebdcf
   src/sdk/packages.ts:
     id: d71e5e0d5096
     last_write_checksum: sha1:cd45c1746ab2a619fb53b913e0398d80731df1dc
@@ -9850,7 +9870,7 @@ examples:
     speakeasy-default-get-risk-overview:
       responses:
         "200":
-          application/json: {"active_policies": 705076, "findings": 627926, "flagged_sessions": 304659, "from": "2026-06-19T12:28:06.346Z", "messages_scanned": 370773, "time_series_findings": [{"bucket_start": "2024-12-08T02:32:23.245Z", "category": "<value>", "findings": 627926}], "to": "2025-12-13T22:42:16.392Z", "top_categories": [], "top_users": [{"email": "Ocie.Corwin@gmail.com", "external_user_id": "<id>", "findings": 58689}]}
+          application/json: {"active_policies": 705076, "findings": 627926, "flagged_sessions": 304659, "from": "2026-06-19T12:28:06.346Z", "messages_scanned": 370773, "time_series_findings": [{"bucket_start": "2024-12-08T02:32:23.245Z", "category": "<value>", "findings": 627926}], "to": "2025-12-13T22:42:16.392Z", "top_categories": [], "top_rules": [{"findings": 312140, "rule_id": "<id>", "source": "<value>"}], "top_users": [{"email": "Ocie.Corwin@gmail.com", "external_user_id": "<id>", "findings": 58689}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9867,6 +9887,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getRiskUserBreakdown:
+    speakeasy-default-get-risk-user-breakdown:
+      parameters:
+        query:
+          external_user_id: "<id>"
+      responses:
+        "200":
+          application/json: {"categories": [], "external_user_id": "<id>", "findings": 301411, "from": "2024-07-23T11:57:04.397Z", "rules": [], "to": "2026-09-26T23:55:59.257Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

@@ -16,6 +16,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import { getRuleTitleFallback } from "./risk-utils";
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -199,6 +200,24 @@ function SecurityOverviewContent() {
   const overviewQuery = useRiskOverview({ from, to });
   const overview = overviewQuery.data;
 
+  const categoriesIndexHref = useMemo(() => {
+    const r = (
+      routes.riskOverview as unknown as {
+        categoriesIndex?: { href: () => string };
+      }
+    ).categoriesIndex;
+    return r ? `${r.href()}${location.search}` : "";
+  }, [routes.riskOverview, location.search]);
+
+  const usersIndexHref = useMemo(() => {
+    const r = (
+      routes.riskOverview as unknown as {
+        usersIndex?: { href: () => string };
+      }
+    ).usersIndex;
+    return r ? `${r.href()}${location.search}` : "";
+  }, [routes.riskOverview, location.search]);
+
   const topCategories = useMemo<BarDatum[]>(() => {
     const categoryDetailRoute = (
       routes.riskOverview as unknown as {
@@ -219,6 +238,27 @@ function SecurityOverviewContent() {
       };
     });
   }, [overview?.topCategories, routes.riskOverview, location.search]);
+
+  const topRules = useMemo<BarDatum[]>(() => {
+    const riskEventsHref = routes.logs.riskEvents.href();
+    return (overview?.topRules ?? []).map((r) => {
+      const label = r.ruleId ? getRuleTitleFallback(r.ruleId) : "(no rule_id)";
+      const ruleParams = new URLSearchParams();
+      if (r.ruleId) ruleParams.set("rule_id", r.ruleId);
+      const search = location.search
+        ? `${location.search}&${ruleParams.toString()}`
+        : ruleParams.toString()
+          ? `?${ruleParams.toString()}`
+          : "";
+      const href = r.ruleId ? `${riskEventsHref}${search}` : undefined;
+      return {
+        key: r.ruleId || "__none",
+        label,
+        value: Number(r.findings),
+        href,
+      };
+    });
+  }, [overview?.topRules, routes.logs.riskEvents, location.search]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
     const userDetailRoute = (
@@ -316,16 +356,31 @@ function SecurityOverviewContent() {
 
       {overview.activePolicies > 0 && (
         <RiskActivitySection>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             <DashboardChartCard
               title="Top Risk Events by Category"
               empty={!hasFindings || topCategories.length === 0}
+              action={
+                <ViewAllLink
+                  href={categoriesIndexHref}
+                  label="View all categories"
+                />
+              }
             >
               <RankedBarList items={topCategories} />
             </DashboardChartCard>
             <DashboardChartCard
+              title="Top Risk Events by Rule"
+              empty={!hasFindings || topRules.length === 0}
+            >
+              <RankedBarList items={topRules} />
+            </DashboardChartCard>
+            <DashboardChartCard
               title="Users with Most Findings"
               empty={!hasFindings || topUsers.length === 0}
+              action={
+                <ViewAllLink href={usersIndexHref} label="View all users" />
+              }
             >
               <RankedBarList items={topUsers} />
             </DashboardChartCard>
@@ -414,13 +469,15 @@ function DashboardChartCard({
   title,
   empty,
   children,
+  action,
 }: {
   title: string;
   empty: boolean;
   children: ReactNode;
+  action?: ReactNode;
 }) {
   return (
-    <DashboardCard title={title}>
+    <DashboardCard title={title} action={action}>
       {empty ? <ChartEmptyState /> : children}
     </DashboardCard>
   );
@@ -428,6 +485,20 @@ function DashboardChartCard({
 
 function ChartEmptyState() {
   return <p className="text-muted-foreground text-sm">No findings recorded</p>;
+}
+
+function ViewAllLink({ href, label }: { href: string; label: string }) {
+  if (!href) return null;
+  return (
+    <Link
+      to={href}
+      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+      aria-label={label}
+    >
+      <span>{label}</span>
+      <Icon name="arrow-right" className="size-3.5" />
+    </Link>
+  );
 }
 
 function RankedBarList({ items }: { items: BarDatum[] }) {

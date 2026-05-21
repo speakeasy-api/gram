@@ -2206,6 +2206,254 @@ func DecodeGetRiskOverviewResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildGetRiskUserBreakdownRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "getRiskUserBreakdown"
+// endpoint
+func (c *Client) BuildGetRiskUserBreakdownRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRiskUserBreakdownRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getRiskUserBreakdown", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRiskUserBreakdownRequest returns an encoder for requests sent to
+// the risk getRiskUserBreakdown server.
+func EncodeGetRiskUserBreakdownRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetRiskUserBreakdownPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getRiskUserBreakdown", "*risk.GetRiskUserBreakdownPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("external_user_id", p.ExternalUserID)
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRiskUserBreakdownResponse returns a decoder for responses returned
+// by the risk getRiskUserBreakdown endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetRiskUserBreakdownResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRiskUserBreakdownResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRiskUserBreakdownResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			res := NewGetRiskUserBreakdownRiskUserBreakdownResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRiskUserBreakdownUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRiskUserBreakdownForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRiskUserBreakdownBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRiskUserBreakdownNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRiskUserBreakdownConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRiskUserBreakdownUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRiskUserBreakdownInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRiskUserBreakdownInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+				}
+				err = ValidateGetRiskUserBreakdownInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+				}
+				return nil, NewGetRiskUserBreakdownInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRiskUserBreakdownUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+				}
+				err = ValidateGetRiskUserBreakdownUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+				}
+				return nil, NewGetRiskUserBreakdownUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getRiskUserBreakdown", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRiskUserBreakdownGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getRiskUserBreakdown", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRiskRuleBreakdownRequest instantiates a HTTP request object with
 // method and path set to call the "risk" service "getRiskRuleBreakdown"
 // endpoint
@@ -3745,19 +3993,6 @@ func unmarshalRiskOverviewUserResponseBodyToRiskRiskOverviewUser(v *RiskOverview
 	return res
 }
 
-// unmarshalRiskOverviewTimeSeriesFindingResponseBodyToRiskRiskOverviewTimeSeriesFinding
-// builds a value of type *risk.RiskOverviewTimeSeriesFinding from a value of
-// type *RiskOverviewTimeSeriesFindingResponseBody.
-func unmarshalRiskOverviewTimeSeriesFindingResponseBodyToRiskRiskOverviewTimeSeriesFinding(v *RiskOverviewTimeSeriesFindingResponseBody) *risk.RiskOverviewTimeSeriesFinding {
-	res := &risk.RiskOverviewTimeSeriesFinding{
-		BucketStart: *v.BucketStart,
-		Category:    *v.Category,
-		Findings:    *v.Findings,
-	}
-
-	return res
-}
-
 // unmarshalRiskRuleBreakdownEntryResponseBodyToRiskRiskRuleBreakdownEntry
 // builds a value of type *risk.RiskRuleBreakdownEntry from a value of type
 // *RiskRuleBreakdownEntryResponseBody.
@@ -3766,6 +4001,19 @@ func unmarshalRiskRuleBreakdownEntryResponseBodyToRiskRiskRuleBreakdownEntry(v *
 		RuleID:   *v.RuleID,
 		Source:   *v.Source,
 		Findings: *v.Findings,
+	}
+
+	return res
+}
+
+// unmarshalRiskOverviewTimeSeriesFindingResponseBodyToRiskRiskOverviewTimeSeriesFinding
+// builds a value of type *risk.RiskOverviewTimeSeriesFinding from a value of
+// type *RiskOverviewTimeSeriesFindingResponseBody.
+func unmarshalRiskOverviewTimeSeriesFindingResponseBodyToRiskRiskOverviewTimeSeriesFinding(v *RiskOverviewTimeSeriesFindingResponseBody) *risk.RiskOverviewTimeSeriesFinding {
+	res := &risk.RiskOverviewTimeSeriesFinding{
+		BucketStart: *v.BucketStart,
+		Category:    *v.Category,
+		Findings:    *v.Findings,
 	}
 
 	return res

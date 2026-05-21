@@ -123,11 +123,25 @@ function PageHeaderBreadcrumbs({
     .map((segment, index) => {
       const relativeUrl = "/" + allSegments.slice(0, index + 1).join("/");
 
-      let display = segment;
+      // Decode for both display and param matching. `useParams()` returns
+      // decoded values, so an encoded segment like adam%40speakeasy.com would
+      // otherwise miss the toPreserve check and get JS-capitalized.
+      let decoded = segment;
+      try {
+        decoded = decodeURIComponent(segment);
+      } catch {
+        // ignore malformed encodings; fall back to the raw segment
+      }
+
+      let display = decoded;
       if (allSubstitutions[segment]) {
         display = allSubstitutions[segment];
-      } else if (!toPreserve.includes(segment)) {
-        display = capitalize(segment);
+      } else if (allSubstitutions[decoded]) {
+        display = allSubstitutions[decoded];
+      } else if (!toPreserve.includes(decoded) && !decoded.includes("@")) {
+        // Only synthesize a Title-Case display for path-segment slugs.
+        // Route params and email-like identifiers keep their original casing.
+        display = capitalize(decoded);
       }
 
       return {

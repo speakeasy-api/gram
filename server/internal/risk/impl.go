@@ -780,7 +780,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		ProjectID: *authCtx.ProjectID,
 		FromTime:  window.from,
 		ToTime:    window.to,
-		RowLimit:  10,
+		// Returns enough rows for the "view all users" page to show the full
+		// long-tail without pagination. The main /risk-overview widget only
+		// renders the top 10 of these.
+		RowLimit: 200,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users").Log(ctx, s.logger)
@@ -795,7 +798,26 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series findings").Log(ctx, s.logger)
 	}
 
+	ruleRows, err := s.repo.ListRiskOverviewTopRules(ctx, repo.ListRiskOverviewTopRulesParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+		RowLimit:  10,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top rules").Log(ctx, s.logger)
+	}
+
 	topCategories := riskOverviewTopCategories(timeSeriesRows, 10)
+
+	topRules := make([]*gen.RiskRuleBreakdownEntry, 0, len(ruleRows))
+	for _, row := range ruleRows {
+		topRules = append(topRules, &gen.RiskRuleBreakdownEntry{
+			RuleID:   row.RuleID,
+			Source:   row.Source,
+			Findings: row.Findings,
+		})
+	}
 
 	topUsers := make([]*gen.RiskOverviewUser, 0, len(userRows))
 	for _, row := range userRows {
@@ -824,6 +846,7 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		ActivePolicies:     counts.ActivePolicies,
 		TopCategories:      topCategories,
 		TopUsers:           topUsers,
+		TopRules:           topRules,
 		TimeSeriesFindings: timeSeriesFindings,
 	}, nil
 }
@@ -1002,6 +1025,71 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		}
 	}
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
+}
+
+func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRiskUserBreakdownPayload) (*gen.RiskUserBreakdownResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").Log(ctx, s.logger)
+	}
+	window := riskOverviewWindowParams(from, to)
+
+	categoryRows, err := s.repo.ListRiskUserCategoryBreakdown(ctx, repo.ListRiskUserCategoryBreakdownParams{
+		ProjectID:      *authCtx.ProjectID,
+		FromTime:       window.from,
+		ToTime:         window.to,
+		ExternalUserID: payload.ExternalUserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user category breakdown").Log(ctx, s.logger)
+	}
+
+	ruleRows, err := s.repo.ListRiskUserRuleBreakdown(ctx, repo.ListRiskUserRuleBreakdownParams{
+		ProjectID:      *authCtx.ProjectID,
+		FromTime:       window.from,
+		ToTime:         window.to,
+		ExternalUserID: payload.ExternalUserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user rule breakdown").Log(ctx, s.logger)
+	}
+
+	categories := make([]*gen.RiskOverviewCategory, 0, len(categoryRows))
+	var total int64
+	for _, row := range categoryRows {
+		categories = append(categories, &gen.RiskOverviewCategory{
+			Category: row.Category,
+			Findings: row.Findings,
+		})
+		total += row.Findings
+	}
+
+	rules := make([]*gen.RiskRuleBreakdownEntry, 0, len(ruleRows))
+	for _, row := range ruleRows {
+		rules = append(rules, &gen.RiskRuleBreakdownEntry{
+			RuleID:   row.RuleID,
+			Source:   row.Source,
+			Findings: row.Findings,
+		})
+	}
+
+	return &gen.RiskUserBreakdownResult{
+		From:           from.UTC().Format(time.RFC3339),
+		To:             to.UTC().Format(time.RFC3339),
+		ExternalUserID: payload.ExternalUserID,
+		Findings:       total,
+		Categories:     categories,
+		Rules:          rules,
+	}, nil
 }
 
 func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRiskRuleBreakdownPayload) (*gen.RiskRuleBreakdownResult, error) {

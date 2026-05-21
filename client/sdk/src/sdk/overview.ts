@@ -4,6 +4,7 @@
 
 import { riskOverviewGet } from "../funcs/riskOverviewGet.js";
 import { riskOverviewRules } from "../funcs/riskOverviewRules.js";
+import { riskOverviewUserBreakdown } from "../funcs/riskOverviewUserBreakdown.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -41,6 +42,25 @@ export class Overview extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.RiskRuleBreakdownResult> {
     return unwrapAsync(riskOverviewRules(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getRiskUserBreakdown risk
+   *
+   * @remarks
+   * Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+   */
+  async userBreakdown(
+    request: operations.GetRiskUserBreakdownRequest,
+    security?: operations.GetRiskUserBreakdownSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RiskUserBreakdownResult> {
+    return unwrapAsync(riskOverviewUserBreakdown(
       this,
       request,
       security,

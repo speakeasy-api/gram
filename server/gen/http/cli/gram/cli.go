@@ -107,7 +107,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-overview|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-overview|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -1247,6 +1247,14 @@ func ParseEndpoint(
 		riskGetRiskOverviewSessionTokenFlag     = riskGetRiskOverviewFlags.String("session-token", "", "")
 		riskGetRiskOverviewProjectSlugInputFlag = riskGetRiskOverviewFlags.String("project-slug-input", "", "")
 
+		riskGetRiskUserBreakdownFlags                = flag.NewFlagSet("get-risk-user-breakdown", flag.ExitOnError)
+		riskGetRiskUserBreakdownExternalUserIDFlag   = riskGetRiskUserBreakdownFlags.String("external-user-id", "REQUIRED", "")
+		riskGetRiskUserBreakdownFromFlag             = riskGetRiskUserBreakdownFlags.String("from", "", "")
+		riskGetRiskUserBreakdownToFlag               = riskGetRiskUserBreakdownFlags.String("to", "", "")
+		riskGetRiskUserBreakdownApikeyTokenFlag      = riskGetRiskUserBreakdownFlags.String("apikey-token", "", "")
+		riskGetRiskUserBreakdownSessionTokenFlag     = riskGetRiskUserBreakdownFlags.String("session-token", "", "")
+		riskGetRiskUserBreakdownProjectSlugInputFlag = riskGetRiskUserBreakdownFlags.String("project-slug-input", "", "")
+
 		riskGetRiskRuleBreakdownFlags                = flag.NewFlagSet("get-risk-rule-breakdown", flag.ExitOnError)
 		riskGetRiskRuleBreakdownCategoryFlag         = riskGetRiskRuleBreakdownFlags.String("category", "REQUIRED", "")
 		riskGetRiskRuleBreakdownFromFlag             = riskGetRiskRuleBreakdownFlags.String("from", "", "")
@@ -1966,6 +1974,7 @@ func ParseEndpoint(
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsByChatFlags.Usage = riskListRiskResultsByChatUsage
 	riskGetRiskOverviewFlags.Usage = riskGetRiskOverviewUsage
+	riskGetRiskUserBreakdownFlags.Usage = riskGetRiskUserBreakdownUsage
 	riskGetRiskRuleBreakdownFlags.Usage = riskGetRiskRuleBreakdownUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskListShadowMCPApprovalsFlags.Usage = riskListShadowMCPApprovalsUsage
@@ -2908,6 +2917,9 @@ func ParseEndpoint(
 
 			case "get-risk-overview":
 				epf = riskGetRiskOverviewFlags
+
+			case "get-risk-user-breakdown":
+				epf = riskGetRiskUserBreakdownFlags
 
 			case "get-risk-rule-breakdown":
 				epf = riskGetRiskRuleBreakdownFlags
@@ -3931,6 +3943,9 @@ func ParseEndpoint(
 			case "get-risk-overview":
 				endpoint = c.GetRiskOverview()
 				data, err = riskc.BuildGetRiskOverviewPayload(*riskGetRiskOverviewFromFlag, *riskGetRiskOverviewToFlag, *riskGetRiskOverviewApikeyTokenFlag, *riskGetRiskOverviewSessionTokenFlag, *riskGetRiskOverviewProjectSlugInputFlag)
+			case "get-risk-user-breakdown":
+				endpoint = c.GetRiskUserBreakdown()
+				data, err = riskc.BuildGetRiskUserBreakdownPayload(*riskGetRiskUserBreakdownExternalUserIDFlag, *riskGetRiskUserBreakdownFromFlag, *riskGetRiskUserBreakdownToFlag, *riskGetRiskUserBreakdownApikeyTokenFlag, *riskGetRiskUserBreakdownSessionTokenFlag, *riskGetRiskUserBreakdownProjectSlugInputFlag)
 			case "get-risk-rule-breakdown":
 				endpoint = c.GetRiskRuleBreakdown()
 				data, err = riskc.BuildGetRiskRuleBreakdownPayload(*riskGetRiskRuleBreakdownCategoryFlag, *riskGetRiskRuleBreakdownFromFlag, *riskGetRiskRuleBreakdownToFlag, *riskGetRiskRuleBreakdownApikeyTokenFlag, *riskGetRiskRuleBreakdownSessionTokenFlag, *riskGetRiskRuleBreakdownProjectSlugInputFlag)
@@ -8861,6 +8876,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-overview: Get risk overview metrics and trend data for the current project.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-user-breakdown: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-rule-breakdown: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approvals: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
@@ -9099,6 +9115,34 @@ func riskGetRiskOverviewUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-overview --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskGetRiskUserBreakdownUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-user-breakdown", os.Args[0])
+	fmt.Fprint(os.Stderr, " -external-user-id STRING")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -external-user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-user-breakdown --external-user-id \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskRuleBreakdownUsage() {

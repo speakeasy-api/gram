@@ -86,6 +86,18 @@ export function RevealAllProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Hook for other components (e.g. ChatDetailPanel's MaskedMatchInline) to opt
+// into the page-level reveal-all toggle. Returns null when no provider is in
+// the tree so consumers can fall back to local-only state.
+export function useRevealAll(): {
+  revealAll: boolean;
+  generation: number;
+} | null {
+  const ctx = useContext(RevealAllContext);
+  if (!ctx) return null;
+  return { revealAll: ctx.revealAll, generation: ctx.generation };
+}
+
 export function RevealAllToggle({ className }: { className?: string }) {
   const ctx = useContext(RevealAllContext);
   if (!ctx) return null;

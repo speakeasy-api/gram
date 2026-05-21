@@ -16,6 +16,7 @@ import type {
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useRevealAll } from "@/pages/security/risk-ui";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -848,7 +849,12 @@ function MaskedContent({ onReveal }: { onReveal: () => void }) {
 }
 
 function MaskedMatchInline({ value }: { value: string }) {
-  const [revealed, setRevealed] = useState(false);
+  const reveal = useRevealAll();
+  const [revealed, setRevealed] = useState(reveal?.revealAll ?? false);
+  useEffect(() => {
+    if (reveal) setRevealed(reveal.revealAll);
+    // Re-sync on every global toggle, even when its value matches local state.
+  }, [reveal?.revealAll, reveal?.generation, reveal]);
 
   if (!revealed) {
     return (

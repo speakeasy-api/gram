@@ -19,6 +19,10 @@ import {
   RiskOverviewUser,
   RiskOverviewUser$inboundSchema,
 } from "./riskoverviewuser.js";
+import {
+  RiskRuleBreakdownEntry,
+  RiskRuleBreakdownEntry$inboundSchema,
+} from "./riskrulebreakdownentry.js";
 
 export type RiskOverviewResult = {
   /**
@@ -54,6 +58,10 @@ export type RiskOverviewResult = {
    */
   topCategories: Array<RiskOverviewCategory>;
   /**
+   * Top rule_ids by finding count.
+   */
+  topRules: Array<RiskRuleBreakdownEntry>;
+  /**
    * Top users by finding count.
    */
   topUsers: Array<RiskOverviewUser>;
@@ -76,6 +84,7 @@ export const RiskOverviewResult$inboundSchema: z.ZodMiniType<
     time_series_findings: z.array(RiskOverviewTimeSeriesFinding$inboundSchema),
     to: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     top_categories: z.array(RiskOverviewCategory$inboundSchema),
+    top_rules: z.array(RiskRuleBreakdownEntry$inboundSchema),
     top_users: z.array(RiskOverviewUser$inboundSchema),
   }),
   z.transform((v) => {
@@ -85,6 +94,7 @@ export const RiskOverviewResult$inboundSchema: z.ZodMiniType<
       "messages_scanned": "messagesScanned",
       "time_series_findings": "timeSeriesFindings",
       "top_categories": "topCategories",
+      "top_rules": "topRules",
       "top_users": "topUsers",
     });
   }),

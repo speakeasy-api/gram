@@ -11,7 +11,10 @@ import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import {
   useListChatsWithResolutions,
   useRiskOverview,
+  useRiskUserBreakdown,
 } from "@gram/client/react-query/index.js";
+import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import { getRuleTitleFallback } from "./risk-utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router";
@@ -103,6 +106,12 @@ function RiskOverviewUserDetailContent() {
     { throwOnError: false },
   );
 
+  const breakdownQuery = useRiskUserBreakdown(
+    { externalUserId, from, to },
+    undefined,
+    { throwOnError: false },
+  );
+
   const chats = chatsQuery.data?.chats ?? [];
   const totalChats = chatsQuery.data?.total ?? chats.length;
   const userLabel = userEntry?.email || externalUserId || "Unknown user";
@@ -122,7 +131,9 @@ function RiskOverviewUserDetailContent() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title stage="beta">{userLabel}</Page.Section.Title>
+        <Page.Section.Title stage="beta" className="normal-case">
+          {userLabel}
+        </Page.Section.Title>
         <Page.Section.Description>
           Risk findings and chat sessions for this user
           {rangeLabel && ` across ${rangeLabel}.`}
@@ -142,6 +153,16 @@ function RiskOverviewUserDetailContent() {
                 value={totalChats}
                 format="number"
                 icon="message-square"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <CategoryBreakdown
+                categories={breakdownQuery.data?.categories ?? []}
+                isLoading={breakdownQuery.isLoading}
+              />
+              <RuleBreakdown
+                rules={breakdownQuery.data?.rules ?? []}
+                isLoading={breakdownQuery.isLoading}
               />
             </div>
             <ChatList
@@ -248,5 +269,120 @@ function ChatList({
         </li>
       ))}
     </ul>
+  );
+}
+
+function CategoryBreakdown({
+  categories,
+  isLoading,
+}: {
+  categories: Array<{ category: string; findings: number }>;
+  isLoading: boolean;
+}) {
+  if (isLoading && categories.length === 0) {
+    return (
+      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
+        Loading category breakdown...
+      </div>
+    );
+  }
+  if (categories.length === 0) return null;
+  const max = categories[0]?.findings || 1;
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <h4 className="text-sm font-medium">Findings by category</h4>
+      <ul className="space-y-2">
+        {categories.map((c, i) => {
+          const meta = RULE_CATEGORY_META[c.category as RuleCategory];
+          const label = meta?.label ?? c.category;
+          return (
+            <li key={c.category} className="flex items-center gap-3">
+              <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
+                {i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="truncate text-sm">{label}</span>
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {Number(c.findings).toLocaleString()}
+                  </span>
+                </div>
+                <div className="bg-muted h-1 w-full rounded-full">
+                  <div
+                    className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
+                    style={{
+                      width: `${(Number(c.findings) / Number(max)) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function RuleBreakdown({
+  rules,
+  isLoading,
+}: {
+  rules: Array<{ ruleId: string; source: string; findings: number }>;
+  isLoading: boolean;
+}) {
+  if (isLoading && rules.length === 0) {
+    return (
+      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
+        Loading rule breakdown...
+      </div>
+    );
+  }
+  if (rules.length === 0) return null;
+  const max = rules[0]?.findings || 1;
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <h4 className="text-sm font-medium">Findings by rule</h4>
+      <ul className="space-y-2">
+        {rules.map((r, i) => {
+          const label = r.ruleId
+            ? getRuleTitleFallback(r.ruleId)
+            : "(no rule_id)";
+          return (
+            <li
+              key={r.ruleId || `__none_${i}`}
+              className="flex items-center gap-3"
+            >
+              <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
+                {i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span
+                    className="truncate text-sm"
+                    title={r.ruleId || undefined}
+                  >
+                    {label}
+                  </span>
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {Number(r.findings).toLocaleString()}
+                  </span>
+                </div>
+                <div className="bg-muted h-1 w-full rounded-full">
+                  <div
+                    className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
+                    style={{
+                      width: `${(Number(r.findings) / Number(max)) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

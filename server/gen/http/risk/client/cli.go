@@ -518,6 +518,63 @@ func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOver
 	return v, nil
 }
 
+// BuildGetRiskUserBreakdownPayload builds the payload for the risk
+// getRiskUserBreakdown endpoint from CLI flags.
+func BuildGetRiskUserBreakdownPayload(riskGetRiskUserBreakdownExternalUserID string, riskGetRiskUserBreakdownFrom string, riskGetRiskUserBreakdownTo string, riskGetRiskUserBreakdownApikeyToken string, riskGetRiskUserBreakdownSessionToken string, riskGetRiskUserBreakdownProjectSlugInput string) (*risk.GetRiskUserBreakdownPayload, error) {
+	var err error
+	var externalUserID string
+	{
+		externalUserID = riskGetRiskUserBreakdownExternalUserID
+	}
+	var from *string
+	{
+		if riskGetRiskUserBreakdownFrom != "" {
+			from = &riskGetRiskUserBreakdownFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskGetRiskUserBreakdownTo != "" {
+			to = &riskGetRiskUserBreakdownTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskUserBreakdownApikeyToken != "" {
+			apikeyToken = &riskGetRiskUserBreakdownApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskUserBreakdownSessionToken != "" {
+			sessionToken = &riskGetRiskUserBreakdownSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskUserBreakdownProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskUserBreakdownProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskUserBreakdownPayload{}
+	v.ExternalUserID = externalUserID
+	v.From = from
+	v.To = to
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskRuleBreakdownPayload builds the payload for the risk
 // getRiskRuleBreakdown endpoint from CLI flags.
 func BuildGetRiskRuleBreakdownPayload(riskGetRiskRuleBreakdownCategory string, riskGetRiskRuleBreakdownFrom string, riskGetRiskRuleBreakdownTo string, riskGetRiskRuleBreakdownApikeyToken string, riskGetRiskRuleBreakdownSessionToken string, riskGetRiskRuleBreakdownProjectSlugInput string) (*risk.GetRiskRuleBreakdownPayload, error) {

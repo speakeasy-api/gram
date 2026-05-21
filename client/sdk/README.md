@@ -423,6 +423,7 @@ run();
 
 * [get](docs/sdks/overview/README.md#get) - getRiskOverview risk
 * [rules](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+* [userBreakdown](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 
 ### [Risk.Policies](docs/sdks/policies/README.md)
 
@@ -745,6 +746,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskCapabilitiesGet`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`riskOverviewRules`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`riskOverviewUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`riskPoliciesCreate`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`riskPoliciesDelete`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 - [`riskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
@@ -1047,6 +1049,7 @@ To learn about this feature and how to get started, check
 - [`useRiskPoliciesTriggerMutation`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry

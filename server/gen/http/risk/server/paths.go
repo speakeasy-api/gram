@@ -52,6 +52,11 @@ func GetRiskOverviewRiskPath() string {
 	return "/rpc/risk.overview.get"
 }
 
+// GetRiskUserBreakdownRiskPath returns the URL path to the risk service getRiskUserBreakdown HTTP endpoint.
+func GetRiskUserBreakdownRiskPath() string {
+	return "/rpc/risk.overview.userBreakdown"
+}
+
 // GetRiskRuleBreakdownRiskPath returns the URL path to the risk service getRiskRuleBreakdown HTTP endpoint.
 func GetRiskRuleBreakdownRiskPath() string {
 	return "/rpc/risk.overview.rules"

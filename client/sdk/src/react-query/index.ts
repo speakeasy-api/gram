@@ -204,6 +204,7 @@ export * from "./riskPoliciesStatus.js";
 export * from "./riskPoliciesTrigger.js";
 export * from "./riskPoliciesUpdate.js";
 export * from "./riskRuleBreakdown.js";
+export * from "./riskUserBreakdown.js";
 export * from "./role.js";
 export * from "./roles.js";
 export * from "./searchChats.js";

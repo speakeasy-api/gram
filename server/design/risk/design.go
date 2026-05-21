@@ -311,6 +311,42 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskOverview"}`)
 	})
 
+	Method("getRiskUserBreakdown", func() {
+		Description("Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("external_user_id", String, "External user identifier to scope the breakdown to.")
+			Attribute("from", String, "Inclusive start of the window. Defaults to the same 7-day window as the overview.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+			Required("external_user_id")
+		})
+
+		Result(RiskUserBreakdownResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.overview.userBreakdown")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("external_user_id")
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskUserBreakdown")
+		Meta("openapi:extension:x-speakeasy-group", "risk.overview")
+		Meta("openapi:extension:x-speakeasy-name-override", "userBreakdown")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUserBreakdown"}`)
+	})
+
 	Method("getRiskRuleBreakdown", func() {
 		Description("Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.")
 
@@ -533,9 +569,10 @@ var RiskOverviewResult = Type("RiskOverviewResult", func() {
 	Attribute("active_policies", Int64, "Enabled risk policies for the current project.")
 	Attribute("top_categories", ArrayOf(RiskOverviewCategory), "Top policy categories by finding count.")
 	Attribute("top_users", ArrayOf(RiskOverviewUser), "Top users by finding count.")
+	Attribute("top_rules", ArrayOf(RiskRuleBreakdownEntry), "Top rule_ids by finding count.")
 	Attribute("time_series_findings", ArrayOf(RiskOverviewTimeSeriesFinding), "Time-series finding counts by category in the window.")
 
-	Required("from", "to", "messages_scanned", "findings", "flagged_sessions", "active_policies", "top_categories", "top_users", "time_series_findings")
+	Required("from", "to", "messages_scanned", "findings", "flagged_sessions", "active_policies", "top_categories", "top_users", "top_rules", "time_series_findings")
 })
 
 var RiskOverviewCategory = Type("RiskOverviewCategory", func() {
@@ -551,6 +588,17 @@ var RiskRuleBreakdownEntry = Type("RiskRuleBreakdownEntry", func() {
 	Attribute("findings", Int64, "Finding count for this rule within the window.")
 
 	Required("rule_id", "source", "findings")
+})
+
+var RiskUserBreakdownResult = Type("RiskUserBreakdownResult", func() {
+	Attribute("from", String, "Inclusive start of the window used.", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive end of the window used.", func() { Format(FormatDateTime) })
+	Attribute("external_user_id", String, "External user the breakdown is scoped to.")
+	Attribute("findings", Int64, "Total findings for this user in the window.")
+	Attribute("categories", ArrayOf(RiskOverviewCategory), "Category breakdown for this user, ordered by finding count descending.")
+	Attribute("rules", ArrayOf(RiskRuleBreakdownEntry), "Rule_id breakdown for this user, ordered by finding count descending.")
+
+	Required("from", "to", "external_user_id", "findings", "categories", "rules")
 })
 
 var RiskRuleBreakdownResult = Type("RiskRuleBreakdownResult", func() {
