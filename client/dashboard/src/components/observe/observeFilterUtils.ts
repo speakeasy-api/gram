@@ -1,5 +1,6 @@
 import type { DateRangePreset } from "@gram-ai/elements";
 import { Operator, type LogFilter } from "@gram/client/models/components";
+import type { AccessMember } from "@gram/client/models/components";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 
 export const validPresets: DateRangePreset[] = [
@@ -42,20 +43,33 @@ export function safeBase64Decode(str: string): string | null {
   }
 }
 
+export function resolveRoleEmails(
+  roleIds: string[],
+  members: AccessMember[],
+): string[] {
+  if (roleIds.length === 0) return [];
+  const roleSet = new Set(roleIds);
+  const emails = members
+    .filter((m) => roleSet.has(m.roleId))
+    .map((m) => m.email);
+  return [...new Set(emails)];
+}
+
 export function buildLogFilters(
   activeFilters: FilterChip[],
+  roleEmails: string[] = [],
 ): LogFilter[] | undefined {
   const byPath = new Map<string, string[]>();
   for (const chip of activeFilters) {
     byPath.set(chip.path, [...(byPath.get(chip.path) ?? []), ...chip.filters]);
   }
+  if (roleEmails.length > 0) {
+    const existing = byPath.get("user.email") ?? [];
+    byPath.set("user.email", [...new Set([...existing, ...roleEmails])]);
+  }
   const filters: LogFilter[] = [];
   for (const [path, values] of byPath) {
-    filters.push({
-      path,
-      operator: Operator.In,
-      values,
-    });
+    filters.push({ path, operator: Operator.In, values });
   }
   return filters.length > 0 ? filters : undefined;
 }
