@@ -50,6 +50,7 @@ export function buildListChatsWithResolutionsQuery(
       search: request?.search,
       externalUserId: request?.externalUserId,
       resolutionStatus: request?.resolutionStatus,
+      hasRisk: request?.hasRisk,
       from: request?.from,
       to: request?.to,
       limit: request?.limit,
@@ -89,6 +90,7 @@ export function queryKeyListChatsWithResolutions(
     search?: string | undefined;
     externalUserId?: string | undefined;
     resolutionStatus?: string | undefined;
+    hasRisk?: operations.HasRisk | undefined;
     from?: Date | undefined;
     to?: Date | undefined;
     limit?: number | undefined;

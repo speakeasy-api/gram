@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 1cf358116f46d6da3b866290e72c4734
+  docChecksum: a281fd317f6191e24f9a743fcfbace10
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -141,13 +141,13 @@ trackedFiles:
   docs/models/components/challengeresolutionresolutiontype.md:
     last_write_checksum: sha1:16b41a0d2e48e14d61e82ae01899bb393db826c3
   docs/models/components/chat.md:
-    last_write_checksum: sha1:32642a251ae24251702ff26fdd0aa32a14b2763a
+    last_write_checksum: sha1:3c8630871919b891da1b77fe06f7951991af82bf
   docs/models/components/chatmessage.md:
     last_write_checksum: sha1:0d8a81d4c4f0d1f45ae7c5ca78a66be74bf7d74d
   docs/models/components/chatoverview.md:
-    last_write_checksum: sha1:c4e133a5f7e54105e65828552f5fbc65c24e7e0d
+    last_write_checksum: sha1:f3743d20762b00bf198c29d571fc28d5fecdaecc
   docs/models/components/chatoverviewwithresolutions.md:
-    last_write_checksum: sha1:c1b39df1207cb6476230ca6710e85e1bc23c06bd
+    last_write_checksum: sha1:53392af0ac3744ef411c8ddaad2d97839cfeffd3
   docs/models/components/chatresolution.md:
     last_write_checksum: sha1:f056a2c0377fd38d04bc53c8a3ebe45ede6abff2
   docs/models/components/chatsummary.md:
@@ -427,9 +427,9 @@ trackedFiles:
   docs/models/components/listchallengesresult.md:
     last_write_checksum: sha1:ccb60abaf74490f8f8b4b30f36892eaced6f2bc6
   docs/models/components/listchatsresult.md:
-    last_write_checksum: sha1:3b302bfbd5a1a3a56e02091da748dcf7d5b90522
+    last_write_checksum: sha1:77ce83961ddeffb080c3e8ef65dc0d63c677710f
   docs/models/components/listchatswithresolutionsresult.md:
-    last_write_checksum: sha1:b40cd5b165fd356bfa92708332fd97ba46038b5b
+    last_write_checksum: sha1:2d3862b21b88f053ff5cf18640188943ae3161b3
   docs/models/components/listdeploymentresult.md:
     last_write_checksum: sha1:e81f46e1358dfcee125fcfb93dfb636b707be998
   docs/models/components/listenvironmentsresult.md:
@@ -1784,6 +1784,8 @@ trackedFiles:
     last_write_checksum: sha1:a06c5dcb7906d3d343f7ae1e04a7a472ddcec83c
   docs/models/operations/getusersessionissuersecurityoption2.md:
     last_write_checksum: sha1:f68bfcd76ebe89e7aeefe17e93a68feec8bbef70
+  docs/models/operations/hasrisk.md:
+    last_write_checksum: sha1:76c9013597780a0d352e7017e3408921b9d88a82
   docs/models/operations/hooksnumberclauderequest.md:
     last_write_checksum: sha1:94e1eb49f5dd5c57ec490d1cf4d9f076e8c0f33b
   docs/models/operations/hooksnumbercodexrequest.md:
@@ -1871,7 +1873,7 @@ trackedFiles:
   docs/models/operations/listchatssecurityoption2.md:
     last_write_checksum: sha1:ac4329bd5c3d3cd40d37cbce5ac96671d710c3cc
   docs/models/operations/listchatswithresolutionsrequest.md:
-    last_write_checksum: sha1:56204d35c89b8e6d9c95a1dc1cede3c30e426181
+    last_write_checksum: sha1:78011871b0d6abcb08ce83492c4b0d5cc689ea03
   docs/models/operations/listchatswithresolutionssecurity.md:
     last_write_checksum: sha1:7e130e49b8de4408cc9f7dc45f57459f9789ef64
   docs/models/operations/listchatswithresolutionssecurityoption1.md:
@@ -2935,7 +2937,7 @@ trackedFiles:
     last_write_checksum: sha1:52c467e5b7457addcc83ab385f7511f89195e165
     pristine_git_object: 814ef1470b3208dac27bc0c097002de03dbda395
   src/funcs/chatListChatsWithResolutions.ts:
-    last_write_checksum: sha1:b9ecda1c1c2329654d44c165c71582a43ae8b02d
+    last_write_checksum: sha1:06d2f35135151303ac3847c784f4a2f6bfc1df2d
   src/funcs/chatLoad.ts:
     id: 79e579c74f00
     last_write_checksum: sha1:9f8e1b2b8dbcffa33bbf2a8d46a5acc4a0964512
@@ -3666,7 +3668,7 @@ trackedFiles:
     last_write_checksum: sha1:3eee5fef5022dacd6465f10a32bc64d2c8a5d42d
   src/models/components/chat.ts:
     id: 9ced5127d17b
-    last_write_checksum: sha1:108b73cd523f5ec480b55de974397968082fef59
+    last_write_checksum: sha1:fc138aa9830d8be7783abdb5b627a2dfb3af8f66
     pristine_git_object: d74d2ff627fec7af63710786888c09ce919dbf87
   src/models/components/chatmessage.ts:
     id: 64060926ed56
@@ -3674,10 +3676,10 @@ trackedFiles:
     pristine_git_object: 9bdc3bfc1f7458c0044bb61b2382f8301c0828bf
   src/models/components/chatoverview.ts:
     id: b060f6650726
-    last_write_checksum: sha1:746a5ee6e0dcd21a36e18d4eee702c17953fa79a
+    last_write_checksum: sha1:7c5e2fb64e31589ccf2a3248f21c6bcdffa0fad1
     pristine_git_object: 60c3257be0907ff0b08bb4ee07a7dd6e300350be
   src/models/components/chatoverviewwithresolutions.ts:
-    last_write_checksum: sha1:e03e62f5e0adf2aa446fc9b83ef3f910ab85eb92
+    last_write_checksum: sha1:9b88c402636668997b942214b79fe136997d65ec
   src/models/components/chatresolution.ts:
     last_write_checksum: sha1:9084f3031124e2ab8ef5698a96e7a5a5f43bf71b
   src/models/components/chatsummary.ts:
@@ -5087,7 +5089,7 @@ trackedFiles:
     last_write_checksum: sha1:a25bdedbea7ff4479e003a0939eb5488cc3a8526
     pristine_git_object: ae806c76bc527b24fab19883a174e5a94f065fe2
   src/models/operations/listchatswithresolutions.ts:
-    last_write_checksum: sha1:b55329f39189ee33dd2f18c4b24edd83f85f582c
+    last_write_checksum: sha1:f6de98842c26ec1a506c65ccd6d5f61870995023
   src/models/operations/listcollections.ts:
     last_write_checksum: sha1:7008055d09d615b4fe08ec3e801dc289b8cc34f3
   src/models/operations/listcollectionservers.ts:
@@ -5887,9 +5889,9 @@ trackedFiles:
     last_write_checksum: sha1:4296c9e2d9e0e658743349149c61fe6d88cee251
     pristine_git_object: bea716c86a525c16fb766cc3d523b64bcd0e67b6
   src/react-query/listChatsWithResolutions.core.ts:
-    last_write_checksum: sha1:44b0b122e433a1b328c1462d24f99df7b015831b
+    last_write_checksum: sha1:fa29807e0f17cf9515837c32abf0a26b2b32bc47
   src/react-query/listChatsWithResolutions.ts:
-    last_write_checksum: sha1:e16d86c7364818e44f0d22913e10425c68a69bad
+    last_write_checksum: sha1:756bbeb1c52f2168d26a0c796443e9ed985dec0b
   src/react-query/listCollections.core.ts:
     last_write_checksum: sha1:ffbfa28d9a9edac27a4609e5e61f8c5241af6bf0
   src/react-query/listCollections.ts:
@@ -6792,7 +6794,7 @@ examples:
     speakeasy-default-list-chats:
       responses:
         "200":
-          application/json: {"chats": [{"created_at": "2024-09-09T21:12:11.561Z", "id": "<id>", "last_message_timestamp": "2026-08-06T02:21:11.404Z", "num_messages": 448273, "title": "<value>", "updated_at": "2023-02-28T09:13:49.707Z", "user_id": "<id>"}]}
+          application/json: {"chats": [{"created_at": "2024-09-09T21:12:11.561Z", "id": "<id>", "last_message_timestamp": "2026-08-06T02:21:11.404Z", "num_messages": 448273, "risk_findings_count": 865053, "title": "<value>", "updated_at": "2023-02-28T09:13:49.707Z", "user_id": "<id>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -6804,7 +6806,7 @@ examples:
           id: "<id>"
       responses:
         "200":
-          application/json: {"created_at": "2024-04-09T14:22:10.370Z", "id": "<id>", "last_message_timestamp": "2025-04-09T14:22:10.370Z", "messages": [{"created_at": "2025-11-05T12:22:55.772Z", "generation": 423904, "id": "<id>", "model": "Aventador", "role": "<value>"}], "num_messages": 795032, "title": "<value>", "updated_at": "2024-03-05T16:47:00.180Z"}
+          application/json: {"created_at": "2024-04-09T14:22:10.370Z", "id": "<id>", "last_message_timestamp": "2025-04-09T14:22:10.370Z", "messages": [{"created_at": "2025-11-05T12:22:55.772Z", "generation": 423904, "id": "<id>", "model": "Aventador", "role": "<value>"}], "num_messages": 795032, "risk_findings_count": 423904, "title": "<value>", "updated_at": "2024-03-05T16:47:00.180Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7932,7 +7934,7 @@ examples:
           sort_order: "desc"
       responses:
         "200":
-          application/json: {"chats": [{"created_at": "2024-03-12T14:08:15.680Z", "id": "<id>", "last_message_timestamp": "2026-08-25T16:34:39.162Z", "num_messages": 236956, "resolutions": [{"created_at": "2024-12-29T23:05:18.944Z", "id": "7388f705-63e1-45b3-9e77-6296c7937c05", "message_ids": ["abc-123", "def-456"], "resolution": "failure", "resolution_notes": "<value>", "score": 789128, "user_goal": "<value>"}], "title": "<value>", "updated_at": "2026-08-30T11:51:39.615Z"}], "total": 52256}
+          application/json: {"chats": [{"created_at": "2024-03-12T14:08:15.680Z", "id": "<id>", "last_message_timestamp": "2026-08-25T16:34:39.162Z", "num_messages": 236956, "resolutions": [{"created_at": "2024-12-29T23:05:18.944Z", "id": "7388f705-63e1-45b3-9e77-6296c7937c05", "message_ids": ["abc-123", "def-456"], "resolution": "failure", "resolution_notes": "<value>", "score": 789128, "user_goal": "<value>"}], "risk_findings_count": 882930, "title": "<value>", "updated_at": "2026-08-30T11:51:39.615Z"}], "total": 52256}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

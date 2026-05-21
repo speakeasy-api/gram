@@ -3,10 +3,9 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { cn } from "@/lib/utils";
-import { resolutionBgColors } from "@/lib/resolution-colors";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
 import {
+  HasRisk,
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchatswithresolutions";
@@ -39,7 +38,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
-type SortField = "chronological" | "messageCount" | "score";
+type SortField = "chronological" | "messageCount";
 type SortOrder = "asc" | "desc";
 
 function toApiSortBy(field: SortField): SortBy {
@@ -48,57 +47,17 @@ function toApiSortBy(field: SortField): SortBy {
       return SortBy.CreatedAt;
     case "messageCount":
       return SortBy.NumMessages;
-    case "score":
-      return SortBy.Score;
   }
+}
+
+function toApiHasRisk(value: string): HasRisk | undefined {
+  if (value === "true") return HasRisk.True;
+  if (value === "false") return HasRisk.False;
+  return undefined;
 }
 
 function toApiSortOrder(order: SortOrder): ApiSortOrder {
   return order === "asc" ? ApiSortOrder.Asc : ApiSortOrder.Desc;
-}
-
-function ScoreIndicator({
-  colorClass,
-  children,
-}: {
-  colorClass: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={cn("size-2 rounded-full", colorClass)} />
-      <span>{children}</span>
-    </div>
-  );
-}
-
-function ScoreLegend() {
-  return (
-    <div className="bg-background text-muted-foreground flex items-center overflow-x-auto border-b px-5 py-3 text-xs whitespace-nowrap">
-      <div className="flex w-[44px] shrink-0 items-center justify-center">
-        <Icon name="gauge" className="size-5" />
-      </div>
-      <div className="flex flex-1 items-center gap-4">
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="font-medium">Resolution Score</span>
-          <span className="text-muted-foreground/70">
-            — How well the assistant resolved user goals
-          </span>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-4">
-          <ScoreIndicator colorClass={resolutionBgColors.success}>
-            80-100 Good
-          </ScoreIndicator>
-          <ScoreIndicator colorClass={resolutionBgColors.partial}>
-            50-79 Fair
-          </ScoreIndicator>
-          <ScoreIndicator colorClass={resolutionBgColors.failure}>
-            0-49 Poor
-          </ScoreIndicator>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export function LogsAgentsContent() {
@@ -153,15 +112,16 @@ export function LogsAgentsContent() {
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
   const urlStatus = searchParams.get("status");
+  const urlHasRisk = searchParams.get("has_risk");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
 
   const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "30d";
   const sortField: SortField =
-    urlSort === "messageCount" || urlSort === "score"
-      ? urlSort
-      : "chronological";
+    urlSort === "messageCount" ? urlSort : "chronological";
   const sortOrder: SortOrder = urlOrder === "asc" ? "asc" : "desc";
+  const hasRisk: string =
+    urlHasRisk === "true" || urlHasRisk === "false" ? urlHasRisk : "";
 
   const customRange = useMemo(() => {
     if (urlFrom && urlTo) {
@@ -238,6 +198,13 @@ export function LogsAgentsContent() {
     [updateSearchParams],
   );
 
+  const setHasRisk = useCallback(
+    (value: string) => {
+      updateSearchParams({ has_risk: value || null });
+    },
+    [updateSearchParams],
+  );
+
   const setSortField = useCallback(
     (value: SortField) => {
       updateSearchParams({ sort: value === "chronological" ? null : value });
@@ -262,6 +229,7 @@ export function LogsAgentsContent() {
         {
           search: searchQuery || undefined,
           resolutionStatus: resolutionStatus || undefined,
+          hasRisk: toApiHasRisk(hasRisk),
           from: timeRange.from,
           to: timeRange.to,
           sortBy: toApiSortBy(sortField),
@@ -369,6 +337,8 @@ export function LogsAgentsContent() {
         setSearchQuery={setSearchQuery}
         resolutionStatus={resolutionStatus}
         setResolutionStatus={setResolutionStatus}
+        hasRisk={hasRisk}
+        setHasRisk={setHasRisk}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
@@ -401,6 +371,8 @@ function AgentSessionsPageContent({
   setSearchQuery,
   resolutionStatus,
   setResolutionStatus,
+  hasRisk,
+  setHasRisk,
   sortField,
   setSortField,
   sortOrder,
@@ -428,6 +400,8 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   resolutionStatus: string;
   setResolutionStatus: (value: string) => void;
+  hasRisk: string;
+  setHasRisk: (value: string) => void;
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
@@ -486,6 +460,8 @@ function AgentSessionsPageContent({
               onSearchQueryChange={setSearchQuery}
               resolutionStatus={resolutionStatus}
               onResolutionStatusChange={setResolutionStatus}
+              hasRisk={hasRisk}
+              onHasRiskChange={setHasRisk}
             />
             <div className="ml-auto flex shrink-0 items-center gap-3">
               <div className="border-border flex h-10 items-center rounded-md border">
@@ -512,12 +488,6 @@ function AgentSessionsPageContent({
                       description="Sort by number of messages in the chat"
                     >
                       Messages
-                    </SelectItem>
-                    <SelectItem
-                      value="score"
-                      description="Sort by resolution score"
-                    >
-                      Score
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -551,9 +521,6 @@ function AgentSessionsPageContent({
 
         <div className="min-h-0 flex-1 overflow-hidden border-t">
           <div className="bg-background flex h-full flex-col overflow-hidden">
-            <div className="shrink-0">
-              <ScoreLegend />
-            </div>
             <div className="flex-1 overflow-y-auto">
               <ChatLogsTable
                 chats={chats}

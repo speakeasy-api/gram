@@ -363,6 +363,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	search := conv.PtrValOr(payload.Search, "")
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
+	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 
 	// Parse time filters
 	var fromTime, toTime pgtype.Timestamptz
@@ -387,6 +388,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		FromTime:         fromTime,
 		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
+		HasRiskFilter:    hasRiskFilter,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to count chats").Log(ctx, s.logger)
@@ -400,6 +402,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		FromTime:         fromTime,
 		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
+		HasRiskFilter:    hasRiskFilter,
 		SortBy:           payload.SortBy,
 		SortOrder:        payload.SortOrder,
 		PageLimit:        int32(limit),
@@ -432,6 +435,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 				CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
+				RiskFindingsCount:    int(row.RiskFindingsCount),
 				Resolutions:          make([]*gen.ChatResolution, 0),
 				TotalInputTokens:     nil,
 				TotalOutputTokens:    nil,

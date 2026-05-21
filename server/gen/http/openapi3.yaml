@@ -4806,6 +4806,17 @@ paths:
                     description: Filter by resolution status
                     type: string
                 - allowEmptyValue: true
+                  description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+                  in: query
+                  name: has_risk
+                  schema:
+                    description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+                    enum:
+                        - ""
+                        - "true"
+                        - "false"
+                    type: string
+                - allowEmptyValue: true
                   description: Filter chats created after this timestamp (ISO 8601)
                   in: query
                   name: from
@@ -27279,6 +27290,10 @@ components:
                     type: integer
                     description: The number of messages in the chat
                     format: int64
+                risk_findings_count:
+                    type: integer
+                    description: Number of risk findings recorded against messages in this chat (project-scoped, found=true).
+                    format: int64
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -27316,6 +27331,7 @@ components:
                 - created_at
                 - updated_at
                 - last_message_timestamp
+                - risk_findings_count
         ChatMessage:
             type: object
             properties:
@@ -27380,6 +27396,10 @@ components:
                     type: integer
                     description: The number of messages in the chat
                     format: int64
+                risk_findings_count:
+                    type: integer
+                    description: Number of risk findings recorded against messages in this chat (project-scoped, found=true).
+                    format: int64
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -27416,6 +27436,7 @@ components:
                 - created_at
                 - updated_at
                 - last_message_timestamp
+                - risk_findings_count
         ChatOverviewWithResolutions:
             type: object
             properties:
@@ -27442,6 +27463,10 @@ components:
                     items:
                         $ref: '#/components/schemas/ChatResolution'
                     description: List of resolutions for this chat
+                risk_findings_count:
+                    type: integer
+                    description: Number of risk findings recorded against messages in this chat (project-scoped, found=true).
+                    format: int64
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -27480,6 +27505,7 @@ components:
                 - created_at
                 - updated_at
                 - last_message_timestamp
+                - risk_findings_count
         ChatResolution:
             type: object
             properties:

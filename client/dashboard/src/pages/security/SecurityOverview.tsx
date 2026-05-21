@@ -356,6 +356,25 @@ function SecurityOverviewContent() {
 
 function RiskActivitySection({ children }: { children: ReactNode }) {
   const routes = useRoutes();
+  const location = useLocation();
+
+  const carriedRangeParams = useMemo(() => {
+    const incoming = new URLSearchParams(location.search);
+    const next = new URLSearchParams();
+    for (const key of ["range", "from", "to"]) {
+      const value = incoming.get(key);
+      if (value) next.set(key, value);
+    }
+    return next;
+  }, [location.search]);
+
+  const agentsParams = new URLSearchParams(carriedRangeParams);
+  agentsParams.set("has_risk", "true");
+  const agentsHref = `${routes.logs.agents.href()}?${agentsParams.toString()}`;
+
+  const riskEventsHref = carriedRangeParams.toString()
+    ? `${routes.logs.riskEvents.href()}?${carriedRangeParams.toString()}`
+    : routes.logs.riskEvents.href();
 
   return (
     <Page.Section>
@@ -367,15 +386,15 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
       <Page.Section.CTA>
         <div className="flex items-center gap-2">
           <Button variant="secondary" asChild>
-            <Link to={routes.logs.agents.href()}>
-              <Button.Text>View All Sessions</Button.Text>
+            <Link to={agentsHref}>
+              <Button.Text>View Sessions with Risk</Button.Text>
               <Button.RightIcon>
                 <Icon name="arrow-right" />
               </Button.RightIcon>
             </Link>
           </Button>
           <Button variant="secondary" asChild>
-            <Link to={routes.logs.riskEvents.href()}>
+            <Link to={riskEventsHref}>
               <Button.Text>View All Events</Button.Text>
               <Button.RightIcon>
                 <Icon name="arrow-right" />

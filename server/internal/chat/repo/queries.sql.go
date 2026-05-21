@@ -75,6 +75,27 @@ WHERE c.project_id = $1
       )
     )
   )
+  AND (
+    $7::text = ''
+    OR (
+      $7::text = 'true' AND EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = $1
+          AND rr.found IS TRUE
+      )
+    )
+    OR (
+      $7::text = 'false' AND NOT EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = $1
+          AND rr.found IS TRUE
+      )
+    )
+  )
 `
 
 type CountChatsWithResolutionsParams struct {
@@ -84,6 +105,7 @@ type CountChatsWithResolutionsParams struct {
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
 	ResolutionStatus interface{}
+	HasRiskFilter    string
 }
 
 func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
@@ -94,6 +116,7 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 		arg.ToTime,
 		arg.Search,
 		arg.ResolutionStatus,
+		arg.HasRiskFilter,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -1155,7 +1178,15 @@ WITH limited_chats AS (
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
-    ) as avg_score
+    ) as avg_score,
+    (
+      SELECT COUNT(*)::integer
+      FROM risk_results rr
+      JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      WHERE cm.chat_id = c.id
+        AND rr.project_id = $3
+        AND rr.found IS TRUE
+    ) as risk_findings_count
   FROM chats c
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
@@ -1181,6 +1212,27 @@ WITH limited_chats AS (
         )
       )
     )
+    AND (
+      $9::text = ''
+      OR (
+        $9::text = 'true' AND EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = $3
+            AND rr.found IS TRUE
+        )
+      )
+      OR (
+        $9::text = 'false' AND NOT EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = $3
+            AND rr.found IS TRUE
+        )
+      )
+    )
   ORDER BY
     CASE WHEN $1 = 'created_at' AND $2 = 'desc' THEN c.created_at END DESC NULLS LAST,
     CASE WHEN $1 = 'created_at' AND $2 = 'asc' THEN c.created_at END ASC NULLS LAST,
@@ -1189,8 +1241,8 @@ WITH limited_chats AS (
     CASE WHEN $1 = 'score' AND $2 = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
     c.created_at DESC
-  LIMIT $10
-  OFFSET $9
+  LIMIT $11
+  OFFSET $10
 )
 SELECT
     lc.id as chat_id,
@@ -1203,6 +1255,7 @@ SELECT
     lc.num_messages,
     lc.last_message_timestamp,
     lc.avg_score,
+    lc.risk_findings_count,
     cr.id as resolution_id,
     cr.user_goal,
     cr.resolution,
@@ -1239,6 +1292,7 @@ type ListChatsWithResolutionsParams struct {
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
 	ResolutionStatus interface{}
+	HasRiskFilter    string
 	PageOffset       int32
 	PageLimit        int32
 }
@@ -1254,6 +1308,7 @@ type ListChatsWithResolutionsRow struct {
 	NumMessages          int32
 	LastMessageTimestamp pgtype.Timestamptz
 	AvgScore             interface{}
+	RiskFindingsCount    int32
 	ResolutionID         uuid.NullUUID
 	UserGoal             pgtype.Text
 	Resolution           pgtype.Text
@@ -1273,6 +1328,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 		arg.ToTime,
 		arg.Search,
 		arg.ResolutionStatus,
+		arg.HasRiskFilter,
 		arg.PageOffset,
 		arg.PageLimit,
 	)
@@ -1294,6 +1350,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 			&i.NumMessages,
 			&i.LastMessageTimestamp,
 			&i.AvgScore,
+			&i.RiskFindingsCount,
 			&i.ResolutionID,
 			&i.UserGoal,
 			&i.Resolution,
