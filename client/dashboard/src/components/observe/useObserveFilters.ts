@@ -100,7 +100,10 @@ export function useObserveFilters() {
   }, [searchParams]);
 
   const roleOptions = useMemo(
-    () => (rolesData?.roles ?? []).map((r) => ({ id: r.id, name: r.name })),
+    () =>
+      (rolesData?.roles ?? [])
+        .filter((r) => r.memberCount > 0)
+        .map((r) => ({ id: r.id, name: r.name })),
     [rolesData],
   );
 
