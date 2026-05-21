@@ -269,7 +269,7 @@ function LogDetailContent({
               {highlights.map((h) => (
                 <div
                   key={h.path}
-                  className="contents [&>div:first-child]:text-muted-foreground [&>div:first-child]:text-xs [&>div:first-child]:font-medium [&>div:first-child]:tracking-wide [&>div:first-child]:uppercase [&>div:first-child]:self-center"
+                  className="[&>div:first-child]:text-muted-foreground contents [&>div:first-child]:self-center [&>div:first-child]:text-xs [&>div:first-child]:font-medium [&>div:first-child]:tracking-wide [&>div:first-child]:uppercase"
                 >
                   <div>{h.label}</div>
                   <div className="text-foreground font-mono text-sm break-all">
