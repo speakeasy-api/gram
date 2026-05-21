@@ -47,18 +47,20 @@ func TestService_UpdateRole(t *testing.T) {
 		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
 		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"),
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "custom-builder").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"member", "custom-builder"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlug:       "member",
+		RoleSlugs:      []string{"member", "custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "custom-builder").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{"member", "custom-builder"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlug:       "member",
+		RoleSlugs:      []string{"member", "custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
@@ -113,15 +115,16 @@ func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
 		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "admin").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"member", "admin"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "admin",
+		RoleSlug:       "member",
+		RoleSlugs:      []string{"member", "admin"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+		{ID: "membership_1", UserID: "user_1", OrganizationID: mockidp.MockOrgID, RoleSlug: "member", RoleSlugs: []string{"member", "admin"}, CreatedAt: mockMembershipTimestamp},
 		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
 	}, nil).Once()
 
@@ -139,6 +142,52 @@ func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
 
 	// WorkOS UpdateRole must NOT have been called for a system role.
 	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestService_UpdateRole_PreservesExistingRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
+	}, nil).Once()
+	// user_1 already has admin — assigning custom-builder must preserve admin.
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		{ID: "membership_1", UserID: "user_1", OrganizationID: mockidp.MockOrgID, RoleSlug: "admin", RoleSlugs: []string{"admin"}, CreatedAt: mockMembershipTimestamp},
+	}, nil).Once()
+	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return(&thirdpartyworkos.Role{
+		ID:          "role_custom",
+		Name:        "Custom Builder",
+		Slug:        "custom-builder",
+		Description: "Old description",
+		CreatedAt:   mockRoleTimestamp,
+		UpdatedAt:   mockRoleTimestamp,
+	}, nil).Once()
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"admin", "custom-builder"}).Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin", "custom-builder"},
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		{ID: "membership_1", UserID: "user_1", OrganizationID: mockidp.MockOrgID, RoleSlug: "admin", RoleSlugs: []string{"admin", "custom-builder"}, CreatedAt: mockMembershipTimestamp},
+	}, nil).Once()
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID:        "role_custom",
+		MemberIds: []string{"local_user_1"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "role_custom", role.ID)
+	require.Equal(t, 1, role.MemberCount)
 }
 
 func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
@@ -206,15 +255,16 @@ func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "admin").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"member", "admin"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "admin",
+		RoleSlug:       "member",
+		RoleSlugs:      []string{"member", "admin"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+		{ID: "membership_1", UserID: "user_1", OrganizationID: mockidp.MockOrgID, RoleSlug: "member", RoleSlugs: []string{"member", "admin"}, CreatedAt: mockMembershipTimestamp},
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")

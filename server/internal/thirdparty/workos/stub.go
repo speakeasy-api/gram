@@ -267,27 +267,6 @@ func (s *StubClient) UpsertOrganizationMembership(member Member) {
 	state.memberships[member.ID] = member
 }
 
-func (s *StubClient) UpdateMemberRole(_ context.Context, membershipID string, roleSlug string) (*Member, error) {
-	s.mut.Lock()
-	defer s.mut.Unlock()
-
-	for _, state := range s.orgs {
-		member, ok := state.memberships[membershipID]
-		if !ok {
-			continue
-		}
-		if _, ok := state.roles[roleSlug]; !ok {
-			return nil, fmt.Errorf("role %q not found", roleSlug)
-		}
-		member.RoleSlug = roleSlug
-		member.RoleSlugs = []string{roleSlug}
-		state.memberships[membershipID] = member
-		return &member, nil
-	}
-
-	return nil, fmt.Errorf("membership %q not found", membershipID)
-}
-
 func (s *StubClient) UpdateMemberRoles(_ context.Context, membershipID string, roleSlugs []string) (*Member, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()

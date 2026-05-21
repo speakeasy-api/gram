@@ -1033,6 +1033,168 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	require.False(t, enforce)
 }
 
+type multiRoleMembershipFetcher struct {
+	calls  int
+	member *workos.Member
+}
+
+func (f *multiRoleMembershipFetcher) GetOrgMembership(_ context.Context, _, _ string) (*workos.Member, error) {
+	f.calls++
+	if f.member != nil {
+		cp := *f.member
+		return &cp, nil
+	}
+	return nil, nil
+}
+
+func TestResolveRoleSlugs_cachesMultiRoleResult(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "multi@example.com", "Multi User", "user_workos_multi", "membership_multi")
+
+	membership := &multiRoleMembershipFetcher{
+		member: &workos.Member{
+			RoleSlug:  "admin",
+			RoleSlugs: []string{"admin", "builder"},
+		},
+	}
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), membership, newMapCache())
+
+	// First call — should hit the fetcher.
+	roleSlugs, err := engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin", "builder"}, roleSlugs)
+
+	// Second call — should come from cache; fetcher not called again.
+	roleSlugs, err = engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin", "builder"}, roleSlugs)
+	require.Equal(t, 1, membership.calls)
+}
+
+func TestResolveRoleSlugs_fallsBackToSingleRoleSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "single@example.com", "Single User", "user_workos_single", "membership_single")
+
+	membership := &multiRoleMembershipFetcher{
+		member: &workos.Member{
+			RoleSlug:  "viewer",
+			RoleSlugs: nil,
+		},
+	}
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), membership, newMapCache())
+
+	roleSlugs, err := engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"viewer"}, roleSlugs)
+}
+
+func TestEngineRequire_multiRoleGrantUnion(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, "proj_1"), // from role_a
+		NewGrant(ScopeProjectRead, "proj_2"), // from role_b
+	})
+
+	// Both resources should be allowed (union of grants from two roles).
+	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_1"})
+	require.NoError(t, err)
+
+	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_2"})
+	require.NoError(t, err)
+
+	// Resource not covered by any role — forbidden.
+	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_3"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineFilter_multiRoleGrantUnion(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, "proj_a"), // from role_a
+		NewGrant(ScopeProjectRead, "proj_b"), // from role_b
+	})
+
+	resourceIDs, err := engine.Filter(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_b"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_c"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj_a", "proj_b"}, resourceIDs)
+}
+
+func TestEngineRequire_multiRoleDenyFromOneRoleBlocksOther(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),    // allow from role_a
+		NewDenyGrant(ScopeMCPConnect, "server_secret"), // deny from role_b
+	})
+
+	// Non-denied resource — should pass.
+	err = engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "server_ok"})
+	require.NoError(t, err)
+
+	// Denied resource — deny from role_b blocks the wildcard allow from role_a.
+	err = engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "server_secret"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineFilter_multiRoleDenyFromOneRoleExcludesResource(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, WildcardResource),  // allow wildcard
+		NewDenyGrant(ScopeProjectRead, "proj_secret"), // deny specific resource
+	})
+
+	resourceIDs, err := engine.Filter(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_secret"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_b"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj_a", "proj_b"}, resourceIDs)
+}
+
 // TestSyncGrants_denyEffectSurvivesDBRoundTrip verifies that deny grants
 // written via SyncGrants are read back with the correct effect by GrantsForRole.
 func TestSyncGrants_denyEffectSurvivesDBRoundTrip(t *testing.T) {

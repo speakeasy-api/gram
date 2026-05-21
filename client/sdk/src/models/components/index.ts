@@ -350,7 +350,7 @@ export * from "./updateenvironmentrequestbody.js";
 export * from "./updateinviterolerequestbody.js";
 export * from "./updatemcpendpointform.js";
 export * from "./updatemcpserverform.js";
-export * from "./updatememberroleform.js";
+export * from "./updatememberrolesform.js";
 export * from "./updateoauthproxyserverrequestbody.js";
 export * from "./updatepackageform.js";
 export * from "./updatepackageresult.js";

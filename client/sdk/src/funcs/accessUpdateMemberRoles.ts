@@ -28,15 +28,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * updateMemberRole access
+ * updateMemberRoles access
  *
  * @remarks
- * Change a team member's role assignment.
+ * Update a team member's role assignments.
  */
-export function accessUpdateMemberRole(
+export function accessUpdateMemberRoles(
   client: GramCore,
-  request: operations.UpdateMemberRoleRequest,
-  security?: operations.UpdateMemberRoleSecurity | undefined,
+  request: operations.UpdateMemberRolesRequest,
+  security?: operations.UpdateMemberRolesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -62,8 +62,8 @@ export function accessUpdateMemberRole(
 
 async function $do(
   client: GramCore,
-  request: operations.UpdateMemberRoleRequest,
-  security?: operations.UpdateMemberRoleSecurity | undefined,
+  request: operations.UpdateMemberRolesRequest,
+  security?: operations.UpdateMemberRolesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -85,18 +85,18 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.UpdateMemberRoleRequest$outboundSchema, value),
+      z.parse(operations.UpdateMemberRolesRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpdateMemberRoleForm, {
+  const body = encodeJSON("body", payload.UpdateMemberRolesForm, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/access.updateMemberRole")();
+  const path = pathToFunc("/rpc/access.updateMemberRoles")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -131,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "updateMemberRole",
+    operationID: "updateMemberRoles",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

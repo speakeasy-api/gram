@@ -54,7 +54,6 @@ type RoleProvider interface {
 	UpdateRole(ctx context.Context, orgID string, roleSlug string, opts workos.UpdateRoleOpts) (*workos.Role, error)
 	DeleteRole(ctx context.Context, orgID string, roleSlug string) error
 	ListMembers(ctx context.Context, orgID string) ([]workos.Member, error)
-	UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetUser(ctx context.Context, userID string) (*workos.User, error)
 	ListOrgUsers(ctx context.Context, orgID string) (map[string]workos.User, error)
@@ -290,19 +289,21 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 			return nil, oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 		}
 
-		membershipByUser := membershipsByUserID(members)
+		memberByUser := membersByUserID(members)
 
 		for _, gramID := range payload.MemberIds {
 			workosID, ok := gramToWorkos[gramID]
 			if !ok {
 				continue
 			}
-			membershipID, ok := membershipByUser[workosID]
+			existing, ok := memberByUser[workosID]
 			if !ok {
 				continue
 			}
 
-			if _, err := s.roles.UpdateMemberRole(ctx, membershipID, wr.Slug); err != nil {
+			// Add the new role to the member's existing roles rather than replacing them.
+			newSlugs := addRoleSlug(existing.RoleSlugs, wr.Slug)
+			if _, err := s.roles.UpdateMemberRoles(ctx, existing.ID, newSlugs); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "assign members to created role").Log(ctx, logger)
 			}
 
@@ -435,19 +436,21 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve gram user ids to workos ids").Log(ctx, logger)
 		}
 
-		membershipByUser := membershipsByUserID(membersBefore)
+		memberByUser := membersByUserID(membersBefore)
 
 		for _, gramID := range payload.MemberIds {
 			workosID, ok := gramToWorkos[gramID]
 			if !ok {
 				continue
 			}
-			membershipID, ok := membershipByUser[workosID]
+			existing, ok := memberByUser[workosID]
 			if !ok {
 				continue
 			}
 
-			if _, err := s.roles.UpdateMemberRole(ctx, membershipID, currentRole.Slug); err != nil {
+			// Add the role to the member's existing roles rather than replacing them.
+			newSlugs := addRoleSlug(existing.RoleSlugs, currentRole.Slug)
+			if _, err := s.roles.UpdateMemberRoles(ctx, existing.ID, newSlugs); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "assign members to updated role").Log(ctx, logger)
 			}
 		}
@@ -525,18 +528,23 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 		return oops.E(oops.CodeBadRequest, nil, "system roles cannot be deleted").Log(ctx, logger)
 	}
 
-	// WorkOS rejects deleting a role that still has members assigned, so move
-	// any assigned members to the default member role first.
+	// WorkOS rejects deleting a role that still has members assigned, so remove
+	// the deleted role from each member's role set. If that leaves zero roles,
+	// fall back to the default "member" role.
 	members, err := s.roles.ListMembers(ctx, workosOrgID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
 	}
 	reassigned := false
 	for _, m := range members {
-		if m.RoleSlug != currentRole.Slug {
+		if !hasRoleSlug(m.RoleSlugs, currentRole.Slug) {
 			continue
 		}
-		if _, err := s.roles.UpdateMemberRole(ctx, m.ID, authz.SystemRoleMember); err != nil {
+		remaining := removeRoleSlug(m.RoleSlugs, currentRole.Slug)
+		if len(remaining) == 0 {
+			remaining = []string{authz.SystemRoleMember}
+		}
+		if _, err := s.roles.UpdateMemberRoles(ctx, m.ID, remaining); err != nil {
 			if reassigned {
 				s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
 			}
@@ -641,7 +649,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	// those connected to this organization via organization_user_relationships.
 	// This single joined query prevents the list from surfacing users who
 	// exist in Gram but aren't connected to the current org (which would
-	// cause UpdateMemberRole to fail).
+	// cause UpdateMemberRoles to fail).
 	workosIDs := make([]string, 0, len(users))
 	for workosUID := range users {
 		workosIDs = append(workosIDs, workosUID)
@@ -763,10 +771,10 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	return &gen.ListUserGrantsResult{Grants: listRoleGrantsFromGrants(grants)}, nil
 }
 
-// UpdateMemberRole is intentionally stricter than member listing: it only
+// UpdateMemberRoles is intentionally stricter than member listing: it only
 // mutates access for users Gram knows are connected to the local organization.
 // It accepts multiple role IDs and performs a full replacement of the user's roles.
-func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
+func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemberRolesPayload) (*gen.AccessMember, error) {
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1051,7 +1059,9 @@ func (s *Service) localMemberCounts(ctx context.Context, organizationID string, 
 	counts := make(map[string]int)
 	for _, m := range members {
 		if _, ok := localSet[m.UserID]; ok {
-			counts[m.RoleSlug]++
+			for _, slug := range m.RoleSlugs {
+				counts[slug]++
+			}
 		}
 	}
 	return counts, nil
@@ -1074,13 +1084,33 @@ func gramToWorkosIDMap(ctx context.Context, db *pgxpool.Pool, gramIDs []string) 
 	return m, nil
 }
 
-func membershipsByUserID(members []workos.Member) map[string]string {
-	membershipByUser := make(map[string]string, len(members))
-	for _, member := range members {
-		membershipByUser[member.UserID] = member.ID
+func membersByUserID(members []workos.Member) map[string]workos.Member {
+	byUser := make(map[string]workos.Member, len(members))
+	for _, m := range members {
+		byUser[m.UserID] = m
 	}
+	return byUser
+}
 
-	return membershipByUser
+func addRoleSlug(existing []string, slug string) []string {
+	if slices.Contains(existing, slug) {
+		return existing
+	}
+	return append(existing, slug)
+}
+
+func removeRoleSlug(slugs []string, remove string) []string {
+	result := make([]string, 0, len(slugs))
+	for _, s := range slugs {
+		if s != remove {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+func hasRoleSlug(slugs []string, slug string) bool {
+	return slices.Contains(slugs, slug)
 }
 
 func (s *Service) memberRoleSlugs(ctx context.Context, workosOrgID string, workosUserID string) ([]string, error) {

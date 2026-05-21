@@ -234,22 +234,7 @@ func (wc *Client) ListOrgUsers(ctx context.Context, orgID string) (map[string]Us
 	return users, nil
 }
 
-// UpdateMemberRole changes a member's role within an organization membership.
-func (wc *Client) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*Member, error) {
-	m, err := wc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
-		RoleSlug:  roleSlug,
-		RoleSlugs: nil,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("update member role: %w", err)
-	}
-
-	member := convertMember(m)
-	return &member, nil
-}
-
-// UpdateMemberRoles replaces all roles on a membership. This is the multi-role
-// variant used when directory sync assigns multiple roles to a single user.
+// UpdateMemberRoles replaces all roles on a membership.
 func (wc *Client) UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*Member, error) {
 	m, err := wc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
 		RoleSlug:  "",

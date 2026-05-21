@@ -41,9 +41,9 @@ type UpdateRoleRequestBody struct {
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
 }
 
-// UpdateMemberRoleRequestBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP request body.
-type UpdateMemberRoleRequestBody struct {
+// UpdateMemberRolesRequestBody is the type of the "access" service
+// "updateMemberRoles" endpoint HTTP request body.
+type UpdateMemberRolesRequestBody struct {
 	// The user ID to update.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The role IDs to assign. Replaces all existing role assignments.
@@ -160,9 +160,9 @@ type ListGrantsResponseBody struct {
 	Grants []*ListRoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 }
 
-// UpdateMemberRoleResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body.
-type UpdateMemberRoleResponseBody struct {
+// UpdateMemberRolesResponseBody is the type of the "access" service
+// "updateMemberRoles" endpoint HTTP response body.
+type UpdateMemberRolesResponseBody struct {
 	// User ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name.
@@ -1650,9 +1650,10 @@ type ListGrantsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleUnauthorizedResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body for the "unauthorized" error.
-type UpdateMemberRoleUnauthorizedResponseBody struct {
+// UpdateMemberRolesUnauthorizedResponseBody is the type of the "access"
+// service "updateMemberRoles" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateMemberRolesUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1668,9 +1669,9 @@ type UpdateMemberRoleUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleForbiddenResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body for the "forbidden" error.
-type UpdateMemberRoleForbiddenResponseBody struct {
+// UpdateMemberRolesForbiddenResponseBody is the type of the "access" service
+// "updateMemberRoles" endpoint HTTP response body for the "forbidden" error.
+type UpdateMemberRolesForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1686,9 +1687,9 @@ type UpdateMemberRoleForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleBadRequestResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body for the "bad_request" error.
-type UpdateMemberRoleBadRequestResponseBody struct {
+// UpdateMemberRolesBadRequestResponseBody is the type of the "access" service
+// "updateMemberRoles" endpoint HTTP response body for the "bad_request" error.
+type UpdateMemberRolesBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1704,9 +1705,9 @@ type UpdateMemberRoleBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleNotFoundResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body for the "not_found" error.
-type UpdateMemberRoleNotFoundResponseBody struct {
+// UpdateMemberRolesNotFoundResponseBody is the type of the "access" service
+// "updateMemberRoles" endpoint HTTP response body for the "not_found" error.
+type UpdateMemberRolesNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1722,9 +1723,9 @@ type UpdateMemberRoleNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleConflictResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body for the "conflict" error.
-type UpdateMemberRoleConflictResponseBody struct {
+// UpdateMemberRolesConflictResponseBody is the type of the "access" service
+// "updateMemberRoles" endpoint HTTP response body for the "conflict" error.
+type UpdateMemberRolesConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1740,10 +1741,10 @@ type UpdateMemberRoleConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleUnsupportedMediaResponseBody is the type of the "access"
-// service "updateMemberRole" endpoint HTTP response body for the
+// UpdateMemberRolesUnsupportedMediaResponseBody is the type of the "access"
+// service "updateMemberRoles" endpoint HTTP response body for the
 // "unsupported_media" error.
-type UpdateMemberRoleUnsupportedMediaResponseBody struct {
+type UpdateMemberRolesUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1759,9 +1760,9 @@ type UpdateMemberRoleUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleInvalidResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body for the "invalid" error.
-type UpdateMemberRoleInvalidResponseBody struct {
+// UpdateMemberRolesInvalidResponseBody is the type of the "access" service
+// "updateMemberRoles" endpoint HTTP response body for the "invalid" error.
+type UpdateMemberRolesInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1777,10 +1778,10 @@ type UpdateMemberRoleInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleInvariantViolationResponseBody is the type of the "access"
-// service "updateMemberRole" endpoint HTTP response body for the
+// UpdateMemberRolesInvariantViolationResponseBody is the type of the "access"
+// service "updateMemberRoles" endpoint HTTP response body for the
 // "invariant_violation" error.
-type UpdateMemberRoleInvariantViolationResponseBody struct {
+type UpdateMemberRolesInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1796,9 +1797,9 @@ type UpdateMemberRoleInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleUnexpectedResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body for the "unexpected" error.
-type UpdateMemberRoleUnexpectedResponseBody struct {
+// UpdateMemberRolesUnexpectedResponseBody is the type of the "access" service
+// "updateMemberRoles" endpoint HTTP response body for the "unexpected" error.
+type UpdateMemberRolesUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1814,9 +1815,10 @@ type UpdateMemberRoleUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateMemberRoleGatewayErrorResponseBody is the type of the "access" service
-// "updateMemberRole" endpoint HTTP response body for the "gateway_error" error.
-type UpdateMemberRoleGatewayErrorResponseBody struct {
+// UpdateMemberRolesGatewayErrorResponseBody is the type of the "access"
+// service "updateMemberRoles" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateMemberRolesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3209,10 +3211,10 @@ func NewUpdateRoleRequestBody(p *access.UpdateRolePayload) *UpdateRoleRequestBod
 	return body
 }
 
-// NewUpdateMemberRoleRequestBody builds the HTTP request body from the payload
-// of the "updateMemberRole" endpoint of the "access" service.
-func NewUpdateMemberRoleRequestBody(p *access.UpdateMemberRolePayload) *UpdateMemberRoleRequestBody {
-	body := &UpdateMemberRoleRequestBody{
+// NewUpdateMemberRolesRequestBody builds the HTTP request body from the
+// payload of the "updateMemberRoles" endpoint of the "access" service.
+func NewUpdateMemberRolesRequestBody(p *access.UpdateMemberRolesPayload) *UpdateMemberRolesRequestBody {
+	body := &UpdateMemberRolesRequestBody{
 		UserID: p.UserID,
 	}
 	if p.RoleIds != nil {
@@ -4582,9 +4584,9 @@ func NewListGrantsGatewayError(body *ListGrantsGatewayErrorResponseBody) *goa.Se
 	return v
 }
 
-// NewUpdateMemberRoleAccessMemberOK builds a "access" service
-// "updateMemberRole" endpoint result from a HTTP "OK" response.
-func NewUpdateMemberRoleAccessMemberOK(body *UpdateMemberRoleResponseBody) *access.AccessMember {
+// NewUpdateMemberRolesAccessMemberOK builds a "access" service
+// "updateMemberRoles" endpoint result from a HTTP "OK" response.
+func NewUpdateMemberRolesAccessMemberOK(body *UpdateMemberRolesResponseBody) *access.AccessMember {
 	v := &access.AccessMember{
 		ID:       *body.ID,
 		Name:     *body.Name,
@@ -4600,9 +4602,9 @@ func NewUpdateMemberRoleAccessMemberOK(body *UpdateMemberRoleResponseBody) *acce
 	return v
 }
 
-// NewUpdateMemberRoleUnauthorized builds a access service updateMemberRole
+// NewUpdateMemberRolesUnauthorized builds a access service updateMemberRoles
 // endpoint unauthorized error.
-func NewUpdateMemberRoleUnauthorized(body *UpdateMemberRoleUnauthorizedResponseBody) *goa.ServiceError {
+func NewUpdateMemberRolesUnauthorized(body *UpdateMemberRolesUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4615,9 +4617,9 @@ func NewUpdateMemberRoleUnauthorized(body *UpdateMemberRoleUnauthorizedResponseB
 	return v
 }
 
-// NewUpdateMemberRoleForbidden builds a access service updateMemberRole
+// NewUpdateMemberRolesForbidden builds a access service updateMemberRoles
 // endpoint forbidden error.
-func NewUpdateMemberRoleForbidden(body *UpdateMemberRoleForbiddenResponseBody) *goa.ServiceError {
+func NewUpdateMemberRolesForbidden(body *UpdateMemberRolesForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4630,9 +4632,9 @@ func NewUpdateMemberRoleForbidden(body *UpdateMemberRoleForbiddenResponseBody) *
 	return v
 }
 
-// NewUpdateMemberRoleBadRequest builds a access service updateMemberRole
+// NewUpdateMemberRolesBadRequest builds a access service updateMemberRoles
 // endpoint bad_request error.
-func NewUpdateMemberRoleBadRequest(body *UpdateMemberRoleBadRequestResponseBody) *goa.ServiceError {
+func NewUpdateMemberRolesBadRequest(body *UpdateMemberRolesBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4645,9 +4647,9 @@ func NewUpdateMemberRoleBadRequest(body *UpdateMemberRoleBadRequestResponseBody)
 	return v
 }
 
-// NewUpdateMemberRoleNotFound builds a access service updateMemberRole
+// NewUpdateMemberRolesNotFound builds a access service updateMemberRoles
 // endpoint not_found error.
-func NewUpdateMemberRoleNotFound(body *UpdateMemberRoleNotFoundResponseBody) *goa.ServiceError {
+func NewUpdateMemberRolesNotFound(body *UpdateMemberRolesNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4660,9 +4662,9 @@ func NewUpdateMemberRoleNotFound(body *UpdateMemberRoleNotFoundResponseBody) *go
 	return v
 }
 
-// NewUpdateMemberRoleConflict builds a access service updateMemberRole
+// NewUpdateMemberRolesConflict builds a access service updateMemberRoles
 // endpoint conflict error.
-func NewUpdateMemberRoleConflict(body *UpdateMemberRoleConflictResponseBody) *goa.ServiceError {
+func NewUpdateMemberRolesConflict(body *UpdateMemberRolesConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4675,9 +4677,9 @@ func NewUpdateMemberRoleConflict(body *UpdateMemberRoleConflictResponseBody) *go
 	return v
 }
 
-// NewUpdateMemberRoleUnsupportedMedia builds a access service updateMemberRole
-// endpoint unsupported_media error.
-func NewUpdateMemberRoleUnsupportedMedia(body *UpdateMemberRoleUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewUpdateMemberRolesUnsupportedMedia builds a access service
+// updateMemberRoles endpoint unsupported_media error.
+func NewUpdateMemberRolesUnsupportedMedia(body *UpdateMemberRolesUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4690,9 +4692,9 @@ func NewUpdateMemberRoleUnsupportedMedia(body *UpdateMemberRoleUnsupportedMediaR
 	return v
 }
 
-// NewUpdateMemberRoleInvalid builds a access service updateMemberRole endpoint
-// invalid error.
-func NewUpdateMemberRoleInvalid(body *UpdateMemberRoleInvalidResponseBody) *goa.ServiceError {
+// NewUpdateMemberRolesInvalid builds a access service updateMemberRoles
+// endpoint invalid error.
+func NewUpdateMemberRolesInvalid(body *UpdateMemberRolesInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4705,9 +4707,9 @@ func NewUpdateMemberRoleInvalid(body *UpdateMemberRoleInvalidResponseBody) *goa.
 	return v
 }
 
-// NewUpdateMemberRoleInvariantViolation builds a access service
-// updateMemberRole endpoint invariant_violation error.
-func NewUpdateMemberRoleInvariantViolation(body *UpdateMemberRoleInvariantViolationResponseBody) *goa.ServiceError {
+// NewUpdateMemberRolesInvariantViolation builds a access service
+// updateMemberRoles endpoint invariant_violation error.
+func NewUpdateMemberRolesInvariantViolation(body *UpdateMemberRolesInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4720,9 +4722,9 @@ func NewUpdateMemberRoleInvariantViolation(body *UpdateMemberRoleInvariantViolat
 	return v
 }
 
-// NewUpdateMemberRoleUnexpected builds a access service updateMemberRole
+// NewUpdateMemberRolesUnexpected builds a access service updateMemberRoles
 // endpoint unexpected error.
-func NewUpdateMemberRoleUnexpected(body *UpdateMemberRoleUnexpectedResponseBody) *goa.ServiceError {
+func NewUpdateMemberRolesUnexpected(body *UpdateMemberRolesUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4735,9 +4737,9 @@ func NewUpdateMemberRoleUnexpected(body *UpdateMemberRoleUnexpectedResponseBody)
 	return v
 }
 
-// NewUpdateMemberRoleGatewayError builds a access service updateMemberRole
+// NewUpdateMemberRolesGatewayError builds a access service updateMemberRoles
 // endpoint gateway_error error.
-func NewUpdateMemberRoleGatewayError(body *UpdateMemberRoleGatewayErrorResponseBody) *goa.ServiceError {
+func NewUpdateMemberRolesGatewayError(body *UpdateMemberRolesGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5914,9 +5916,9 @@ func ValidateListGrantsResponseBody(body *ListGrantsResponseBody) (err error) {
 	return
 }
 
-// ValidateUpdateMemberRoleResponseBody runs the validations defined on
-// UpdateMemberRoleResponseBody
-func ValidateUpdateMemberRoleResponseBody(body *UpdateMemberRoleResponseBody) (err error) {
+// ValidateUpdateMemberRolesResponseBody runs the validations defined on
+// UpdateMemberRolesResponseBody
+func ValidateUpdateMemberRolesResponseBody(body *UpdateMemberRolesResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -7921,9 +7923,9 @@ func ValidateListGrantsGatewayErrorResponseBody(body *ListGrantsGatewayErrorResp
 	return
 }
 
-// ValidateUpdateMemberRoleUnauthorizedResponseBody runs the validations
-// defined on updateMemberRole_unauthorized_response_body
-func ValidateUpdateMemberRoleUnauthorizedResponseBody(body *UpdateMemberRoleUnauthorizedResponseBody) (err error) {
+// ValidateUpdateMemberRolesUnauthorizedResponseBody runs the validations
+// defined on updateMemberRoles_unauthorized_response_body
+func ValidateUpdateMemberRolesUnauthorizedResponseBody(body *UpdateMemberRolesUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7945,9 +7947,9 @@ func ValidateUpdateMemberRoleUnauthorizedResponseBody(body *UpdateMemberRoleUnau
 	return
 }
 
-// ValidateUpdateMemberRoleForbiddenResponseBody runs the validations defined
-// on updateMemberRole_forbidden_response_body
-func ValidateUpdateMemberRoleForbiddenResponseBody(body *UpdateMemberRoleForbiddenResponseBody) (err error) {
+// ValidateUpdateMemberRolesForbiddenResponseBody runs the validations defined
+// on updateMemberRoles_forbidden_response_body
+func ValidateUpdateMemberRolesForbiddenResponseBody(body *UpdateMemberRolesForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7969,9 +7971,9 @@ func ValidateUpdateMemberRoleForbiddenResponseBody(body *UpdateMemberRoleForbidd
 	return
 }
 
-// ValidateUpdateMemberRoleBadRequestResponseBody runs the validations defined
-// on updateMemberRole_bad_request_response_body
-func ValidateUpdateMemberRoleBadRequestResponseBody(body *UpdateMemberRoleBadRequestResponseBody) (err error) {
+// ValidateUpdateMemberRolesBadRequestResponseBody runs the validations defined
+// on updateMemberRoles_bad_request_response_body
+func ValidateUpdateMemberRolesBadRequestResponseBody(body *UpdateMemberRolesBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7993,9 +7995,9 @@ func ValidateUpdateMemberRoleBadRequestResponseBody(body *UpdateMemberRoleBadReq
 	return
 }
 
-// ValidateUpdateMemberRoleNotFoundResponseBody runs the validations defined on
-// updateMemberRole_not_found_response_body
-func ValidateUpdateMemberRoleNotFoundResponseBody(body *UpdateMemberRoleNotFoundResponseBody) (err error) {
+// ValidateUpdateMemberRolesNotFoundResponseBody runs the validations defined
+// on updateMemberRoles_not_found_response_body
+func ValidateUpdateMemberRolesNotFoundResponseBody(body *UpdateMemberRolesNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8017,9 +8019,9 @@ func ValidateUpdateMemberRoleNotFoundResponseBody(body *UpdateMemberRoleNotFound
 	return
 }
 
-// ValidateUpdateMemberRoleConflictResponseBody runs the validations defined on
-// updateMemberRole_conflict_response_body
-func ValidateUpdateMemberRoleConflictResponseBody(body *UpdateMemberRoleConflictResponseBody) (err error) {
+// ValidateUpdateMemberRolesConflictResponseBody runs the validations defined
+// on updateMemberRoles_conflict_response_body
+func ValidateUpdateMemberRolesConflictResponseBody(body *UpdateMemberRolesConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8041,9 +8043,9 @@ func ValidateUpdateMemberRoleConflictResponseBody(body *UpdateMemberRoleConflict
 	return
 }
 
-// ValidateUpdateMemberRoleUnsupportedMediaResponseBody runs the validations
-// defined on updateMemberRole_unsupported_media_response_body
-func ValidateUpdateMemberRoleUnsupportedMediaResponseBody(body *UpdateMemberRoleUnsupportedMediaResponseBody) (err error) {
+// ValidateUpdateMemberRolesUnsupportedMediaResponseBody runs the validations
+// defined on updateMemberRoles_unsupported_media_response_body
+func ValidateUpdateMemberRolesUnsupportedMediaResponseBody(body *UpdateMemberRolesUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8065,9 +8067,9 @@ func ValidateUpdateMemberRoleUnsupportedMediaResponseBody(body *UpdateMemberRole
 	return
 }
 
-// ValidateUpdateMemberRoleInvalidResponseBody runs the validations defined on
-// updateMemberRole_invalid_response_body
-func ValidateUpdateMemberRoleInvalidResponseBody(body *UpdateMemberRoleInvalidResponseBody) (err error) {
+// ValidateUpdateMemberRolesInvalidResponseBody runs the validations defined on
+// updateMemberRoles_invalid_response_body
+func ValidateUpdateMemberRolesInvalidResponseBody(body *UpdateMemberRolesInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8089,9 +8091,9 @@ func ValidateUpdateMemberRoleInvalidResponseBody(body *UpdateMemberRoleInvalidRe
 	return
 }
 
-// ValidateUpdateMemberRoleInvariantViolationResponseBody runs the validations
-// defined on updateMemberRole_invariant_violation_response_body
-func ValidateUpdateMemberRoleInvariantViolationResponseBody(body *UpdateMemberRoleInvariantViolationResponseBody) (err error) {
+// ValidateUpdateMemberRolesInvariantViolationResponseBody runs the validations
+// defined on updateMemberRoles_invariant_violation_response_body
+func ValidateUpdateMemberRolesInvariantViolationResponseBody(body *UpdateMemberRolesInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8113,9 +8115,9 @@ func ValidateUpdateMemberRoleInvariantViolationResponseBody(body *UpdateMemberRo
 	return
 }
 
-// ValidateUpdateMemberRoleUnexpectedResponseBody runs the validations defined
-// on updateMemberRole_unexpected_response_body
-func ValidateUpdateMemberRoleUnexpectedResponseBody(body *UpdateMemberRoleUnexpectedResponseBody) (err error) {
+// ValidateUpdateMemberRolesUnexpectedResponseBody runs the validations defined
+// on updateMemberRoles_unexpected_response_body
+func ValidateUpdateMemberRolesUnexpectedResponseBody(body *UpdateMemberRolesUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8137,9 +8139,9 @@ func ValidateUpdateMemberRoleUnexpectedResponseBody(body *UpdateMemberRoleUnexpe
 	return
 }
 
-// ValidateUpdateMemberRoleGatewayErrorResponseBody runs the validations
-// defined on updateMemberRole_gateway_error_response_body
-func ValidateUpdateMemberRoleGatewayErrorResponseBody(body *UpdateMemberRoleGatewayErrorResponseBody) (err error) {
+// ValidateUpdateMemberRolesGatewayErrorResponseBody runs the validations
+// defined on updateMemberRoles_gateway_error_response_body
+func ValidateUpdateMemberRolesGatewayErrorResponseBody(body *UpdateMemberRolesGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

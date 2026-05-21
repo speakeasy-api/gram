@@ -233,7 +233,7 @@ export * from "./updateEnvironment.js";
 export * from "./updateInviteRole.js";
 export * from "./updateMcpEndpoint.js";
 export * from "./updateMcpServer.js";
-export * from "./updateMemberRole.js";
+export * from "./updateMemberRoles.js";
 export * from "./updateOAuthProxyServer.js";
 export * from "./updatePackage.js";
 export * from "./updatePlugin.js";

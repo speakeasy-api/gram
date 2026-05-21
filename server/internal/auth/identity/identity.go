@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -79,7 +80,7 @@ type WorkOSClient interface {
 	CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error)
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
-	UpdateMemberRole(ctx context.Context, membershipID, roleSlug string) (*workos.Member, error)
+	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 }
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
@@ -392,11 +393,16 @@ func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosU
 	if membership == nil || membership.ID == "" {
 		return "", errors.New("WorkOS organization membership not found")
 	}
-	if membership.RoleSlug == roleSlug {
+	// Add the invited role to whatever roles the member already has,
+	// rather than replacing them (multi-role safe).
+	newSlugs := membership.RoleSlugs
+	alreadyHas := slices.Contains(newSlugs, roleSlug)
+	if alreadyHas {
 		return membership.ID, nil
 	}
+	newSlugs = append(newSlugs, roleSlug)
 
-	updated, err := r.workosClient.UpdateMemberRole(ctx, membership.ID, roleSlug)
+	updated, err := r.workosClient.UpdateMemberRoles(ctx, membership.ID, newSlugs)
 	if err != nil {
 		return "", fmt.Errorf("update WorkOS organization membership role: %w", err)
 	}

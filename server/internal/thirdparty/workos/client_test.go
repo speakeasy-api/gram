@@ -84,7 +84,7 @@ func (f *fakeWorkOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// SDK: PUT /user_management/organization_memberships/{id}
 	case r.Method == http.MethodPut && strings.HasPrefix(path, "/user_management/organization_memberships/"):
 		membershipID := strings.TrimPrefix(path, "/user_management/organization_memberships/")
-		f.handleUpdateMemberRole(w, r, membershipID)
+		f.handleUpdateMembership(w, r, membershipID)
 
 	// SDK: GET /user_management/users/{id}
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/user_management/users/") && !strings.Contains(path[len("/user_management/users/"):], "/"):
@@ -277,9 +277,10 @@ func (f *fakeWorkOS) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (f *fakeWorkOS) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request, membershipID string) {
+func (f *fakeWorkOS) handleUpdateMembership(w http.ResponseWriter, r *http.Request, membershipID string) {
 	var opts struct {
-		RoleSlug string `json:"role_slug"`
+		RoleSlug  string   `json:"role_slug"`
+		RoleSlugs []string `json:"role_slugs"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -291,7 +292,17 @@ func (f *fakeWorkOS) handleUpdateMemberRole(w http.ResponseWriter, r *http.Reque
 
 	for i, m := range f.memberships {
 		if m.ID == membershipID {
-			f.memberships[i].Role = common.RoleResponse{Slug: opts.RoleSlug}
+			if len(opts.RoleSlugs) > 0 {
+				f.memberships[i].Role = common.RoleResponse{Slug: opts.RoleSlugs[0]}
+				roleResponses := make([]common.RoleResponse, len(opts.RoleSlugs))
+				for j, slug := range opts.RoleSlugs {
+					roleResponses[j] = common.RoleResponse{Slug: slug}
+				}
+				f.memberships[i].Roles = roleResponses
+			} else {
+				f.memberships[i].Role = common.RoleResponse{Slug: opts.RoleSlug}
+				f.memberships[i].Roles = []common.RoleResponse{{Slug: opts.RoleSlug}}
+			}
 			writeJSON(w, f.memberships[i])
 			return
 		}
@@ -585,23 +596,6 @@ func TestRoleClient_ListUsersInOrg(t *testing.T) {
 	require.Equal(t, "Bob", users[1].FirstName)
 }
 
-func TestRoleClient_UpdateMemberRole(t *testing.T) {
-	t.Parallel()
-	fake := newFakeWorkOS()
-	fake.memberships = []usermanagement.OrganizationMembership{
-		{
-			ID:     "mem_1",
-			UserID: "user_1",
-			Role:   common.RoleResponse{Slug: "admin"},
-		},
-	}
-	client, _ := newTestClient(t, fake)
-
-	updated, err := client.UpdateMemberRole(context.Background(), "mem_1", "org-editor")
-	require.NoError(t, err)
-	require.Equal(t, "org-editor", updated.RoleSlug)
-}
-
 func TestRoleClient_GetUser(t *testing.T) {
 	t.Parallel()
 	fake := newFakeWorkOS()
@@ -873,4 +867,89 @@ func TestEnsureUserExternalID_Mismatch(t *testing.T) {
 	err := client.EnsureUserExternalID(context.Background(), "user_1", "gram-user-abc")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "mismatch")
+}
+
+func TestRoleClient_ListMembers_MultiRole(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{
+		{
+			ID:             "mem_1",
+			UserID:         "user_1",
+			OrganizationID: "org_1",
+			Role:           common.RoleResponse{Slug: "admin"},
+			Roles:          []common.RoleResponse{{Slug: "admin"}, {Slug: "builder"}},
+			Status:         usermanagement.Active,
+		},
+	}
+	client, _ := newTestClient(t, fake)
+
+	members, err := client.ListMembers(context.Background(), "org_1")
+	require.NoError(t, err)
+	require.Len(t, members, 1)
+	require.Equal(t, "admin", members[0].RoleSlug)
+	require.Equal(t, []string{"admin", "builder"}, members[0].RoleSlugs)
+}
+
+func TestRoleClient_ListMembers_FallsBackToSingleRole(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{
+		{
+			ID:             "mem_1",
+			UserID:         "user_1",
+			OrganizationID: "org_1",
+			Role:           common.RoleResponse{Slug: "editor"},
+			Status:         usermanagement.Active,
+		},
+	}
+	client, _ := newTestClient(t, fake)
+
+	members, err := client.ListMembers(context.Background(), "org_1")
+	require.NoError(t, err)
+	require.Len(t, members, 1)
+	require.Equal(t, "editor", members[0].RoleSlug)
+	require.Equal(t, []string{"editor"}, members[0].RoleSlugs)
+}
+
+func TestRoleClient_UpdateMemberRoles(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{
+		{
+			ID:             "mem_1",
+			UserID:         "user_1",
+			OrganizationID: "org_1",
+			Role:           common.RoleResponse{Slug: "member"},
+			Status:         usermanagement.Active,
+		},
+	}
+	client, _ := newTestClient(t, fake)
+
+	updated, err := client.UpdateMemberRoles(context.Background(), "mem_1", []string{"admin", "builder"})
+	require.NoError(t, err)
+	require.Equal(t, "admin", updated.RoleSlug)
+	require.Equal(t, []string{"admin", "builder"}, updated.RoleSlugs)
+}
+
+func TestRoleClient_GetOrgMembership_MultiRole(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.memberships = []usermanagement.OrganizationMembership{
+		{
+			ID:             "mem_1",
+			UserID:         "user_1",
+			OrganizationID: "org_1",
+			Role:           common.RoleResponse{Slug: "admin"},
+			Roles:          []common.RoleResponse{{Slug: "admin"}, {Slug: "builder"}, {Slug: "viewer"}},
+			Status:         usermanagement.Active,
+		},
+	}
+	client, _ := newTestClient(t, fake)
+
+	membership, err := client.GetOrgMembership(context.Background(), "user_1", "org_1")
+	require.NoError(t, err)
+	require.Equal(t, "mem_1", membership.ID)
+	require.Equal(t, "admin", membership.RoleSlug)
+	require.Equal(t, []string{"admin", "builder", "viewer"}, membership.RoleSlugs)
 }

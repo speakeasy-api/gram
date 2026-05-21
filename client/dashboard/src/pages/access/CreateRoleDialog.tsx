@@ -1,7 +1,7 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+
 import { Button as LocalButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -32,7 +32,6 @@ import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  ArrowRight,
   Ban,
   Check,
   ChevronDown,
@@ -208,7 +207,9 @@ export function CreateRoleDialog({
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const { data: membersData } = useMembers();
-  const members = membersData?.members ?? [];
+  const members = [...(membersData?.members ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
   const { data: rolesData } = useRoles();
   const roleNameById = new Map(
     (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
@@ -1017,59 +1018,12 @@ export function CreateRoleDialog({
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0 flex-1 space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <Type
-                                variant="body"
-                                className="text-sm font-medium"
-                              >
-                                {member.name}
-                              </Type>
-                              {member.roleIds.length > 0 &&
-                                member.roleIds.some((id) =>
-                                  roleNameById.has(id),
-                                ) && (
-                                  <div className="flex items-center gap-1">
-                                    <Badge
-                                      variant="outline"
-                                      size="sm"
-                                      className={cn(
-                                        "font-mono text-[10px] uppercase",
-                                        selectedMembers.has(member.id) &&
-                                          !(
-                                            editingRole?.id &&
-                                            member.roleIds.includes(
-                                              editingRole.id,
-                                            )
-                                          ) &&
-                                          name.trim() &&
-                                          "line-through opacity-60",
-                                      )}
-                                    >
-                                      {member.roleIds
-                                        .map((id) => roleNameById.get(id))
-                                        .filter(Boolean)
-                                        .join(", ")}
-                                    </Badge>
-                                    {selectedMembers.has(member.id) &&
-                                      !(
-                                        editingRole?.id &&
-                                        member.roleIds.includes(editingRole.id)
-                                      ) &&
-                                      name.trim() && (
-                                        <>
-                                          <ArrowRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                                          <Badge
-                                            variant="outline"
-                                            size="sm"
-                                            className="border-primary text-primary font-mono text-[10px] uppercase"
-                                          >
-                                            {name}
-                                          </Badge>
-                                        </>
-                                      )}
-                                  </div>
-                                )}
-                            </div>
+                            <Type
+                              variant="body"
+                              className="text-sm font-medium"
+                            >
+                              {member.name}
+                            </Type>
                             <Type
                               variant="body"
                               className="text-muted-foreground text-xs"

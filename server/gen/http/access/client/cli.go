@@ -282,13 +282,13 @@ func BuildListGrantsPayload(accessListGrantsApikeyToken string, accessListGrants
 	return v, nil
 }
 
-// BuildUpdateMemberRolePayload builds the payload for the access
-// updateMemberRole endpoint from CLI flags.
-func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdateMemberRoleApikeyToken string, accessUpdateMemberRoleSessionToken string) (*access.UpdateMemberRolePayload, error) {
+// BuildUpdateMemberRolesPayload builds the payload for the access
+// updateMemberRoles endpoint from CLI flags.
+func BuildUpdateMemberRolesPayload(accessUpdateMemberRolesBody string, accessUpdateMemberRolesApikeyToken string, accessUpdateMemberRolesSessionToken string) (*access.UpdateMemberRolesPayload, error) {
 	var err error
-	var body UpdateMemberRoleRequestBody
+	var body UpdateMemberRolesRequestBody
 	{
-		err = json.Unmarshal([]byte(accessUpdateMemberRoleBody), &body)
+		err = json.Unmarshal([]byte(accessUpdateMemberRolesBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }'")
 		}
@@ -301,17 +301,17 @@ func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdat
 	}
 	var apikeyToken *string
 	{
-		if accessUpdateMemberRoleApikeyToken != "" {
-			apikeyToken = &accessUpdateMemberRoleApikeyToken
+		if accessUpdateMemberRolesApikeyToken != "" {
+			apikeyToken = &accessUpdateMemberRolesApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if accessUpdateMemberRoleSessionToken != "" {
-			sessionToken = &accessUpdateMemberRoleSessionToken
+		if accessUpdateMemberRolesSessionToken != "" {
+			sessionToken = &accessUpdateMemberRolesSessionToken
 		}
 	}
-	v := &access.UpdateMemberRolePayload{
+	v := &access.UpdateMemberRolesPayload{
 		UserID: body.UserID,
 	}
 	if body.RoleIds != nil {

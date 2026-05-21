@@ -425,17 +425,29 @@ export function TeamInner() {
               const memberRoleIds = roleIdsByUserId.get(member.userId);
               if (!memberRoleIds || memberRoleIds.length === 0)
                 return <span className="text-muted-foreground">—</span>;
+              const MAX_VISIBLE = 1;
+              const visible = memberRoleIds.slice(0, MAX_VISIBLE);
+              const overflow = memberRoleIds.slice(MAX_VISIBLE);
               return (
                 <Stack direction="horizontal" gap={1} className="flex-wrap">
-                  {memberRoleIds.map((roleId) => (
+                  {visible.map((roleId) => (
                     <Link
                       key={roleId}
                       to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                      className="text-primary hover:text-primary/80 rounded-sm border px-1.5 py-0.5 text-xs underline decoration-dotted underline-offset-4 transition-colors"
+                      className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
                     >
                       {getRoleName(roleId)}
                     </Link>
                   ))}
+                  {overflow.length > 0 && (
+                    <SimpleTooltip
+                      tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
+                    >
+                      <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
+                        +{overflow.length} more
+                      </span>
+                    </SimpleTooltip>
+                  )}
                 </Stack>
               );
             },
@@ -496,7 +508,7 @@ export function TeamInner() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {isRbacEnabled && accessMember && !isSelf && (
+              {isRbacEnabled && accessMember && (
                 <RequireScope scope="org:admin" level="component">
                   <DropdownMenuItem
                     onSelect={() =>

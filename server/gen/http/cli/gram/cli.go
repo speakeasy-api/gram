@@ -73,7 +73,7 @@ func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin poke",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
@@ -191,10 +191,10 @@ func ParseEndpoint(
 		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
 		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
 
-		accessUpdateMemberRoleFlags            = flag.NewFlagSet("update-member-role", flag.ExitOnError)
-		accessUpdateMemberRoleBodyFlag         = accessUpdateMemberRoleFlags.String("body", "REQUIRED", "")
-		accessUpdateMemberRoleApikeyTokenFlag  = accessUpdateMemberRoleFlags.String("apikey-token", "", "")
-		accessUpdateMemberRoleSessionTokenFlag = accessUpdateMemberRoleFlags.String("session-token", "", "")
+		accessUpdateMemberRolesFlags            = flag.NewFlagSet("update-member-roles", flag.ExitOnError)
+		accessUpdateMemberRolesBodyFlag         = accessUpdateMemberRolesFlags.String("body", "REQUIRED", "")
+		accessUpdateMemberRolesApikeyTokenFlag  = accessUpdateMemberRolesFlags.String("apikey-token", "", "")
+		accessUpdateMemberRolesSessionTokenFlag = accessUpdateMemberRolesFlags.String("session-token", "", "")
 
 		accessGetRBACStatusFlags            = flag.NewFlagSet("get-rbac-status", flag.ExitOnError)
 		accessGetRBACStatusSessionTokenFlag = accessGetRBACStatusFlags.String("session-token", "", "")
@@ -1705,7 +1705,7 @@ func ParseEndpoint(
 	accessListScopesFlags.Usage = accessListScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
-	accessUpdateMemberRoleFlags.Usage = accessUpdateMemberRoleUsage
+	accessUpdateMemberRolesFlags.Usage = accessUpdateMemberRolesUsage
 	accessGetRBACStatusFlags.Usage = accessGetRBACStatusUsage
 	accessEnableRBACFlags.Usage = accessEnableRBACUsage
 	accessDisableRBACFlags.Usage = accessDisableRBACUsage
@@ -2219,8 +2219,8 @@ func ParseEndpoint(
 			case "list-grants":
 				epf = accessListGrantsFlags
 
-			case "update-member-role":
-				epf = accessUpdateMemberRoleFlags
+			case "update-member-roles":
+				epf = accessUpdateMemberRolesFlags
 
 			case "get-rbac-status":
 				epf = accessGetRBACStatusFlags
@@ -3227,9 +3227,9 @@ func ParseEndpoint(
 			case "list-grants":
 				endpoint = c.ListGrants()
 				data, err = accessc.BuildListGrantsPayload(*accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
-			case "update-member-role":
-				endpoint = c.UpdateMemberRole()
-				data, err = accessc.BuildUpdateMemberRolePayload(*accessUpdateMemberRoleBodyFlag, *accessUpdateMemberRoleApikeyTokenFlag, *accessUpdateMemberRoleSessionTokenFlag)
+			case "update-member-roles":
+				endpoint = c.UpdateMemberRoles()
+				data, err = accessc.BuildUpdateMemberRolesPayload(*accessUpdateMemberRolesBodyFlag, *accessUpdateMemberRolesApikeyTokenFlag, *accessUpdateMemberRolesSessionTokenFlag)
 			case "get-rbac-status":
 				endpoint = c.GetRBACStatus()
 				data, err = accessc.BuildGetRBACStatusPayload(*accessGetRBACStatusSessionTokenFlag)
@@ -4259,7 +4259,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
-	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
+	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
 	fmt.Fprintln(os.Stderr, `    get-rbac-status: Returns whether RBAC is currently enabled for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    enable-rbac: Enable RBAC for the current organization. Seeds default grants for system roles.`)
 	fmt.Fprintln(os.Stderr, `    disable-rbac: Disable RBAC enforcement for the current organization.`)
@@ -4438,9 +4438,9 @@ func accessListGrantsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
-func accessUpdateMemberRoleUsage() {
+func accessUpdateMemberRolesUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access update-member-role", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-member-roles", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -4448,7 +4448,7 @@ func accessUpdateMemberRoleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Change a team member's role assignment.`)
+	fmt.Fprintln(os.Stderr, `Update a team member's role assignments.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -4457,7 +4457,7 @@ func accessUpdateMemberRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-role --body '{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-roles --body '{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessGetRBACStatusUsage() {

@@ -68,14 +68,6 @@ func (m *MockRoleProvider) ListMembers(ctx context.Context, orgID string) ([]thi
 	return nil, mockErr(args, 1)
 }
 
-func (m *MockRoleProvider) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*thirdpartyworkos.Member, error) {
-	args := m.Called(ctx, membershipID, roleSlug)
-	if member, ok := args.Get(0).(*thirdpartyworkos.Member); ok {
-		return member, mockErr(args, 1)
-	}
-	return nil, mockErr(args, 1)
-}
-
 func (m *MockRoleProvider) UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*thirdpartyworkos.Member, error) {
 	args := m.Called(ctx, membershipID, roleSlugs)
 	if member, ok := args.Get(0).(*thirdpartyworkos.Member); ok {

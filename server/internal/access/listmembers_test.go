@@ -55,6 +55,38 @@ func TestService_ListMembers(t *testing.T) {
 	require.Equal(t, []string{"role_builder"}, byID["local_user_2"].RoleIds)
 }
 
+func TestService_ListMembers_MultiRoleMember(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockSystemRole("role_admin", "Admin", "admin"),
+		mockRole("role_builder", "Builder", "custom-builder", ""),
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		{
+			ID:             "membership_1",
+			UserID:         "user_1",
+			OrganizationID: mockidp.MockOrgID,
+			RoleSlug:       "admin",
+			RoleSlugs:      []string{"admin", "custom-builder"},
+			CreatedAt:      mockMembershipTimestamp,
+		},
+	}, nil).Once()
+	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
+		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
+	}, nil).Once()
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Members, 1)
+	require.Equal(t, []string{"role_admin", "role_builder"}, result.Members[0].RoleIds)
+}
+
 func TestService_ListMembers_ExcludesDisconnectedUsers(t *testing.T) {
 	t.Parallel()
 

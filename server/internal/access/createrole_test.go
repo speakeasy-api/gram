@@ -45,18 +45,20 @@ func TestService_CreateRole(t *testing.T) {
 		// user_workos_only has never logged into Gram — should not be counted
 		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "member"),
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "org-custom-builder").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"member", "org-custom-builder"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "org-custom-builder",
+		RoleSlug:       "member",
+		RoleSlugs:      []string{"member", "org-custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "org-custom-builder").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{"member", "org-custom-builder"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "org-custom-builder",
+		RoleSlug:       "member",
+		RoleSlugs:      []string{"member", "org-custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 
@@ -83,6 +85,54 @@ func TestService_CreateRole(t *testing.T) {
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
 	require.Len(t, grants, 3)
+}
+
+func TestService_CreateRole_PreservesExistingRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
+		Name:        "New Role",
+		Slug:        "org-new-role",
+		Description: "Brand new",
+	}).Return(&thirdpartyworkos.Role{
+		ID:          "role_new",
+		Name:        "New Role",
+		Slug:        "org-new-role",
+		Description: "Brand new",
+		CreatedAt:   mockRoleTimestamp,
+		UpdatedAt:   mockRoleTimestamp,
+	}, nil).Once()
+	// user_1 already has admin + custom-builder — the new role must be appended, not replace them.
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		{ID: "membership_1", UserID: "user_1", OrganizationID: mockidp.MockOrgID, RoleSlug: "admin", RoleSlugs: []string{"admin", "custom-builder"}, CreatedAt: mockMembershipTimestamp},
+	}, nil).Once()
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"admin", "custom-builder", "org-new-role"}).Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin", "custom-builder", "org-new-role"},
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+
+	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name:        "New Role",
+		Description: "Brand new",
+		Grants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
+		},
+		MemberIds: []string{"local_user_1"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "New Role", role.Name)
+	require.Equal(t, 1, role.MemberCount)
 }
 
 func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {

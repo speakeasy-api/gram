@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { accessUpdateMemberRole } from "../funcs/accessUpdateMemberRole.js";
+import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -28,15 +28,15 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpdateMemberRoleMutationVariables = {
-  request: operations.UpdateMemberRoleRequest;
-  security?: operations.UpdateMemberRoleSecurity | undefined;
+export type UpdateMemberRolesMutationVariables = {
+  request: operations.UpdateMemberRolesRequest;
+  security?: operations.UpdateMemberRolesSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateMemberRoleMutationData = components.AccessMember;
+export type UpdateMemberRolesMutationData = components.AccessMember;
 
-export type UpdateMemberRoleMutationError =
+export type UpdateMemberRolesMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -48,49 +48,49 @@ export type UpdateMemberRoleMutationError =
   | SDKValidationError;
 
 /**
- * updateMemberRole access
+ * updateMemberRoles access
  *
  * @remarks
- * Change a team member's role assignment.
+ * Update a team member's role assignments.
  */
-export function useUpdateMemberRoleMutation(
+export function useUpdateMemberRolesMutation(
   options?: MutationHookOptions<
-    UpdateMemberRoleMutationData,
-    UpdateMemberRoleMutationError,
-    UpdateMemberRoleMutationVariables
+    UpdateMemberRolesMutationData,
+    UpdateMemberRolesMutationError,
+    UpdateMemberRolesMutationVariables
   >,
 ): UseMutationResult<
-  UpdateMemberRoleMutationData,
-  UpdateMemberRoleMutationError,
-  UpdateMemberRoleMutationVariables
+  UpdateMemberRolesMutationData,
+  UpdateMemberRolesMutationError,
+  UpdateMemberRolesMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpdateMemberRoleMutation(client, options),
+    ...buildUpdateMemberRolesMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpdateMemberRole(): MutationKey {
-  return ["@gram/client", "access", "updateMemberRole"];
+export function mutationKeyUpdateMemberRoles(): MutationKey {
+  return ["@gram/client", "access", "updateMemberRoles"];
 }
 
-export function buildUpdateMemberRoleMutation(
+export function buildUpdateMemberRolesMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpdateMemberRoleMutationVariables,
-  ) => Promise<UpdateMemberRoleMutationData>;
+    variables: UpdateMemberRolesMutationVariables,
+  ) => Promise<UpdateMemberRolesMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpdateMemberRole(),
-    mutationFn: function updateMemberRoleMutationFn({
+    mutationKey: mutationKeyUpdateMemberRoles(),
+    mutationFn: function updateMemberRolesMutationFn({
       request,
       security,
       options,
-    }): Promise<UpdateMemberRoleMutationData> {
+    }): Promise<UpdateMemberRolesMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -103,7 +103,7 @@ export function buildUpdateMemberRoleMutation(
           ),
         },
       };
-      return unwrapAsync(accessUpdateMemberRole(
+      return unwrapAsync(accessUpdateMemberRoles(
         client$,
         request,
         security,

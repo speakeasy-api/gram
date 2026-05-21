@@ -32,8 +32,8 @@ type Service interface {
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
 	// List the current user's effective grants, including inherited role grants.
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListUserGrantsResult, err error)
-	// Change a team member's role assignment.
-	UpdateMemberRole(context.Context, *UpdateMemberRolePayload) (res *AccessMember, err error)
+	// Update a team member's role assignments.
+	UpdateMemberRoles(context.Context, *UpdateMemberRolesPayload) (res *AccessMember, err error)
 	// Returns whether RBAC is currently enabled for the current organization.
 	GetRBACStatus(context.Context, *GetRBACStatusPayload) (res *RBACStatus, err error)
 	// Enable RBAC for the current organization. Seeds default grants for system
@@ -73,9 +73,9 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRole", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [15]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
-// AccessMember is the result type of the access service updateMemberRole
+// AccessMember is the result type of the access service updateMemberRoles
 // method.
 type AccessMember struct {
 	// User ID.
@@ -473,9 +473,9 @@ type Selector struct {
 	ProjectID *string
 }
 
-// UpdateMemberRolePayload is the payload type of the access service
-// updateMemberRole method.
-type UpdateMemberRolePayload struct {
+// UpdateMemberRolesPayload is the payload type of the access service
+// updateMemberRoles method.
+type UpdateMemberRolesPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// The user ID to update.

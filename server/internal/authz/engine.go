@@ -254,8 +254,8 @@ func (e *Engine) storeRoleSlugsCache(ctx context.Context, userID, orgID string, 
 	}
 }
 
-// InvalidateRoleCache removes the cached role slug for a single user. Call
-// this after updating a specific member's role via UpdateMemberRole.
+// InvalidateRoleCache removes the cached role slugs for a single user. Call
+// this after updating a specific member's roles via UpdateMemberRoles.
 func (e *Engine) InvalidateRoleCache(ctx context.Context, userID, orgID string) {
 	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: "", Slugs: nil}
 	if err := e.roleCache.Delete(ctx, entry); err != nil {

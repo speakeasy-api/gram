@@ -226,15 +226,15 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Grants"}`)
 	})
 
-	Method("updateMemberRole", func() {
-		Description("Change a team member's role assignment.")
+	Method("updateMemberRoles", func() {
+		Description("Update a team member's role assignments.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(UpdateMemberRoleForm)
+			Extend(UpdateMemberRolesForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -242,15 +242,15 @@ var _ = Service("access", func() {
 		Result(MemberModel)
 
 		HTTP(func() {
-			PUT("/rpc/access.updateMemberRole")
+			PUT("/rpc/access.updateMemberRoles")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "updateMemberRole")
-		Meta("openapi:extension:x-speakeasy-name-override", "updateMemberRole")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRole"}`)
+		Meta("openapi:operationId", "updateMemberRoles")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateMemberRoles")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRoles"}`)
 	})
 
 	Method("getRBACStatus", func() {
@@ -601,7 +601,7 @@ var ListUserGrantsResult = Type("ListUserGrantsResult", func() {
 	Attribute("grants", ArrayOf(ListRoleGrantModel), "The user's effective grants in this organization.")
 })
 
-var UpdateMemberRoleForm = Type("UpdateMemberRoleForm", func() {
+var UpdateMemberRolesForm = Type("UpdateMemberRolesForm", func() {
 	Required("user_id", "role_ids")
 
 	Attribute("user_id", String, "The user ID to update.")

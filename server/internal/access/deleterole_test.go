@@ -56,24 +56,59 @@ func TestService_DeleteRole_ReassignsMembersToDefault(t *testing.T) {
 		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
 		mockMember(mockidp.MockOrgID, "membership_other", "user_3", "admin"),
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", authz.SystemRoleMember).Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{authz.SystemRoleMember}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       authz.SystemRoleMember,
+		RoleSlugs:      []string{authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", authz.SystemRoleMember).Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{authz.SystemRoleMember}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       authz.SystemRoleMember,
+		RoleSlugs:      []string{authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.NoError(t, err)
+}
+
+func TestService_DeleteRole_PreservesOtherRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
+	}, nil).Once()
+	// user_1 has admin + custom-builder — deleting custom-builder must keep admin.
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		{ID: "membership_1", UserID: "user_1", OrganizationID: mockidp.MockOrgID, RoleSlug: "admin", RoleSlugs: []string{"admin", "custom-builder"}, CreatedAt: mockMembershipTimestamp},
+	}, nil).Once()
+	// Remaining roles after removing custom-builder: just admin.
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"admin"}).Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin"},
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
+
+	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
+	require.NoError(t, err)
+
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	require.Empty(t, grants)
 }
 
 func TestService_DeleteRole_ReassignFailureHaltsDelete(t *testing.T) {
@@ -90,7 +125,7 @@ func TestService_DeleteRole_ReassignFailureHaltsDelete(t *testing.T) {
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", authz.SystemRoleMember).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{authz.SystemRoleMember}).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
@@ -119,14 +154,15 @@ func TestService_DeleteRole_PartialReassignFailureStopsLoop(t *testing.T) {
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
 		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", authz.SystemRoleMember).Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{authz.SystemRoleMember}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       authz.SystemRoleMember,
+		RoleSlugs:      []string{authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", authz.SystemRoleMember).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{authz.SystemRoleMember}).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})

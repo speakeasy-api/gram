@@ -243,19 +243,19 @@ func TestService_DeleteRole_AllowsOrgAdminGrant(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestService_UpdateMemberRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
+func TestService_UpdateMemberRoles_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 	ctx = withRBACGrants(t, ctx)
 
-	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "user_1", RoleIds: []string{"role_builder"}})
+	_, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "user_1", RoleIds: []string{"role_builder"}})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
+func TestService_UpdateMemberRoles_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -282,7 +282,7 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 	}, nil).Once()
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
-	member, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleIds: []string{"role_builder"}})
+	member, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "local_user_1", RoleIds: []string{"role_builder"}})
 	require.NoError(t, err)
 	require.Equal(t, []string{"role_builder"}, member.RoleIds)
 }
@@ -305,4 +305,107 @@ func testAccessAuthContext(t *testing.T, ctx context.Context) *contextvalues.Aut
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 	return authCtx
+}
+
+func TestService_ListRoles_MultiRoleGrantUnion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+
+	// Simulate grant union from two roles: role_a grants org:read, role_b also grants org:read.
+	// In practice LoadGrants returns a flat list. Here we test that a single org:read grant works.
+	// The interesting case is: role_a grants org:read on the org, AND the context has grants from both roles.
+	ctx = withRBACGrants(t, ctx,
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
+	)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockSystemRole("role_admin", "Admin", "admin"),
+		mockRole("role_builder", "Builder", "custom-builder", ""),
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+	}, nil).Once()
+
+	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Roles, 2)
+}
+
+func TestService_UpdateMemberRoles_MultiRoleGrantAllowsOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+
+	// Multi-role scenario: user has grants from both admin and builder roles.
+	// The admin role grants org:admin. The builder role grants build:write.
+	// The union should include org:admin, allowing UpdateMemberRoles.
+	ctx = withRBACGrants(t, ctx,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+		authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authz.WildcardResource)},
+	)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockSystemRole("role_admin", "Admin", "admin"),
+		mockRole("role_builder", "Builder", "custom-builder", ""),
+	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "admin"),
+	}, nil).Once()
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"custom-builder"}).Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder"},
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
+		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
+	}, nil).Once()
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+
+	member, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "local_user_1", RoleIds: []string{"role_builder"}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"role_builder"}, member.RoleIds)
+}
+
+func TestService_UpdateMemberRoles_DenyOverridesAllowAcrossRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+
+	// Role A grants org:admin (allow). Role B denies org:admin on same resource.
+	// Deny-wins: UpdateMemberRoles should be forbidden.
+	ctx = withRBACGrants(t, ctx,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+		authz.NewDenyGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	)
+
+	_, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "local_user_1", RoleIds: []string{"role_builder"}})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestService_ListMembers_DenyOverridesAllowAcrossRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+
+	// Role A grants org:read. Role B denies org:read. Deny wins.
+	ctx = withRBACGrants(t, ctx,
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
+		authz.NewDenyGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	)
+
+	_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }

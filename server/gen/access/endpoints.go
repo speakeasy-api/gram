@@ -24,7 +24,7 @@ type Endpoints struct {
 	ListScopes           goa.Endpoint
 	ListMembers          goa.Endpoint
 	ListGrants           goa.Endpoint
-	UpdateMemberRole     goa.Endpoint
+	UpdateMemberRoles    goa.Endpoint
 	GetRBACStatus        goa.Endpoint
 	EnableRBAC           goa.Endpoint
 	DisableRBAC          goa.Endpoint
@@ -46,7 +46,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListScopes:           NewListScopesEndpoint(s, a.APIKeyAuth),
 		ListMembers:          NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:           NewListGrantsEndpoint(s, a.APIKeyAuth),
-		UpdateMemberRole:     NewUpdateMemberRoleEndpoint(s, a.APIKeyAuth),
+		UpdateMemberRoles:    NewUpdateMemberRolesEndpoint(s, a.APIKeyAuth),
 		GetRBACStatus:        NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
 		EnableRBAC:           NewEnableRBACEndpoint(s, a.APIKeyAuth),
 		DisableRBAC:          NewDisableRBACEndpoint(s, a.APIKeyAuth),
@@ -66,7 +66,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListScopes = m(e.ListScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
-	e.UpdateMemberRole = m(e.UpdateMemberRole)
+	e.UpdateMemberRoles = m(e.UpdateMemberRoles)
 	e.GetRBACStatus = m(e.GetRBACStatus)
 	e.EnableRBAC = m(e.EnableRBAC)
 	e.DisableRBAC = m(e.DisableRBAC)
@@ -355,11 +355,11 @@ func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 	}
 }
 
-// NewUpdateMemberRoleEndpoint returns an endpoint function that calls the
-// method "updateMemberRole" of service "access".
-func NewUpdateMemberRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewUpdateMemberRolesEndpoint returns an endpoint function that calls the
+// method "updateMemberRoles" of service "access".
+func NewUpdateMemberRolesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UpdateMemberRolePayload)
+		p := req.(*UpdateMemberRolesPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -386,7 +386,7 @@ func NewUpdateMemberRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		if err != nil {
 			return nil, err
 		}
-		return s.UpdateMemberRole(ctx, p)
+		return s.UpdateMemberRoles(ctx, p)
 	}
 }
 

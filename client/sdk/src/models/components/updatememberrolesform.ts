@@ -5,7 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type UpdateMemberRoleForm = {
+export type UpdateMemberRolesForm = {
   /**
    * The role IDs to assign. Replaces all existing role assignments.
    */
@@ -17,15 +17,15 @@ export type UpdateMemberRoleForm = {
 };
 
 /** @internal */
-export type UpdateMemberRoleForm$Outbound = {
+export type UpdateMemberRolesForm$Outbound = {
   role_ids: Array<string>;
   user_id: string;
 };
 
 /** @internal */
-export const UpdateMemberRoleForm$outboundSchema: z.ZodMiniType<
-  UpdateMemberRoleForm$Outbound,
-  UpdateMemberRoleForm
+export const UpdateMemberRolesForm$outboundSchema: z.ZodMiniType<
+  UpdateMemberRolesForm$Outbound,
+  UpdateMemberRolesForm
 > = z.pipe(
   z.object({
     roleIds: z.array(z.string()),
@@ -39,10 +39,10 @@ export const UpdateMemberRoleForm$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function updateMemberRoleFormToJSON(
-  updateMemberRoleForm: UpdateMemberRoleForm,
+export function updateMemberRolesFormToJSON(
+  updateMemberRolesForm: UpdateMemberRolesForm,
 ): string {
   return JSON.stringify(
-    UpdateMemberRoleForm$outboundSchema.parse(updateMemberRoleForm),
+    UpdateMemberRolesForm$outboundSchema.parse(updateMemberRolesForm),
   );
 }

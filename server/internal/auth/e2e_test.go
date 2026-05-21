@@ -93,11 +93,14 @@ func (m *mockWorkOSFetcher) GetOrgMembership(_ context.Context, workosUserID, wo
 	return nil, nil
 }
 
-func (m *mockWorkOSFetcher) UpdateMemberRole(_ context.Context, membershipID, roleSlug string) (*workos.Member, error) {
+func (m *mockWorkOSFetcher) UpdateMemberRoles(_ context.Context, membershipID string, roleSlugs []string) (*workos.Member, error) {
 	for userID, members := range m.members {
 		for i := range members {
 			if members[i].ID == membershipID {
-				members[i].RoleSlug = roleSlug
+				members[i].RoleSlugs = roleSlugs
+				if len(roleSlugs) > 0 {
+					members[i].RoleSlug = roleSlugs[0]
+				}
 				m.members[userID] = members
 				return &members[i], nil
 			}

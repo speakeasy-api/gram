@@ -1295,10 +1295,10 @@ paths:
       x-speakeasy-name-override: resolveChallenge
       x-speakeasy-react-hook:
         name: ResolveChallenge
-  /rpc/access.updateMemberRole:
+  /rpc/access.updateMemberRoles:
     put:
-      description: Change a team member's role assignment.
-      operationId: updateMemberRole
+      description: Update a team member's role assignments.
+      operationId: updateMemberRoles
       parameters:
         - allowEmptyValue: true
           description: API Key header
@@ -1318,7 +1318,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateMemberRoleForm'
+              $ref: '#/components/schemas/UpdateMemberRolesForm'
         required: true
       responses:
         "200":
@@ -1385,12 +1385,12 @@ paths:
         - apikey_header_Gram-Key: []
         - session_header_Gram-Session: []
         - {}
-      summary: updateMemberRole access
+      summary: updateMemberRoles access
       tags:
         - access
-      x-speakeasy-name-override: updateMemberRole
+      x-speakeasy-name-override: updateMemberRoles
       x-speakeasy-react-hook:
-        name: UpdateMemberRole
+        name: UpdateMemberRoles
   /rpc/access.updateRole:
     put:
       description: Update an existing custom role.
@@ -36729,7 +36729,7 @@ components:
       required:
         - id
         - visibility
-    UpdateMemberRoleForm:
+    UpdateMemberRolesForm:
       type: object
       properties:
         role_ids:

@@ -147,7 +147,7 @@ run();
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
 * [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
-* [updateMemberRole](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
+* [updateMemberRoles](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
 
 ### [Assets](docs/sdks/assets/README.md)
@@ -573,7 +573,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
 - [`accessResolveChallenge`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
-- [`accessUpdateMemberRole`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
+- [`accessUpdateMemberRoles`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`assetsCreateSignedChatAttachmentURL`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`assetsFetchOpenAPIv3FromURL`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
@@ -1074,7 +1074,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
 - [`useUpdateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
 - [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
-- [`useUpdateMemberRoleMutation`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
+- [`useUpdateMemberRolesMutation`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
