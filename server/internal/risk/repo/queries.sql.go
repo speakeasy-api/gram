@@ -1061,16 +1061,62 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
+  AND ($2::timestamptz IS NULL OR cm.created_at >= $2::timestamptz)
+  AND ($3::timestamptz IS NULL OR cm.created_at < $3::timestamptz)
+  AND ($4::text = '' OR (
+    CASE
+      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
+      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
+      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
+      WHEN rr.rule_id IN (
+          'pii.us_ssn'
+        , 'pii.us_passport'
+        , 'pii.us_driver_license'
+        , 'pii.us_itin'
+        , 'pii.uk_nhs'
+        , 'pii.uk_nino'
+        , 'pii.uk_passport'
+        , 'pii.es_nif'
+        , 'pii.it_fiscal_code'
+        , 'pii.au_tfn'
+        , 'pii.in_pan'
+        , 'pii.in_aadhaar'
+        , 'pii.sg_nric_fin'
+      ) THEN 'government_ids'
+      WHEN rr.rule_id IN (
+          'pii.medical_license'
+        , 'pii.us_mbi'
+        , 'pii.us_npi'
+        , 'pii.medical_disease_disorder'
+        , 'pii.medical_medication'
+        , 'pii.medical_therapeutic_procedure'
+        , 'pii.medical_clinical_event'
+        , 'pii.medical_biological_attribute'
+        , 'pii.medical_family_history'
+      ) THEN 'healthcare'
+      WHEN rr.rule_id IN (
+          'pii.harmful_content_request'
+        , 'pii.policy_violation'
+        , 'pii.unauthorized_action'
+        , 'pii.topic_boundary_violation'
+      ) THEN 'off_policy'
+      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+      ELSE 'custom'
+    END
+  ) = $4::text)
   AND (
-    $2::timestamptz IS NULL
-    OR (cm.created_at, rr.id) < ($2::timestamptz, $3::uuid)
+    $5::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < ($5::timestamptz, $6::uuid)
   )
 ORDER BY cm.created_at DESC, rr.id DESC
-LIMIT $4
+LIMIT $7
 `
 
 type ListRiskResultsByProjectFoundParams struct {
 	ProjectID              uuid.UUID
+	FromTime               pgtype.Timestamptz
+	ToTime                 pgtype.Timestamptz
+	Category               string
 	CursorMessageCreatedAt pgtype.Timestamptz
 	CursorID               uuid.NullUUID
 	PageLimit              int32
@@ -1106,9 +1152,15 @@ type ListRiskResultsByProjectFoundRow struct {
 // finding for an old message ahead of one for a recent message — which is
 // exactly the "random-seeming" order users see in Recent Findings.
 // Cursor is (cm.created_at, rr.id) for stable pagination.
+// The category CASE expression here must stay in sync with the one in
+// ListRiskOverviewTimeSeriesFindings; both derive the user-facing category
+// key from rr.source and rr.rule_id.
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound,
 		arg.ProjectID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.Category,
 		arg.CursorMessageCreatedAt,
 		arg.CursorID,
 		arg.PageLimit,

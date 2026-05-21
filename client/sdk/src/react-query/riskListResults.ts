@@ -110,6 +110,9 @@ export function setRiskListResultsData(
     parameters: {
       policyId?: string | undefined;
       chatId?: string | undefined;
+      category?: string | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;
@@ -130,6 +133,9 @@ export function invalidateRiskListResults(
     [parameters: {
       policyId?: string | undefined;
       chatId?: string | undefined;
+      category?: string | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;

@@ -1400,6 +1400,9 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		var (
 			policyID         *string
 			chatID           *string
+			category         *string
+			from             *string
+			to               *string
 			cursor           *string
 			limit            *int
 			apikeyToken      *string
@@ -1421,6 +1424,24 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		}
 		if chatID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+		}
+		categoryRaw := qp.Get("category")
+		if categoryRaw != "" {
+			category = &categoryRaw
+		}
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
@@ -1462,7 +1483,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, chatID, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, category, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

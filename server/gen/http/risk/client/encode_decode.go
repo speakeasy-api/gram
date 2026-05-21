@@ -1491,6 +1491,15 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.ChatID != nil {
 			values.Add("chat_id", *p.ChatID)
 		}
+		if p.Category != nil {
+			values.Add("category", *p.Category)
+		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}

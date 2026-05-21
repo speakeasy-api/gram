@@ -79,6 +79,7 @@ import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
+import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
@@ -471,6 +472,11 @@ const ROUTE_STRUCTURE = {
         title: "User",
         url: "users/:externalUserId",
         component: RiskOverviewUserDetail,
+      },
+      categoryDetail: {
+        title: "Category",
+        url: "categories/:category",
+        component: RiskOverviewCategoryDetail,
       },
     },
   },

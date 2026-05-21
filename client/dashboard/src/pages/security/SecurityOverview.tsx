@@ -200,16 +200,25 @@ function SecurityOverviewContent() {
   const overview = overviewQuery.data;
 
   const topCategories = useMemo<BarDatum[]>(() => {
+    const categoryDetailRoute = (
+      routes.riskOverview as unknown as {
+        categoryDetail?: { href: (...params: string[]) => string };
+      }
+    ).categoryDetail;
     return (overview?.topCategories ?? []).map((category) => {
       const key = category.category;
       const meta = RULE_CATEGORY_META[key as RuleCategory];
+      const href = categoryDetailRoute
+        ? `${categoryDetailRoute.href(encodeURIComponent(key))}${location.search}`
+        : undefined;
       return {
         key,
         label: meta?.label ?? key,
         value: category.findings,
+        href,
       };
     });
-  }, [overview?.topCategories]);
+  }, [overview?.topCategories, routes.riskOverview, location.search]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
     const userDetailRoute = (

@@ -100,10 +100,13 @@ async function $do(
   const path = pathToFunc("/rpc/risk.results.list")();
 
   const query = encodeFormQuery({
+    "category": payload?.category,
     "chat_id": payload?.chat_id,
     "cursor": payload?.cursor,
+    "from": payload?.from,
     "limit": payload?.limit,
     "policy_id": payload?.policy_id,
+    "to": payload?.to,
   });
 
   const headers = new Headers(compactMap({

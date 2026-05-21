@@ -292,7 +292,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -309,6 +309,32 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 		if riskListRiskResultsChatID != "" {
 			chatID = &riskListRiskResultsChatID
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var category *string
+	{
+		if riskListRiskResultsCategory != "" {
+			category = &riskListRiskResultsCategory
+		}
+	}
+	var from *string
+	{
+		if riskListRiskResultsFrom != "" {
+			from = &riskListRiskResultsFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskListRiskResultsTo != "" {
+			to = &riskListRiskResultsTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 			if err != nil {
 				return nil, err
 			}
@@ -362,6 +388,9 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
+	v.Category = category
+	v.From = from
+	v.To = to
 	v.Cursor = cursor
 	v.Limit = limit
 	v.ApikeyToken = apikeyToken

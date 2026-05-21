@@ -207,6 +207,13 @@ var _ = Service("risk", func() {
 			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
+			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Filter results to messages created strictly before this timestamp (ISO 8601).", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
 			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
 				Minimum(1)
@@ -223,6 +230,9 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("chat_id")
+			Param("category")
+			Param("from")
+			Param("to")
 			Param("cursor")
 			Param("limit")
 			Response(StatusOK)

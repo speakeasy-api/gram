@@ -213,6 +213,12 @@ type ListRiskResultsPayload struct {
 	PolicyID *string
 	// Optional chat ID to filter by.
 	ChatID *string
+	// Optional rule category key to filter by (e.g. secrets, pii, financial).
+	Category *string
+	// Filter results to messages created at or after this timestamp (ISO 8601).
+	From *string
+	// Filter results to messages created strictly before this timestamp (ISO 8601).
+	To *string
 	// Cursor to fetch the next page of results.
 	Cursor *string
 	// Maximum number of results to return per page.

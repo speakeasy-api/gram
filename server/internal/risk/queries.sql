@@ -324,6 +324,9 @@ WHERE risk_policy_id = @risk_policy_id
 -- finding for an old message ahead of one for a recent message — which is
 -- exactly the "random-seeming" order users see in Recent Findings.
 -- Cursor is (cm.created_at, rr.id) for stable pagination.
+-- The category CASE expression here must stay in sync with the one in
+-- ListRiskOverviewTimeSeriesFindings; both derive the user-facing category
+-- key from rr.source and rr.rule_id.
 SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
@@ -331,6 +334,49 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
+  AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
+  AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
+  AND (@category::text = '' OR (
+    CASE
+      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
+      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
+      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
+      WHEN rr.rule_id IN (
+          'pii.us_ssn'
+        , 'pii.us_passport'
+        , 'pii.us_driver_license'
+        , 'pii.us_itin'
+        , 'pii.uk_nhs'
+        , 'pii.uk_nino'
+        , 'pii.uk_passport'
+        , 'pii.es_nif'
+        , 'pii.it_fiscal_code'
+        , 'pii.au_tfn'
+        , 'pii.in_pan'
+        , 'pii.in_aadhaar'
+        , 'pii.sg_nric_fin'
+      ) THEN 'government_ids'
+      WHEN rr.rule_id IN (
+          'pii.medical_license'
+        , 'pii.us_mbi'
+        , 'pii.us_npi'
+        , 'pii.medical_disease_disorder'
+        , 'pii.medical_medication'
+        , 'pii.medical_therapeutic_procedure'
+        , 'pii.medical_clinical_event'
+        , 'pii.medical_biological_attribute'
+        , 'pii.medical_family_history'
+      ) THEN 'healthcare'
+      WHEN rr.rule_id IN (
+          'pii.harmful_content_request'
+        , 'pii.policy_violation'
+        , 'pii.unauthorized_action'
+        , 'pii.topic_boundary_violation'
+      ) THEN 'off_policy'
+      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+      ELSE 'custom'
+    END
+  ) = @category::text)
   AND (
     sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
     OR (cm.created_at, rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)

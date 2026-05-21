@@ -670,7 +670,35 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
 		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize, totalCount)
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount)
+
+	category := ""
+	if payload.Category != nil {
+		category = *payload.Category
+	}
+	fromTime, err := parseOptionalTimestamptz(payload.From)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid from").Log(ctx, s.logger)
+	}
+	toTime, err := parseOptionalTimestamptz(payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid to").Log(ctx, s.logger)
+	}
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, fromTime, toTime)
+}
+
+func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
+	if raw == nil {
+		return pgtype.Timestamptz{}, nil
+	}
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" {
+		return pgtype.Timestamptz{}, nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, trimmed)
+	if err != nil {
+		return pgtype.Timestamptz{}, err
+	}
+	return pgtype.Timestamptz{Time: parsed.UTC(), InfinityModifier: pgtype.Finite, Valid: true}, nil
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
@@ -945,10 +973,13 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
+		FromTime:               fromTime,
+		ToTime:                 toTime,
+		Category:               category,
 		CursorMessageCreatedAt: cursorCreatedAt,
 		CursorID:               cursorID,
 		PageLimit:              conv.SafeInt32(pageSize + 1),

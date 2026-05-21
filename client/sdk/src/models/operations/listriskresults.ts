@@ -30,6 +30,18 @@ export type ListRiskResultsRequest = {
    */
   chatId?: string | undefined;
   /**
+   * Optional rule category key to filter by (e.g. secrets, pii, financial).
+   */
+  category?: string | undefined;
+  /**
+   * Filter results to messages created at or after this timestamp (ISO 8601).
+   */
+  from?: Date | undefined;
+  /**
+   * Filter results to messages created strictly before this timestamp (ISO 8601).
+   */
+  to?: Date | undefined;
+  /**
    * Cursor to fetch the next page of results.
    */
   cursor?: string | undefined;
@@ -156,6 +168,9 @@ export function listRiskResultsSecurityToJSON(
 export type ListRiskResultsRequest$Outbound = {
   policy_id?: string | undefined;
   chat_id?: string | undefined;
+  category?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Key"?: string | undefined;
@@ -171,6 +186,9 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     policyId: z.optional(z.string()),
     chatId: z.optional(z.string()),
+    category: z.optional(z.string()),
+    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramKey: z.optional(z.string()),

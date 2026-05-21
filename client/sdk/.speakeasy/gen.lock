@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0a4c14f9133c36ae8bc79db732a5df0f
+  docChecksum: 1cf358116f46d6da3b866290e72c4734
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2049,7 +2049,7 @@ trackedFiles:
   docs/models/operations/listriskresultsbychatsecurityoption2.md:
     last_write_checksum: sha1:e4671f7de0aa651f138730fc56273cf87c2eca30
   docs/models/operations/listriskresultsrequest.md:
-    last_write_checksum: sha1:f56866b8cb675b9137a7ab70eac01650de6d9198
+    last_write_checksum: sha1:8c5a580cf55c4801ce3721d39767ee74b722c1e5
   docs/models/operations/listriskresultssecurity.md:
     last_write_checksum: sha1:d9f80b63da3e50953ab93a07dd1e54cca5068750
   docs/models/operations/listriskresultssecurityoption1.md:
@@ -3319,7 +3319,7 @@ trackedFiles:
   src/funcs/riskResultsByChat.ts:
     last_write_checksum: sha1:f7d08096a2f620fa96470b83b8a47d483c202da7
   src/funcs/riskResultsList.ts:
-    last_write_checksum: sha1:53d54dcfaa97cae9af4dd99ec601132591533a58
+    last_write_checksum: sha1:144a289f8d814c022af57c452859a014c4758285
   src/funcs/slackConfigureSlackApp.ts:
     last_write_checksum: sha1:8bc4423e8eee9029d10416d94f39ce19518eeeba
   src/funcs/slackCreateSlackApp.ts:
@@ -5155,7 +5155,7 @@ trackedFiles:
   src/models/operations/listriskpolicies.ts:
     last_write_checksum: sha1:7f0b959f25ceb36e6f612a3a7d92427f4c9aa644
   src/models/operations/listriskresults.ts:
-    last_write_checksum: sha1:e2f3e8f14430c8f4f007851c50f9773ca6e67c38
+    last_write_checksum: sha1:c784f2c72b73d39d71b30effe7a8c05233473418
   src/models/operations/listriskresultsbychat.ts:
     last_write_checksum: sha1:e9e67cfb8e43e5a443a937d067267d2df381ab4e
   src/models/operations/listroles.ts:
@@ -6191,9 +6191,9 @@ trackedFiles:
   src/react-query/riskListPolicies.ts:
     last_write_checksum: sha1:74965e0fbdf603a5b8cd565cae3e8b080b35b670
   src/react-query/riskListResults.core.ts:
-    last_write_checksum: sha1:f762a3c779ebe620b7af505219f1b14b2565aeb3
+    last_write_checksum: sha1:97a64c6264e4a9705c599d24255697289c95ac8f
   src/react-query/riskListResults.ts:
-    last_write_checksum: sha1:50ca4d69db00e9ad1054a838d76da72789124eef
+    last_write_checksum: sha1:43428db9b91ae429ac1f07a5913df83c0ce1713b
   src/react-query/riskListResultsByChat.core.ts:
     last_write_checksum: sha1:3c4a55aef7a2f5c43dbd5b2a7ca607b19f73b009
   src/react-query/riskListResultsByChat.ts:
