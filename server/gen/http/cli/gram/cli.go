@@ -43,6 +43,7 @@ import (
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
+	portalsc "github.com/speakeasy-api/gram/server/gen/http/portals/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
 	remotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/client"
@@ -100,6 +101,7 @@ func UsageCommands() []string {
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
+		"portals (get-portal|update-portal)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|verify-url|delete-server)",
@@ -985,6 +987,20 @@ func ParseEndpoint(
 		pluginsPublishPluginsBodyFlag             = pluginsPublishPluginsFlags.String("body", "REQUIRED", "")
 		pluginsPublishPluginsSessionTokenFlag     = pluginsPublishPluginsFlags.String("session-token", "", "")
 		pluginsPublishPluginsProjectSlugInputFlag = pluginsPublishPluginsFlags.String("project-slug-input", "", "")
+
+		portalsFlags = flag.NewFlagSet("portals", flag.ContinueOnError)
+
+		portalsGetPortalFlags                = flag.NewFlagSet("get-portal", flag.ExitOnError)
+		portalsGetPortalPreviewFlag          = portalsGetPortalFlags.String("preview", "", "")
+		portalsGetPortalSessionTokenFlag     = portalsGetPortalFlags.String("session-token", "", "")
+		portalsGetPortalApikeyTokenFlag      = portalsGetPortalFlags.String("apikey-token", "", "")
+		portalsGetPortalProjectSlugInputFlag = portalsGetPortalFlags.String("project-slug-input", "", "")
+
+		portalsUpdatePortalFlags                = flag.NewFlagSet("update-portal", flag.ExitOnError)
+		portalsUpdatePortalBodyFlag             = portalsUpdatePortalFlags.String("body", "REQUIRED", "")
+		portalsUpdatePortalSessionTokenFlag     = portalsUpdatePortalFlags.String("session-token", "", "")
+		portalsUpdatePortalApikeyTokenFlag      = portalsUpdatePortalFlags.String("apikey-token", "", "")
+		portalsUpdatePortalProjectSlugInputFlag = portalsUpdatePortalFlags.String("project-slug-input", "", "")
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
@@ -1891,6 +1907,10 @@ func ParseEndpoint(
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 
+	portalsFlags.Usage = portalsUsage
+	portalsGetPortalFlags.Usage = portalsGetPortalUsage
+	portalsUpdatePortalFlags.Usage = portalsUpdatePortalUsage
+
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
@@ -2116,6 +2136,8 @@ func ParseEndpoint(
 			svcf = packagesFlags
 		case "plugins":
 			svcf = pluginsFlags
+		case "portals":
+			svcf = portalsFlags
 		case "features":
 			svcf = featuresFlags
 		case "projects":
@@ -2734,6 +2756,16 @@ func ParseEndpoint(
 
 			case "publish-plugins":
 				epf = pluginsPublishPluginsFlags
+
+			}
+
+		case "portals":
+			switch epn {
+			case "get-portal":
+				epf = portalsGetPortalFlags
+
+			case "update-portal":
+				epf = portalsUpdatePortalFlags
 
 			}
 
@@ -3751,6 +3783,16 @@ func ParseEndpoint(
 			case "publish-plugins":
 				endpoint = c.PublishPlugins()
 				data, err = pluginsc.BuildPublishPluginsPayload(*pluginsPublishPluginsBodyFlag, *pluginsPublishPluginsSessionTokenFlag, *pluginsPublishPluginsProjectSlugInputFlag)
+			}
+		case "portals":
+			c := portalsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-portal":
+				endpoint = c.GetPortal()
+				data, err = portalsc.BuildGetPortalPayload(*portalsGetPortalPreviewFlag, *portalsGetPortalSessionTokenFlag, *portalsGetPortalApikeyTokenFlag, *portalsGetPortalProjectSlugInputFlag)
+			case "update-portal":
+				endpoint = c.UpdatePortal()
+				data, err = portalsc.BuildUpdatePortalPayload(*portalsUpdatePortalBodyFlag, *portalsUpdatePortalSessionTokenFlag, *portalsUpdatePortalApikeyTokenFlag, *portalsUpdatePortalProjectSlugInputFlag)
 			}
 		case "features":
 			c := featuresc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7972,6 +8014,65 @@ func pluginsPublishPluginsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --body '{\n      \"github_usernames\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// portalsUsage displays the usage of the portals command and its subcommands.
+func portalsUsage() {
+	fmt.Fprintln(os.Stderr, `Manages per-project Internal MCP Server Portals.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] portals COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-portal: Get the portal configuration and server cards for a project. Returns 404 when the portal does not exist or is disabled, unless preview=true and the caller has project:write.`)
+	fmt.Fprintln(os.Stderr, `    update-portal: Create or update the portal configuration for a project.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s portals COMMAND --help\n", os.Args[0])
+}
+func portalsGetPortalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] portals get-portal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -preview BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the portal configuration and server cards for a project. Returns 404 when the portal does not exist or is disabled, unless preview=true and the caller has project:write.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -preview BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "portals get-portal --preview false --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func portalsUpdatePortalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] portals update-portal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or update the portal configuration for a project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "portals update-portal --body '{\n      \"display_name\": \"abc123\",\n      \"enabled\": false,\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tagline\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.

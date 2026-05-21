@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: f62aa1482613145cc514cab057e08b36
+  docChecksum: 1ecf7afbda8d6abdbf9328f19d7db3fa
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -644,6 +644,10 @@ trackedFiles:
     last_write_checksum: sha1:8a2bc1a476e55d66c0fa67b222371171ce935f53
   docs/models/components/policy.md:
     last_write_checksum: sha1:4f61847539866024b0d616f84b41de6dc9c64b2d
+  docs/models/components/portal.md:
+    last_write_checksum: sha1:04eedc9e54a39452b8fb724ee69942e6b40c3f57
+  docs/models/components/portalserver.md:
+    last_write_checksum: sha1:29a99ba6710bd77c941510b47797a078f65c8c4b
   docs/models/components/principaltype.md:
     last_write_checksum: sha1:0b369f84dc15c71aaa2b290aa3a7dcffa514dfd6
   docs/models/components/project.md:
@@ -928,6 +932,8 @@ trackedFiles:
     last_write_checksum: sha1:baacccd02a2cc6f551cfea99592ff1b553a4398a
   docs/models/components/updatepluginserverformpolicy.md:
     last_write_checksum: sha1:a3c1c31ef8ff5c29e31965e4e8e248683e9e57d5
+  docs/models/components/updateportalform.md:
+    last_write_checksum: sha1:746d43343d29624771eab4fb3bfe5c3a7e18d086
   docs/models/components/updateprompttemplateform.md:
     last_write_checksum: sha1:783351b401f225e4d70b8715b123edb860b56849
   docs/models/components/updateprompttemplateformengine.md:
@@ -1622,6 +1628,14 @@ trackedFiles:
     last_write_checksum: sha1:6306d00e8c4ee10d78926f43c6e82c5365532e64
   docs/models/operations/getpluginsecurity.md:
     last_write_checksum: sha1:33f0d6e5986f17bf55088f6b06400be9c3f50887
+  docs/models/operations/getportalrequest.md:
+    last_write_checksum: sha1:e71ac9aff3607cb3f63ee4b6cd3fe595e00d2ccc
+  docs/models/operations/getportalsecurity.md:
+    last_write_checksum: sha1:42767b6ddb7e1e2e64159b505d43121b59a5bd1f
+  docs/models/operations/getportalsecurityoption1.md:
+    last_write_checksum: sha1:643400bc9085c634dce8bd18b716050728cc45d4
+  docs/models/operations/getportalsecurityoption2.md:
+    last_write_checksum: sha1:f6b2b63f9495405aefc8fcfa4d1d24f1db696905
   docs/models/operations/getproductfeaturesrequest.md:
     last_write_checksum: sha1:17a0c2a2069d6be56484508e4a3ec4f9636dd6eb
   docs/models/operations/getproductfeaturessecurity.md:
@@ -2506,6 +2520,14 @@ trackedFiles:
     last_write_checksum: sha1:79f772cf108c6dcbdf78648fba2ee970ba9b88be
   docs/models/operations/updatepluginserversecurity.md:
     last_write_checksum: sha1:f8a3c53bd653179cc26853ca847944720bcff13f
+  docs/models/operations/updateportalrequest.md:
+    last_write_checksum: sha1:163f0f03639f9977702a105f06389c30dd56cc97
+  docs/models/operations/updateportalsecurity.md:
+    last_write_checksum: sha1:529062abfd080874ebc3d7b1d016e0c8040ba400
+  docs/models/operations/updateportalsecurityoption1.md:
+    last_write_checksum: sha1:a1fe8f198e8f5becdc5ada12ce4965ad12969e85
+  docs/models/operations/updateportalsecurityoption2.md:
+    last_write_checksum: sha1:2b079987c85ce7b49a01dfd9da4833a39ff53622
   docs/models/operations/updateremotemcpserverrequest.md:
     last_write_checksum: sha1:9c43caba8858690cc507e38a0e128d2571ce5b49
   docs/models/operations/updateremotemcpserversecurity.md:
@@ -2708,6 +2730,8 @@ trackedFiles:
     last_write_checksum: sha1:1db1ff15e99af9efc38c654bdff23180d91827d8
   docs/sdks/policies/README.md:
     last_write_checksum: sha1:cdd3f7dc142798bd13cfe0fb5c109301a47c5e16
+  docs/sdks/portals/README.md:
+    last_write_checksum: sha1:a57223c5c90b6d845476db662648c44daa4dbc5d
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
   docs/sdks/remotemcp/README.md:
@@ -3196,6 +3220,10 @@ trackedFiles:
     last_write_checksum: sha1:3e01a530b3a9f0f3b21303a70524873c5f9551c9
   src/funcs/pluginsUpdatePluginServer.ts:
     last_write_checksum: sha1:ec4cbd534a492838f10fe9cf645049f8c3c00ccc
+  src/funcs/portalsRead.ts:
+    last_write_checksum: sha1:7bb559a17ad6a91825837a84644c71586c31c3d0
+  src/funcs/portalsUpdate.ts:
+    last_write_checksum: sha1:c3748a22627866458b6b4ad9a8440f7e23480180
   src/funcs/projectsCreate.ts:
     id: dd2581a3ecbe
     last_write_checksum: sha1:0c4be3ea8c91da57e84684276a616b42857058d5
@@ -3960,7 +3988,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:cbdd01d6e2d4e02b7533289744fef5148a028d2a
+    last_write_checksum: sha1:4c6656e9f55c0711d840b3be8e2a5b4c9c662b4a
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4258,6 +4286,10 @@ trackedFiles:
     last_write_checksum: sha1:b311ed29fb32f79675d5605f8d38a894f11cda61
   src/models/components/pluginserver.ts:
     last_write_checksum: sha1:a6ef33fce7d68e9c3a5abc2f7bbee100be7e81d4
+  src/models/components/portal.ts:
+    last_write_checksum: sha1:d111f73ae928b0d13ee71927cf3f1f33e60dd0d4
+  src/models/components/portalserver.ts:
+    last_write_checksum: sha1:d107a18d58053f2a74894628022102086617f3df
   src/models/components/project.ts:
     id: 0a0f965206a3
     last_write_checksum: sha1:84b9576251265d0f29eaee2be9af497e70a5d262
@@ -4552,6 +4584,8 @@ trackedFiles:
     last_write_checksum: sha1:6cb5b9e522d17bc27eeca84121f06c454c7f5843
   src/models/components/updatepluginserverform.ts:
     last_write_checksum: sha1:279766c9600743d8d59cebb1c9c84abd6fa0538e
+  src/models/components/updateportalform.ts:
+    last_write_checksum: sha1:f68f7b8bbcc67bf2653070fe14891a3fa70ddd1f
   src/models/components/updateprompttemplateform.ts:
     id: 21a677c10f0a
     last_write_checksum: sha1:d82cb580318d084f713ebd16a34b93f1241731bd
@@ -4948,6 +4982,8 @@ trackedFiles:
     pristine_git_object: 3e4b0a83b81bd2c50a72f7a5476e9463aa1ab441
   src/models/operations/getplugin.ts:
     last_write_checksum: sha1:7b2604c8ee3b5122e5ef9ddc4595183e70710a79
+  src/models/operations/getportal.ts:
+    last_write_checksum: sha1:50c53802fa996d6e796c0d732d34663e72de1eb7
   src/models/operations/getproductfeatures.ts:
     last_write_checksum: sha1:81244d1e94decda47179cb8b9e32bf6bc3400882
   src/models/operations/getproject.ts:
@@ -5014,7 +5050,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:ed903182d0b45a2b77f3524a14466d76b6e7950a
+    last_write_checksum: sha1:bfaa6bb8829bdbcb0a4c08cd188bbad00ab52974
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5330,6 +5366,8 @@ trackedFiles:
     last_write_checksum: sha1:207d539388bb6bb4deb89280da6461b55a640e1c
   src/models/operations/updatepluginserver.ts:
     last_write_checksum: sha1:9e163c97aaaa1b03df179c7940c81c99398a10b0
+  src/models/operations/updateportal.ts:
+    last_write_checksum: sha1:b4795afb43a694d80f5ba59f0dfb30689e259081
   src/models/operations/updateremotemcpserver.ts:
     last_write_checksum: sha1:a07fa9bec355cb71eeb6866762a924e146402b0c
   src/models/operations/updateremotesessionclient.ts:
@@ -5784,7 +5822,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:4a23ddbcce75b258ab2cea717f19b8ad32f200c3
+    last_write_checksum: sha1:992c65de9ef1b3fc7ed5255892974cf6b73967ae
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6034,6 +6072,10 @@ trackedFiles:
     last_write_checksum: sha1:ac252459de2faad04c01ef3919b8a48f6b9358a4
   src/react-query/pluginsDownloadPluginPackage.ts:
     last_write_checksum: sha1:60630da17b8cac01cf2d9aba68361416f00b4ab0
+  src/react-query/portal.core.ts:
+    last_write_checksum: sha1:a6a3cead0670bd6dfd3431906feaf2543dcfa422
+  src/react-query/portal.ts:
+    last_write_checksum: sha1:001ea2980492f2425a01e05ddd1ee746a0338bfb
   src/react-query/productFeatures.core.ts:
     last_write_checksum: sha1:e50a4730a1ba96856cfe20b946c83f2f50525103
   src/react-query/productFeatures.ts:
@@ -6336,6 +6378,8 @@ trackedFiles:
     last_write_checksum: sha1:a6d41eb32e3f51eab455f9cf4b6dc1b0b9787c82
   src/react-query/updatePluginServer.ts:
     last_write_checksum: sha1:489ddf2625bf5b337bff7708e70ee9b80e47b0f4
+  src/react-query/updatePortal.ts:
+    last_write_checksum: sha1:5c45b875409cfaae0a78caf204bf0b8d929c4580
   src/react-query/updateRemoteMcpServer.ts:
     last_write_checksum: sha1:6e0c7cce02a7275a4a56d00607de092d63d85dd0
   src/react-query/updateRemoteSessionClient.ts:
@@ -6510,6 +6554,8 @@ trackedFiles:
     last_write_checksum: sha1:7028ca7dfba43671e325dd5f14920e007e88e378
   src/sdk/policies.ts:
     last_write_checksum: sha1:7df5f8ff60b6ce77f41555f75e34a2364f53e9cf
+  src/sdk/portals.ts:
+    last_write_checksum: sha1:854b22d1a6181e4db9588fcc95070a4dc88cab6e
   src/sdk/projects.ts:
     id: 28088373a118
     last_write_checksum: sha1:a80e20f3e6686ec35437d4054d5f1ff74b78c346
@@ -6532,7 +6578,7 @@ trackedFiles:
     last_write_checksum: sha1:be77693c3ad1fead906ed32052a6395f6d2cd130
   src/sdk/sdk.ts:
     id: 784571af2f69
-    last_write_checksum: sha1:13bae5fb1873ba74f7cc2211435078fdb2683f6d
+    last_write_checksum: sha1:990914ccd3c5e6de2b98a37213224123698896f3
     pristine_git_object: 02357477f876788c1d5316789aca538a95c1070a
   src/sdk/slack.ts:
     id: bbd98c55f3c0
@@ -9778,6 +9824,26 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getPortal:
+    speakeasy-default-get-portal:
+      responses:
+        "200":
+          application/json: {"display_name": "Katlynn_Halvorson87", "enabled": false, "project_slug": "<value>", "servers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updatePortal:
+    speakeasy-default-update-portal:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"display_name": "Eldora_Franey5", "enabled": false, "project_slug": "<value>", "servers": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

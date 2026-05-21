@@ -14500,6 +14500,215 @@ paths:
             x-speakeasy-name-override: updatePluginServer
             x-speakeasy-react-hook:
                 name: UpdatePluginServer
+    /rpc/portals.get:
+        get:
+            description: Get the portal configuration and server cards for a project. Returns 404 when the portal does not exist or is disabled, unless preview=true and the caller has project:write.
+            operationId: getPortal
+            parameters:
+                - allowEmptyValue: true
+                  description: Bypass the disabled-portal 404 for project admins (for the in-settings preview).
+                  in: query
+                  name: preview
+                  schema:
+                    description: Bypass the disabled-portal 404 for project admins (for the in-settings preview).
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Portal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getPortal portals
+            tags:
+                - portals
+            x-speakeasy-name-override: read
+            x-speakeasy-react-hook:
+                name: Portal
+    /rpc/portals.update:
+        post:
+            description: Create or update the portal configuration for a project.
+            operationId: updatePortal
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePortalForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Portal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updatePortal portals
+            tags:
+                - portals
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdatePortal
     /rpc/productFeatures.get:
         get:
             description: Get the current state of all product feature flags.
@@ -32982,6 +33191,59 @@ components:
                     type: boolean
             required:
                 - ok
+        Portal:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: Resolved display name (override → project.name).
+                enabled:
+                    type: boolean
+                    description: Whether the portal is enabled.
+                    default: false
+                logo_url:
+                    type: string
+                    description: Resolved logo URL or empty when none.
+                project_slug:
+                    type: string
+                    description: The project's slug.
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PortalServer'
+                    description: Cards to render on the portal.
+                tagline:
+                    type: string
+                    description: Tagline if set.
+            required:
+                - enabled
+                - project_slug
+                - display_name
+                - servers
+        PortalServer:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Server or toolset description.
+                install_url:
+                    type: string
+                    description: URL of the per-server install page.
+                name:
+                    type: string
+                    description: Server name.
+                slug:
+                    type: string
+                    description: Endpoint slug.
+                tool_count:
+                    type: integer
+                    description: Number of tools exposed by this server.
+                    format: int64
+            required:
+                - slug
+                - name
+                - tool_count
+                - install_url
         Project:
             type: object
             properties:
@@ -36368,6 +36630,22 @@ components:
                 - id
                 - plugin_id
                 - display_name
+        UpdatePortalForm:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: Override for the portal's display name. Empty string clears the override.
+                enabled:
+                    type: boolean
+                    description: Whether the portal is publicly reachable to org members.
+                logo_asset_id:
+                    type: string
+                    description: UUID of an asset to use as the logo. Empty string clears.
+                    format: uuid
+                tagline:
+                    type: string
+                    description: Short tagline shown under the title. Empty string clears.
         UpdatePromptTemplateForm:
             type: object
             properties:
@@ -37463,6 +37741,8 @@ tags:
       description: Manages packages in Gram.
     - name: plugins
       description: Manage distributable plugin bundles of MCP servers and hooks.
+    - name: portals
+      description: Manages per-project Internal MCP Server Portals.
     - name: features
       description: Manage product level feature controls.
     - name: projects

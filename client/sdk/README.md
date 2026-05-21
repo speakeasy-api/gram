@@ -362,6 +362,11 @@ run();
 * [updatePlugin](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 * [updatePluginServer](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 
+### [Portals](docs/sdks/portals/README.md)
+
+* [read](docs/sdks/portals/README.md#read) - getPortal portals
+* [update](docs/sdks/portals/README.md#update) - updatePortal portals
+
 ### [Projects](docs/sdks/projects/README.md)
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
@@ -705,6 +710,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsSetPluginAssignments`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`pluginsUpdatePlugin`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`pluginsUpdatePluginServer`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
+- [`portalsRead`](docs/sdks/portals/README.md#read) - getPortal portals
+- [`portalsUpdate`](docs/sdks/portals/README.md#update) - updatePortal portals
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsDeleteById`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
@@ -996,6 +1003,7 @@ To learn about this feature and how to get started, check
 - [`usePluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`usePluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+- [`usePortal`](docs/sdks/portals/README.md#read) - getPortal portals
 - [`useProductFeatures`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
@@ -1073,6 +1081,7 @@ To learn about this feature and how to get started, check
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`useUpdatePluginServerMutation`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
+- [`useUpdatePortalMutation`](docs/sdks/portals/README.md#update) - updatePortal portals
 - [`useUpdateRemoteMcpServerMutation`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
 - [`useUpdateRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#update) - updateRemoteSessionClient remoteSessionClients
 - [`useUpdateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers

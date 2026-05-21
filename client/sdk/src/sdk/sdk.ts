@@ -30,6 +30,7 @@ import { Organizations } from "./organizations.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
+import { Portals } from "./portals.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
 import { RemoteSessionClients } from "./remotesessionclients.js";
@@ -179,6 +180,11 @@ export class Gram extends ClientSDK {
   private _plugins?: Plugins;
   get plugins(): Plugins {
     return (this._plugins ??= new Plugins(this._options));
+  }
+
+  private _portals?: Portals;
+  get portals(): Portals {
+    return (this._portals ??= new Portals(this._options));
   }
 
   private _features?: Features;
