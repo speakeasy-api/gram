@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -126,12 +127,15 @@ export function RevealAllToggle({ className }: { className?: string }) {
 export function MaskedMatch({ value }: { value: string | undefined }) {
   const ctx = useContext(RevealAllContext);
   const [revealed, setRevealed] = useState(ctx?.revealAll ?? false);
-  const generation = ctx?.generation ?? 0;
-  const globalRevealed = ctx?.revealAll ?? false;
+  // Only sync when the global toggle actually fires (generation changes).
+  // Depending on ctx directly would clobber per-row clicks on every render.
+  const lastSyncedGeneration = useRef(ctx?.generation);
   useEffect(() => {
-    if (ctx) setRevealed(globalRevealed);
-    // Re-sync whenever the global toggle fires, even if its value is unchanged.
-  }, [ctx, globalRevealed, generation]);
+    if (!ctx) return;
+    if (lastSyncedGeneration.current === ctx.generation) return;
+    lastSyncedGeneration.current = ctx.generation;
+    setRevealed(ctx.revealAll);
+  });
 
   if (!value) return <span>-</span>;
 

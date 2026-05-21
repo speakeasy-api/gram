@@ -20,7 +20,7 @@ import { useRevealAll } from "@/pages/security/risk-ui";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import {
@@ -852,10 +852,16 @@ function MaskedContent({ onReveal }: { onReveal: () => void }) {
 function MaskedMatchInline({ value }: { value: string }) {
   const reveal = useRevealAll();
   const [revealed, setRevealed] = useState(reveal?.revealAll ?? false);
+  // Only sync when the global toggle actually fires (generation changes).
+  // useRevealAll() returns a fresh object each render, so depending on it
+  // directly would clobber per-row clicks immediately after they happen.
+  const lastSyncedGeneration = useRef(reveal?.generation);
   useEffect(() => {
-    if (reveal) setRevealed(reveal.revealAll);
-    // Re-sync on every global toggle, even when its value matches local state.
-  }, [reveal?.revealAll, reveal?.generation, reveal]);
+    if (!reveal) return;
+    if (lastSyncedGeneration.current === reveal.generation) return;
+    lastSyncedGeneration.current = reveal.generation;
+    setRevealed(reveal.revealAll);
+  });
 
   if (!revealed) {
     return (
