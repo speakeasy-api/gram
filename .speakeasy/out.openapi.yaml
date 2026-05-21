@@ -26708,6 +26708,16 @@ components:
         - plugin_id
         - toolset_id
         - display_name
+    AdminListOrganizationMembersResult:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOrganizationMember'
+          description: The members of the organization.
+      required:
+        - members
     AdminListOrganizationProjectsResult:
       type: object
       properties:
@@ -26784,6 +26794,35 @@ components:
         - account_type
         - whitelisted
         - member_count
+        - created_at
+        - updated_at
+    AdminOrganizationMember:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        display_name:
+          type: string
+          description: User display name.
+        email:
+          type: string
+          description: User email address.
+        id:
+          type: string
+          description: User ID.
+        last_login:
+          type: string
+          description: The time the user last logged in, if any.
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      description: Organization member surfaced to admin operators.
+      required:
+        - id
+        - email
+        - display_name
         - created_at
         - updated_at
     AdminProject:
