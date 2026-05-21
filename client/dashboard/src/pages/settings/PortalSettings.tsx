@@ -73,6 +73,16 @@ export function PortalSettings() {
 
   const portalUrl = `${window.location.origin}/portal/${project.slug}`;
 
+  const handleCopyPortalUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(portalUrl);
+      toast.success("Portal URL copied");
+    } catch (err) {
+      console.error("Failed to copy portal URL:", err);
+      toast.error("Failed to copy portal URL");
+    }
+  };
+
   return (
     <section className="rounded-lg border p-6">
       <Stack gap={4}>
@@ -161,7 +171,7 @@ export function PortalSettings() {
             <Button
               variant="secondary"
               size="md"
-              onClick={() => navigator.clipboard.writeText(portalUrl)}
+              onClick={handleCopyPortalUrl}
               disabled={!enabled}
             >
               <Button.Text>Copy</Button.Text>
