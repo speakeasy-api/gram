@@ -1004,6 +1004,52 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
+func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRiskRuleBreakdownPayload) (*gen.RiskRuleBreakdownResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").Log(ctx, s.logger)
+	}
+
+	window := riskOverviewWindowParams(from, to)
+	rows, err := s.repo.ListRiskRulesByCategory(ctx, repo.ListRiskRulesByCategoryParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+		Category:  payload.Category,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list rule breakdown").Log(ctx, s.logger)
+	}
+
+	rules := make([]*gen.RiskRuleBreakdownEntry, 0, len(rows))
+	var total int64
+	for _, row := range rows {
+		rules = append(rules, &gen.RiskRuleBreakdownEntry{
+			RuleID:   row.RuleID,
+			Source:   row.Source,
+			Findings: row.Findings,
+		})
+		total += row.Findings
+	}
+
+	return &gen.RiskRuleBreakdownResult{
+		From:     from.UTC().Format(time.RFC3339),
+		To:       to.UTC().Format(time.RFC3339),
+		Category: payload.Category,
+		Rules:    rules,
+		Total:    total,
+	}, nil
+}
+
 func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskPolicyStatusPayload) (*types.RiskPolicyStatus, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

@@ -3,6 +3,7 @@
  */
 
 import { riskOverviewGet } from "../funcs/riskOverviewGet.js";
+import { riskOverviewRules } from "../funcs/riskOverviewRules.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -21,6 +22,25 @@ export class Overview extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.RiskOverviewResult> {
     return unwrapAsync(riskOverviewGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getRiskRuleBreakdown risk
+   *
+   * @remarks
+   * Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
+   */
+  async rules(
+    request: operations.GetRiskRuleBreakdownRequest,
+    security?: operations.GetRiskRuleBreakdownSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RiskRuleBreakdownResult> {
+    return unwrapAsync(riskOverviewRules(
       this,
       request,
       security,

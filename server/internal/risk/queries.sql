@@ -142,6 +142,65 @@ WHERE rr.project_id = @project_id
   AND rr.created_at >= @from_time
   AND rr.created_at < @to_time;
 
+-- name: ListRiskRulesByCategory :many
+-- Returns per-rule_id finding counts for a category within a window.
+-- The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings
+-- and ListRiskResultsByProjectFound; all three classify rr.rule_id the same way.
+WITH categorized AS (
+  SELECT
+    COALESCE(rr.rule_id, '')::TEXT AS rule_id,
+    rr.source,
+    CASE
+      WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
+      WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
+      WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
+      WHEN rr.rule_id IN (
+          'pii.us_ssn'
+        , 'pii.us_passport'
+        , 'pii.us_driver_license'
+        , 'pii.us_itin'
+        , 'pii.uk_nhs'
+        , 'pii.uk_nino'
+        , 'pii.uk_passport'
+        , 'pii.es_nif'
+        , 'pii.it_fiscal_code'
+        , 'pii.au_tfn'
+        , 'pii.in_pan'
+        , 'pii.in_aadhaar'
+        , 'pii.sg_nric_fin'
+      ) THEN 'government_ids'
+      WHEN rr.rule_id IN (
+          'pii.medical_license'
+        , 'pii.us_mbi'
+        , 'pii.us_npi'
+        , 'pii.medical_disease_disorder'
+        , 'pii.medical_medication'
+        , 'pii.medical_therapeutic_procedure'
+        , 'pii.medical_clinical_event'
+        , 'pii.medical_biological_attribute'
+        , 'pii.medical_family_history'
+      ) THEN 'healthcare'
+      WHEN rr.rule_id IN (
+          'pii.harmful_content_request'
+        , 'pii.policy_violation'
+        , 'pii.unauthorized_action'
+        , 'pii.topic_boundary_violation'
+      ) THEN 'off_policy'
+      WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+      ELSE 'custom'
+    END AS category
+  FROM risk_results rr
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.created_at >= @from_time
+    AND rr.created_at < @to_time
+)
+SELECT rule_id, source, COUNT(*)::BIGINT AS findings
+FROM categorized
+WHERE category = @category::text
+GROUP BY rule_id, source
+ORDER BY findings DESC, rule_id ASC;
+
 -- name: ListRiskOverviewTopUsers :many
 WITH user_findings AS (
   SELECT

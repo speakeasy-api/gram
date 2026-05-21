@@ -10,12 +10,16 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components";
-import { useRiskOverview } from "@gram/client/react-query/index.js";
+import {
+  useRiskOverview,
+  useRiskRuleBreakdown,
+} from "@gram/client/react-query/index.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import { getRuleTitleFallback } from "./risk-utils";
 import {
   CategoryLabel,
   MaskedMatch,
@@ -57,6 +61,7 @@ function RiskOverviewCategoryDetailContent() {
   const client = useSdkClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
+  const ruleFilter = searchParams.get("rule_id") ?? "";
   const setSelectedChatId = useCallback(
     (chatId: string | null) => {
       setSearchParams(
@@ -66,6 +71,23 @@ function RiskOverviewCategoryDetailContent() {
             next.set("chat_id", chatId);
           } else {
             next.delete("chat_id");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  const setRuleFilter = useCallback(
+    (ruleId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (ruleId) {
+            next.set("rule_id", ruleId);
+          } else {
+            next.delete("rule_id");
           }
           return next;
         },
@@ -97,6 +119,8 @@ function RiskOverviewCategoryDetailContent() {
     [overviewQuery.data?.topCategories, category],
   );
 
+  const ruleBreakdownQuery = useRiskRuleBreakdown({ category, from, to });
+
   const resultsQuery = useInfiniteQuery({
     queryKey: [
       "risk",
@@ -104,6 +128,7 @@ function RiskOverviewCategoryDetailContent() {
       "list",
       "by-category",
       category,
+      ruleFilter,
       from.toISOString(),
       to.toISOString(),
     ],
@@ -112,6 +137,7 @@ function RiskOverviewCategoryDetailContent() {
         cursor: pageParam,
         limit: 50,
         category,
+        ruleId: ruleFilter || undefined,
         from,
         to,
       });
@@ -176,6 +202,15 @@ function RiskOverviewCategoryDetailContent() {
                 format="number"
                 icon="flag"
               />
+            </div>
+            <RuleBreakdown
+              rules={ruleBreakdownQuery.data?.rules ?? []}
+              isLoading={ruleBreakdownQuery.isLoading}
+              activeRuleId={ruleFilter}
+              onSelectRule={setRuleFilter}
+            />
+            <div className="flex items-center gap-2">
+              <RuleIdFilter value={ruleFilter} onChange={setRuleFilter} />
             </div>
             <ResultsTable
               results={results}
@@ -326,6 +361,130 @@ function ResultsTable({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function RuleBreakdown({
+  rules,
+  isLoading,
+  activeRuleId,
+  onSelectRule,
+}: {
+  rules: Array<{ ruleId: string; source: string; findings: number }>;
+  isLoading: boolean;
+  activeRuleId: string;
+  onSelectRule: (ruleId: string) => void;
+}) {
+  if (isLoading && rules.length === 0) {
+    return (
+      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
+        Loading rule breakdown...
+      </div>
+    );
+  }
+  if (rules.length === 0) return null;
+  const max = rules[0]?.findings || 1;
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium">Findings by rule</h4>
+        {activeRuleId && (
+          <button
+            type="button"
+            onClick={() => onSelectRule("")}
+            className="text-muted-foreground hover:text-foreground text-xs"
+          >
+            Clear filter
+          </button>
+        )}
+      </div>
+      <ul className="space-y-2">
+        {rules.map((rule, i) => {
+          const isActive = activeRuleId === rule.ruleId;
+          const label = rule.ruleId
+            ? getRuleTitleFallback(rule.ruleId)
+            : "(no rule_id)";
+          return (
+            <li key={rule.ruleId || `__none_${i}`}>
+              <button
+                type="button"
+                onClick={() => onSelectRule(isActive ? "" : rule.ruleId)}
+                aria-pressed={isActive}
+                className={`hover:bg-muted/40 -mx-2 flex w-full items-center gap-3 rounded px-2 py-1.5 transition-colors ${
+                  isActive ? "bg-muted" : ""
+                }`}
+              >
+                <span className="text-muted-foreground w-4 shrink-0 text-right text-xs">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span
+                      className="truncate text-left text-sm"
+                      title={rule.ruleId}
+                    >
+                      {label}
+                    </span>
+                    <span className="text-muted-foreground shrink-0 text-xs">
+                      {rule.findings.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="bg-muted h-1 w-full rounded-full">
+                    <div
+                      className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
+                      style={{ width: `${(rule.findings / max) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function RuleIdFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  useEffect(() => {
+    if (local === value) return;
+    const t = setTimeout(() => onChange(local), 350);
+    return () => clearTimeout(t);
+  }, [local, value, onChange]);
+
+  return (
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
+      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
+      <input
+        type="text"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        placeholder="Filter by rule ID..."
+        className="placeholder:text-muted-foreground w-[240px] bg-transparent text-sm outline-none"
+        aria-label="Filter by rule ID"
+      />
+      {local && (
+        <button
+          type="button"
+          onClick={() => setLocal("")}
+          className="text-muted-foreground hover:text-foreground"
+          aria-label="Clear rule filter"
+        >
+          <Icon name="x" className="size-3.5" />
+        </button>
+      )}
     </div>
   );
 }

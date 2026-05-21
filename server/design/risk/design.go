@@ -311,6 +311,42 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskOverview"}`)
 	})
 
+	Method("getRiskRuleBreakdown", func() {
+		Description("Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("category", String, "Required category key to break down by rule_id (e.g. secrets, pii).")
+			Attribute("from", String, "Inclusive start of the window. Defaults to the same 7-day window as the overview.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+			Required("category")
+		})
+
+		Result(RiskRuleBreakdownResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.overview.rules")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("category")
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskRuleBreakdown")
+		Meta("openapi:extension:x-speakeasy-group", "risk.overview")
+		Meta("openapi:extension:x-speakeasy-name-override", "rules")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskRuleBreakdown"}`)
+	})
+
 	Method("getRiskPolicyStatus", func() {
 		Description("Get the analysis status of a risk policy including progress and workflow state.")
 
@@ -507,6 +543,24 @@ var RiskOverviewCategory = Type("RiskOverviewCategory", func() {
 	Attribute("findings", Int64, "Finding count for this category.")
 
 	Required("category", "findings")
+})
+
+var RiskRuleBreakdownEntry = Type("RiskRuleBreakdownEntry", func() {
+	Attribute("rule_id", String, "Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has no rule_id (treat as 'unspecified').")
+	Attribute("source", String, "Source bucket the rule belongs to (gitleaks, presidio, etc.) for label/icon resolution on the dashboard.")
+	Attribute("findings", Int64, "Finding count for this rule within the window.")
+
+	Required("rule_id", "source", "findings")
+})
+
+var RiskRuleBreakdownResult = Type("RiskRuleBreakdownResult", func() {
+	Attribute("from", String, "Inclusive start of the window used.", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive end of the window used.", func() { Format(FormatDateTime) })
+	Attribute("category", String, "Category the breakdown is scoped to.")
+	Attribute("rules", ArrayOf(RiskRuleBreakdownEntry), "Rules in this category, ordered by finding count descending.")
+	Attribute("total", Int64, "Total findings across all rules in this category and window.")
+
+	Required("from", "to", "category", "rules", "total")
 })
 
 var RiskOverviewUser = Type("RiskOverviewUser", func() {

@@ -285,6 +285,8 @@ export * from "./riskoverviewuser.js";
 export * from "./riskpolicy.js";
 export * from "./riskpolicystatus.js";
 export * from "./riskresult.js";
+export * from "./riskrulebreakdownentry.js";
+export * from "./riskrulebreakdownresult.js";
 export * from "./role.js";
 export * from "./rolegrant.js";
 export * from "./rolesummary.js";

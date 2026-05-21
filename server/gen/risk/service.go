@@ -35,6 +35,9 @@ type Service interface {
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
 	// Get risk overview metrics and trend data for the current project.
 	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
+	// Get per-rule_id finding counts for a category within a time window. Powers
+	// the per-category drill-down chart on /risk-overview.
+	GetRiskRuleBreakdown(context.Context, *GetRiskRuleBreakdownPayload) (res *RiskRuleBreakdownResult, err error)
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
@@ -74,7 +77,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
+var MethodNames = [15]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -165,6 +168,21 @@ type GetRiskPolicyStatusPayload struct {
 	ProjectSlugInput *string
 	// The policy ID.
 	ID string
+}
+
+// GetRiskRuleBreakdownPayload is the payload type of the risk service
+// getRiskRuleBreakdown method.
+type GetRiskRuleBreakdownPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Required category key to break down by rule_id (e.g. secrets, pii).
+	Category string
+	// Inclusive start of the window. Defaults to the same 7-day window as the
+	// overview.
+	From *string
+	// Exclusive end of the window. Defaults to now.
+	To *string
 }
 
 // ListRiskPoliciesPayload is the payload type of the risk service
@@ -322,6 +340,32 @@ type RiskOverviewUser struct {
 	ExternalUserID string
 	// Finding count for this user.
 	Findings int64
+}
+
+type RiskRuleBreakdownEntry struct {
+	// Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has
+	// no rule_id (treat as 'unspecified').
+	RuleID string
+	// Source bucket the rule belongs to (gitleaks, presidio, etc.) for label/icon
+	// resolution on the dashboard.
+	Source string
+	// Finding count for this rule within the window.
+	Findings int64
+}
+
+// RiskRuleBreakdownResult is the result type of the risk service
+// getRiskRuleBreakdown method.
+type RiskRuleBreakdownResult struct {
+	// Inclusive start of the window used.
+	From string
+	// Exclusive end of the window used.
+	To string
+	// Category the breakdown is scoped to.
+	Category string
+	// Rules in this category, ordered by finding count descending.
+	Rules []*RiskRuleBreakdownEntry
+	// Total findings across all rules in this category and window.
+	Total int64
 }
 
 // TriggerRiskAnalysisPayload is the payload type of the risk service

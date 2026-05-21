@@ -18397,6 +18397,130 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: RiskOverview
+  /rpc/risk.overview.rules:
+    get:
+      description: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
+      operationId: getRiskRuleBreakdown
+      parameters:
+        - allowEmptyValue: true
+          description: Required category key to break down by rule_id (e.g. secrets, pii).
+          in: query
+          name: category
+          required: true
+          schema:
+            description: Required category key to break down by rule_id (e.g. secrets, pii).
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+          in: query
+          name: from
+          schema:
+            description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive end of the window. Defaults to now.
+          in: query
+          name: to
+          schema:
+            description: Exclusive end of the window. Defaults to now.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRuleBreakdownResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getRiskRuleBreakdown risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.overview
+      x-speakeasy-name-override: rules
+      x-speakeasy-react-hook:
+        name: RiskRuleBreakdown
   /rpc/risk.policies.create:
     post:
       description: Create a new risk analysis policy for the current project.
@@ -34598,6 +34722,52 @@ components:
         - chat_message_id
         - source
         - created_at
+    RiskRuleBreakdownEntry:
+      type: object
+      properties:
+        findings:
+          type: integer
+          description: Finding count for this rule within the window.
+          format: int64
+        rule_id:
+          type: string
+          description: Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has no rule_id (treat as 'unspecified').
+        source:
+          type: string
+          description: Source bucket the rule belongs to (gitleaks, presidio, etc.) for label/icon resolution on the dashboard.
+      required:
+        - rule_id
+        - source
+        - findings
+    RiskRuleBreakdownResult:
+      type: object
+      properties:
+        category:
+          type: string
+          description: Category the breakdown is scoped to.
+        from:
+          type: string
+          description: Inclusive start of the window used.
+          format: date-time
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskRuleBreakdownEntry'
+          description: Rules in this category, ordered by finding count descending.
+        to:
+          type: string
+          description: Exclusive end of the window used.
+          format: date-time
+        total:
+          type: integer
+          description: Total findings across all rules in this category and window.
+          format: int64
+      required:
+        - from
+        - to
+        - category
+        - rules
+        - total
     Role:
       type: object
       properties:

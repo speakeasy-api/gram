@@ -518,6 +518,63 @@ func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOver
 	return v, nil
 }
 
+// BuildGetRiskRuleBreakdownPayload builds the payload for the risk
+// getRiskRuleBreakdown endpoint from CLI flags.
+func BuildGetRiskRuleBreakdownPayload(riskGetRiskRuleBreakdownCategory string, riskGetRiskRuleBreakdownFrom string, riskGetRiskRuleBreakdownTo string, riskGetRiskRuleBreakdownApikeyToken string, riskGetRiskRuleBreakdownSessionToken string, riskGetRiskRuleBreakdownProjectSlugInput string) (*risk.GetRiskRuleBreakdownPayload, error) {
+	var err error
+	var category string
+	{
+		category = riskGetRiskRuleBreakdownCategory
+	}
+	var from *string
+	{
+		if riskGetRiskRuleBreakdownFrom != "" {
+			from = &riskGetRiskRuleBreakdownFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskGetRiskRuleBreakdownTo != "" {
+			to = &riskGetRiskRuleBreakdownTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskRuleBreakdownApikeyToken != "" {
+			apikeyToken = &riskGetRiskRuleBreakdownApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskRuleBreakdownSessionToken != "" {
+			sessionToken = &riskGetRiskRuleBreakdownSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskRuleBreakdownProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskRuleBreakdownProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskRuleBreakdownPayload{}
+	v.Category = category
+	v.From = from
+	v.To = to
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskPolicyStatusPayload builds the payload for the risk
 // getRiskPolicyStatus endpoint from CLI flags.
 func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRiskPolicyStatusApikeyToken string, riskGetRiskPolicyStatusSessionToken string, riskGetRiskPolicyStatusProjectSlugInput string) (*risk.GetRiskPolicyStatusPayload, error) {

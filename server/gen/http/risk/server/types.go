@@ -254,6 +254,21 @@ type GetRiskOverviewResponseBody struct {
 	TimeSeriesFindings []*RiskOverviewTimeSeriesFindingResponseBody `form:"time_series_findings" json:"time_series_findings" xml:"time_series_findings"`
 }
 
+// GetRiskRuleBreakdownResponseBody is the type of the "risk" service
+// "getRiskRuleBreakdown" endpoint HTTP response body.
+type GetRiskRuleBreakdownResponseBody struct {
+	// Inclusive start of the window used.
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive end of the window used.
+	To string `form:"to" json:"to" xml:"to"`
+	// Category the breakdown is scoped to.
+	Category string `form:"category" json:"category" xml:"category"`
+	// Rules in this category, ordered by finding count descending.
+	Rules []*RiskRuleBreakdownEntryResponseBody `form:"rules" json:"rules" xml:"rules"`
+	// Total findings across all rules in this category and window.
+	Total int64 `form:"total" json:"total" xml:"total"`
+}
+
 // GetRiskPolicyStatusResponseBody is the type of the "risk" service
 // "getRiskPolicyStatus" endpoint HTTP response body.
 type GetRiskPolicyStatusResponseBody struct {
@@ -1944,6 +1959,192 @@ type GetRiskOverviewGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetRiskRuleBreakdownUnauthorizedResponseBody is the type of the "risk"
+// service "getRiskRuleBreakdown" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetRiskRuleBreakdownUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownForbiddenResponseBody is the type of the "risk" service
+// "getRiskRuleBreakdown" endpoint HTTP response body for the "forbidden" error.
+type GetRiskRuleBreakdownForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownBadRequestResponseBody is the type of the "risk" service
+// "getRiskRuleBreakdown" endpoint HTTP response body for the "bad_request"
+// error.
+type GetRiskRuleBreakdownBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownNotFoundResponseBody is the type of the "risk" service
+// "getRiskRuleBreakdown" endpoint HTTP response body for the "not_found" error.
+type GetRiskRuleBreakdownNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownConflictResponseBody is the type of the "risk" service
+// "getRiskRuleBreakdown" endpoint HTTP response body for the "conflict" error.
+type GetRiskRuleBreakdownConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownUnsupportedMediaResponseBody is the type of the "risk"
+// service "getRiskRuleBreakdown" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRiskRuleBreakdownUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownInvalidResponseBody is the type of the "risk" service
+// "getRiskRuleBreakdown" endpoint HTTP response body for the "invalid" error.
+type GetRiskRuleBreakdownInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownInvariantViolationResponseBody is the type of the "risk"
+// service "getRiskRuleBreakdown" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRiskRuleBreakdownInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownUnexpectedResponseBody is the type of the "risk" service
+// "getRiskRuleBreakdown" endpoint HTTP response body for the "unexpected"
+// error.
+type GetRiskRuleBreakdownUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskRuleBreakdownGatewayErrorResponseBody is the type of the "risk"
+// service "getRiskRuleBreakdown" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetRiskRuleBreakdownGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetRiskPolicyStatusUnauthorizedResponseBody is the type of the "risk"
 // service "getRiskPolicyStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2993,6 +3194,19 @@ type RiskOverviewTimeSeriesFindingResponseBody struct {
 	Findings int64 `form:"findings" json:"findings" xml:"findings"`
 }
 
+// RiskRuleBreakdownEntryResponseBody is used to define fields on response body
+// types.
+type RiskRuleBreakdownEntryResponseBody struct {
+	// Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has
+	// no rule_id (treat as 'unspecified').
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Source bucket the rule belongs to (gitleaks, presidio, etc.) for label/icon
+	// resolution on the dashboard.
+	Source string `form:"source" json:"source" xml:"source"`
+	// Finding count for this rule within the window.
+	Findings int64 `form:"findings" json:"findings" xml:"findings"`
+}
+
 // ShadowMCPApprovalResponseBody is used to define fields on response body
 // types.
 type ShadowMCPApprovalResponseBody struct {
@@ -3247,6 +3461,30 @@ func NewGetRiskOverviewResponseBody(res *risk.RiskOverviewResult) *GetRiskOvervi
 		}
 	} else {
 		body.TimeSeriesFindings = []*RiskOverviewTimeSeriesFindingResponseBody{}
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownResponseBody builds the HTTP response body from the
+// result of the "getRiskRuleBreakdown" endpoint of the "risk" service.
+func NewGetRiskRuleBreakdownResponseBody(res *risk.RiskRuleBreakdownResult) *GetRiskRuleBreakdownResponseBody {
+	body := &GetRiskRuleBreakdownResponseBody{
+		From:     res.From,
+		To:       res.To,
+		Category: res.Category,
+		Total:    res.Total,
+	}
+	if res.Rules != nil {
+		body.Rules = make([]*RiskRuleBreakdownEntryResponseBody, len(res.Rules))
+		for i, val := range res.Rules {
+			if val == nil {
+				body.Rules[i] = nil
+				continue
+			}
+			body.Rules[i] = marshalRiskRiskRuleBreakdownEntryToRiskRuleBreakdownEntryResponseBody(val)
+		}
+	} else {
+		body.Rules = []*RiskRuleBreakdownEntryResponseBody{}
 	}
 	return body
 }
@@ -4578,6 +4816,150 @@ func NewGetRiskOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetRiskO
 	return body
 }
 
+// NewGetRiskRuleBreakdownUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getRiskRuleBreakdown" endpoint of the "risk"
+// service.
+func NewGetRiskRuleBreakdownUnauthorizedResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownUnauthorizedResponseBody {
+	body := &GetRiskRuleBreakdownUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownForbiddenResponseBody builds the HTTP response body
+// from the result of the "getRiskRuleBreakdown" endpoint of the "risk" service.
+func NewGetRiskRuleBreakdownForbiddenResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownForbiddenResponseBody {
+	body := &GetRiskRuleBreakdownForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownBadRequestResponseBody builds the HTTP response body
+// from the result of the "getRiskRuleBreakdown" endpoint of the "risk" service.
+func NewGetRiskRuleBreakdownBadRequestResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownBadRequestResponseBody {
+	body := &GetRiskRuleBreakdownBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownNotFoundResponseBody builds the HTTP response body
+// from the result of the "getRiskRuleBreakdown" endpoint of the "risk" service.
+func NewGetRiskRuleBreakdownNotFoundResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownNotFoundResponseBody {
+	body := &GetRiskRuleBreakdownNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownConflictResponseBody builds the HTTP response body
+// from the result of the "getRiskRuleBreakdown" endpoint of the "risk" service.
+func NewGetRiskRuleBreakdownConflictResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownConflictResponseBody {
+	body := &GetRiskRuleBreakdownConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getRiskRuleBreakdown" endpoint of the "risk"
+// service.
+func NewGetRiskRuleBreakdownUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownUnsupportedMediaResponseBody {
+	body := &GetRiskRuleBreakdownUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownInvalidResponseBody builds the HTTP response body
+// from the result of the "getRiskRuleBreakdown" endpoint of the "risk" service.
+func NewGetRiskRuleBreakdownInvalidResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownInvalidResponseBody {
+	body := &GetRiskRuleBreakdownInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getRiskRuleBreakdown" endpoint of the
+// "risk" service.
+func NewGetRiskRuleBreakdownInvariantViolationResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownInvariantViolationResponseBody {
+	body := &GetRiskRuleBreakdownInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getRiskRuleBreakdown" endpoint of the "risk" service.
+func NewGetRiskRuleBreakdownUnexpectedResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownUnexpectedResponseBody {
+	body := &GetRiskRuleBreakdownUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskRuleBreakdownGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getRiskRuleBreakdown" endpoint of the "risk"
+// service.
+func NewGetRiskRuleBreakdownGatewayErrorResponseBody(res *goa.ServiceError) *GetRiskRuleBreakdownGatewayErrorResponseBody {
+	body := &GetRiskRuleBreakdownGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetRiskPolicyStatusUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
 func NewGetRiskPolicyStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusUnauthorizedResponseBody {
@@ -5461,6 +5843,20 @@ func NewListRiskResultsByChatPayload(cursor *string, limit *int, apikeyToken *st
 // payload.
 func NewGetRiskOverviewPayload(from *string, to *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskOverviewPayload {
 	v := &risk.GetRiskOverviewPayload{}
+	v.From = from
+	v.To = to
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetRiskRuleBreakdownPayload builds a risk service getRiskRuleBreakdown
+// endpoint payload.
+func NewGetRiskRuleBreakdownPayload(category string, from *string, to *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskRuleBreakdownPayload {
+	v := &risk.GetRiskRuleBreakdownPayload{}
+	v.Category = category
 	v.From = from
 	v.To = to
 	v.ApikeyToken = apikeyToken
