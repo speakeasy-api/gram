@@ -54,15 +54,15 @@ export const SEVERITY_META: Record<
  *  can override via the Detection Rules page (stored locally for now). */
 const CATEGORY_DEFAULT_SEVERITY: Record<RuleCategory, SeverityLevel> = {
   secrets: "high",
-  financial: "high",
+  financial: "medium",
   pii: "medium",
-  government_ids: "high",
-  healthcare: "high",
-  prompt_injection: "critical",
+  government_ids: "medium",
+  healthcare: "medium",
+  prompt_injection: "medium",
   off_policy: "medium",
-  shadow_mcp: "high",
-  destructive_tool: "high",
-  cli_destructive: "high",
+  shadow_mcp: "medium",
+  destructive_tool: "medium",
+  cli_destructive: "medium",
   custom: "medium",
 };
 
