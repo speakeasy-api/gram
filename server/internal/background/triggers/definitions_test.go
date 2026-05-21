@@ -139,6 +139,34 @@ func TestCronBuildScheduledEventIsDeterministic(t *testing.T) {
 	require.Equal(t, instance.ID.String(), first.TriggerInstanceID)
 }
 
+func TestCronBuildScheduledEventPropagatesNote(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("cron")
+	require.True(t, ok)
+
+	note := "run the daily digest"
+	config, err := definition.DecodeConfig(map[string]any{
+		"schedule": "0 9 * * *",
+		"note":     note,
+	})
+	require.NoError(t, err)
+
+	instance := triggerrepo.TriggerInstance{
+		ID:             uuid.MustParse("22222222-3333-4444-5555-666666666666"),
+		DefinitionSlug: "cron",
+	}
+	firedAt := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
+
+	envelope, err := definition.BuildScheduledEvent(instance, config, firedAt)
+	require.NoError(t, err)
+
+	var event cronTriggerEvent
+	require.NoError(t, json.Unmarshal(envelope.RawPayload, &event))
+	require.Equal(t, note, event.Note)
+	require.Equal(t, "0 9 * * *", event.Schedule)
+}
+
 func TestBuildScheduleOptionsUsesSharedScheduleWorkflowInput(t *testing.T) {
 	t.Parallel()
 
