@@ -3,33 +3,82 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import { Assistant } from "@gram/client/models/components/assistant.js";
+import {
+  Assistant,
+  AssistantStatus,
+} from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsList,
   useAssistantsDeleteMutation,
   useAssistantsList,
+  useAssistantsUpdateMutation,
   useGetPeriodUsage,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Info, Plus } from "lucide-react";
+import { MouseEvent } from "react";
 import { Outlet } from "react-router";
+import { toast } from "sonner";
+
+function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
+  e.preventDefault();
+  e.stopPropagation();
+}
 
 export function AssistantsRoot() {
   return <Outlet />;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === "active") return <Badge variant="default">Active</Badge>;
-  if (status === "paused") return <Badge variant="secondary">Paused</Badge>;
-  return <Badge variant="secondary">{status}</Badge>;
+function StatusToggle({ assistant }: { assistant: Assistant }) {
+  const queryClient = useQueryClient();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("project:write");
+  const isActive = assistant.status === AssistantStatus.Active;
+
+  const updateAssistant = useAssistantsUpdateMutation({
+    onSuccess: () => {
+      invalidateAllAssistantsList(queryClient);
+    },
+    onError: () => {
+      toast.error("Failed to update assistant status");
+    },
+  });
+
+  const handleToggle = () => {
+    updateAssistant.mutate({
+      request: {
+        updateAssistantForm: {
+          id: assistant.id,
+          status: isActive ? AssistantStatus.Paused : AssistantStatus.Active,
+        },
+      },
+    });
+  };
+
+  return (
+    <Stack direction="horizontal" gap={2} align="center">
+      <div onClick={stopLinkNavigation}>
+        <Switch
+          checked={isActive}
+          onCheckedChange={handleToggle}
+          disabled={!canWrite || updateAssistant.isPending}
+          aria-label={`${isActive ? "Pause" : "Activate"} assistant ${assistant.name}`}
+        />
+      </div>
+      <Type small muted>
+        {isActive ? "Active" : "Paused"}
+      </Type>
+    </Stack>
+  );
 }
 
 function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
@@ -215,8 +264,8 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
         </Card.Header>
         <Card.Content>
           <Card.Description>
-            <Stack direction="horizontal" gap={2} align="center">
-              <StatusBadge status={assistant.status} />
+            <Stack direction="horizontal" gap={3} align="center">
+              <StatusToggle assistant={assistant} />
               <Type muted small>
                 {assistant.model}
               </Type>
