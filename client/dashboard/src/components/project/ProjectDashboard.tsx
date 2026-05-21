@@ -85,25 +85,34 @@ export function ProjectDashboard() {
 
   const { data: topUsersSearchData, isPending: isTopUsersPending } = useQuery({
     queryKey: ["project", "topUsers", from.toISOString(), to.toISOString()],
-    queryFn: () =>
-      unwrapAsync(
-        telemetrySearchUsers(client, {
-          searchUsersPayload: {
-            filter: { from, to, eventSource: "hook" },
-            limit: 200,
-            sort: "desc",
-            userType: "internal",
-          },
-        }),
-      ),
+    queryFn: async () => {
+      const users = [];
+      let cursor: string | undefined;
+      do {
+        const result = await unwrapAsync(
+          telemetrySearchUsers(client, {
+            searchUsersPayload: {
+              cursor,
+              filter: { from, to, eventSource: "hook" },
+              limit: 1000,
+              sort: "desc",
+              userType: "internal",
+            },
+          }),
+        );
+        users.push(...result.users);
+        cursor = result.nextCursor;
+      } while (cursor);
+      return users;
+    },
     enabled: logsEnabled,
     placeholderData: keepPreviousData,
   });
 
   const topUsersByTokens = useMemo(() => {
-    if (!topUsersSearchData?.users) return [];
+    if (!topUsersSearchData) return [];
     const memberById = new Map(members.map((m) => [m.id, m]));
-    return [...topUsersSearchData.users]
+    return [...topUsersSearchData]
       .sort((a, b) => b.totalTokens - a.totalTokens)
       .slice(0, 5)
       .map((u) => ({
@@ -280,7 +289,7 @@ export function ProjectDashboard() {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.tools.href()} />
+                      <ViewAllLink to={routes.insights.employees.href()} />
                     </CardActions>
                   }
                 >
