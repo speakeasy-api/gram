@@ -47,10 +47,29 @@ func BuildListChatsPayload(chatListChatsSessionToken string, chatListChatsProjec
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+	var err error
 	var id string
 	{
 		id = chatLoadChatID
+	}
+	var generation *int
+	{
+		if chatLoadChatGeneration != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatLoadChatGeneration, 10, strconv.IntSize)
+			val := int(v)
+			generation = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for generation, must be INT")
+			}
+			if *generation < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("generation", *generation, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	var sessionToken *string
 	{
@@ -72,6 +91,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string
 	}
 	v := &chat.LoadChatPayload{}
 	v.ID = id
+	v.Generation = generation
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

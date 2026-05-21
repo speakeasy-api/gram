@@ -529,12 +529,37 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	maxGeneration, err := s.repo.GetMaxGenerationForChat(ctx, chat.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat generation").Log(ctx, s.logger)
+	}
+
+	generation := maxGeneration
+	if payload.Generation != nil {
+		requested := *payload.Generation
+		if requested < 0 || int64(requested) > int64(maxGeneration) {
+			return nil, oops.E(oops.CodeInvalid, nil, "generation out of range")
+		}
+		generation = int32(requested) //nolint:gosec // bounded by maxGeneration above
+	}
+
+	messages, err := s.repo.ListChatMessagesByGeneration(ctx, repo.ListChatMessagesByGenerationParams{
+		ChatID:     chat.ID,
+		ProjectID:  *authCtx.ProjectID,
+		Generation: generation,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
+	}
+
+	// NumMessages reflects the chat's total across all generations so it stays
+	// consistent with the equivalent field returned by listChats.
+	totalMessages, err := s.repo.CountChatMessages(ctx, repo.CountChatMessagesParams{
 		ChatID:    chat.ID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to count chat messages").Log(ctx, s.logger)
 	}
 
 	resultMessages := make([]*gen.ChatMessage, len(messages))
@@ -578,12 +603,14 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UserID:               &chat.UserID.String,
 		ExternalUserID:       &chat.ExternalUserID.String,
 		Source:               source,
-		NumMessages:          len(messages),
+		NumMessages:          int(totalMessages),
 		CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		RiskFindingsCount:    nil,
 		Messages:             resultMessages,
+		Generation:           int(generation),
+		MaxGeneration:        int(maxGeneration),
 		TotalInputTokens:     nil,
 		TotalOutputTokens:    nil,
 		TotalTokens:          nil,

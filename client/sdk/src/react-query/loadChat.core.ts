@@ -45,6 +45,7 @@ export function buildLoadChatQuery(
   return {
     queryKey: queryKeyLoadChat({
       id: request.id,
+      generation: request.generation,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
       gramChatSession: request.gramChatSession,
@@ -74,6 +75,7 @@ export function buildLoadChatQuery(
 export function queryKeyLoadChat(
   parameters: {
     id: string;
+    generation?: number | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;

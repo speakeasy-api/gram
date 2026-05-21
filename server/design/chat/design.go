@@ -39,13 +39,16 @@ var _ = Service("chat", func() {
 	})
 
 	Method("loadChat", func() {
-		Description("Load a chat by its ID")
+		Description("Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.")
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
 			Attribute("id", String, "The ID of the chat")
+			Attribute("generation", Int, "Generation to load. If omitted, the latest generation is returned.", func() {
+				Minimum(0)
+			})
 			Required("id")
 		})
 
@@ -54,6 +57,7 @@ var _ = Service("chat", func() {
 		HTTP(func() {
 			GET("/rpc/chat.load")
 			Param("id")
+			Param("generation")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -278,9 +282,11 @@ var ChatOverview = Type("ChatOverview", func() {
 
 var Chat = Type("Chat", func() {
 	Extend(ChatOverview)
-	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat")
+	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation")
+	Attribute("generation", Int, "The generation of the messages in this response")
+	Attribute("max_generation", Int, "The highest generation present for this chat. Callers paginate by requesting lower generations until 0.")
 
-	Required("messages")
+	Required("messages", "generation", "max_generation")
 })
 
 var ChatMessage = Type("ChatMessage", func() {

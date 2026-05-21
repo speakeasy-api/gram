@@ -256,14 +256,32 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		var payload *chat.LoadChatPayload
 		var (
 			id                string
+			generation        *int
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
 			err               error
 		)
-		id = r.URL.Query().Get("id")
+		qp := r.URL.Query()
+		id = qp.Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		{
+			generationRaw := qp.Get("generation")
+			if generationRaw != "" {
+				v, err2 := strconv.ParseInt(generationRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("generation", generationRaw, "integer"))
+				}
+				pv := int(v)
+				generation = &pv
+			}
+		}
+		if generation != nil {
+			if *generation < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("generation", *generation, 0, true))
+			}
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -280,7 +298,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoadChatPayload(id, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewLoadChatPayload(id, generation, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

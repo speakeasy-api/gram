@@ -19,7 +19,8 @@ import (
 type Service interface {
 	// List all chats for a project
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
-	// Load a chat by its ID
+	// Load a chat by its ID. Messages are paginated one generation per request;
+	// omit `generation` to receive the latest generation.
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Generate a title for a chat based on its messages
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
@@ -59,8 +60,13 @@ var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsa
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
-	// The list of messages in the chat
+	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessage
+	// The generation of the messages in this response
+	Generation int
+	// The highest generation present for this chat. Callers paginate by requesting
+	// lower generations until 0.
+	MaxGeneration int
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -309,6 +315,8 @@ type LoadChatPayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
+	// Generation to load. If omitted, the latest generation is returned.
+	Generation *int
 }
 
 // SubmitFeedbackPayload is the payload type of the chat service submitFeedback

@@ -25,6 +25,10 @@ export type LoadChatRequest = {
    */
   id: string;
   /**
+   * Generation to load. If omitted, the latest generation is returned.
+   */
+  generation?: number | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -132,6 +136,7 @@ export function loadChatSecurityToJSON(
 /** @internal */
 export type LoadChatRequest$Outbound = {
   id: string;
+  generation?: number | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -144,6 +149,7 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
+    generation: z.optional(z.int()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),

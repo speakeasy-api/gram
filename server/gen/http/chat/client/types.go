@@ -40,8 +40,13 @@ type ListChatsResponseBody struct {
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
-	// The list of messages in the chat
+	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+	// The generation of the messages in this response
+	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// The highest generation present for this chat. Callers paginate by requesting
+	// lower generations until 0.
+	MaxGeneration *int `form:"max_generation,omitempty" json:"max_generation,omitempty" xml:"max_generation,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -1688,6 +1693,8 @@ func NewListChatsGatewayError(body *ListChatsGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	v := &chat.Chat{
+		Generation:           *body.Generation,
+		MaxGeneration:        *body.MaxGeneration,
 		ID:                   *body.ID,
 		Title:                *body.Title,
 		UserID:               body.UserID,
@@ -2680,6 +2687,12 @@ func ValidateListChatsResponseBody(body *ListChatsResponseBody) (err error) {
 func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.Messages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.MaxGeneration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_generation", "body"))
 	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
