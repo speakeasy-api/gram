@@ -589,7 +589,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		lastMessageTimestamp = stats.LastMessageAt.Time.Format(time.RFC3339)
 	}
 
-	isLatestRequest := payload.Generation == nil
+	isLatestRequest := generation == maxGeneration
 	var source *string
 	if isLatestRequest {
 		for i := len(messages) - 1; i >= 0; i-- {
