@@ -3,6 +3,16 @@ INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
 RETURNING id;
 
+-- name: UpdateChatMessageCreatedAt :exec
+UPDATE chat_messages
+SET created_at = @created_at
+WHERE id = @id;
+
+-- name: UpdateRiskResultCreatedAt :exec
+UPDATE risk_results
+SET created_at = @created_at
+WHERE id = @id;
+
 -- name: ListDeploymentHTTPTools :many
 SELECT *
 FROM http_tool_definitions
