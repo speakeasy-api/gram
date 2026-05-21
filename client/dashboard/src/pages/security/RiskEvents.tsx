@@ -17,6 +17,7 @@ import {
   invalidateAllRiskListShadowMCPApprovals,
   useRiskApproveShadowMCPMutation,
   useRiskListPolicies,
+  useRiskOverview,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,6 +26,7 @@ import { RefreshCw, ShieldOff } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -132,6 +134,16 @@ export default function RiskEvents() {
   const policies = useMemo(
     () => policiesData?.policies ?? [],
     [policiesData?.policies],
+  );
+
+  // Powers the rule_id filter autocomplete: surface only rules that actually
+  // have findings in this project's recent window.
+  const { data: overviewData } = useRiskOverview({}, undefined, {
+    throwOnError: false,
+  });
+  const ruleSuggestions = useMemo(
+    () => (overviewData?.topRules ?? []).map((r) => r.ruleId).filter(Boolean),
+    [overviewData?.topRules],
   );
   const policyNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -259,7 +271,11 @@ export default function RiskEvents() {
                 ))}
               </SelectContent>
             </Select>
-            <RuleIdFilter value={ruleFilter} onChange={setRuleFilter} />
+            <RuleIdFilter
+              value={ruleFilter}
+              onChange={setRuleFilter}
+              suggestions={ruleSuggestions}
+            />
             <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
               <Checkbox
                 checked={uniqueOnly}
@@ -335,11 +351,14 @@ export default function RiskEvents() {
 function RuleIdFilter({
   value,
   onChange,
+  suggestions,
 }: {
   value: string;
   onChange: (next: string) => void;
+  suggestions?: string[];
 }) {
   const [local, setLocal] = useState(value);
+  const listId = useId();
   useEffect(() => {
     setLocal(value);
   }, [value]);
@@ -348,6 +367,13 @@ function RuleIdFilter({
     const t = setTimeout(() => onChange(local), 350);
     return () => clearTimeout(t);
   }, [local, value, onChange]);
+
+  // Dedup and only include non-empty suggestions. Browser-native <datalist>
+  // does the substring matching client-side using these as candidates.
+  const options = useMemo(
+    () => Array.from(new Set((suggestions ?? []).filter(Boolean))),
+    [suggestions],
+  );
 
   return (
     <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
@@ -359,7 +385,16 @@ function RuleIdFilter({
         placeholder="Rule ID contains..."
         className="placeholder:text-muted-foreground w-[200px] bg-transparent text-sm outline-none"
         aria-label="Filter by rule ID"
+        list={options.length > 0 ? listId : undefined}
+        autoComplete="off"
       />
+      {options.length > 0 && (
+        <datalist id={listId}>
+          {options.map((opt) => (
+            <option key={opt} value={opt} />
+          ))}
+        </datalist>
+      )}
       {local && (
         <button
           type="button"

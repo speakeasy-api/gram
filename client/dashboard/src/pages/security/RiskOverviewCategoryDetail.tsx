@@ -16,7 +16,14 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useParams, useSearchParams } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getRuleTitleFallback } from "./risk-utils";
@@ -210,7 +217,13 @@ function RiskOverviewCategoryDetailContent() {
               onSelectRule={setRuleFilter}
             />
             <div className="flex items-center gap-2">
-              <RuleIdFilter value={ruleFilter} onChange={setRuleFilter} />
+              <RuleIdFilter
+                value={ruleFilter}
+                onChange={setRuleFilter}
+                suggestions={(ruleBreakdownQuery.data?.rules ?? [])
+                  .map((r) => r.ruleId)
+                  .filter(Boolean)}
+              />
             </div>
             <ResultsTable
               results={results}
@@ -450,11 +463,14 @@ function RuleBreakdown({
 function RuleIdFilter({
   value,
   onChange,
+  suggestions,
 }: {
   value: string;
   onChange: (next: string) => void;
+  suggestions?: string[];
 }) {
   const [local, setLocal] = useState(value);
+  const listId = useId();
   useEffect(() => {
     setLocal(value);
   }, [value]);
@@ -463,6 +479,11 @@ function RuleIdFilter({
     const t = setTimeout(() => onChange(local), 350);
     return () => clearTimeout(t);
   }, [local, value, onChange]);
+
+  const options = useMemo(
+    () => Array.from(new Set((suggestions ?? []).filter(Boolean))),
+    [suggestions],
+  );
 
   return (
     <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
@@ -474,7 +495,16 @@ function RuleIdFilter({
         placeholder="Rule ID contains..."
         className="placeholder:text-muted-foreground w-[240px] bg-transparent text-sm outline-none"
         aria-label="Filter by rule ID"
+        list={options.length > 0 ? listId : undefined}
+        autoComplete="off"
       />
+      {options.length > 0 && (
+        <datalist id={listId}>
+          {options.map((opt) => (
+            <option key={opt} value={opt} />
+          ))}
+        </datalist>
+      )}
       {local && (
         <button
           type="button"
