@@ -133,11 +133,11 @@ export default function RiskEvents() {
     () => policiesData?.policies ?? [],
     [policiesData?.policies],
   );
-  const policyMessageById = useMemo(() => {
+  const policyNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const policy of policies) {
-      if (policy.userMessage && policy.userMessage.trim() !== "") {
-        m.set(policy.id, policy.userMessage);
+      if (policy.name && policy.name.trim() !== "") {
+        m.set(policy.id, policy.name);
       }
     }
     return m;
@@ -336,7 +336,7 @@ export default function RiskEvents() {
           error={resultsQuery.error}
           isLoading={isInitialLoading}
           results={results}
-          policyMessageById={policyMessageById}
+          policyNameById={policyNameById}
           isExcluding={approveMutation.isPending}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
@@ -403,7 +403,7 @@ function RiskEventsHeader() {
       <div className="min-w-0">Session Name</div>
       <div className="min-w-0">User</div>
       <div className="min-w-0">Match</div>
-      <div className="min-w-0">Policy Note</div>
+      <div className="min-w-0">Policy</div>
       <div className="flex min-w-0 justify-center">Actions</div>
     </div>
   );
@@ -413,7 +413,7 @@ function RiskEventsRows({
   error,
   isLoading,
   results,
-  policyMessageById,
+  policyNameById,
   isExcluding,
   scrollRef,
   onSelectChat,
@@ -422,7 +422,7 @@ function RiskEventsRows({
   error: Error | null;
   isLoading: boolean;
   results: RiskResult[];
-  policyMessageById: Map<string, string>;
+  policyNameById: Map<string, string>;
   isExcluding: boolean;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
@@ -495,7 +495,7 @@ function RiskEventsRows({
           >
             <RiskEventsRow
               result={result}
-              policyNote={policyMessageById.get(result.policyId)}
+              policyName={policyNameById.get(result.policyId)}
               isExcluding={isExcluding}
               onSelectChat={onSelectChat}
               onExclude={onExclude}
@@ -509,13 +509,13 @@ function RiskEventsRows({
 
 function RiskEventsRow({
   result,
-  policyNote,
+  policyName,
   isExcluding,
   onSelectChat,
   onExclude,
 }: {
   result: RiskResult;
-  policyNote: string | undefined;
+  policyName: string | undefined;
   isExcluding: boolean;
   onSelectChat: (chatId: string | null) => void;
   onExclude: (policyId: string, match: string, serverName?: string) => void;
@@ -564,8 +564,8 @@ function RiskEventsRow({
           <MaskedMatch value={result.match} />
         )}
       </div>
-      <div className="min-w-0 truncate" title={policyNote}>
-        {policyNote ?? "-"}
+      <div className="min-w-0 truncate" title={policyName}>
+        {policyName ?? "-"}
       </div>
       <div className="flex min-w-0 justify-center">
         {isShadowMCP && result.match ? (
