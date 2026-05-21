@@ -89,8 +89,9 @@ type Chat struct {
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
 	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true).
-	RiskFindingsCount int
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int
 }
 
 type ChatMessage struct {
@@ -149,8 +150,9 @@ type ChatOverview struct {
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
 	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true).
-	RiskFindingsCount int
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int
 }
 
 // Chat overview with embedded resolution data
@@ -185,8 +187,9 @@ type ChatOverviewWithResolutions struct {
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
 	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true).
-	RiskFindingsCount int
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int
 }
 
 // Resolution information for a chat

@@ -41,9 +41,9 @@ export type ChatOverviewWithResolutions = {
    */
   resolutions: Array<ChatResolution>;
   /**
-   * Number of risk findings recorded against messages in this chat (project-scoped, found=true).
+   * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
    */
-  riskFindingsCount: number;
+  riskFindingsCount?: number | undefined;
   /**
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
@@ -96,7 +96,7 @@ export const ChatOverviewWithResolutions$inboundSchema: z.ZodMiniType<
     ),
     num_messages: z.int(),
     resolutions: z.array(ChatResolution$inboundSchema),
-    risk_findings_count: z.int(),
+    risk_findings_count: z.optional(z.int()),
     source: z.optional(z.string()),
     title: z.string(),
     total_cost: z.optional(z.number()),

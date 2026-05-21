@@ -35,9 +35,9 @@ export type Chat = {
    */
   numMessages: number;
   /**
-   * Number of risk findings recorded against messages in this chat (project-scoped, found=true).
+   * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
    */
-  riskFindingsCount: number;
+  riskFindingsCount?: number | undefined;
   /**
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
@@ -87,7 +87,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     ),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
-    risk_findings_count: z.int(),
+    risk_findings_count: z.optional(z.int()),
     source: z.optional(z.string()),
     title: z.string(),
     total_cost: z.optional(z.number()),

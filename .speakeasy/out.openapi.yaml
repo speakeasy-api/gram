@@ -27499,7 +27499,7 @@ components:
           format: int64
         risk_findings_count:
           type: integer
-          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true).
+          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
         source:
           type: string
@@ -27538,7 +27538,6 @@ components:
         - created_at
         - updated_at
         - last_message_timestamp
-        - risk_findings_count
     ChatMessage:
       type: object
       properties:
@@ -27605,7 +27604,7 @@ components:
           format: int64
         risk_findings_count:
           type: integer
-          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true).
+          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
         source:
           type: string
@@ -27643,7 +27642,6 @@ components:
         - created_at
         - updated_at
         - last_message_timestamp
-        - risk_findings_count
     ChatOverviewWithResolutions:
       type: object
       properties:
@@ -27672,7 +27670,7 @@ components:
           description: List of resolutions for this chat
         risk_findings_count:
           type: integer
-          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true).
+          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
         source:
           type: string
@@ -27712,7 +27710,6 @@ components:
         - created_at
         - updated_at
         - last_message_timestamp
-        - risk_findings_count
     ChatResolution:
       type: object
       properties:

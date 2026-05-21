@@ -1716,7 +1716,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		TotalTokens:          v.TotalTokens,
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
-		RiskFindingsCount:    *v.RiskFindingsCount,
+		RiskFindingsCount:    v.RiskFindingsCount,
 	}
 
 	return res
@@ -1760,7 +1760,7 @@ func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResol
 		TotalTokens:          v.TotalTokens,
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
-		RiskFindingsCount:    *v.RiskFindingsCount,
+		RiskFindingsCount:    v.RiskFindingsCount,
 	}
 	res.Resolutions = make([]*chat.ChatResolution, len(v.Resolutions))
 	for i, val := range v.Resolutions {

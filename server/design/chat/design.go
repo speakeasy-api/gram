@@ -267,9 +267,9 @@ var ChatOverview = Type("ChatOverview", func() {
 		Description("When the last message in the chat was created.")
 		Format(FormatDateTime)
 	})
-	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true).")
+	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.")
 
-	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp", "risk_findings_count")
+	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })
 
 var Chat = Type("Chat", func() {
