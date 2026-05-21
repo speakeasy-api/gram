@@ -2613,6 +2613,22 @@ CREATE TABLE IF NOT EXISTS project_marketplace_settings (
   CONSTRAINT project_marketplace_settings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS project_portals (
+  id              uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id      uuid NOT NULL,
+  enabled         boolean NOT NULL DEFAULT false,
+  display_name    TEXT CHECK (display_name IS NULL OR (display_name <> '' AND CHAR_LENGTH(display_name) <= 64)),
+  tagline         TEXT CHECK (tagline IS NULL OR CHAR_LENGTH(tagline) <= 200),
+  logo_asset_id   uuid,
+  created_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT project_portals_pkey PRIMARY KEY (id),
+  CONSTRAINT project_portals_project_id_key UNIQUE (project_id),
+  CONSTRAINT project_portals_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT project_portals_logo_asset_id_fkey FOREIGN KEY (logo_asset_id) REFERENCES assets (id) ON DELETE SET NULL
+);
+
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
 CREATE TABLE IF NOT EXISTS risk_policies (
