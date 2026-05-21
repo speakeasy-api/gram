@@ -35,7 +35,7 @@ export function ChangeRoleDialog({
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
-  const roles = rolesData?.roles ?? [];
+  const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
   const roleById = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
 
   const updateMemberRoles = useUpdateMemberRolesMutation({

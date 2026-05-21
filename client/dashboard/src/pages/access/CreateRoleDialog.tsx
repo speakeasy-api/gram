@@ -22,10 +22,7 @@ import {
   invalidateAllMembers,
   useMembers,
 } from "@gram/client/react-query/members.js";
-import {
-  invalidateAllRoles,
-  useRoles,
-} from "@gram/client/react-query/roles.js";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Button } from "@speakeasy-api/moonshine";
@@ -209,10 +206,6 @@ export function CreateRoleDialog({
   const { data: membersData } = useMembers();
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
-  );
-  const { data: rolesData } = useRoles();
-  const roleNameById = new Map(
-    (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
   );
   const { data: scopesData } = useListScopes();
 
