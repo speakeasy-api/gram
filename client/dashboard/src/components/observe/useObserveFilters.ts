@@ -7,10 +7,13 @@ import {
   buildLogFilters,
   isValidPreset,
   mergeFilterChip,
+  resolveRoleEmails,
   safeBase64Decode,
   safeBase64Encode,
 } from "./observeFilterUtils";
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 
 const SERVER_FILTER_PATH = "gram.tool_call.source";
 const USER_EMAIL_FILTER_PATH = "user.email";
@@ -65,6 +68,9 @@ export function useObserveFilters() {
   const [knownServers, setKnownServers] = useState<string[]>([]);
   const [knownUserEmails, setKnownUserEmails] = useState<string[]>([]);
 
+  const { data: membersData } = useMembers();
+  const { data: rolesData } = useRoles();
+
   const urlRange = searchParams.get("range");
   const urlFrom = searchParams.get("from");
   const urlTo = searchParams.get("to");
@@ -83,6 +89,25 @@ export function useObserveFilters() {
     }
     return null;
   }, [urlFrom, urlTo]);
+
+  const selectedRoleIds = useMemo(() => {
+    const raw = searchParams.get("role");
+    if (!raw) return [];
+    return raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }, [searchParams]);
+
+  const roleOptions = useMemo(
+    () => (rolesData?.roles ?? []).map((r) => ({ id: r.id, name: r.name })),
+    [rolesData],
+  );
+
+  const roleEmails = useMemo(
+    () => resolveRoleEmails(selectedRoleIds, membersData?.members ?? []),
+    [selectedRoleIds, membersData],
+  );
 
   const updateSearchParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -135,8 +160,8 @@ export function useObserveFilters() {
   }, [from, to]);
 
   const logFilters = useMemo(
-    () => buildLogFilters(activeFilters),
-    [activeFilters],
+    () => buildLogFilters(activeFilters, roleEmails),
+    [activeFilters, roleEmails],
   );
 
   const addKnownServers = useCallback((names: string[]) => {
@@ -198,6 +223,24 @@ export function useObserveFilters() {
             next.set("server", values.join(","));
           } else {
             next.delete("server");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleRoleSelectionChange = useCallback(
+    (values: string[]) => {
+      setSearchParams(
+        (urlPrev) => {
+          const next = new URLSearchParams(urlPrev);
+          if (values.length > 0) {
+            next.set("role", values.join(","));
+          } else {
+            next.delete("role");
           }
           return next;
         },
@@ -280,5 +323,8 @@ export function useObserveFilters() {
     setDateRangeParam,
     setCustomRangeParam,
     clearCustomRange,
+    selectedRoleIds,
+    roleOptions,
+    handleRoleSelectionChange,
   };
 }
