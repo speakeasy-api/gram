@@ -3,14 +3,17 @@ package risk
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -1289,6 +1292,157 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return fmt.Errorf("signal risk analysis workflow: %w", err)
 	}
 	return nil
+}
+
+// SuggestCustomDetectionRule turns a natural-language description ("what do
+// you want to detect?") into a structured custom-rule suggestion. The
+// response is intentionally minimal — the dashboard prefills its create
+// form with these values and the operator edits before saving.
+func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.SuggestCustomDetectionRulePayload) (*gen.SuggestCustomDetectionRuleResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	prompt := strings.TrimSpace(payload.Prompt)
+	if prompt == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	}
+
+	if s.completionClient == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "LLM suggestion is not configured on this server")
+	}
+
+	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt, payload.ExistingRuleIds)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "suggest custom detection rule").Log(ctx, s.logger)
+	}
+	return suggestion, nil
+}
+
+// Severity returned by the LLM is constrained by the JSON schema; we still
+// enforce membership in case the model strays.
+var customRuleSeverityAllow = map[string]bool{
+	"info":     true,
+	"low":      true,
+	"medium":   true,
+	"high":     true,
+	"critical": true,
+}
+
+var customRuleIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
+func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
+	systemPrompt := `You are a security-rules assistant for a runtime DLP product.
+
+Given a single natural-language description of what an operator wants to detect, return a JSON object that the dashboard will use to prefill a "create custom detection rule" form.
+
+Rules:
+- "rule_id" must start with the literal prefix "custom." and contain only [a-z0-9_]. Pick a stable, descriptive slug derived from the subject (e.g. "custom.acme_internal_token", "custom.qa_signing_key"). It must NOT appear in the provided existing_rule_ids list.
+- "title" is 2-6 words, title case.
+- "description" is 1-2 sentences describing what is detected and why it matters. No marketing copy.
+- "regex" is an RE2-compatible pattern that matches the described payload. Prefer anchors and character classes that minimise false positives. Do not include leading/trailing slashes.
+- "severity" is one of "info", "low", "medium", "high", "critical". Pick based on the leakage cost of the data described — credentials, PII, financial, healthcare are typically high or critical; logging IDs and internal references are typically low or medium.
+
+Output ONLY the JSON object. No prose, no markdown fences.`
+
+	existingList := strings.Join(existingIDs, ", ")
+	if existingList == "" {
+		existingList = "(none)"
+	}
+	userMessage := fmt.Sprintf("Operator request: %s\n\nExisting rule ids (avoid colliding): %s", userPrompt, existingList)
+
+	strict := true
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"rule_id":     map[string]any{"type": "string", "pattern": "^custom\\.[a-z0-9_]+$"},
+			"title":       map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+			"description": map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+			"regex":       map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+			"severity":    map[string]any{"type": "string", "enum": []string{"info", "low", "medium", "high", "critical"}},
+		},
+		"required":             []string{"rule_id", "title", "description", "regex", "severity"},
+		"additionalProperties": false,
+	}
+
+	jsonSchema := or.ChatJSONSchemaConfig{
+		Name:        "custom_detection_rule_suggestion",
+		Schema:      schema,
+		Description: nil,
+		Strict:      optionalnullable.From(&strict),
+	}
+
+	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	temperature := 0.2
+	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
+		OrgID:          orgID,
+		ProjectID:      projectID,
+		Model:          "",
+		SystemPrompt:   systemPrompt,
+		Prompt:         userMessage,
+		Temperature:    &temperature,
+		UsageSource:    billing.ModelUsageSourceGram,
+		UserID:         "",
+		ExternalUserID: "",
+		HTTPMetadata:   nil,
+		JSONSchema:     &jsonSchema,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("openrouter object completion: %w", err)
+	}
+	if response == nil || response.Message == nil {
+		return nil, fmt.Errorf("empty completion response")
+	}
+
+	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if raw == "" {
+		return nil, fmt.Errorf("empty completion content")
+	}
+
+	var parsed struct {
+		RuleID      string `json:"rule_id"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Regex       string `json:"regex"`
+		Severity    string `json:"severity"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, fmt.Errorf("parse llm response: %w", err)
+	}
+
+	parsed.RuleID = strings.TrimSpace(parsed.RuleID)
+	parsed.Title = strings.TrimSpace(parsed.Title)
+	parsed.Description = strings.TrimSpace(parsed.Description)
+	parsed.Regex = strings.TrimSpace(parsed.Regex)
+	parsed.Severity = strings.ToLower(strings.TrimSpace(parsed.Severity))
+
+	if !strings.HasPrefix(parsed.RuleID, "custom.") || !customRuleIDPattern.MatchString(parsed.RuleID) {
+		return nil, fmt.Errorf("model returned invalid rule_id %q", parsed.RuleID)
+	}
+	if _, err := regexp.Compile(parsed.Regex); err != nil {
+		return nil, fmt.Errorf("model returned invalid regex: %w", err)
+	}
+	if !customRuleSeverityAllow[parsed.Severity] {
+		parsed.Severity = "medium"
+	}
+	if slices.Contains(existingIDs, parsed.RuleID) {
+		parsed.RuleID = parsed.RuleID + "_" + time.Now().UTC().Format("20060102150405")
+	}
+
+	return &gen.SuggestCustomDetectionRuleResult{
+		RuleID:      parsed.RuleID,
+		Title:       parsed.Title,
+		Description: parsed.Description,
+		Regex:       parsed.Regex,
+		Severity:    parsed.Severity,
+	}, nil
 }
 
 // policyToType converts a database row to the API type, enriching it with

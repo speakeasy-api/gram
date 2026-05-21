@@ -558,6 +558,48 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
 		Meta("openapi:extension:x-speakeasy-name-override", "trigger")
 	})
+
+	Method("suggestCustomDetectionRule", func() {
+		Description("Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("prompt", String, "Natural-language description of what the rule should detect.", func() {
+				MinLength(3)
+				MaxLength(500)
+			})
+			Attribute("existing_rule_ids", ArrayOf(String), "Existing built-in and custom rule ids the suggested id must avoid colliding with.")
+			Required("prompt")
+		})
+
+		Result(SuggestCustomDetectionRuleResult)
+
+		HTTP(func() {
+			POST("/rpc/risk.customRules.suggest")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "suggestCustomDetectionRule")
+		Meta("openapi:extension:x-speakeasy-group", "risk.customRules")
+		Meta("openapi:extension:x-speakeasy-name-override", "suggest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestCustomRule", "type": "mutation"}`)
+	})
+})
+
+var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", func() {
+	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
+	Attribute("title", String, "Short, human-friendly title for the rule.")
+	Attribute("description", String, "Description of what the rule detects and why it matters.")
+	Attribute("regex", String, "RE2-compatible regex pattern the rule should match against.")
+	Attribute("severity", String, "Suggested severity level.", func() {
+		Enum("info", "low", "medium", "high", "critical")
+	})
+	Required("rule_id", "title", "description", "regex", "severity")
 })
 
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {

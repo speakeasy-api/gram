@@ -331,6 +331,8 @@ export * from "./skilltimeseriespoint.js";
 export * from "./slackappresult.js";
 export * from "./sourceenvironmentlink.js";
 export * from "./submitfeedbackrequestbody.js";
+export * from "./suggestcustomdetectionrulerequestbody.js";
+export * from "./suggestcustomdetectionruleresult.js";
 export * from "./telemetrylogrecord.js";
 export * from "./tierlimits.js";
 export * from "./timeseriesbucket.js";

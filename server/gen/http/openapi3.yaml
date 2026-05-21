@@ -18331,6 +18331,112 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskCategories
+    /rpc/risk.customRules.suggest:
+        post:
+            description: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
+            operationId: suggestCustomDetectionRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SuggestCustomDetectionRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SuggestCustomDetectionRuleResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: suggestCustomDetectionRule risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.customRules
+            x-speakeasy-name-override: suggest
+            x-speakeasy-react-hook:
+                name: RiskSuggestCustomRule
+                type: mutation
     /rpc/risk.overview.get:
         get:
             description: Get risk overview metrics and trend data for the current project.
@@ -36107,6 +36213,51 @@ components:
             required:
                 - id
                 - feedback
+        SuggestCustomDetectionRuleRequestBody:
+            type: object
+            properties:
+                existing_rule_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Existing built-in and custom rule ids the suggested id must avoid colliding with.
+                prompt:
+                    type: string
+                    description: Natural-language description of what the rule should detect.
+                    minLength: 3
+                    maxLength: 500
+            required:
+                - prompt
+        SuggestCustomDetectionRuleResult:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what the rule detects and why it matters.
+                regex:
+                    type: string
+                    description: RE2-compatible regex pattern the rule should match against.
+                rule_id:
+                    type: string
+                    description: Suggested stable identifier, prefixed with `custom.`.
+                severity:
+                    type: string
+                    description: Suggested severity level.
+                    enum:
+                        - info
+                        - low
+                        - medium
+                        - high
+                        - critical
+                title:
+                    type: string
+                    description: Short, human-friendly title for the rule.
+            required:
+                - rule_id
+                - title
+                - description
+                - regex
+                - severity
         TelemetryFilter:
             type: object
             properties:

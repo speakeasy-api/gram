@@ -63,6 +63,11 @@ type Service interface {
 	// workflow. Defaults to the most recent 100 unanalyzed messages; pass
 	// `limit=0` to backfill every unanalyzed message.
 	TriggerRiskAnalysis(context.Context, *TriggerRiskAnalysisPayload) (err error)
+	// Suggest a custom detection rule (rule_id, title, description, regex,
+	// severity) from a natural-language prompt. Calls the configured LLM with a
+	// JSON-schema constrained response so the dashboard can prefill the create
+	// form.
+	SuggestCustomDetectionRule(context.Context, *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -85,7 +90,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
+var MethodNames = [18]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "suggestCustomDetectionRule"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -449,6 +454,34 @@ type RiskUserBreakdownResult struct {
 	Categories []*RiskOverviewCategory
 	// Rule_id breakdown for this user, ordered by finding count descending.
 	Rules []*RiskRuleBreakdownEntry
+}
+
+// SuggestCustomDetectionRulePayload is the payload type of the risk service
+// suggestCustomDetectionRule method.
+type SuggestCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Natural-language description of what the rule should detect.
+	Prompt string
+	// Existing built-in and custom rule ids the suggested id must avoid colliding
+	// with.
+	ExistingRuleIds []string
+}
+
+// SuggestCustomDetectionRuleResult is the result type of the risk service
+// suggestCustomDetectionRule method.
+type SuggestCustomDetectionRuleResult struct {
+	// Suggested stable identifier, prefixed with `custom.`.
+	RuleID string
+	// Short, human-friendly title for the rule.
+	Title string
+	// Description of what the rule detects and why it matters.
+	Description string
+	// RE2-compatible regex pattern the rule should match against.
+	Regex string
+	// Suggested severity level.
+	Severity string
 }
 
 // TriggerRiskAnalysisPayload is the payload type of the risk service
