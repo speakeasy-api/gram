@@ -7,6 +7,7 @@ INSERT INTO risk_policies (
   , sources
   , presidio_entities
   , prompt_injection_rules
+  , disabled_rules
   , enabled
   , action
   , auto_name
@@ -21,6 +22,7 @@ VALUES (
   , @sources
   , @presidio_entities
   , @prompt_injection_rules
+  , @disabled_rules
   , @enabled
   , @action
   , @auto_name
@@ -56,6 +58,7 @@ SET name = @name
   , sources = @sources
   , presidio_entities = @presidio_entities
   , prompt_injection_rules = @prompt_injection_rules
+  , disabled_rules = @disabled_rules
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
@@ -64,6 +67,7 @@ SET name = @name
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
+        OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
       THEN version + 1

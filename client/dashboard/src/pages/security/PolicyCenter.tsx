@@ -123,17 +123,29 @@ function policyToCategories(
   return cats;
 }
 
-/** Derive sources, presidioEntities, and promptInjectionRules from selected
- * categories. Prompt-injection is a single category-level toggle; the
- * detection engine (deberta classifier vs L0 regex) is chosen per-org via
- * a feature flag, not by the policy author. promptInjectionRules is left
- * empty here for backward compatibility with the policy schema.
+/** Derive sources, presidioEntities, promptInjectionRules, and disabledRules
+ * from selected categories + per-rule disable set.
  *
- * `presidioEntities` is translated to UPPER_SNAKE for Presidio's HTTP API. */
-function categoriesToPayload(cats: Set<RuleCategory>) {
+ * - `sources` selects which scanners run (category-level).
+ * - `presidioEntities` (UPPER_SNAKE) narrows the Presidio query to only the
+ *   entities the user has enabled across selected presidio-backed categories.
+ *   Rules in `disabledRules` are omitted from this list so the scanner is
+ *   never even asked about them.
+ * - `disabledRules` (canonical ids like `secret.aws_access_token`) is the
+ *   per-rule allowlist applied post-scan for sources without entity-level
+ *   query support (gitleaks). It also serves as a redundancy net for
+ *   presidio in case of API drift.
+ * - `promptInjectionRules` stays empty for backward compatibility — the
+ *   detection engine (deberta classifier vs L0 regex) is chosen per-org
+ *   via a feature flag, not by the policy author. */
+function categoriesToPayload(
+  cats: Set<RuleCategory>,
+  disabledRules: Set<string>,
+) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
   const promptInjectionRules: string[] = [];
+
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
@@ -142,12 +154,28 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
+        if (disabledRules.has(rule.id)) continue;
         presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
     }
   }
   if (presidioEntities.length > 0) sources.push("presidio");
-  return { sources, presidioEntities, promptInjectionRules };
+
+  // Persist disabled ids only for currently-selected categories. If a user
+  // unselects a category they shouldn't carry over its per-rule overrides.
+  const persistedDisabled: string[] = [];
+  for (const cat of cats) {
+    for (const rule of DETECTION_RULES[cat] ?? []) {
+      if (disabledRules.has(rule.id)) persistedDisabled.push(rule.id);
+    }
+  }
+
+  return {
+    sources,
+    presidioEntities,
+    promptInjectionRules,
+    disabledRules: persistedDisabled,
+  };
 }
 
 /** Map sources to display categories for the table row badges. */
@@ -178,6 +206,7 @@ function PolicyCenterContent() {
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(new Set<RuleCategory>(["secrets", "pii"]));
+  const [disabledRules, setDisabledRules] = useState<Set<string>>(new Set());
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
@@ -216,6 +245,7 @@ function PolicyCenterContent() {
     setFormName("");
     setFormEnabled(true);
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
+    setDisabledRules(new Set());
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
@@ -229,6 +259,7 @@ function PolicyCenterContent() {
     setSelectedCategories(
       policyToCategories(policy.sources, policy.presidioEntities),
     );
+    setDisabledRules(new Set(policy.disabledRules ?? []));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
@@ -236,12 +267,16 @@ function PolicyCenterContent() {
   };
 
   const handleSave = () => {
-    const { sources, presidioEntities, promptInjectionRules } =
-      categoriesToPayload(selectedCategories);
-    const flagOnly = [...FLAG_ONLY_CATEGORIES].some((c) =>
-      selectedCategories.has(c),
-    );
-    const action = flagOnly && formAction === "block" ? "flag" : formAction;
+    const {
+      sources,
+      presidioEntities,
+      promptInjectionRules,
+      disabledRules: payloadDisabled,
+    } = categoriesToPayload(selectedCategories, disabledRules);
+    const action =
+      sources.includes("destructive_tool") && formAction === "block"
+        ? "flag"
+        : formAction;
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -252,6 +287,7 @@ function PolicyCenterContent() {
             sources,
             presidioEntities,
             promptInjectionRules,
+            disabledRules: payloadDisabled,
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -267,6 +303,7 @@ function PolicyCenterContent() {
             sources,
             presidioEntities,
             promptInjectionRules,
+            disabledRules: payloadDisabled,
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -333,18 +370,24 @@ function PolicyCenterContent() {
             </Type>
             <Button
               onClick={() => {
-                const { sources, presidioEntities, promptInjectionRules } =
-                  categoriesToPayload(
-                    new Set<RuleCategory>(["secrets", "pii"]),
-                  );
+                const {
+                  sources,
+                  presidioEntities,
+                  promptInjectionRules,
+                  disabledRules: payloadDisabled,
+                } = categoriesToPayload(
+                  new Set<RuleCategory>(["secrets", "pii"]),
+                  new Set(),
+                );
                 createMutation.mutate({
                   request: {
                     createRiskPolicyRequestBody: {
-                      name: "Risk Scanner",
+                      autoName: true,
                       enabled: true,
                       sources,
                       presidioEntities,
                       promptInjectionRules,
+                      disabledRules: payloadDisabled,
                     },
                   },
                 });
@@ -547,6 +590,8 @@ function PolicyCenterContent() {
                 setFormEnabled={setFormEnabled}
                 selectedCategories={selectedCategories}
                 setSelectedCategories={setSelectedCategories}
+                disabledRules={disabledRules}
+                setDisabledRules={setDisabledRules}
                 formAction={formAction}
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
@@ -614,6 +659,8 @@ function PolicySheetBody({
   setFormEnabled,
   selectedCategories,
   setSelectedCategories,
+  disabledRules,
+  setDisabledRules,
   formAction,
   setFormAction,
   formAutoName,
@@ -627,6 +674,8 @@ function PolicySheetBody({
   setFormEnabled: (v: boolean) => void;
   selectedCategories: Set<RuleCategory>;
   setSelectedCategories: (v: Set<RuleCategory>) => void;
+  disabledRules: Set<string>;
+  setDisabledRules: (v: Set<string>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
@@ -678,6 +727,55 @@ function PolicySheetBody({
             const isExpanded = expandedCategory === cat;
             const rules = DETECTION_RULES[cat];
             const isExpandable = isAvailable && rules.length > 0;
+            const categorySelected = selectedCategories.has(cat);
+            const enabledRuleCount = categorySelected
+              ? rules.filter((r) => !disabledRules.has(r.id)).length
+              : 0;
+            const hasPartialSelection =
+              categorySelected &&
+              rules.length > 0 &&
+              enabledRuleCount > 0 &&
+              enabledRuleCount < rules.length;
+            const headerChecked: boolean | "indeterminate" = hasPartialSelection
+              ? "indeterminate"
+              : categorySelected &&
+                (rules.length === 0 || enabledRuleCount > 0);
+
+            const toggleCategory = (checked: boolean) => {
+              const nextCats = new Set(selectedCategories);
+              const nextDisabled = new Set(disabledRules);
+              if (checked) {
+                nextCats.add(cat);
+                for (const rule of rules) nextDisabled.delete(rule.id);
+              } else {
+                nextCats.delete(cat);
+                for (const rule of rules) nextDisabled.delete(rule.id);
+              }
+              setSelectedCategories(nextCats);
+              setDisabledRules(nextDisabled);
+              if (
+                checked &&
+                cat === "destructive_tool" &&
+                formAction === "block"
+              ) {
+                setFormAction("flag");
+              }
+            };
+
+            const toggleRule = (ruleId: string, enabled: boolean) => {
+              const nextDisabled = new Set(disabledRules);
+              const nextCats = new Set(selectedCategories);
+              if (enabled) {
+                nextDisabled.delete(ruleId);
+                // Enabling any rule inside a category implies the category is
+                // selected. Otherwise the rule wouldn't actually run.
+                nextCats.add(cat);
+              } else {
+                nextDisabled.add(ruleId);
+              }
+              setSelectedCategories(nextCats);
+              setDisabledRules(nextDisabled);
+            };
 
             return (
               <div key={cat}>
@@ -720,6 +818,11 @@ function PolicySheetBody({
                           Coming Soon
                         </Badge>
                       )}
+                      {isExpandable && categorySelected && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {enabledRuleCount}/{rules.length} on
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-muted-foreground text-xs">
                       {meta.description}
@@ -728,51 +831,75 @@ function PolicySheetBody({
 
                   {/* Category checkbox */}
                   <Checkbox
-                    checked={selectedCategories.has(cat)}
+                    checked={headerChecked}
                     disabled={!isAvailable}
-                    onCheckedChange={(checked) => {
-                      const next = new Set(selectedCategories);
-                      if (checked) {
-                        next.add(cat);
-                      } else {
-                        next.delete(cat);
-                      }
-                      setSelectedCategories(next);
-                      if (
-                        checked &&
-                        FLAG_ONLY_CATEGORIES.has(cat) &&
-                        formAction === "block"
-                      ) {
-                        setFormAction("flag");
-                      }
-                    }}
+                    onCheckedChange={(checked) => toggleCategory(!!checked)}
                     onClick={(e) => e.stopPropagation()}
                   />
                 </div>
 
-                {/* Expanded rules list — category-level toggle is the only
-                    user-facing control; sub-rules ride along with it. */}
+                {/* Expanded per-rule toggles. Each rule is independently
+                    toggleable; unchecking adds the canonical rule_id to the
+                    policy's disabled_rules list and the scanner drops matching
+                    findings. */}
                 {isAvailable && isExpanded && rules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
-                    <div className="space-y-2 py-1">
-                      {rules.map((rule) => (
-                        <div
-                          key={rule.id}
-                          className="flex items-center gap-3 py-1 pl-8"
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-muted-foreground text-xs">
+                        {enabledRuleCount} of {rules.length} rules enabled
+                      </span>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={enabledRuleCount === rules.length}
+                          onClick={() => {
+                            const nextDisabled = new Set(disabledRules);
+                            for (const r of rules) nextDisabled.delete(r.id);
+                            setDisabledRules(nextDisabled);
+                            const nextCats = new Set(selectedCategories);
+                            nextCats.add(cat);
+                            setSelectedCategories(nextCats);
+                          }}
                         >
-                          <Checkbox
-                            id={rule.id}
-                            checked={selectedCategories.has(cat)}
-                            disabled
-                          />
-                          <label
-                            htmlFor={rule.id}
-                            className="text-muted-foreground text-xs"
+                          Enable all
+                        </button>
+                        <button
+                          type="button"
+                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={!categorySelected || enabledRuleCount === 0}
+                          onClick={() => {
+                            const nextDisabled = new Set(disabledRules);
+                            for (const r of rules) nextDisabled.add(r.id);
+                            setDisabledRules(nextDisabled);
+                          }}
+                        >
+                          Disable all
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2 py-1">
+                      {rules.map((rule) => {
+                        const ruleEnabled =
+                          categorySelected && !disabledRules.has(rule.id);
+                        return (
+                          <div
+                            key={rule.id}
+                            className="flex items-center gap-3 py-1 pl-8"
                           >
-                            {rule.title}
-                          </label>
-                        </div>
-                      ))}
+                            <Checkbox
+                              id={rule.id}
+                              checked={ruleEnabled}
+                              onCheckedChange={(checked) =>
+                                toggleRule(rule.id, !!checked)
+                              }
+                            />
+                            <label htmlFor={rule.id} className="text-xs">
+                              {rule.title}
+                            </label>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
