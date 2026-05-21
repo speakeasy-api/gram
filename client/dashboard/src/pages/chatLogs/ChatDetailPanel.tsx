@@ -17,6 +17,7 @@ import type {
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useRevealAll } from "@/pages/security/risk-ui";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -979,7 +980,13 @@ export function ChatDetailPanel({
   onDelete,
   collapseNonRisk,
 }: ChatDetailPanelProps) {
-  const isAdmin = useIsAdmin();
+  const isSuperAdmin = useIsAdmin();
+  const { hasScope } = useRBAC();
+  // Export + delete should be available to anyone with org:admin (the scope
+  // that already gates /risk-overview and /logs/risk-events). Falling back to
+  // the platform super-admin flag locked out customer org admins who can
+  // already see the data in this panel.
+  const canManageChat = isSuperAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [enabledEntryTypes, setEnabledEntryTypes] = useState<
     FilterableTraceEntryType[]
@@ -1103,7 +1110,7 @@ export function ChatDetailPanel({
             )}
           </div>
           <div className="flex items-center gap-1">
-            {isAdmin && (
+            {canManageChat && (
               <>
                 <button
                   onClick={() =>
