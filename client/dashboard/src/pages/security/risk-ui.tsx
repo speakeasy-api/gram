@@ -1,5 +1,13 @@
 import { Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
 import { humanizeRuleId } from "./rule-ids";
@@ -49,8 +57,69 @@ export function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
   );
 }
 
+type RevealAllContextValue = {
+  revealAll: boolean;
+  setRevealAll: (next: boolean) => void;
+  // Bumps when revealAll is toggled. MaskedMatch listens to this so a global
+  // toggle resets any per-row state, even when the new value matches the row's
+  // current local state.
+  generation: number;
+};
+
+const RevealAllContext = createContext<RevealAllContextValue | null>(null);
+
+export function RevealAllProvider({ children }: { children: ReactNode }) {
+  const [revealAll, setRevealAllState] = useState(false);
+  const [generation, setGeneration] = useState(0);
+  const setRevealAll = useCallback((next: boolean) => {
+    setRevealAllState(next);
+    setGeneration((g) => g + 1);
+  }, []);
+  const value = useMemo(
+    () => ({ revealAll, setRevealAll, generation }),
+    [revealAll, setRevealAll, generation],
+  );
+  return (
+    <RevealAllContext.Provider value={value}>
+      {children}
+    </RevealAllContext.Provider>
+  );
+}
+
+export function RevealAllToggle({ className }: { className?: string }) {
+  const ctx = useContext(RevealAllContext);
+  if (!ctx) return null;
+  const { revealAll, setRevealAll } = ctx;
+  return (
+    <SimpleTooltip
+      tooltip={revealAll ? "Hide all matches" : "Reveal all matches"}
+    >
+      <button
+        type="button"
+        onClick={() => setRevealAll(!revealAll)}
+        aria-pressed={revealAll}
+        aria-label={revealAll ? "Hide all matches" : "Reveal all matches"}
+        className={
+          className ??
+          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors"
+        }
+      >
+        {revealAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+        <span>{revealAll ? "Hide all" : "Reveal all"}</span>
+      </button>
+    </SimpleTooltip>
+  );
+}
+
 export function MaskedMatch({ value }: { value: string | undefined }) {
-  const [revealed, setRevealed] = useState(false);
+  const ctx = useContext(RevealAllContext);
+  const [revealed, setRevealed] = useState(ctx?.revealAll ?? false);
+  const generation = ctx?.generation ?? 0;
+  const globalRevealed = ctx?.revealAll ?? false;
+  useEffect(() => {
+    if (ctx) setRevealed(globalRevealed);
+    // Re-sync whenever the global toggle fires, even if its value is unchanged.
+  }, [ctx, globalRevealed, generation]);
 
   if (!value) return <span>-</span>;
 

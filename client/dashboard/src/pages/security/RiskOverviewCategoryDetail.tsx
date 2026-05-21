@@ -16,7 +16,13 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
-import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-ui";
+import {
+  CategoryLabel,
+  MaskedMatch,
+  RevealAllProvider,
+  RevealAllToggle,
+  RuleLabel,
+} from "./risk-ui";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "15m",
@@ -138,19 +144,22 @@ function RiskOverviewCategoryDetailContent() {
   );
 
   const controls = (
-    <TimeRangePicker
-      preset={customRange ? null : dateRange}
-      customRange={customRange}
-      customRangeLabel={customRangeLabel}
-      availablePresets={RISK_OVERVIEW_PRESETS}
-      onPresetChange={setDateRangeParam}
-      onCustomRangeChange={setCustomRangeParam}
-      onClearCustomRange={clearCustomRange}
-    />
+    <div className="flex items-center gap-2">
+      <RevealAllToggle />
+      <TimeRangePicker
+        preset={customRange ? null : dateRange}
+        customRange={customRange}
+        customRangeLabel={customRangeLabel}
+        availablePresets={RISK_OVERVIEW_PRESETS}
+        onPresetChange={setDateRangeParam}
+        onCustomRangeChange={setCustomRangeParam}
+        onClearCustomRange={clearCustomRange}
+      />
+    </div>
   );
 
   return (
-    <>
+    <RevealAllProvider>
       <Page.Section>
         <Page.Section.Title stage="beta">{categoryLabel}</Page.Section.Title>
         <Page.Section.Description>
@@ -196,7 +205,7 @@ function RiskOverviewCategoryDetailContent() {
           )}
         </DrawerContent>
       </Drawer>
-    </>
+    </RevealAllProvider>
   );
 }
 

@@ -24,7 +24,13 @@ import { RefreshCw, ShieldOff } from "lucide-react";
 import { useCallback, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-ui";
+import {
+  CategoryLabel,
+  MaskedMatch,
+  RevealAllProvider,
+  RevealAllToggle,
+  RuleLabel,
+} from "./risk-ui";
 
 const RISK_EVENTS_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
@@ -158,106 +164,111 @@ export default function RiskEvents() {
   );
 
   return (
-    <LogWorkbench
-      title="Risk Events"
-      description="Review policy findings across recent analyzed chats."
-      actions={
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => resultsQuery.refetch()}
-          disabled={resultsQuery.isFetching}
-          aria-label="Refresh risk events"
-        >
-          <Button.LeftIcon>
-            <RefreshCw
-              className={cn(
-                "h-4 w-4",
-                resultsQuery.isFetching && "animate-spin",
-              )}
-            />
-          </Button.LeftIcon>
-          <Button.Text>Refresh</Button.Text>
-        </Button>
-      }
-      filters={
-        <Select
-          value={policyFilter || "all"}
-          onValueChange={(value) =>
-            setPolicyFilter(value === "all" ? "" : value)
-          }
-        >
-          <SelectTrigger className="w-[260px]">
-            <SelectValue placeholder="Filter by policy" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All policies</SelectItem>
-            {policies.map((policy) => (
-              <SelectItem key={policy.id} value={policy.id}>
-                {policy.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      }
-      status={
-        resultsQuery.isFetching && results.length > 0 ? (
-          <div className="bg-primary/20 h-1 shrink-0">
-            <div className="bg-primary h-full animate-pulse" />
+    <RevealAllProvider>
+      <LogWorkbench
+        title="Risk Events"
+        description="Review policy findings across recent analyzed chats."
+        actions={
+          <div className="flex items-center gap-2">
+            <RevealAllToggle />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => resultsQuery.refetch()}
+              disabled={resultsQuery.isFetching}
+              aria-label="Refresh risk events"
+            >
+              <Button.LeftIcon>
+                <RefreshCw
+                  className={cn(
+                    "h-4 w-4",
+                    resultsQuery.isFetching && "animate-spin",
+                  )}
+                />
+              </Button.LeftIcon>
+              <Button.Text>Refresh</Button.Text>
+            </Button>
           </div>
-        ) : null
-      }
-      header={
-        <div className="min-w-[1120px]">
-          <RiskEventsHeader />
-        </div>
-      }
-      footer={
-        results.length > 0 ? (
-          <RiskEventsFooter
-            count={results.length}
-            totalCount={totalCount}
-            hasNextPage={resultsQuery.hasNextPage}
-            isFetchingNextPage={resultsQuery.isFetchingNextPage}
-            onLoadMore={() => resultsQuery.fetchNextPage()}
-          />
-        ) : null
-      }
-      detail={
-        <Drawer
-          open={!!selectedChatId}
-          onOpenChange={(open) => !open && setSelectedChatId(null)}
-          direction="right"
-        >
-          <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
-            {selectedChatId && (
-              <ChatDetailPanel
-                chatId={selectedChatId}
-                resolutions={[]}
-                onClose={() => setSelectedChatId(null)}
-                onDelete={() => setSelectedChatId(null)}
-                collapseNonRisk
-              />
-            )}
-          </DrawerContent>
-        </Drawer>
-      }
-      scrollRef={containerRef}
-      onScroll={handleScroll}
-      surfaceClassName="overflow-x-auto"
-      contentClassName="min-w-[1120px]"
-    >
-      <RiskEventsRows
-        error={resultsQuery.error}
-        isLoading={isInitialLoading}
-        results={results}
-        policyMessageById={policyMessageById}
-        isExcluding={approveMutation.isPending}
+        }
+        filters={
+          <Select
+            value={policyFilter || "all"}
+            onValueChange={(value) =>
+              setPolicyFilter(value === "all" ? "" : value)
+            }
+          >
+            <SelectTrigger className="w-[260px]">
+              <SelectValue placeholder="Filter by policy" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All policies</SelectItem>
+              {policies.map((policy) => (
+                <SelectItem key={policy.id} value={policy.id}>
+                  {policy.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+        status={
+          resultsQuery.isFetching && results.length > 0 ? (
+            <div className="bg-primary/20 h-1 shrink-0">
+              <div className="bg-primary h-full animate-pulse" />
+            </div>
+          ) : null
+        }
+        header={
+          <div className="min-w-[1120px]">
+            <RiskEventsHeader />
+          </div>
+        }
+        footer={
+          results.length > 0 ? (
+            <RiskEventsFooter
+              count={results.length}
+              totalCount={totalCount}
+              hasNextPage={resultsQuery.hasNextPage}
+              isFetchingNextPage={resultsQuery.isFetchingNextPage}
+              onLoadMore={() => resultsQuery.fetchNextPage()}
+            />
+          ) : null
+        }
+        detail={
+          <Drawer
+            open={!!selectedChatId}
+            onOpenChange={(open) => !open && setSelectedChatId(null)}
+            direction="right"
+          >
+            <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
+              {selectedChatId && (
+                <ChatDetailPanel
+                  chatId={selectedChatId}
+                  resolutions={[]}
+                  onClose={() => setSelectedChatId(null)}
+                  onDelete={() => setSelectedChatId(null)}
+                  collapseNonRisk
+                />
+              )}
+            </DrawerContent>
+          </Drawer>
+        }
         scrollRef={containerRef}
-        onSelectChat={setSelectedChatId}
-        onExclude={handleExclude}
-      />
-    </LogWorkbench>
+        onScroll={handleScroll}
+        surfaceClassName="overflow-x-auto"
+        contentClassName="min-w-[1120px]"
+      >
+        <RiskEventsRows
+          error={resultsQuery.error}
+          isLoading={isInitialLoading}
+          results={results}
+          policyMessageById={policyMessageById}
+          isExcluding={approveMutation.isPending}
+          scrollRef={containerRef}
+          onSelectChat={setSelectedChatId}
+          onExclude={handleExclude}
+        />
+      </LogWorkbench>
+    </RevealAllProvider>
   );
 }
 
