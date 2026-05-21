@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import type { Chat, ChatMessage } from "@gram/client/models/components";
 import {
@@ -18,10 +18,9 @@ export interface LoadChatAllGenerationsResult {
 }
 
 // Loads a chat by paging across generations: latest first, then older
-// generations with up to three concurrent in-flight requests. Server returns
-// one generation per request to keep query cost bounded for long chats; the
-// window of queries we materialize grows as earlier ones settle so a chat with
-// many generations never pre-registers them all in React Query at once.
+// generations with up to three concurrent in-flight requests. The window of
+// queries we materialize grows as earlier ones settle, so a chat with many
+// generations never pre-registers them all in React Query at once.
 export function useLoadChatAllGenerations(
   chatId: string,
 ): LoadChatAllGenerationsResult {
@@ -34,40 +33,32 @@ export function useLoadChatAllGenerations(
 
   const maxGeneration = latest?.maxGeneration ?? 0;
 
+  const [trackedChatId, setTrackedChatId] = useState(chatId);
   const [windowSize, setWindowSize] = useState(0);
 
-  useEffect(() => {
+  if (trackedChatId !== chatId) {
+    setTrackedChatId(chatId);
     setWindowSize(0);
-  }, [chatId]);
-
-  useEffect(() => {
-    if (latest && windowSize === 0 && maxGeneration > 0) {
-      setWindowSize(Math.min(PARALLELISM, maxGeneration));
-    }
-  }, [latest, windowSize, maxGeneration]);
-
-  const generationsToLoad = useMemo(() => {
-    if (!latest) return [];
-    return Array.from({ length: windowSize }, (_, i) => maxGeneration - 1 - i);
-  }, [latest, maxGeneration, windowSize]);
+  }
 
   const queries = useQueries({
-    queries: generationsToLoad.map((generation) => ({
-      ...buildLoadChatQuery(client, { id: chatId, generation }),
+    queries: Array.from({ length: windowSize }, (_, i) => ({
+      ...buildLoadChatQuery(client, {
+        id: chatId,
+        generation: maxGeneration - 1 - i,
+      }),
     })),
   });
 
   const successCount = queries.filter((q) => q.isSuccess).length;
   const hasErrors = queries.some((q) => q.isError);
 
-  useEffect(() => {
-    if (!latest || windowSize === 0 || windowSize >= maxGeneration) return;
-    if (hasErrors) return;
-    const desired = Math.min(successCount + PARALLELISM, maxGeneration);
-    if (desired > windowSize) {
-      setWindowSize(desired);
-    }
-  }, [latest, successCount, windowSize, maxGeneration, hasErrors]);
+  const desiredWindow = hasErrors
+    ? windowSize
+    : Math.min(successCount + PARALLELISM, maxGeneration);
+  if (desiredWindow > windowSize) {
+    setWindowSize(desiredWindow);
+  }
 
   const messages = useMemo(() => {
     if (!latest) return [];
@@ -80,13 +71,11 @@ export function useLoadChatAllGenerations(
     return merged;
   }, [latest, queries]);
 
-  const isFullyLoaded = !!latest && successCount === maxGeneration;
-
   return {
     chat: latest,
     messages,
     isLoading: latestLoading,
-    isFullyLoaded,
+    isFullyLoaded: !!latest && successCount === maxGeneration,
     hasErrors,
   };
 }
