@@ -160,7 +160,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	require.NoError(t, err)
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
@@ -208,7 +208,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	require.NoError(t, err)
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)

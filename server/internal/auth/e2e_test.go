@@ -162,7 +162,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	require.NoError(t, err)
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore)
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
