@@ -89,7 +89,7 @@ function DetectionRulesContent() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedRule | null>(null);
   const [expanded, setExpanded] = useState<RuleCategory | "custom" | null>(
-    "secrets",
+    null,
   );
 
   return (

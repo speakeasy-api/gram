@@ -226,11 +226,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 scope="project:read"
               />
               <ScopeGatedNavItem
-                item={routes.detectionRules}
+                item={routes.policyCenter}
                 scope={["project:read", "project:write"]}
               />
               <ScopeGatedNavItem
-                item={routes.policyCenter}
+                item={routes.detectionRules}
                 scope={["project:read", "project:write"]}
               />
             </CollapsibleNavGroup>
