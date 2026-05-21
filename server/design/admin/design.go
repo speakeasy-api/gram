@@ -115,7 +115,8 @@ var _ = Service("admin", func() {
 		NoSecurity()
 
 		Payload(func() {
-			Attribute("return_to", String, "Optional URL to return the user to after login. Must be relative and under the admin service's base URL.")
+			Attribute("return_to", String, "Optional URL to return the user to after login. Relative paths and absolute URLs whose origin is in the admin allowed-origins list are accepted.")
+			Attribute("prompt", String, "Optional OAuth prompt parameter forwarded to the provider. Pass 'none' to attempt silent re-authentication.")
 		})
 
 		Result(func() {
@@ -127,6 +128,7 @@ var _ = Service("admin", func() {
 		HTTP(func() {
 			GET("/admin/auth.login")
 			Param("return_to")
+			Param("prompt")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String)
@@ -143,10 +145,12 @@ var _ = Service("admin", func() {
 		NoSecurity()
 
 		Payload(func() {
-			Required("code", "state_param")
-			Attribute("code", String, "The authorization code returned")
+			Required("state_param")
+			Attribute("code", String, "The authorization code returned by the provider on success")
 			Attribute("state_param", String, "The state parameter returned, which should match the one generated in the login step")
 			Attribute("state_cookie", String, "The state cookie value for CSRF sanity checking against the state parameter")
+			Attribute("error", String, "OAuth error code returned by the provider (e.g. login_required for prompt=none failures)")
+			Attribute("error_description", String, "Human-readable OAuth error description")
 		})
 
 		Result(func() {
@@ -159,6 +163,8 @@ var _ = Service("admin", func() {
 			GET("/admin/auth.callback")
 			Param("code")
 			Param("state_param:state")
+			Param("error")
+			Param("error_description")
 			Cookie(fmt.Sprintf("state_cookie:%s", constants.AdminLoginStateCookie), String)
 
 			Response(StatusTemporaryRedirect, func() {

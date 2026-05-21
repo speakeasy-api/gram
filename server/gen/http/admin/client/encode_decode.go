@@ -47,6 +47,9 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if p.ReturnTo != nil {
 			values.Add("return_to", *p.ReturnTo)
 		}
+		if p.Prompt != nil {
+			values.Add("prompt", *p.Prompt)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -298,8 +301,16 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			})
 		}
 		values := req.URL.Query()
-		values.Add("code", p.Code)
+		if p.Code != nil {
+			values.Add("code", *p.Code)
+		}
 		values.Add("state", p.StateParam)
+		if p.Error != nil {
+			values.Add("error", *p.Error)
+		}
+		if p.ErrorDescription != nil {
+			values.Add("error_description", *p.ErrorDescription)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

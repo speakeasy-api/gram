@@ -2868,18 +2868,21 @@ func NewListOrganizationsGatewayErrorResponseBody(res *goa.ServiceError) *ListOr
 }
 
 // NewLoginPayload builds a admin service login endpoint payload.
-func NewLoginPayload(returnTo *string) *admin.LoginPayload {
+func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
 	v.ReturnTo = returnTo
+	v.Prompt = prompt
 
 	return v
 }
 
 // NewCallbackPayload builds a admin service callback endpoint payload.
-func NewCallbackPayload(code string, stateParam string, stateCookie *string) *admin.CallbackPayload {
+func NewCallbackPayload(code *string, stateParam string, error_ *string, errorDescription *string, stateCookie *string) *admin.CallbackPayload {
 	v := &admin.CallbackPayload{}
 	v.Code = code
 	v.StateParam = stateParam
+	v.Error = error_
+	v.ErrorDescription = errorDescription
 	v.StateCookie = stateCookie
 
 	return v

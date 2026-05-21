@@ -15,12 +15,11 @@ paths:
             parameters:
                 - name: code
                   in: query
-                  description: The authorization code returned
+                  description: The authorization code returned by the provider on success
                   allowEmptyValue: true
-                  required: true
                   schema:
                     type: string
-                    description: The authorization code returned
+                    description: The authorization code returned by the provider on success
                 - name: state
                   in: query
                   description: The state parameter returned, which should match the one generated in the login step
@@ -29,6 +28,20 @@ paths:
                   schema:
                     type: string
                     description: The state parameter returned, which should match the one generated in the login step
+                - name: error
+                  in: query
+                  description: OAuth error code returned by the provider (e.g. login_required for prompt=none failures)
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: OAuth error code returned by the provider (e.g. login_required for prompt=none failures)
+                - name: error_description
+                  in: query
+                  description: Human-readable OAuth error description
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Human-readable OAuth error description
                 - name: gram_admin_login_state
                   in: cookie
                   description: The state cookie value for CSRF sanity checking against the state parameter
@@ -113,11 +126,18 @@ paths:
             parameters:
                 - name: return_to
                   in: query
-                  description: Optional URL to return the user to after login. Must be relative and under the admin service's base URL.
+                  description: Optional URL to return the user to after login. Relative paths and absolute URLs whose origin is in the admin allowed-origins list are accepted.
                   allowEmptyValue: true
                   schema:
                     type: string
-                    description: Optional URL to return the user to after login. Must be relative and under the admin service's base URL.
+                    description: Optional URL to return the user to after login. Relative paths and absolute URLs whose origin is in the admin allowed-origins list are accepted.
+                - name: prompt
+                  in: query
+                  description: Optional OAuth prompt parameter forwarded to the provider. Pass 'none' to attempt silent re-authentication.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional OAuth prompt parameter forwarded to the provider. Pass 'none' to attempt silent re-authentication.
             responses:
                 "307":
                     description: Temporary Redirect response.

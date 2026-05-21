@@ -65,17 +65,21 @@ func NewOIDCClient(cfg OIDCClientOptions) *OIDCClient {
 	}
 }
 
-// AuthCodeURL returns the OAuth consent URL for the given opaque state and PKCE
-// challenge. access_type=offline + prompt=consent ensures we receive a refresh
-// token for long-lived sessions.
-func (g *OIDCClient) AuthCodeURL(state, pkceChallenge string) string {
-	return g.oauth2Config.AuthCodeURL(
-		state,
+// AuthCodeURL returns the OAuth consent URL for the given opaque state, PKCE
+// challenge, and optional prompt value. Pass prompt="" for the default Google
+// behaviour (consent only on first use). Pass prompt="none" to attempt a
+// completely silent re-authentication — Google returns error=login_required if
+// no active session exists and the caller must fall back to interactive login.
+func (g *OIDCClient) AuthCodeURL(state, pkceChallenge, prompt string) string {
+	opts := []oauth2.AuthCodeOption{
 		oauth2.AccessTypeOffline,
-		oauth2.ApprovalForce,
 		oauth2.SetAuthURLParam("code_challenge", pkceChallenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-	)
+	}
+	if prompt != "" {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", prompt))
+	}
+	return g.oauth2Config.AuthCodeURL(state, opts...)
 }
 
 // Exchange converts an OAuth authorization code into an OAuth token. The

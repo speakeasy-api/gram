@@ -278,7 +278,7 @@ func newAdminCommand() *cli.Command {
 			mux.Use(middleware.AdminCookieAttributes(adminCrossOriginCookies, adminCookieDomain))
 			mux.Use(admin.SessionMiddleware)
 
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

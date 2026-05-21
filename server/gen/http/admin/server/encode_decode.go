@@ -47,12 +47,18 @@ func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		var payload *admin.LoginPayload
 		var (
 			returnTo *string
+			prompt   *string
 		)
-		returnToRaw := r.URL.Query().Get("return_to")
+		qp := r.URL.Query()
+		returnToRaw := qp.Get("return_to")
 		if returnToRaw != "" {
 			returnTo = &returnToRaw
 		}
-		payload = NewLoginPayload(returnTo)
+		promptRaw := qp.Get("prompt")
+		if promptRaw != "" {
+			prompt = &promptRaw
+		}
+		payload = NewLoginPayload(returnTo, prompt)
 
 		return payload, nil
 	}
@@ -239,20 +245,30 @@ func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 	return func(r *http.Request) (*admin.CallbackPayload, error) {
 		var payload *admin.CallbackPayload
 		var (
-			code        string
-			stateParam  string
-			stateCookie *string
-			err         error
-			c           *http.Cookie
+			code             *string
+			stateParam       string
+			error_           *string
+			errorDescription *string
+			stateCookie      *string
+			err              error
+			c                *http.Cookie
 		)
 		qp := r.URL.Query()
-		code = qp.Get("code")
-		if code == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("code", "query string"))
+		codeRaw := qp.Get("code")
+		if codeRaw != "" {
+			code = &codeRaw
 		}
 		stateParam = qp.Get("state")
 		if stateParam == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("state_param", "query string"))
+		}
+		error_Raw := qp.Get("error")
+		if error_Raw != "" {
+			error_ = &error_Raw
+		}
+		errorDescriptionRaw := qp.Get("error_description")
+		if errorDescriptionRaw != "" {
+			errorDescription = &errorDescriptionRaw
 		}
 		c, _ = r.Cookie("gram_admin_login_state")
 		var stateCookieRaw string
@@ -265,7 +281,7 @@ func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewCallbackPayload(code, stateParam, stateCookie)
+		payload = NewCallbackPayload(code, stateParam, error_, errorDescription, stateCookie)
 
 		return payload, nil
 	}

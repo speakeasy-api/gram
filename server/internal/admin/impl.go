@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,13 +30,14 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	verifier    *Verifier
-	loginStates cache.TypedCacheObject[LoginState]
-	oidc        *OIDCClient
-	sessions    *SessionStore
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	verifier       *Verifier
+	loginStates    cache.TypedCacheObject[LoginState]
+	oidc           *OIDCClient
+	sessions       *SessionStore
+	allowedOrigins []string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -48,6 +50,7 @@ func NewService(
 	redisClient *redis.Client,
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
+	allowedOrigins []string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -61,12 +64,13 @@ func NewService(
 	)
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:   logger,
-		db:       db,
-		oidc:     oidcClient,
-		sessions: sessionStore,
-		verifier: NewVerifier(logger, sessionStore, oidcClient),
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:         logger,
+		db:             db,
+		oidc:           oidcClient,
+		sessions:       sessionStore,
+		verifier:       NewVerifier(logger, sessionStore, oidcClient),
+		allowedOrigins: allowedOrigins,
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			cache.NewRedisCacheAdapter(redisClient),
@@ -106,7 +110,8 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	}
 	challenge := pkceChallenge(verifier)
 
-	returnTo := sanitizeReturnTo(conv.PtrValOrEmpty(payload.ReturnTo, ""), "/")
+	returnTo := sanitizeReturnTo(conv.PtrValOrEmpty(payload.ReturnTo, ""), "/", s.allowedOrigins)
+	prompt := conv.PtrValOrEmpty(payload.Prompt, "")
 
 	rec := LoginState{
 		State:        state,
@@ -119,7 +124,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	}
 
 	return &gen.LoginResult{
-		Location:    s.oidc.AuthCodeURL(state, challenge),
+		Location:    s.oidc.AuthCodeURL(state, challenge, prompt),
 		StateCookie: state,
 	}, nil
 }
@@ -127,9 +132,6 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
 	logger := s.logger
 
-	if payload.Code == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "missing code parameter")
-	}
 	if payload.StateParam == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "missing state parameter")
 	}
@@ -153,7 +155,21 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		s.logger.WarnContext(ctx, "delete login state", attr.SlogError(err))
 	}
 
-	tok, err := s.oidc.Exchange(ctx, payload.Code, rec.CodeVerifier)
+	// Handle OAuth errors returned by the provider (e.g. error=login_required when
+	// prompt=none was used). Fall back to an interactive login preserving return_to.
+	if oauthErr := conv.PtrValOrEmpty(payload.Error, ""); oauthErr != "" {
+		s.logger.InfoContext(ctx, fmt.Sprintf("oauth provider returned %q, falling back to interactive login", oauthErr))
+		return &gen.CallbackResult{
+			Location:  fmt.Sprintf("/admin/auth.login?return_to=%s", url.QueryEscape(rec.ReturnTo)),
+			SessionID: "",
+		}, nil
+	}
+
+	if conv.PtrValOrEmpty(payload.Code, "") == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "missing code parameter")
+	}
+
+	tok, err := s.oidc.Exchange(ctx, conv.PtrValOrEmpty(payload.Code, ""), rec.CodeVerifier)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "oauth code exchange failed").Log(ctx, logger)
 	}

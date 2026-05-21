@@ -149,13 +149,18 @@ type AdminProjectDetail struct {
 
 // CallbackPayload is the payload type of the admin service callback method.
 type CallbackPayload struct {
-	// The authorization code returned
-	Code string
+	// The authorization code returned by the provider on success
+	Code *string
 	// The state parameter returned, which should match the one generated in the
 	// login step
 	StateParam string
 	// The state cookie value for CSRF sanity checking against the state parameter
 	StateCookie *string
+	// OAuth error code returned by the provider (e.g. login_required for
+	// prompt=none failures)
+	Error *string
+	// Human-readable OAuth error description
+	ErrorDescription *string
 }
 
 // CallbackResult is the result type of the admin service callback method.
@@ -207,9 +212,12 @@ type ListOrganizationsPayload struct {
 
 // LoginPayload is the payload type of the admin service login method.
 type LoginPayload struct {
-	// Optional URL to return the user to after login. Must be relative and under
-	// the admin service's base URL.
+	// Optional URL to return the user to after login. Relative paths and absolute
+	// URLs whose origin is in the admin allowed-origins list are accepted.
 	ReturnTo *string
+	// Optional OAuth prompt parameter forwarded to the provider. Pass 'none' to
+	// attempt silent re-authentication.
+	Prompt *string
 }
 
 // LoginResult is the result type of the admin service login method.

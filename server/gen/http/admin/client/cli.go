@@ -17,29 +17,50 @@ import (
 
 // BuildLoginPayload builds the payload for the admin login endpoint from CLI
 // flags.
-func BuildLoginPayload(adminLoginReturnTo string) (*admin.LoginPayload, error) {
+func BuildLoginPayload(adminLoginReturnTo string, adminLoginPrompt string) (*admin.LoginPayload, error) {
 	var returnTo *string
 	{
 		if adminLoginReturnTo != "" {
 			returnTo = &adminLoginReturnTo
 		}
 	}
+	var prompt *string
+	{
+		if adminLoginPrompt != "" {
+			prompt = &adminLoginPrompt
+		}
+	}
 	v := &admin.LoginPayload{}
 	v.ReturnTo = returnTo
+	v.Prompt = prompt
 
 	return v, nil
 }
 
 // BuildCallbackPayload builds the payload for the admin callback endpoint from
 // CLI flags.
-func BuildCallbackPayload(adminCallbackCode string, adminCallbackStateParam string, adminCallbackStateCookie string) (*admin.CallbackPayload, error) {
-	var code string
+func BuildCallbackPayload(adminCallbackCode string, adminCallbackStateParam string, adminCallbackError string, adminCallbackErrorDescription string, adminCallbackStateCookie string) (*admin.CallbackPayload, error) {
+	var code *string
 	{
-		code = adminCallbackCode
+		if adminCallbackCode != "" {
+			code = &adminCallbackCode
+		}
 	}
 	var stateParam string
 	{
 		stateParam = adminCallbackStateParam
+	}
+	var error_ *string
+	{
+		if adminCallbackError != "" {
+			error_ = &adminCallbackError
+		}
+	}
+	var errorDescription *string
+	{
+		if adminCallbackErrorDescription != "" {
+			errorDescription = &adminCallbackErrorDescription
+		}
 	}
 	var stateCookie *string
 	{
@@ -50,6 +71,8 @@ func BuildCallbackPayload(adminCallbackCode string, adminCallbackStateParam stri
 	v := &admin.CallbackPayload{}
 	v.Code = code
 	v.StateParam = stateParam
+	v.Error = error_
+	v.ErrorDescription = errorDescription
 	v.StateCookie = stateCookie
 
 	return v, nil

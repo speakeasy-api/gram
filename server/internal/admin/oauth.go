@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -47,9 +48,12 @@ func pkceChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// sanitizeReturnTo ensures the post-login redirect target stays on the
-// current origin so the login flow cannot be used as an open redirect.
-func sanitizeReturnTo(raw, fallback string) string {
+// sanitizeReturnTo ensures the post-login redirect target is safe.
+// Relative paths are allowed unconditionally. Absolute URLs are allowed only
+// when their origin (scheme + "://" + host) appears in allowedOrigins, which
+// prevents open-redirect abuse while still allowing the Registry admin SPA
+// (a different domain) to be the post-auth landing page.
+func sanitizeReturnTo(raw, fallback string, allowedOrigins []string) string {
 	if raw == "" {
 		return fallback
 	}
@@ -57,12 +61,17 @@ func sanitizeReturnTo(raw, fallback string) string {
 	if err != nil {
 		return fallback
 	}
-	// Only allow same-origin relative paths.
-	if u.Scheme != "" || u.Host != "" {
-		return fallback
+	if u.Scheme == "" && u.Host == "" {
+		// Relative path — allow as long as there is a path.
+		if u.Path == "" {
+			return fallback
+		}
+		return u.String()
 	}
-	if u.Path == "" {
-		return fallback
+	// Absolute URL — only allow if the origin is explicitly permitted.
+	origin := u.Scheme + "://" + u.Host
+	if slices.Contains(allowedOrigins, origin) {
+		return u.String()
 	}
-	return u.String()
+	return fallback
 }
