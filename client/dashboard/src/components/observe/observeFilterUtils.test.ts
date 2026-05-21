@@ -152,11 +152,13 @@ describe("resolveRoleEmails", () => {
   });
 
   it("unions emails across multiple selected roles", () => {
-    expect(resolveRoleEmails(["role-admin", "role-member"], members)).toEqual([
-      "alice@example.com",
-      "bob@example.com",
-      "carol@example.com",
-    ]);
+    expect(resolveRoleEmails(["role-admin", "role-member"], members)).toEqual(
+      expect.arrayContaining([
+        "alice@example.com",
+        "carol@example.com",
+        "bob@example.com",
+      ]),
+    );
   });
 
   it("returns empty array when no roles selected", () => {

@@ -1,6 +1,9 @@
 import type { DateRangePreset } from "@gram-ai/elements";
-import { Operator, type LogFilter } from "@gram/client/models/components";
-import type { AccessMember } from "@gram/client/models/components";
+import {
+  Operator,
+  type LogFilter,
+  type AccessMember,
+} from "@gram/client/models/components";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 
 export const validPresets: DateRangePreset[] = [
