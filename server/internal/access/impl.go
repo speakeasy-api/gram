@@ -213,8 +213,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	if err != nil {
 		return err
 	}
-	deletedRole := deleted.Role
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(deletedRole.Slug))
+	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(deleted.Slug))
 
 	return nil
 }
@@ -322,6 +321,8 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	}
 	roleSlugs := make([]string, 0, len(rolePrincipals))
 	for _, role := range rolePrincipals {
+		// Effective-grant responses must include grants stored under either the
+		// canonical role URN or the legacy role slug during the migration.
 		rolePrincipalURNs, err := authz.RolePrincipals(role.RoleSlug, role.PrincipalUrn)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)

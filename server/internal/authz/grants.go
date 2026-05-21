@@ -146,6 +146,9 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 	}
 
 	q := repo.New(dbtx)
+	// During the role-principal migration, replace grants for both the new
+	// role:<kind>:<uuid> principal and the legacy role:<slug> principal. New
+	// writes below only insert the canonical URN form.
 	if err := DeleteRoleGrants(ctx, q, orgID, roleSlug, rolePrincipalURN); err != nil {
 		return nil, err
 	}
@@ -241,6 +244,8 @@ func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rol
 	if legacyPrincipalURN.String() == principalURN.String() {
 		return nil
 	}
+	// Legacy grants were keyed by role slug (role:<slug>). Keep deleting that
+	// principal alongside the canonical role URN until the backfill is complete.
 	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
 		OrganizationID: orgID,
 		PrincipalUrn:   legacyPrincipalURN,

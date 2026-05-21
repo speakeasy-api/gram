@@ -144,6 +144,8 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("resolve role slugs: %w", err)
 	}
 	for _, role := range rolePrincipals {
+		// Load grants for both canonical role:<kind>:<uuid> principals and
+		// legacy role:<slug> principals while existing grant rows are backfilled.
 		rolePrincipalURNs, err := RolePrincipals(role.RoleSlug, role.PrincipalUrn)
 		if err != nil {
 			return ctx, fmt.Errorf("build role principals: %w", err)
