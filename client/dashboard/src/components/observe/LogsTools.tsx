@@ -92,6 +92,9 @@ export function LogsTools() {
     setDateRangeParam,
     setCustomRangeParam,
     clearCustomRange,
+    selectedRoleIds,
+    roleOptions,
+    handleRoleSelectionChange,
   } = useObserveFilters();
 
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
@@ -117,6 +120,7 @@ export function LogsTools() {
         "hooks-traces",
         activeFilters,
         selectedHookTypes,
+        selectedRoleIds,
         from.toISOString(),
         to.toISOString(),
       ],
@@ -237,6 +241,9 @@ export function LogsTools() {
             addFilter={addFilter}
             selectedHookTypes={selectedHookTypes}
             onHookTypesChange={handleHookTypesChange}
+            roleOptions={roleOptions}
+            selectedRoleIds={selectedRoleIds}
+            onRoleSelectionChange={handleRoleSelectionChange}
             expandedTraceId={expandedTraceId}
             toggleExpand={toggleExpand}
             selectedLog={selectedLog}
@@ -273,6 +280,9 @@ function HooksInnerContent({
   activeFilters,
   selectedHookTypes,
   onHookTypesChange,
+  roleOptions,
+  selectedRoleIds,
+  onRoleSelectionChange,
   expandedTraceId,
   toggleExpand,
   selectedLog,
@@ -304,6 +314,9 @@ function HooksInnerContent({
   addFilter: (chip: FilterChip) => void;
   selectedHookTypes: TypesToInclude[];
   onHookTypesChange: (types: TypesToInclude[]) => void;
+  roleOptions: Array<{ id: string; name: string }>;
+  selectedRoleIds: string[];
+  onRoleSelectionChange: (values: string[]) => void;
   expandedTraceId: string | null;
   toggleExpand: (traceId: string) => void;
   selectedLog: TelemetryLogRecord | null;
@@ -354,6 +367,9 @@ function HooksInnerContent({
             activeFilters={activeFilters}
             selectedTypes={selectedHookTypes}
             onTypesChange={onHookTypesChange}
+            roleOptions={roleOptions}
+            selectedRoleIds={selectedRoleIds}
+            onRoleSelectionChange={onRoleSelectionChange}
             dateRange={dateRange}
             customRange={customRange}
             customRangeLabel={customRangeLabel}
