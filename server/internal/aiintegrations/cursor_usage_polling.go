@@ -28,7 +28,7 @@ const (
 
 type UsagePollService struct {
 	users           *usersrepo.Queries
-	apiClient       *cursorapi.Client
+	guardianPolicy  *guardian.Policy
 	telemetryLogger *telemetry.Logger
 	heartbeat       func(ctx context.Context, page int)
 }
@@ -39,7 +39,7 @@ func NewUsagePollService(db *pgxpool.Pool, telemetryLogger *telemetry.Logger, gu
 	}
 	return &UsagePollService{
 		users:           usersrepo.New(db),
-		apiClient:       cursorapi.New(guardianPolicy),
+		guardianPolicy:  guardianPolicy,
 		telemetryLogger: telemetryLogger,
 		heartbeat:       heartbeat,
 	}
@@ -53,6 +53,7 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 	g, gctx := errgroup.WithContext(ctx)
 	rawEvents := make(chan cursorapi.UsageEvent, cursorUsageEventsBufferSize)
 	fetchErr := make(chan error, 1)
+	apiClient := cursorapi.New(s.guardianPolicy, cursorapi.WithAPIKey(cfg.APIKey))
 
 	// Cursor includes both time bounds, so advance past our stored inclusive watermark.
 	startTime := cfg.PollWatermarkAt.Add(time.Millisecond)
@@ -66,7 +67,7 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 		for pageNum := 1; ; {
 			s.heartbeat(gctx, pageNum)
 
-			page, err := s.apiClient.FetchUsageEventsPage(gctx, cursorapi.FetchUsageEventsPageParams{
+			page, err := apiClient.FetchUsageEventsPage(gctx, cursorapi.FetchUsageEventsPageParams{
 				Start: startTime,
 				End:   endTime,
 				Page:  pageNum,
@@ -74,7 +75,8 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 			if err != nil {
 				var rateLimitErr *cursorapi.RateLimitError
 				if errors.As(err, &rateLimitErr) {
-					if err := s.sleep(gctx, calculateCursorRateLimitSleep(rateLimitErr.RetryAfter), pageNum); err != nil {
+					sleepFor := calculateCursorRateLimitSleep(rateLimitErr.RetryAfter)
+					if err := s.sleep(gctx, sleepFor, pageNum); err != nil {
 						return oops.E(oops.CodeUnexpected, err, "sleep after cursor rate limit")
 					}
 					continue
@@ -147,7 +149,10 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 		return nil
 	})
 
-	return g.Wait() //nolint:wrapcheck // Preserve the original goroutine error for callers.
+	if err := g.Wait(); err != nil {
+		return err //nolint:wrapcheck // Preserve the original goroutine error for callers.
+	}
+	return nil
 }
 
 func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
@@ -170,7 +175,8 @@ func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.Usa
 			attr.ProjectIDKey:                          cfg.ProjectID.String(),
 			attr.OrganizationIDKey:                     cfg.OrganizationID,
 			attr.ResourceURNKey:                        cursorUsageMetricsURN,
-			attr.HookSourceKey:                         string(telemetry.EventSourceHook),
+			attr.HookSourceKey:                         "cursor",
+			attr.AIIntegrationConfigIDKey:              cfg.ID.String(),
 			attr.GenAIUsageInputTokensKey:              event.TokenUsage.InputTokens,
 			attr.GenAIUsageOutputTokensKey:             event.TokenUsage.OutputTokens,
 			attr.GenAIUsageCacheReadInputTokensKey:     event.TokenUsage.CacheReadTokens,

@@ -220,6 +220,55 @@ func (q *Queries) GetUsagePollConfigByID(ctx context.Context, aiIntegrationConfi
 	return i, err
 }
 
+const insertConfig = `-- name: InsertConfig :one
+INSERT INTO ai_integration_configs (
+    organization_id
+  , provider
+  , project_id
+  , api_key_encrypted
+  , enabled
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+)
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, api_key_encrypted, enabled, id, deleted
+`
+
+type InsertConfigParams struct {
+	OrganizationID  string
+	Provider        string
+	ProjectID       uuid.UUID
+	ApiKeyEncrypted string
+	Enabled         bool
+}
+
+func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, insertConfig,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.ProjectID,
+		arg.ApiKeyEncrypted,
+		arg.Enabled,
+	)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listEnabledConfigsByProvider = `-- name: ListEnabledConfigsByProvider :many
 SELECT
     c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
@@ -307,9 +356,11 @@ const listUsagePollCandidates = `-- name: ListUsagePollCandidates :many
 SELECT
     c.id
   , c.organization_id
+  , om.slug AS organization_slug
   , c.provider
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.provider = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -326,9 +377,10 @@ type ListUsagePollCandidatesParams struct {
 }
 
 type ListUsagePollCandidatesRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Provider       string
+	ID               uuid.UUID
+	OrganizationID   string
+	OrganizationSlug string
+	Provider         string
 }
 
 func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePollCandidatesParams) ([]ListUsagePollCandidatesRow, error) {
@@ -340,7 +392,12 @@ func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePoll
 	var items []ListUsagePollCandidatesRow
 	for rows.Next() {
 		var i ListUsagePollCandidatesRow
-		if err := rows.Scan(&i.ID, &i.OrganizationID, &i.Provider); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationSlug,
+			&i.Provider,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -436,44 +493,30 @@ func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigPara
 	return err
 }
 
-const upsertConfig = `-- name: UpsertConfig :one
-INSERT INTO ai_integration_configs (
-    organization_id
-  , provider
-  , project_id
-  , api_key_encrypted
-  , enabled
-) VALUES (
-    $1
-  , $2
-  , $3
-  , $4
-  , $5
-)
-ON CONFLICT (organization_id, provider) WHERE deleted IS FALSE
-DO UPDATE SET
-    project_id = EXCLUDED.project_id
-  , api_key_encrypted = EXCLUDED.api_key_encrypted
-  , enabled = EXCLUDED.enabled
-  , updated_at = clock_timestamp()
+const updateConfigSettings = `-- name: UpdateConfigSettings :one
+UPDATE ai_integration_configs
+SET project_id = $1,
+    enabled = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND provider = $4
+  AND deleted IS FALSE
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, api_key_encrypted, enabled, id, deleted
 `
 
-type UpsertConfigParams struct {
-	OrganizationID  string
-	Provider        string
-	ProjectID       uuid.UUID
-	ApiKeyEncrypted string
-	Enabled         bool
+type UpdateConfigSettingsParams struct {
+	ProjectID      uuid.UUID
+	Enabled        bool
+	OrganizationID string
+	Provider       string
 }
 
-func (q *Queries) UpsertConfig(ctx context.Context, arg UpsertConfigParams) (AiIntegrationConfig, error) {
-	row := q.db.QueryRow(ctx, upsertConfig,
+func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSettingsParams) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, updateConfigSettings,
+		arg.ProjectID,
+		arg.Enabled,
 		arg.OrganizationID,
 		arg.Provider,
-		arg.ProjectID,
-		arg.ApiKeyEncrypted,
-		arg.Enabled,
 	)
 	var i AiIntegrationConfig
 	err := row.Scan(

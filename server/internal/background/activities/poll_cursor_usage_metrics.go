@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -25,7 +24,6 @@ const (
 )
 
 type PollCursorUsageMetrics struct {
-	logger       *slog.Logger
 	integrations *aiintegrations.Store
 	usagePoller  *aiintegrations.UsagePollService
 }
@@ -38,7 +36,6 @@ func NewPollCursorUsageMetrics(
 	guardianPolicy *guardian.Policy,
 ) *PollCursorUsageMetrics {
 	return &PollCursorUsageMetrics{
-		logger:       logger.With(attr.SlogComponent("poll_cursor_usage_metrics")),
 		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
 		usagePoller: aiintegrations.NewUsagePollService(db, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{

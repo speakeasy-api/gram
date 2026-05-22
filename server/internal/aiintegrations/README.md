@@ -11,7 +11,9 @@ AI integrations are split across two Postgres tables:
 
 Configuration and sync state are separate because provider credentials are user-managed settings, while polling metadata is operational state owned by background workers.
 
-Cursor setup is organization-level. Today each integration attaches to the organization's first-created project automatically. New or replaced API keys start with a one-hour-old query cursor and `next_poll_after = now()` so they are due on the next five-minute polling tick.
+Cursor setup is organization-level. Today each integration attaches to the organization's first-created project automatically. New or replaced API keys start with a one-hour-old query cursor and `next_poll_after = now()` so they are due immediately.
+
+Replacing an API key creates a new config generation: the old active `ai_integration_configs` row is soft-deleted, and a new active row is inserted with its own sync row. Settings-only updates, such as toggling `enabled` without supplying a new key, update the active row in place. Imported telemetry is not deleted when keys are replaced or integrations are deleted; each imported row carries `gram.ai_integration.config_id` so historical usage can be traced back to the config generation that imported it.
 
 ## Cursor Usage Polling
 
@@ -80,7 +82,9 @@ Coordinator starts one bounded batch, waits for it to complete, then fetches mor
 
 ## Important Invariants
 
-Temporal workflow IDs are the per-org/provider mutex. Each child workflow uses `v1:ai-usage-poller:{organizationID}:{provider}`. If another coordinator tries to start the same provider/org while a child is already open, Temporal rejects the duplicate start and the coordinator skips that config for the run.
+Temporal workflow IDs are the per-org/provider mutex for scheduled polling. Each scheduled child workflow uses `v1:ai-usage-poller:{organizationID}:{provider}`. If another coordinator tries to start the same provider/org while a child is already open, Temporal rejects the duplicate start and the coordinator skips that config for the run.
+
+New enabled config generations also start a best-effort immediate child workflow after the upsert transaction commits. That workflow uses `v1:ai-usage-poller:config:{configID}`, so a newly replaced key is not blocked by an older in-flight scheduled poll for the same org/provider. If the immediate start fails, the config remains due and the five-minute coordinator is the fallback.
 
 The coordinator runs every five minutes, while each config is due when `next_poll_after <= runTime`. It starts a bounded batch of child workflows, waits for that batch to complete, then fetches the next due `LIMIT` batch. The stable workflow ID prevents another poll for the same provider/org from starting if a previous child workflow is still open.
 
@@ -95,6 +99,8 @@ Child workflow failures are isolated. The coordinator waits for the current chil
 ClickHouse and Postgres are not updated atomically. If ClickHouse insert succeeds but the success sync-state update fails before a retry advances `poll_watermark_at`, the same window can be re-inserted. Ingestion does not enforce uniqueness; each row includes `cursor.event_hash` so consumers that need exact-once sums can dedupe by `(gram_project_id, cursor.event_hash)`. If the final activity attempt fails before inserting, the failure is recorded and only `next_poll_after` advances so that provider/org does not block later work.
 
 Cost fields are intentionally separate. `gen_ai.usage.cost` currently uses `tokenUsage.totalCents / 100`. Cursor's charged amount is also stored as `cursor.charged_cents` so billing semantics can be adjusted later without losing data.
+
+The API returns poll status derived from sync state, not from a separate column. A config is `pending` before its first success or failure, `success` when `last_poll_success_at` is set without a later failure, and `failed` when failure metadata is present. The dashboard shows this status in the integration card, including the persisted error message for failed polls.
 
 ## Adding Providers
 

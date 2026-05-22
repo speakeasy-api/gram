@@ -280,7 +280,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
-	aiUsageWorker.RegisterActivity(activities.SyncAIIntegrationUsage)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -320,6 +319,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+
+	// AI integration usage syncing runs on its own worker and task queue.
+	aiUsageWorker.RegisterActivity(activities.SyncAIIntegrationUsage)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)

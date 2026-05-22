@@ -19,6 +19,16 @@ var Config = Type("AIIntegrationConfig", func() {
 	Attribute("last_polled_at", String, "ISO 8601 timestamp for the last successful usage poll. Omitted until a poll succeeds.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("next_poll_after", String, "ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config is set.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_poll_status", String, "Derived status for the latest usage poll state. Omitted when no config is set for the provider.", func() {
+		Enum("pending", "success", "failed")
+	})
+	Attribute("last_poll_error", String, "Stored error from the latest failed usage poll. Omitted unless the latest poll state failed.")
+	Attribute("last_poll_failed_at", String, "ISO 8601 timestamp for the latest failed usage poll. Omitted unless a poll has failed.", func() {
+		Format(FormatDateTime)
+	})
 	Attribute("created_at", String, "ISO 8601 timestamp when the config was created. Omitted when no config is set.", func() {
 		Format(FormatDateTime)
 	})

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -78,7 +79,7 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 		batch := make([]runningAIUsagePoller, 0, len(candidates))
 		for _, candidate := range candidates {
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.Provider, candidate.OrganizationID),
+				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.ID, candidate.Provider),
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 				WaitForCancellation:   true,
 			})
@@ -134,8 +135,21 @@ func AIUsagePollerWorkflow(ctx workflow.Context, configID string) error {
 	return nil
 }
 
-func buildAIUsagePollerWorkflowID(provider string, organizationID string) string {
-	return fmt.Sprintf("v1:ai-usage-poller:%s:%s", organizationID, provider)
+func buildAIUsagePollerWorkflowID(organizationSlug string, configID uuid.UUID, provider string) string {
+	return fmt.Sprintf("v1:ai-usage-poller:%s:%s:%s", organizationSlug, configID.String(), provider)
+}
+
+type TemporalAIUsagePoller struct {
+	TemporalEnv *tenv.Environment
+}
+
+func (p *TemporalAIUsagePoller) Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
+	_, err := p.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    buildAIUsagePollerWorkflowID(organizationSlug, configID, provider),
+		TaskQueue:             string(p.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}, AIUsagePollerWorkflow, configID.String())
+	return err
 }
 
 func AddAIUsagePollerCoordinatorSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {

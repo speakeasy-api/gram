@@ -5,8 +5,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Derived status for the latest usage poll state. Omitted when no config is set for the provider.
+ */
+export const LastPollStatus = {
+  Pending: "pending",
+  Success: "success",
+  Failed: "failed",
+} as const;
+/**
+ * Derived status for the latest usage poll state. Omitted when no config is set for the provider.
+ */
+export type LastPollStatus = ClosedEnum<typeof LastPollStatus>;
 
 /**
  * Per-organization AI provider integration config. The provider API key is write-only; reads only expose whether a key is configured.
@@ -29,9 +43,25 @@ export type AIIntegrationConfig = {
    */
   id?: string | undefined;
   /**
+   * Stored error from the latest failed usage poll. Omitted unless the latest poll state failed.
+   */
+  lastPollError?: string | undefined;
+  /**
+   * ISO 8601 timestamp for the latest failed usage poll. Omitted unless a poll has failed.
+   */
+  lastPollFailedAt?: Date | undefined;
+  /**
+   * Derived status for the latest usage poll state. Omitted when no config is set for the provider.
+   */
+  lastPollStatus?: LastPollStatus | undefined;
+  /**
    * ISO 8601 timestamp for the last successful usage poll. Omitted until a poll succeeds.
    */
   lastPolledAt?: Date | undefined;
+  /**
+   * ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config is set.
+   */
+  nextPollAfter?: Date | undefined;
   /**
    * Organization the config belongs to.
    */
@@ -51,6 +81,11 @@ export type AIIntegrationConfig = {
 };
 
 /** @internal */
+export const LastPollStatus$inboundSchema: z.ZodMiniEnum<
+  typeof LastPollStatus
+> = z.enum(LastPollStatus);
+
+/** @internal */
 export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
   AIIntegrationConfig,
   unknown
@@ -62,7 +97,15 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
     enabled: z.boolean(),
     has_api_key: z.boolean(),
     id: z.optional(z.string()),
+    last_poll_error: z.optional(z.string()),
+    last_poll_failed_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    last_poll_status: z.optional(LastPollStatus$inboundSchema),
     last_polled_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    next_poll_after: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     organization_id: z.string(),
@@ -76,7 +119,11 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "created_at": "createdAt",
       "has_api_key": "hasApiKey",
+      "last_poll_error": "lastPollError",
+      "last_poll_failed_at": "lastPollFailedAt",
+      "last_poll_status": "lastPollStatus",
       "last_polled_at": "lastPolledAt",
+      "next_poll_after": "nextPollAfter",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",

@@ -27435,9 +27435,27 @@ components:
         id:
           type: string
           description: Config ID. Omitted when no config is set for the provider.
+        last_poll_error:
+          type: string
+          description: Stored error from the latest failed usage poll. Omitted unless the latest poll state failed.
+        last_poll_failed_at:
+          type: string
+          description: ISO 8601 timestamp for the latest failed usage poll. Omitted unless a poll has failed.
+          format: date-time
+        last_poll_status:
+          type: string
+          description: Derived status for the latest usage poll state. Omitted when no config is set for the provider.
+          enum:
+            - pending
+            - success
+            - failed
         last_polled_at:
           type: string
           description: ISO 8601 timestamp for the last successful usage poll. Omitted until a poll succeeds.
+          format: date-time
+        next_poll_after:
+          type: string
+          description: ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config is set.
           format: date-time
         organization_id:
           type: string

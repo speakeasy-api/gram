@@ -24,7 +24,7 @@ WHERE organization_id = @organization_id
 ORDER BY created_at ASC, id ASC
 LIMIT 1;
 
--- name: UpsertConfig :one
+-- name: InsertConfig :one
 INSERT INTO ai_integration_configs (
     organization_id
   , provider
@@ -38,12 +38,16 @@ INSERT INTO ai_integration_configs (
   , @api_key_encrypted
   , @enabled
 )
-ON CONFLICT (organization_id, provider) WHERE deleted IS FALSE
-DO UPDATE SET
-    project_id = EXCLUDED.project_id
-  , api_key_encrypted = EXCLUDED.api_key_encrypted
-  , enabled = EXCLUDED.enabled
-  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: UpdateConfigSettings :one
+UPDATE ai_integration_configs
+SET project_id = @project_id,
+    enabled = @enabled,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: EnsureSync :one
@@ -106,9 +110,11 @@ WHERE ai_integration_config_id = @ai_integration_config_id;
 SELECT
     c.id
   , c.organization_id
+  , om.slug AS organization_slug
   , c.provider
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.provider = @provider
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE

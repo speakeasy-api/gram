@@ -48,6 +48,18 @@ type GetConfigResponseBody struct {
 	// ISO 8601 timestamp for the last successful usage poll. Omitted until a poll
 	// succeeds.
 	LastPolledAt *string `form:"last_polled_at,omitempty" json:"last_polled_at,omitempty" xml:"last_polled_at,omitempty"`
+	// ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config
+	// is set.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Derived status for the latest usage poll state. Omitted when no config is
+	// set for the provider.
+	LastPollStatus *string `form:"last_poll_status,omitempty" json:"last_poll_status,omitempty" xml:"last_poll_status,omitempty"`
+	// Stored error from the latest failed usage poll. Omitted unless the latest
+	// poll state failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the latest failed usage poll. Omitted unless a poll
+	// has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
 	// ISO 8601 timestamp when the config was created. Omitted when no config is
 	// set.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -73,6 +85,18 @@ type UpsertConfigResponseBody struct {
 	// ISO 8601 timestamp for the last successful usage poll. Omitted until a poll
 	// succeeds.
 	LastPolledAt *string `form:"last_polled_at,omitempty" json:"last_polled_at,omitempty" xml:"last_polled_at,omitempty"`
+	// ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config
+	// is set.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Derived status for the latest usage poll state. Omitted when no config is
+	// set for the provider.
+	LastPollStatus *string `form:"last_poll_status,omitempty" json:"last_poll_status,omitempty" xml:"last_poll_status,omitempty"`
+	// Stored error from the latest failed usage poll. Omitted unless the latest
+	// poll state failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the latest failed usage poll. Omitted unless a poll
+	// has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
 	// ISO 8601 timestamp when the config was created. Omitted when no config is
 	// set.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -639,15 +663,19 @@ type DeleteConfigGatewayErrorResponseBody struct {
 // the "getConfig" endpoint of the "aiIntegrations" service.
 func NewGetConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetConfigResponseBody {
 	body := &GetConfigResponseBody{
-		ID:             res.ID,
-		OrganizationID: res.OrganizationID,
-		Provider:       res.Provider,
-		ProjectID:      res.ProjectID,
-		Enabled:        res.Enabled,
-		HasAPIKey:      res.HasAPIKey,
-		LastPolledAt:   res.LastPolledAt,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:               res.ID,
+		OrganizationID:   res.OrganizationID,
+		Provider:         res.Provider,
+		ProjectID:        res.ProjectID,
+		Enabled:          res.Enabled,
+		HasAPIKey:        res.HasAPIKey,
+		LastPolledAt:     res.LastPolledAt,
+		NextPollAfter:    res.NextPollAfter,
+		LastPollStatus:   res.LastPollStatus,
+		LastPollError:    res.LastPollError,
+		LastPollFailedAt: res.LastPollFailedAt,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }
@@ -656,15 +684,19 @@ func NewGetConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetConfi
 // the "upsertConfig" endpoint of the "aiIntegrations" service.
 func NewUpsertConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *UpsertConfigResponseBody {
 	body := &UpsertConfigResponseBody{
-		ID:             res.ID,
-		OrganizationID: res.OrganizationID,
-		Provider:       res.Provider,
-		ProjectID:      res.ProjectID,
-		Enabled:        res.Enabled,
-		HasAPIKey:      res.HasAPIKey,
-		LastPolledAt:   res.LastPolledAt,
-		CreatedAt:      res.CreatedAt,
-		UpdatedAt:      res.UpdatedAt,
+		ID:               res.ID,
+		OrganizationID:   res.OrganizationID,
+		Provider:         res.Provider,
+		ProjectID:        res.ProjectID,
+		Enabled:          res.Enabled,
+		HasAPIKey:        res.HasAPIKey,
+		LastPolledAt:     res.LastPolledAt,
+		NextPollAfter:    res.NextPollAfter,
+		LastPollStatus:   res.LastPollStatus,
+		LastPollError:    res.LastPollError,
+		LastPollFailedAt: res.LastPollFailedAt,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }

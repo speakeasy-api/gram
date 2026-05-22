@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 8c7584f32a3e9b4b71224173a8325fdd
+  docChecksum: 5dbda95b99f3e586968b6928657deed9
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -93,7 +93,7 @@ trackedFiles:
   docs/models/components/addpluginserverform.md:
     last_write_checksum: sha1:a2726c1edb39bdb417e5a9e65fc695f7a5abb9f2
   docs/models/components/aiintegrationconfig.md:
-    last_write_checksum: sha1:5b4d9d1a89bd56693c396444ecab952a902813f4
+    last_write_checksum: sha1:6fd07c709c59d79aacdf82600a23adf69dbb6158
   docs/models/components/allowedorigin.md:
     last_write_checksum: sha1:962b6ed2e5fe2e57c01511a764dbef975efd6289
   docs/models/components/allowedoriginstatus.md:
@@ -412,6 +412,8 @@ trackedFiles:
     last_write_checksum: sha1:01ec12d1a17b6d6c5f6dfdd06215fe5a1545570a
   docs/models/components/kind.md:
     last_write_checksum: sha1:f17db76576b64ca436fcac0d69c8ca428204e20e
+  docs/models/components/lastpollstatus.md:
+    last_write_checksum: sha1:d342d33ebe165de40df32d6a2005bbdfa49dd596
   docs/models/components/listallowedoriginsresult.md:
     last_write_checksum: sha1:ba95feb265ff9c2875b85ec31cec246a7c9b5251
   docs/models/components/listassetsresult.md:
@@ -3719,7 +3721,7 @@ trackedFiles:
   src/models/components/addpluginserverform.ts:
     last_write_checksum: sha1:6af5998e0f14002028123f6a8c26896c1d1f4ed8
   src/models/components/aiintegrationconfig.ts:
-    last_write_checksum: sha1:1fff8c95f82f8835e38a4196246d5405714d7cb1
+    last_write_checksum: sha1:cfbccc1b3a3aa4738c2f052324df032d1b1882f6
   src/models/components/allowedorigin.ts:
     id: 99b4f40f1f9c
     last_write_checksum: sha1:09b19b8524236e2c90452d0539edff8f12f26872

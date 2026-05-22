@@ -65,6 +65,18 @@ type AIIntegrationConfig struct {
 	// ISO 8601 timestamp for the last successful usage poll. Omitted until a poll
 	// succeeds.
 	LastPolledAt *string
+	// ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config
+	// is set.
+	NextPollAfter *string
+	// Derived status for the latest usage poll state. Omitted when no config is
+	// set for the provider.
+	LastPollStatus *string
+	// Stored error from the latest failed usage poll. Omitted unless the latest
+	// poll state failed.
+	LastPollError *string
+	// ISO 8601 timestamp for the latest failed usage poll. Omitted unless a poll
+	// has failed.
+	LastPollFailedAt *string
 	// ISO 8601 timestamp when the config was created. Omitted when no config is
 	// set.
 	CreatedAt *string

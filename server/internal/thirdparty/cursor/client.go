@@ -159,8 +159,12 @@ type FetchUsageEventsPageParams struct {
 }
 
 type UsageEventsPage struct {
-	Events      []UsageEvent
-	HasNextPage bool
+	Events                []UsageEvent
+	TotalUsageEventsCount int
+	CurrentPage           int
+	NumPages              int
+	PageSize              int
+	HasNextPage           bool
 }
 
 func (c *Client) FetchUsageEventsPage(ctx context.Context, params FetchUsageEventsPageParams) (*UsageEventsPage, error) {
@@ -185,8 +189,12 @@ func (c *Client) FetchUsageEventsPage(ctx context.Context, params FetchUsageEven
 	}
 
 	return &UsageEventsPage{
-		Events:      resp.UsageEvents,
-		HasNextPage: resp.Pagination.HasNextPage,
+		Events:                resp.UsageEvents,
+		TotalUsageEventsCount: resp.TotalUsageEventsCount,
+		CurrentPage:           resp.Pagination.CurrentPage,
+		NumPages:              resp.Pagination.NumPages,
+		PageSize:              resp.Pagination.PageSize,
+		HasNextPage:           resp.Pagination.HasNextPage,
 	}, nil
 }
 

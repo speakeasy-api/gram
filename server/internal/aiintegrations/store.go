@@ -51,9 +51,16 @@ type Config struct {
 }
 
 type UsagePollCandidate struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Provider       string
+	ID               uuid.UUID
+	OrganizationID   string
+	OrganizationSlug string
+	Provider         string
+}
+
+type UpsertResult struct {
+	Config               Config
+	Row                  *repo.AiIntegrationConfig
+	CreatedNewGeneration bool
 }
 
 func NewStore(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Store {
@@ -100,40 +107,59 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 	return cfg, &row, nil
 }
 
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, enabled bool, resetPollWatermarkAt *time.Time) (Config, *repo.AiIntegrationConfig, error) {
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
-		return emptyConfig(orgID, provider), nil, err
+		return UpsertResult{}, err
 	}
 
 	q := repo.New(dbtx)
 	projectID, err := q.GetFirstProjectByOrganization(ctx, orgID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return emptyConfig(orgID, provider), nil, oops.E(oops.CodeInvalid, err, "organization has no project for ai integration attribution")
+			return UpsertResult{}, oops.E(oops.CodeInvalid, err, "organization has no project for ai integration attribution")
 		}
-		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to resolve ai integration project")
+		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to resolve ai integration project")
 	}
 
-	encrypted, err := s.encryptAPIKey(apiKey)
-	if err != nil {
-		return emptyConfig(orgID, provider), nil, err
-	}
-
-	row, err := q.UpsertConfig(ctx, repo.UpsertConfigParams{
-		OrganizationID:  orgID,
-		Provider:        provider,
-		ProjectID:       projectID,
-		ApiKeyEncrypted: encrypted,
-		Enabled:         enabled,
-	})
-	if err != nil {
-		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
+	var row repo.AiIntegrationConfig
+	createdNewGeneration := apiKeySupplied
+	if apiKeySupplied {
+		if err := q.SoftDeleteConfig(ctx, repo.SoftDeleteConfigParams{
+			OrganizationID: orgID,
+			Provider:       provider,
+		}); err != nil {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to replace ai integration config")
+		}
+		encrypted, err := s.encryptAPIKey(apiKey)
+		if err != nil {
+			return UpsertResult{}, err
+		}
+		row, err = q.InsertConfig(ctx, repo.InsertConfigParams{
+			OrganizationID:  orgID,
+			Provider:        provider,
+			ProjectID:       projectID,
+			ApiKeyEncrypted: encrypted,
+			Enabled:         enabled,
+		})
+		if err != nil {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
+		}
+	} else {
+		row, err = q.UpdateConfigSettings(ctx, repo.UpdateConfigSettingsParams{
+			OrganizationID: orgID,
+			Provider:       provider,
+			ProjectID:      projectID,
+			Enabled:        enabled,
+		})
+		if err != nil {
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
+		}
 	}
 
 	syncRow, err := q.EnsureSync(ctx, row.ID)
 	if err != nil {
-		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
+		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
 	}
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = timestamptz(*resetPollWatermarkAt)
@@ -147,15 +173,19 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			PollWatermarkAt:       syncRow.PollWatermarkAt,
 			NextPollAfter:         syncRow.NextPollAfter,
 		}); err != nil {
-			return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to reset ai integration sync watermark")
+			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to reset ai integration sync watermark")
 		}
 	}
 
 	cfg, err := s.configFromRows(row, syncRow)
 	if err != nil {
-		return emptyConfig(orgID, provider), nil, err
+		return UpsertResult{}, err
 	}
-	return cfg, &row, nil
+	return UpsertResult{
+		Config:               cfg,
+		Row:                  &row,
+		CreatedNewGeneration: createdNewGeneration,
+	}, nil
 }
 
 func (s *Store) softDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
@@ -222,9 +252,10 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, provider string, po
 	candidates := make([]UsagePollCandidate, 0, len(rows))
 	for _, row := range rows {
 		candidates = append(candidates, UsagePollCandidate{
-			ID:             row.ID,
-			OrganizationID: row.OrganizationID,
-			Provider:       row.Provider,
+			ID:               row.ID,
+			OrganizationID:   row.OrganizationID,
+			OrganizationSlug: row.OrganizationSlug,
+			Provider:         row.Provider,
 		})
 	}
 	return candidates, nil

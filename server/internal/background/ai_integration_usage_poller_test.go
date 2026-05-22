@@ -18,7 +18,7 @@ import (
 func TestBuildAIUsagePollerWorkflowID(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "v1:ai-usage-poller:org_123:cursor", buildAIUsagePollerWorkflowID(aiintegrations.ProviderCursor, "org_123"))
+	require.Equal(t, "v1:ai-usage-poller:acme:11111111-1111-1111-1111-111111111111:cursor", buildAIUsagePollerWorkflowID("acme", uuid.MustParse("11111111-1111-1111-1111-111111111111"), aiintegrations.ProviderCursor))
 }
 
 func TestAIUsagePollerCadenceAndRetryConfig(t *testing.T) {
@@ -41,39 +41,46 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 
 	candidates := []aiintegrations.UsagePollCandidate{
 		{
-			ID:             uuid.MustParse("11111111-1111-1111-1111-111111111111"),
-			OrganizationID: "org_a",
-			Provider:       aiintegrations.ProviderCursor,
+			ID:               uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			OrganizationID:   "org_a",
+			OrganizationSlug: "org-a",
+			Provider:         aiintegrations.ProviderCursor,
 		},
 		{
-			ID:             uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-			OrganizationID: "org_b",
-			Provider:       aiintegrations.ProviderCursor,
+			ID:               uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+			OrganizationID:   "org_b",
+			OrganizationSlug: "org-b",
+			Provider:         aiintegrations.ProviderCursor,
 		},
 		{
-			ID:             uuid.MustParse("33333333-3333-3333-3333-333333333333"),
-			OrganizationID: "org_c",
-			Provider:       aiintegrations.ProviderCursor,
+			ID:               uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+			OrganizationID:   "org_c",
+			OrganizationSlug: "org-c",
+			Provider:         aiintegrations.ProviderCursor,
 		},
 		{
-			ID:             uuid.MustParse("44444444-4444-4444-4444-444444444444"),
-			OrganizationID: "org_d",
-			Provider:       aiintegrations.ProviderCursor,
+			ID:               uuid.MustParse("44444444-4444-4444-4444-444444444444"),
+			OrganizationID:   "org_d",
+			OrganizationSlug: "org-d",
+			Provider:         aiintegrations.ProviderCursor,
 		},
 		{
-			ID:             uuid.MustParse("55555555-5555-5555-5555-555555555555"),
-			OrganizationID: "org_e",
-			Provider:       aiintegrations.ProviderCursor,
+			ID:               uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+			OrganizationID:   "org_e",
+			OrganizationSlug: "org-e",
+			Provider:         aiintegrations.ProviderCursor,
 		},
 		{
-			ID:             uuid.MustParse("66666666-6666-6666-6666-666666666666"),
-			OrganizationID: "org_f",
-			Provider:       aiintegrations.ProviderCursor,
+			ID:               uuid.MustParse("66666666-6666-6666-6666-666666666666"),
+			OrganizationID:   "org_f",
+			OrganizationSlug: "org-f",
+			Provider:         aiintegrations.ProviderCursor,
 		},
 		{
-			ID:             uuid.MustParse("77777777-7777-7777-7777-777777777777"),
-			OrganizationID: "org_g",
-			Provider:       aiintegrations.ProviderCursor,
+			ID:               uuid.MustParse("77777777-7777-7777-7777-777777777777"),
+			OrganizationID:   "org_g",
+			OrganizationSlug: "org-g",
+			Provider:         aiintegrations.ProviderCursor,
 		},
 	}
 
@@ -127,19 +134,22 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 	env.RegisterWorkflow(AIUsagePollerWorkflow)
 
 	failedCandidate := aiintegrations.UsagePollCandidate{
-		ID:             uuid.MustParse("11111111-1111-1111-1111-111111111111"),
-		OrganizationID: "org_a",
-		Provider:       aiintegrations.ProviderCursor,
+		ID:               uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		OrganizationID:   "org_a",
+		OrganizationSlug: "org-a",
+		Provider:         aiintegrations.ProviderCursor,
 	}
 	successCandidate := aiintegrations.UsagePollCandidate{
-		ID:             uuid.MustParse("22222222-2222-2222-2222-222222222222"),
-		OrganizationID: "org_b",
-		Provider:       aiintegrations.ProviderCursor,
+		ID:               uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		OrganizationID:   "org_b",
+		OrganizationSlug: "org-b",
+		Provider:         aiintegrations.ProviderCursor,
 	}
 	nextBatchCandidate := aiintegrations.UsagePollCandidate{
-		ID:             uuid.MustParse("33333333-3333-3333-3333-333333333333"),
-		OrganizationID: "org_c",
-		Provider:       aiintegrations.ProviderCursor,
+		ID:               uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+		OrganizationID:   "org_c",
+		OrganizationSlug: "org-c",
+		Provider:         aiintegrations.ProviderCursor,
 	}
 
 	listCalls := 0

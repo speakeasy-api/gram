@@ -360,7 +360,7 @@ const (
 
 	GitHubUsernameKey = attribute.Key("gram.github.username")
 
-	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration_config.id")
+	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
 	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
 )
 

@@ -21,15 +21,15 @@ func TestFetchUsageEventsPageSendsAuthAndRequest(t *testing.T) {
 		if r.URL.Path != "/teams/filtered-usage-events" {
 			t.Errorf("expected path /teams/filtered-usage-events, got %s", r.URL.Path)
 		}
-		user, pass, ok := r.BasicAuth()
+		username, password, ok := r.BasicAuth()
 		if !ok {
 			t.Errorf("expected basic auth")
 		}
-		if user != "cursor-key" {
-			t.Errorf("expected basic auth user cursor-key, got %s", user)
+		if username != "cursor-key" {
+			t.Errorf("expected basic auth username cursor-key, got %s", username)
 		}
-		if pass != "" {
-			t.Errorf("expected empty basic auth password, got %s", pass)
+		if password != "" {
+			t.Errorf("expected empty basic auth password, got %s", password)
 		}
 
 		var req filteredUsageEventsRequest
@@ -80,6 +80,10 @@ func TestFetchUsageEventsPageSendsAuthAndRequest(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []int{1}, pages)
 	require.Len(t, eventsPage.Events, 1)
+	require.Equal(t, 2, eventsPage.TotalUsageEventsCount)
+	require.Equal(t, 1, eventsPage.CurrentPage)
+	require.Equal(t, 2, eventsPage.NumPages)
+	require.Equal(t, 2, eventsPage.PageSize)
 	require.InDelta(t, float64(1), eventsPage.Events[0].ChargedCents, 0.000001)
 }
 
@@ -204,6 +208,74 @@ func TestUsageEventUnmarshalsTimestamp(t *testing.T) {
 	}`), &event)
 	require.NoError(t, err)
 	require.Equal(t, int64(1710720000123), event.Timestamp.UnixMilli())
+}
+
+func TestFilteredUsageEventsResponseUnmarshalsDocsShape(t *testing.T) {
+	t.Parallel()
+
+	var resp filteredUsageEventsResponse
+	err := json.Unmarshal([]byte(`{
+		"totalUsageEventsCount": 113,
+		"pagination": {
+			"numPages": 12,
+			"currentPage": 1,
+			"pageSize": 10,
+			"hasNextPage": true,
+			"hasPreviousPage": false
+		},
+		"usageEvents": [
+			{
+				"timestamp": "1750979225854",
+				"userEmail": "developer@company.com",
+				"model": "claude-4.5-sonnet",
+				"kind": "Usage-based",
+				"maxMode": true,
+				"requestsCosts": 5,
+				"isTokenBasedCall": true,
+				"isChargeable": true,
+				"isHeadless": false,
+				"tokenUsage": {
+					"inputTokens": 126,
+					"outputTokens": 450,
+					"cacheWriteTokens": 6112,
+					"cacheReadTokens": 11964,
+					"totalCents": 20.18232
+				},
+				"chargedCents": 21.36232,
+				"cursorTokenFee": 1.18,
+				"isFreeBugbot": false
+			},
+			{
+				"timestamp": "1750978339901",
+				"userEmail": "admin@company.com",
+				"model": "claude-4-sonnet-thinking",
+				"kind": "Included in Business",
+				"maxMode": true,
+				"requestsCosts": 1.4,
+				"isTokenBasedCall": false,
+				"isChargeable": false,
+				"isHeadless": false,
+				"chargedCents": 8,
+				"isFreeBugbot": false
+			}
+		],
+		"period": {
+			"startDate": 1748411762359,
+			"endDate": 1751003762359
+		}
+	}`), &resp)
+	require.NoError(t, err)
+	require.Equal(t, 113, resp.TotalUsageEventsCount)
+	require.Equal(t, 12, resp.Pagination.NumPages)
+	require.True(t, resp.Pagination.HasNextPage)
+	require.Len(t, resp.UsageEvents, 2)
+	require.Equal(t, "developer@company.com", resp.UsageEvents[0].UserEmail)
+	require.Equal(t, int64(1750979225854), resp.UsageEvents[0].Timestamp.UnixMilli())
+	require.InDelta(t, float64(21.36232), resp.UsageEvents[0].ChargedCents, 0.000001)
+	require.Equal(t, int64(126), resp.UsageEvents[0].TokenUsage.InputTokens)
+	require.Equal(t, "admin@company.com", resp.UsageEvents[1].UserEmail)
+	require.False(t, resp.UsageEvents[1].IsTokenBasedCall)
+	require.Zero(t, resp.UsageEvents[1].TokenUsage.InputTokens)
 }
 
 func testGuardianPolicy(t *testing.T) *guardian.Policy {

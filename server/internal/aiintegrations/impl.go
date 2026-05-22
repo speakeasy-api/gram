@@ -28,17 +28,22 @@ import (
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
-	store  *Store
+	tracer           trace.Tracer
+	logger           *slog.Logger
+	db               *pgxpool.Pool
+	auth             *auth.Auth
+	authz            *authz.Engine
+	audit            *audit.Logger
+	store            *Store
+	usagePollStarter UsagePollWorkflowStarter
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
+
+type UsagePollWorkflowStarter interface {
+	Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error
+}
 
 func NewService(
 	logger *slog.Logger,
@@ -48,16 +53,18 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	encryptionClient *encryption.Client,
+	usagePollStarter UsagePollWorkflowStarter,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("aiintegrations.api"))
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/aiintegrations"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
-		store:  NewStore(logger, db, encryptionClient),
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/aiintegrations"),
+		logger:           logger,
+		db:               db,
+		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
+		audit:            auditLogger,
+		store:            NewStore(logger, db, encryptionClient),
+		usagePollStarter: usagePollStarter,
 	}
 }
 
@@ -139,10 +146,12 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	cfg, row, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, payload.Enabled, resetPollWatermarkAt)
+	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, resetPollWatermarkAt)
 	if err != nil {
 		return nil, err
 	}
+	cfg := result.Config
+	row := result.Row
 
 	var beforeSnap *audit.AIIntegrationSnapshot
 	if beforeRow != nil {
@@ -166,6 +175,15 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration upsert").Log(ctx, logger)
+	}
+
+	if result.CreatedNewGeneration && cfg.Enabled {
+		if err := s.startUsagePoll(ctx, authCtx.OrganizationSlug, cfg.ID, cfg.Provider); err != nil {
+			logger.WarnContext(ctx, "failed to start ai integration usage poll workflow",
+				attr.SlogError(err),
+				attr.SlogAIIntegrationConfigID(cfg.ID.String()),
+			)
+		}
 	}
 
 	return buildView(cfg, row.ID), nil
@@ -236,17 +254,28 @@ func shouldResetUsagePollWatermark(hasExistingConfig bool, apiKeySupplied bool) 
 	return !hasExistingConfig || apiKeySupplied
 }
 
+func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
+	if s.usagePollStarter == nil {
+		return nil
+	}
+	return s.usagePollStarter.Poll(ctx, organizationSlug, configID, provider)
+}
+
 func emptyView(orgID, provider string) *gen.AIIntegrationConfig {
 	return &gen.AIIntegrationConfig{
-		ID:             nil,
-		OrganizationID: orgID,
-		Provider:       provider,
-		ProjectID:      nil,
-		Enabled:        false,
-		HasAPIKey:      false,
-		LastPolledAt:   nil,
-		CreatedAt:      nil,
-		UpdatedAt:      nil,
+		ID:               nil,
+		OrganizationID:   orgID,
+		Provider:         provider,
+		ProjectID:        nil,
+		Enabled:          false,
+		HasAPIKey:        false,
+		LastPolledAt:     nil,
+		LastPollStatus:   nil,
+		LastPollError:    nil,
+		LastPollFailedAt: nil,
+		NextPollAfter:    nil,
+		CreatedAt:        nil,
+		UpdatedAt:        nil,
 	}
 }
 
@@ -260,15 +289,44 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		formatted := cfg.LastPollSuccessAt.Format(time.RFC3339)
 		lastPolledAt = &formatted
 	}
-	return &gen.AIIntegrationConfig{
-		ID:             &id,
-		OrganizationID: cfg.OrganizationID,
-		Provider:       cfg.Provider,
-		ProjectID:      &projectID,
-		Enabled:        cfg.Enabled,
-		HasAPIKey:      cfg.APIKey != "",
-		LastPolledAt:   lastPolledAt,
-		CreatedAt:      &createdAt,
-		UpdatedAt:      &updatedAt,
+	lastPollStatus := deriveLastPollStatus(cfg)
+	var lastPollError *string
+	if cfg.LastPollError != "" {
+		lastPollError = &cfg.LastPollError
 	}
+	var lastPollFailedAt *string
+	if !cfg.LastPollFailedAt.IsZero() {
+		formatted := cfg.LastPollFailedAt.Format(time.RFC3339)
+		lastPollFailedAt = &formatted
+	}
+	var nextPollAfter *string
+	if !cfg.NextPollAfter.IsZero() {
+		formatted := cfg.NextPollAfter.Format(time.RFC3339)
+		nextPollAfter = &formatted
+	}
+	return &gen.AIIntegrationConfig{
+		ID:               &id,
+		OrganizationID:   cfg.OrganizationID,
+		Provider:         cfg.Provider,
+		ProjectID:        &projectID,
+		Enabled:          cfg.Enabled,
+		HasAPIKey:        cfg.APIKey != "",
+		LastPolledAt:     lastPolledAt,
+		LastPollStatus:   &lastPollStatus,
+		LastPollError:    lastPollError,
+		LastPollFailedAt: lastPollFailedAt,
+		NextPollAfter:    nextPollAfter,
+		CreatedAt:        &createdAt,
+		UpdatedAt:        &updatedAt,
+	}
+}
+
+func deriveLastPollStatus(cfg Config) string {
+	if cfg.LastPollError != "" || !cfg.LastPollFailedAt.IsZero() {
+		return "failed"
+	}
+	if !cfg.LastPollSuccessAt.IsZero() {
+		return "success"
+	}
+	return "pending"
 }

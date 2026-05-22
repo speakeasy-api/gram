@@ -48,6 +48,18 @@ type GetConfigResponseBody struct {
 	// ISO 8601 timestamp for the last successful usage poll. Omitted until a poll
 	// succeeds.
 	LastPolledAt *string `form:"last_polled_at,omitempty" json:"last_polled_at,omitempty" xml:"last_polled_at,omitempty"`
+	// ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config
+	// is set.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Derived status for the latest usage poll state. Omitted when no config is
+	// set for the provider.
+	LastPollStatus *string `form:"last_poll_status,omitempty" json:"last_poll_status,omitempty" xml:"last_poll_status,omitempty"`
+	// Stored error from the latest failed usage poll. Omitted unless the latest
+	// poll state failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the latest failed usage poll. Omitted unless a poll
+	// has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
 	// ISO 8601 timestamp when the config was created. Omitted when no config is
 	// set.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -73,6 +85,18 @@ type UpsertConfigResponseBody struct {
 	// ISO 8601 timestamp for the last successful usage poll. Omitted until a poll
 	// succeeds.
 	LastPolledAt *string `form:"last_polled_at,omitempty" json:"last_polled_at,omitempty" xml:"last_polled_at,omitempty"`
+	// ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config
+	// is set.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Derived status for the latest usage poll state. Omitted when no config is
+	// set for the provider.
+	LastPollStatus *string `form:"last_poll_status,omitempty" json:"last_poll_status,omitempty" xml:"last_poll_status,omitempty"`
+	// Stored error from the latest failed usage poll. Omitted unless the latest
+	// poll state failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the latest failed usage poll. Omitted unless a poll
+	// has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
 	// ISO 8601 timestamp when the config was created. Omitted when no config is
 	// set.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -659,15 +683,19 @@ func NewDeleteConfigRequestBody(p *aiintegrations.DeleteConfigPayload) *DeleteCo
 // "getConfig" endpoint result from a HTTP "OK" response.
 func NewGetConfigAIIntegrationConfigOK(body *GetConfigResponseBody) *aiintegrations.AIIntegrationConfig {
 	v := &aiintegrations.AIIntegrationConfig{
-		ID:             body.ID,
-		OrganizationID: *body.OrganizationID,
-		Provider:       *body.Provider,
-		ProjectID:      body.ProjectID,
-		Enabled:        *body.Enabled,
-		HasAPIKey:      *body.HasAPIKey,
-		LastPolledAt:   body.LastPolledAt,
-		CreatedAt:      body.CreatedAt,
-		UpdatedAt:      body.UpdatedAt,
+		ID:               body.ID,
+		OrganizationID:   *body.OrganizationID,
+		Provider:         *body.Provider,
+		ProjectID:        body.ProjectID,
+		Enabled:          *body.Enabled,
+		HasAPIKey:        *body.HasAPIKey,
+		LastPolledAt:     body.LastPolledAt,
+		NextPollAfter:    body.NextPollAfter,
+		LastPollStatus:   body.LastPollStatus,
+		LastPollError:    body.LastPollError,
+		LastPollFailedAt: body.LastPollFailedAt,
+		CreatedAt:        body.CreatedAt,
+		UpdatedAt:        body.UpdatedAt,
 	}
 
 	return v
@@ -827,15 +855,19 @@ func NewGetConfigGatewayError(body *GetConfigGatewayErrorResponseBody) *goa.Serv
 // "upsertConfig" endpoint result from a HTTP "OK" response.
 func NewUpsertConfigAIIntegrationConfigOK(body *UpsertConfigResponseBody) *aiintegrations.AIIntegrationConfig {
 	v := &aiintegrations.AIIntegrationConfig{
-		ID:             body.ID,
-		OrganizationID: *body.OrganizationID,
-		Provider:       *body.Provider,
-		ProjectID:      body.ProjectID,
-		Enabled:        *body.Enabled,
-		HasAPIKey:      *body.HasAPIKey,
-		LastPolledAt:   body.LastPolledAt,
-		CreatedAt:      body.CreatedAt,
-		UpdatedAt:      body.UpdatedAt,
+		ID:               body.ID,
+		OrganizationID:   *body.OrganizationID,
+		Provider:         *body.Provider,
+		ProjectID:        body.ProjectID,
+		Enabled:          *body.Enabled,
+		HasAPIKey:        *body.HasAPIKey,
+		LastPolledAt:     body.LastPolledAt,
+		NextPollAfter:    body.NextPollAfter,
+		LastPollStatus:   body.LastPollStatus,
+		LastPollError:    body.LastPollError,
+		LastPollFailedAt: body.LastPollFailedAt,
+		CreatedAt:        body.CreatedAt,
+		UpdatedAt:        body.UpdatedAt,
 	}
 
 	return v
@@ -1159,6 +1191,17 @@ func ValidateGetConfigResponseBody(body *GetConfigResponseBody) (err error) {
 	if body.LastPolledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_polled_at", *body.LastPolledAt, goa.FormatDateTime))
 	}
+	if body.NextPollAfter != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_poll_after", *body.NextPollAfter, goa.FormatDateTime))
+	}
+	if body.LastPollStatus != nil {
+		if !(*body.LastPollStatus == "pending" || *body.LastPollStatus == "success" || *body.LastPollStatus == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.last_poll_status", *body.LastPollStatus, []any{"pending", "success", "failed"}))
+		}
+	}
+	if body.LastPollFailedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_poll_failed_at", *body.LastPollFailedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -1185,6 +1228,17 @@ func ValidateUpsertConfigResponseBody(body *UpsertConfigResponseBody) (err error
 	}
 	if body.LastPolledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_polled_at", *body.LastPolledAt, goa.FormatDateTime))
+	}
+	if body.NextPollAfter != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_poll_after", *body.NextPollAfter, goa.FormatDateTime))
+	}
+	if body.LastPollStatus != nil {
+		if !(*body.LastPollStatus == "pending" || *body.LastPollStatus == "success" || *body.LastPollStatus == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.last_poll_status", *body.LastPollStatus, []any{"pending", "success", "failed"}))
+		}
+	}
+	if body.LastPollFailedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_poll_failed_at", *body.LastPollFailedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

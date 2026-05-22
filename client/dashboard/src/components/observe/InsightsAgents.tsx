@@ -1635,7 +1635,7 @@ async function fetchAllUsers(
       telemetrySearchUsers(client, {
         searchUsersPayload: {
           cursor,
-          filter: { from, to, eventSource: "hook" },
+          filter: { from, to },
           limit: 1000,
           sort: "desc",
           userType: "internal",
@@ -1656,7 +1656,7 @@ async function fetchRoleUsage(
   const result = await unwrapAsync(
     telemetrySearchUsers(client, {
       searchUsersPayload: {
-        filter: { from, to, eventSource: "hook" },
+        filter: { from, to },
         groupBy: "role",
         limit: 1000,
         sort: "desc",
@@ -1692,7 +1692,6 @@ async function fetchOverview(
         from,
         to,
         includeTimeSeries: true,
-        eventSource: "hook",
         hookSource,
       },
     }),
