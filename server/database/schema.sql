@@ -424,6 +424,7 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
   name TEXT NOT NULL,
   description TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
   input_schema JSONB,
   -- Record<string, { description?: string }>
   variables JSONB,

@@ -182,6 +182,34 @@ type Proxy struct {
 	// originating request ID is seen. Responses to non-tools/list requests
 	// skip this loop entirely.
 	ToolsListResponseInterceptors []ToolsListResponseInterceptor
+
+	// ResourcesReadRequestInterceptors run for inbound "resources/read"
+	// JSON-RPC requests only, after the generic UserRequestInterceptors
+	// chain has completed. Non-resources/read requests skip this loop
+	// entirely.
+	ResourcesReadRequestInterceptors []ResourcesReadRequestInterceptor
+
+	// ResourcesReadResponseInterceptors run for "resources/read" JSON-RPC
+	// responses only, after the generic RemoteMessageInterceptors chain has
+	// completed. Dispatches from either the JSON response path or — for
+	// SSE responses — when a terminal response event matching the
+	// originating request ID is seen. Responses to non-resources/read
+	// requests skip this loop entirely.
+	ResourcesReadResponseInterceptors []ResourcesReadResponseInterceptor
+
+	// ResourcesListRequestInterceptors run for inbound "resources/list"
+	// JSON-RPC requests only, after the generic UserRequestInterceptors
+	// chain has completed. Non-resources/list requests skip this loop
+	// entirely.
+	ResourcesListRequestInterceptors []ResourcesListRequestInterceptor
+
+	// ResourcesListResponseInterceptors run for "resources/list" JSON-RPC
+	// responses only, after the generic RemoteMessageInterceptors chain has
+	// completed. Dispatches from either the JSON response path or — for
+	// SSE responses — when a terminal response event matching the
+	// originating request ID is seen. Responses to non-resources/list
+	// requests skip this loop entirely.
+	ResourcesListResponseInterceptors []ResourcesListResponseInterceptor
 }
 
 // Delete forwards an inbound DELETE to the remote MCP server. In MCP's
@@ -275,7 +303,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	// the user's MCP runtime sees upstream's actual response instead of
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil)
 		responseBytes = n
 		if streamErr != nil {
 			return streamErr
@@ -371,6 +399,24 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
+	resourcesReadReq, _ := resourcesReadRequestFromUserRequest(userReq)
+	if resourcesReadReq != nil {
+		// Attach the resource URI to the parent Post span so the
+		// `gram.resource.uri` attribute on traces populates for /x/mcp
+		// resource reads, mirroring how tools/call sets `tool_name`.
+		span.SetAttributes(attr.ResourceURI(resourcesReadReq.Params.URI))
+		if err := p.runResourcesReadRequestInterceptors(ctx, resourcesReadReq); err != nil {
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+		}
+	}
+
+	resourcesListReq, _ := resourcesListRequestFromUserRequest(userReq)
+	if resourcesListReq != nil {
+		if err := p.runResourcesListRequestInterceptors(ctx, resourcesListReq); err != nil {
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+		}
+	}
+
 	// Materialize any typed-setter mutations (e.g. ToolsCallRequest.SetArguments)
 	// into the cached body bytes so the forwarder sends the mutated payload
 	// upstream. A no-op when no interceptor mutated the request.
@@ -400,7 +446,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// below is bypassed entirely for SSE responses because the body is
 	// not a single message to hand off — it's a stream of them.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
 		responseBytes = n
 		if streamErr != nil {
 			return streamErr
@@ -443,6 +489,22 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		if toolsListReq != nil {
 			if toolsListResp, ok := toolsListResponseFromRemoteMessage(toolsListReq, remoteMsg); ok {
 				if err := p.runToolsListResponseInterceptors(ctx, toolsListResp); err != nil {
+					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+				}
+			}
+		}
+
+		if resourcesReadReq != nil {
+			if resourcesReadResp, ok := resourcesReadResponseFromRemoteMessage(resourcesReadReq, remoteMsg); ok {
+				if err := p.runResourcesReadResponseInterceptors(ctx, resourcesReadResp); err != nil {
+					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+				}
+			}
+		}
+
+		if resourcesListReq != nil {
+			if resourcesListResp, ok := resourcesListResponseFromRemoteMessage(resourcesListReq, remoteMsg); ok {
+				if err := p.runResourcesListResponseInterceptors(ctx, resourcesListResp); err != nil {
 					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 				}
 			}
@@ -578,6 +640,8 @@ func (p *Proxy) relaySSEStream(
 	upstreamResp *http.Response,
 	toolsCallReq *ToolsCallRequest,
 	toolsListReq *ToolsListRequest,
+	resourcesReadReq *ResourcesReadRequest,
+	resourcesListReq *ResourcesListRequest,
 ) (int64, error) {
 	applyResponseHeaders(w, upstreamResp)
 	w.WriteHeader(upstreamResp.StatusCode)
@@ -595,7 +659,7 @@ func (p *Proxy) relaySSEStream(
 
 	// Extract the request ID of the originating typed request once, so we
 	// can match it against response events to detect the terminal event.
-	// At most one of toolsCallReq and toolsListReq is non-nil for a given
+	// At most one of the typed request views is non-nil for a given
 	// inbound POST.
 	var terminalID jsonrpc.ID
 	var haveTerminalID bool
@@ -607,6 +671,16 @@ func (p *Proxy) relaySSEStream(
 		}
 	case toolsListReq != nil && len(toolsListReq.UserRequest.JSONRPCMessages) == 1:
 		if rpcReq, ok := toolsListReq.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request); ok {
+			terminalID = rpcReq.ID
+			haveTerminalID = true
+		}
+	case resourcesReadReq != nil && len(resourcesReadReq.UserRequest.JSONRPCMessages) == 1:
+		if rpcReq, ok := resourcesReadReq.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request); ok {
+			terminalID = rpcReq.ID
+			haveTerminalID = true
+		}
+	case resourcesListReq != nil && len(resourcesListReq.UserRequest.JSONRPCMessages) == 1:
+		if rpcReq, ok := resourcesListReq.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request); ok {
 			terminalID = rpcReq.ID
 			haveTerminalID = true
 		}
@@ -652,8 +726,8 @@ func (p *Proxy) relaySSEStream(
 			// Typed dispatch on terminal response events. Same rejection
 			// semantics as the generic chain — a typed rejection
 			// substitutes the same way. At most one of the typed
-			// dispatchers fires per event because at most one of
-			// toolsCallReq/toolsListReq is non-nil.
+			// dispatchers fires per event because at most one of the
+			// typed request views is non-nil.
 			if rejectionErr == nil && haveTerminalID {
 				if resp, ok := msg.(*jsonrpc.Response); ok && jsonrpcIDsEqual(resp.ID, terminalID) {
 					switch {
@@ -666,6 +740,18 @@ func (p *Proxy) relaySSEStream(
 					case toolsListReq != nil:
 						if typedResp, typedOK := toolsListResponseFromRemoteMessage(toolsListReq, remoteMsg); typedOK {
 							if err := p.runToolsListResponseInterceptors(ctx, typedResp); err != nil {
+								rejectionErr = err
+							}
+						}
+					case resourcesReadReq != nil:
+						if typedResp, typedOK := resourcesReadResponseFromRemoteMessage(resourcesReadReq, remoteMsg); typedOK {
+							if err := p.runResourcesReadResponseInterceptors(ctx, typedResp); err != nil {
+								rejectionErr = err
+							}
+						}
+					case resourcesListReq != nil:
+						if typedResp, typedOK := resourcesListResponseFromRemoteMessage(resourcesListReq, remoteMsg); typedOK {
+							if err := p.runResourcesListResponseInterceptors(ctx, typedResp); err != nil {
 								rejectionErr = err
 							}
 						}
@@ -870,6 +956,78 @@ func (p *Proxy) runToolsListResponseInterceptors(ctx context.Context, list *Tool
 			span.RecordError(err, trace.WithStackTrace(true))
 			span.End()
 			return p.wrapInterceptorRejection(iterCtx, "tools/list response", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
+// runResourcesReadRequestInterceptors invokes each configured
+// ResourcesReadRequestInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the request.
+func (p *Proxy) runResourcesReadRequestInterceptors(ctx context.Context, read *ResourcesReadRequest) error {
+	for _, interceptor := range p.ResourcesReadRequestInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ResourcesReadRequestInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptResourcesReadRequest(iterCtx, read); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "resources/read request", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
+// runResourcesReadResponseInterceptors invokes each configured
+// ResourcesReadResponseInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the response.
+func (p *Proxy) runResourcesReadResponseInterceptors(ctx context.Context, read *ResourcesReadResponse) error {
+	for _, interceptor := range p.ResourcesReadResponseInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ResourcesReadResponseInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptResourcesReadResponse(iterCtx, read); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "resources/read response", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
+// runResourcesListRequestInterceptors invokes each configured
+// ResourcesListRequestInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the request.
+func (p *Proxy) runResourcesListRequestInterceptors(ctx context.Context, list *ResourcesListRequest) error {
+	for _, interceptor := range p.ResourcesListRequestInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ResourcesListRequestInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptResourcesListRequest(iterCtx, list); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "resources/list request", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
+// runResourcesListResponseInterceptors invokes each configured
+// ResourcesListResponseInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the response.
+func (p *Proxy) runResourcesListResponseInterceptors(ctx context.Context, list *ResourcesListResponse) error {
+	for _, interceptor := range p.ResourcesListResponseInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ResourcesListResponseInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptResourcesListResponse(iterCtx, list); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "resources/list response", interceptor.Name(), err)
 		}
 		span.End()
 	}
