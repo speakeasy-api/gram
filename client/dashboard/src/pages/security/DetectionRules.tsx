@@ -34,13 +34,19 @@ import {
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  useListChats,
   useRiskSuggestCustomRuleMutation,
   useRiskTestDetectionRuleMutation,
 } from "@gram/client/react-query/index.js";
+import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { TestDetectionRuleMatch } from "@gram/client/models/components/testdetectionrulematch.js";
+import type { TestDetectionRuleResult } from "@gram/client/models/components/testdetectionruleresult.js";
+import { chatLoad } from "@gram/client/funcs/chatLoad.js";
+import { unwrapAsync } from "@gram/client/types/fp.js";
+import { useSdkClient } from "@/contexts/Sdk";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   BUILTIN_RULES_BY_CATEGORY,
-  resolveSeverity,
   SEVERITY_LEVELS,
   SEVERITY_META,
   useDetectionRulesStore,
@@ -243,26 +249,15 @@ function BuiltinRulesSection({
               />
               {isExpanded && rules.length > 0 && (
                 <div className="bg-muted/30 divide-border divide-y">
-                  {rules.map((rule) => {
-                    const severity = resolveSeverity(
-                      rule.id,
-                      rule.defaultSeverity,
-                      severityOverrides,
-                    );
-                    const isOverridden =
-                      severityOverrides[rule.id] !== undefined &&
-                      severityOverrides[rule.id] !== rule.defaultSeverity;
-                    return (
-                      <RuleRow
-                        key={rule.id}
-                        title={rule.title}
-                        subtitle={rule.id}
-                        severity={severity}
-                        overridden={isOverridden}
-                        onClick={() => onSelect(rule)}
-                      />
-                    );
-                  })}
+                  {rules.map((rule) => (
+                    <RuleRow
+                      key={rule.id}
+                      title={rule.title}
+                      subtitle={rule.id}
+                      severity={rule.defaultSeverity}
+                      onClick={() => onSelect(rule)}
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -322,13 +317,11 @@ function RuleRow({
   title,
   subtitle,
   severity,
-  overridden,
   onClick,
 }: {
   title: string;
   subtitle: string;
   severity: SeverityLevel;
-  overridden?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -344,11 +337,6 @@ function RuleRow({
         </div>
       </div>
       <SeverityBadge severity={severity} />
-      {overridden && (
-        <Badge variant="outline" className="text-[10px]">
-          Override
-        </Badge>
-      )}
       <ChevronRight className="text-muted-foreground size-4 shrink-0" />
     </button>
   );
@@ -529,6 +517,51 @@ function RulePlayground({
   ruleId: string;
   regex: string | null;
 }) {
+  const [mode, setMode] = useState<"sample" | "chat">("sample");
+
+  return (
+    <DetailField label="Playground">
+      <p className="text-muted-foreground mb-3 text-xs">
+        Run this rule with the same scanner code the worker uses. Paste a sample
+        or pick an existing chat.
+      </p>
+      <RadioGroup
+        value={mode}
+        onValueChange={(v) => setMode(v as "sample" | "chat")}
+        className="mb-4 flex gap-4"
+      >
+        <label
+          htmlFor={`pg-mode-sample-${ruleId}`}
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+        >
+          <RadioGroupItem value="sample" id={`pg-mode-sample-${ruleId}`} />
+          Paste sample
+        </label>
+        <label
+          htmlFor={`pg-mode-chat-${ruleId}`}
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+        >
+          <RadioGroupItem value="chat" id={`pg-mode-chat-${ruleId}`} />
+          Run on a chat
+        </label>
+      </RadioGroup>
+
+      {mode === "sample" ? (
+        <SamplePlayground ruleId={ruleId} regex={regex} />
+      ) : (
+        <ChatPlayground ruleId={ruleId} regex={regex} />
+      )}
+    </DetailField>
+  );
+}
+
+function SamplePlayground({
+  ruleId,
+  regex,
+}: {
+  ruleId: string;
+  regex: string | null;
+}) {
   const [sample, setSample] = useState("");
   const [matches, setMatches] = useState<TestDetectionRuleMatch[] | null>(null);
   const [reason, setReason] = useState<string | null>(null);
@@ -559,11 +592,7 @@ function RulePlayground({
   };
 
   return (
-    <DetailField label="Playground">
-      <p className="text-muted-foreground mb-2 text-xs">
-        Paste any text to run this rule against it. Uses the same scanner code
-        the worker runs on chat messages.
-      </p>
+    <>
       <TextArea
         value={sample}
         onChange={setSample}
@@ -582,47 +611,424 @@ function RulePlayground({
           Run rule
         </Button>
       </div>
-      {matches !== null && (
-        <div className="border-border mt-3 rounded-lg border">
-          <div className="border-border bg-muted/40 flex items-center justify-between border-b px-3 py-2 text-xs font-medium">
-            <span>
-              {matches.length} match{matches.length === 1 ? "" : "es"}
-            </span>
-            {reason && <span className="text-muted-foreground">{reason}</span>}
-          </div>
-          {matches.length === 0 ? (
-            <p className="text-muted-foreground px-3 py-4 text-xs">
-              No findings for this rule in the sample.
+      {matches !== null && <MatchList matches={matches} reason={reason} />}
+    </>
+  );
+}
+
+function MatchList({
+  matches,
+  reason,
+}: {
+  matches: TestDetectionRuleMatch[];
+  reason: string | null;
+}) {
+  return (
+    <div className="border-border mt-3 rounded-lg border">
+      <div className="border-border bg-muted/40 flex items-center justify-between border-b px-3 py-2 text-xs font-medium">
+        <span>
+          {matches.length} match{matches.length === 1 ? "" : "es"}
+        </span>
+        {reason && <span className="text-muted-foreground">{reason}</span>}
+      </div>
+      {matches.length === 0 ? (
+        <p className="text-muted-foreground px-3 py-4 text-xs">
+          No findings for this rule.
+        </p>
+      ) : (
+        <ul className="divide-border divide-y">
+          {matches.map((m, idx) => (
+            <li key={idx} className="px-3 py-2 text-xs">
+              <div className="text-muted-foreground mb-1 flex items-center justify-between font-mono">
+                <span>{m.ruleId}</span>
+                <span>
+                  {m.startPos}–{m.endPos} · conf {m.confidence.toFixed(2)} ·{" "}
+                  {m.source}
+                </span>
+              </div>
+              <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
+                {m.match}
+              </pre>
+              {m.description && (
+                <p className="text-muted-foreground mt-1">{m.description}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Chat-mode playground                                                       */
+/* -------------------------------------------------------------------------- */
+
+const CHAT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const CHAT_MESSAGE_CAP = 100;
+
+type ChatMessageResult = {
+  messageId: string;
+  role: string;
+  textPreview: string;
+  fullText: string;
+  createdAt: string;
+  status: "pending" | "done" | "error";
+  result?: TestDetectionRuleResult;
+  errorMessage?: string;
+};
+
+function ChatPlayground({
+  ruleId,
+  regex,
+}: {
+  ruleId: string;
+  regex: string | null;
+}) {
+  const client = useSdkClient();
+  const chatsQuery = useListChats(undefined, undefined, {
+    throwOnError: false,
+  });
+
+  const recentChats = useMemo(() => {
+    const cutoff = Date.now() - CHAT_WINDOW_MS;
+    return (chatsQuery.data?.chats ?? []).filter((c) => {
+      const ts = c.lastMessageTimestamp
+        ? new Date(c.lastMessageTimestamp).getTime()
+        : 0;
+      return ts >= cutoff;
+    });
+  }, [chatsQuery.data]);
+
+  const byUser = useMemo(() => {
+    const map = new Map<string, ChatOverview[]>();
+    for (const chat of recentChats) {
+      const key =
+        chat.externalUserId?.trim() ||
+        chat.userId?.trim() ||
+        "(no external user)";
+      const list = map.get(key) ?? [];
+      list.push(chat);
+      map.set(key, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) =>
+        (b.lastMessageTimestamp ?? "").localeCompare(
+          a.lastMessageTimestamp ?? "",
+        ),
+      );
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [recentChats]);
+
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [selectedChat, setSelectedChat] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [overflowWarning, setOverflowWarning] = useState<string | null>(null);
+  const [results, setResults] = useState<ChatMessageResult[]>([]);
+
+  const handleRun = async () => {
+    if (!selectedChat) return;
+    setRunning(true);
+    setResults([]);
+    setOverflowWarning(null);
+    try {
+      const chat = await unwrapAsync(chatLoad(client, { id: selectedChat }));
+      const sorted = [...chat.messages].sort((a, b) =>
+        (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+      );
+      if (sorted.length > CHAT_MESSAGE_CAP) {
+        setOverflowWarning(
+          `Chat has ${sorted.length} messages, only the most recent ${CHAT_MESSAGE_CAP} will be analyzed.`,
+        );
+      }
+      const slice = sorted.slice(0, CHAT_MESSAGE_CAP);
+      const initial: ChatMessageResult[] = slice.map((m) => {
+        const fullText = stringifyMessage(m);
+        return {
+          messageId: m.id,
+          role: m.role,
+          textPreview: fullText.slice(0, 240),
+          fullText,
+          createdAt: m.createdAt,
+          status: "pending",
+        };
+      });
+      setResults(initial);
+
+      for (const item of initial) {
+        if (!item.fullText.trim()) {
+          setResults((prev) =>
+            prev.map((r) =>
+              r.messageId === item.messageId
+                ? {
+                    ...r,
+                    status: "done",
+                    result: {
+                      matches: [],
+                      supported: true,
+                    },
+                  }
+                : r,
+            ),
+          );
+          continue;
+        }
+        try {
+          const data = await unwrapAsync(
+            client.risk.rules.test({
+              testDetectionRuleRequestBody: {
+                ruleId,
+                text: item.fullText,
+                ...(regex ? { regex } : {}),
+              },
+            }),
+          );
+          setResults((prev) =>
+            prev.map((r) =>
+              r.messageId === item.messageId
+                ? { ...r, status: "done", result: data }
+                : r,
+            ),
+          );
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : "Failed to run rule";
+          setResults((prev) =>
+            prev.map((r) =>
+              r.messageId === item.messageId
+                ? { ...r, status: "error", errorMessage: message }
+                : r,
+            ),
+          );
+        }
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load chat");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  if (chatsQuery.isLoading) {
+    return (
+      <div className="text-muted-foreground flex items-center gap-2 text-xs">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Loading chats…
+      </div>
+    );
+  }
+  if (byUser.length === 0) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        No chats in the last 7 days for this project.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <ChatPickerColumn
+        title="External user"
+        emptyLabel="No users with recent chats"
+        items={byUser.map(([user, chats]) => ({
+          key: user,
+          label: user,
+          meta: `${chats.length} chat${chats.length === 1 ? "" : "s"}`,
+        }))}
+        value={selectedUser}
+        onChange={(next) => {
+          setSelectedUser(next);
+          setSelectedChat(null);
+        }}
+      />
+
+      {selectedUser && (
+        <ChatPickerColumn
+          title="Chat"
+          emptyLabel="No chats for this user"
+          items={(
+            byUser.find(([user]) => user === selectedUser)?.[1] ?? []
+          ).map((chat) => ({
+            key: chat.id,
+            label: chat.title || "(untitled)",
+            meta: `${chat.numMessages} msgs · ${formatTimestamp(
+              chat.lastMessageTimestamp,
+            )}`,
+          }))}
+          value={selectedChat}
+          onChange={setSelectedChat}
+        />
+      )}
+
+      <div className="flex items-center justify-between">
+        <Button
+          size="sm"
+          disabled={!selectedChat || running}
+          onClick={handleRun}
+        >
+          {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Run on chat
+        </Button>
+        {overflowWarning && (
+          <span className="text-muted-foreground text-xs">
+            {overflowWarning}
+          </span>
+        )}
+      </div>
+
+      {results.length > 0 && (
+        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto rounded-lg border">
+          {results.map((r) => (
+            <ChatMessageRow key={r.messageId} item={r} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatPickerColumn({
+  title,
+  emptyLabel,
+  items,
+  value,
+  onChange,
+}: {
+  title: string;
+  emptyLabel: string;
+  items: { key: string; label: string; meta?: string }[];
+  value: string | null;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div>
+      <div className="text-muted-foreground mb-1 text-[11px] font-medium tracking-wide uppercase">
+        {title}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-muted-foreground text-xs">{emptyLabel}</p>
+      ) : (
+        <RadioGroup
+          value={value ?? ""}
+          onValueChange={onChange}
+          className="border-border divide-border max-h-48 divide-y overflow-y-auto rounded-md border"
+        >
+          {items.map((item) => (
+            <label
+              key={item.key}
+              htmlFor={`pick-${title}-${item.key}`}
+              className="hover:bg-muted/40 flex cursor-pointer items-center gap-3 px-3 py-2 text-xs"
+            >
+              <RadioGroupItem
+                id={`pick-${title}-${item.key}`}
+                value={item.key}
+              />
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {item.meta && (
+                <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
+                  {item.meta}
+                </span>
+              )}
+            </label>
+          ))}
+        </RadioGroup>
+      )}
+    </div>
+  );
+}
+
+function ChatMessageRow({ item }: { item: ChatMessageResult }) {
+  const [expanded, setExpanded] = useState(false);
+  const matchCount = item.result?.matches.length ?? 0;
+  const truncated = item.fullText.length > 240;
+  return (
+    <div className="px-3 py-2 text-xs">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="flex w-full items-start gap-3 text-left"
+      >
+        <span className="text-muted-foreground w-6 shrink-0 text-[10px] uppercase">
+          {item.role.slice(0, 4)}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="text-muted-foreground line-clamp-2 font-mono text-[11px]">
+            {item.textPreview || "(empty)"}
+          </span>
+        </span>
+        <span className="shrink-0">
+          {item.status === "pending" && (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          )}
+          {item.status === "error" && (
+            <Badge variant="destructive">error</Badge>
+          )}
+          {item.status === "done" &&
+            (matchCount > 0 ? (
+              <Badge>{matchCount}</Badge>
+            ) : (
+              <Badge variant="secondary">0</Badge>
+            ))}
+        </span>
+      </button>
+      {expanded && (
+        <div className="mt-2 space-y-2 pl-9">
+          {truncated && (
+            <p className="text-muted-foreground text-[10px]">
+              Full message ({item.fullText.length} chars):
             </p>
-          ) : (
-            <ul className="divide-border divide-y">
-              {matches.map((m, idx) => (
-                <li key={idx} className="px-3 py-2 text-xs">
-                  <div className="text-muted-foreground mb-1 flex items-center justify-between font-mono">
-                    <span>{m.ruleId}</span>
-                    <span>
-                      {m.startPos}–{m.endPos}
-                      {" · "}conf {m.confidence.toFixed(2)}
-                      {" · "}
-                      {m.source}
-                    </span>
-                  </div>
-                  <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
-                    {m.match}
-                  </pre>
-                  {m.description && (
-                    <p className="text-muted-foreground mt-1">
-                      {m.description}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
+          )}
+          <pre className="bg-muted/40 max-h-40 overflow-auto rounded px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
+            {item.fullText || "(empty)"}
+          </pre>
+          {item.status === "error" && (
+            <p className="text-destructive text-[11px]">{item.errorMessage}</p>
+          )}
+          {item.result && (
+            <MatchList
+              matches={item.result.matches}
+              reason={
+                item.result.supported
+                  ? null
+                  : (item.result.reason ?? "Rule not supported")
+              }
+            />
           )}
         </div>
       )}
-    </DetailField>
+    </div>
   );
+}
+
+function stringifyMessage(m: {
+  content?: unknown;
+  toolCalls?: string;
+}): string {
+  const parts: string[] = [];
+  if (typeof m.content === "string") {
+    parts.push(m.content);
+  } else if (m.content != null) {
+    try {
+      parts.push(JSON.stringify(m.content));
+    } catch {
+      // ignore
+    }
+  }
+  if (m.toolCalls) parts.push(m.toolCalls);
+  return parts.join("\n");
+}
+
+function formatTimestamp(ts: string | undefined | null): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function DetailField({

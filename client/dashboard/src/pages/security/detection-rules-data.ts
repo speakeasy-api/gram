@@ -178,12 +178,10 @@ export type CustomDetectionRule = {
 const STORAGE_KEY = "gram.detection-rules.v1";
 
 type StoredState = {
-  severityOverrides: Record<string, SeverityLevel>;
   customRules: CustomDetectionRule[];
 };
 
 const EMPTY_STATE: StoredState = {
-  severityOverrides: {},
   customRules: [],
 };
 
@@ -194,7 +192,6 @@ function readState(): StoredState {
     if (!raw) return EMPTY_STATE;
     const parsed = JSON.parse(raw) as Partial<StoredState>;
     return {
-      severityOverrides: parsed.severityOverrides ?? {},
       customRules: parsed.customRules ?? [],
     };
   } catch {
@@ -225,23 +222,6 @@ export function useDetectionRulesStore() {
       window.removeEventListener("storage", onChange);
     };
   }, []);
-
-  const setSeverityOverride = useCallback(
-    (ruleId: string, severity: SeverityLevel | null) => {
-      setState((prev) => {
-        const next = { ...prev.severityOverrides };
-        if (severity === null) {
-          delete next[ruleId];
-        } else {
-          next[ruleId] = severity;
-        }
-        const updated = { ...prev, severityOverrides: next };
-        writeState(updated);
-        return updated;
-      });
-    },
-    [],
-  );
 
   const addCustomRule = useCallback(
     (rule: Omit<CustomDetectionRule, "createdAt" | "updatedAt">) => {
@@ -286,9 +266,6 @@ export function useDetectionRulesStore() {
       const updated = {
         ...prev,
         customRules: prev.customRules.filter((r) => r.id !== id),
-        severityOverrides: Object.fromEntries(
-          Object.entries(prev.severityOverrides).filter(([key]) => key !== id),
-        ),
       };
       writeState(updated);
       return updated;
@@ -296,23 +273,11 @@ export function useDetectionRulesStore() {
   }, []);
 
   return {
-    severityOverrides: state.severityOverrides,
     customRules: state.customRules,
-    setSeverityOverride,
     addCustomRule,
     updateCustomRule,
     removeCustomRule,
   };
-}
-
-/** Resolve the effective severity for any rule (builtin or custom),
- *  preferring the user's override if present. */
-export function resolveSeverity(
-  ruleId: string,
-  defaultSeverity: SeverityLevel,
-  overrides: Record<string, SeverityLevel>,
-): SeverityLevel {
-  return overrides[ruleId] ?? defaultSeverity;
 }
 
 /** Validate a proposed custom rule id. Returns an error message if the id
