@@ -32,6 +32,7 @@ type Server struct {
 	AddOAuthProxyServer      http.Handler
 	UpdateOAuthProxyServer   http.Handler
 	SetUserSessionIssuer     http.Handler
+	ClearUserSessionIssuer   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -74,6 +75,7 @@ func New(
 			{"AddOAuthProxyServer", "POST", "/rpc/toolsets.addOAuthProxyServer"},
 			{"UpdateOAuthProxyServer", "POST", "/rpc/toolsets.updateOAuthProxyServer"},
 			{"SetUserSessionIssuer", "POST", "/rpc/toolsets.setUserSessionIssuer"},
+			{"ClearUserSessionIssuer", "POST", "/rpc/toolsets.clearUserSessionIssuer"},
 		},
 		CreateToolset:            NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:             NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
@@ -88,6 +90,7 @@ func New(
 		AddOAuthProxyServer:      NewAddOAuthProxyServerHandler(e.AddOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
 		UpdateOAuthProxyServer:   NewUpdateOAuthProxyServerHandler(e.UpdateOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
 		SetUserSessionIssuer:     NewSetUserSessionIssuerHandler(e.SetUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		ClearUserSessionIssuer:   NewClearUserSessionIssuerHandler(e.ClearUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -109,6 +112,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AddOAuthProxyServer = m(s.AddOAuthProxyServer)
 	s.UpdateOAuthProxyServer = m(s.UpdateOAuthProxyServer)
 	s.SetUserSessionIssuer = m(s.SetUserSessionIssuer)
+	s.ClearUserSessionIssuer = m(s.ClearUserSessionIssuer)
 }
 
 // MethodNames returns the methods served.
@@ -129,6 +133,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAddOAuthProxyServerHandler(mux, h.AddOAuthProxyServer)
 	MountUpdateOAuthProxyServerHandler(mux, h.UpdateOAuthProxyServer)
 	MountSetUserSessionIssuerHandler(mux, h.SetUserSessionIssuer)
+	MountClearUserSessionIssuerHandler(mux, h.ClearUserSessionIssuer)
 }
 
 // Mount configures the mux to serve the toolsets endpoints.
@@ -803,6 +808,59 @@ func NewSetUserSessionIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setUserSessionIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountClearUserSessionIssuerHandler configures the mux to serve the
+// "toolsets" service "clearUserSessionIssuer" endpoint.
+func MountClearUserSessionIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.clearUserSessionIssuer", f)
+}
+
+// NewClearUserSessionIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "clearUserSessionIssuer" endpoint.
+func NewClearUserSessionIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeClearUserSessionIssuerRequest(mux, decoder)
+		encodeResponse = EncodeClearUserSessionIssuerResponse(encoder)
+		encodeError    = EncodeClearUserSessionIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "clearUserSessionIssuer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {
