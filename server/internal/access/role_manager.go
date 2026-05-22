@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -593,6 +594,18 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "list existing role assignments").Log(ctx, r.logger)
 	}
 
+	// Snapshot existing role slugs to detect admin removal.
+	existingRolePrincipals, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
+		OrganizationID: gramOrgID,
+		WorkosUserID:   connectedUser.WorkosID.String,
+	})
+	if err != nil {
+		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "list existing role slugs").Log(ctx, r.logger)
+	}
+	hadAdmin := slices.ContainsFunc(existingRolePrincipals, func(rp repo.ListMemberRolePrincipalsByWorkosUserRow) bool {
+		return rp.RoleSlug == authz.SystemRoleAdmin
+	})
+
 	// Soft-delete all existing assignments, then insert one per role.
 	if _, err := repo.New(tx).SoftDeleteAllRoleAssignmentsByWorkosUser(ctx, repo.SoftDeleteAllRoleAssignmentsByWorkosUserParams{
 		OrganizationID: gramOrgID,
@@ -624,6 +637,21 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		}
 		afterRoleIDs = append(afterRoleIDs, role.ID)
 		roleSlugs = append(roleSlugs, role.Slug)
+	}
+
+	// Guard: prevent removing admin from the last admin in the org.
+	hasAdmin := slices.Contains(roleSlugs, authz.SystemRoleAdmin)
+	if hadAdmin && !hasAdmin {
+		remainingAdmins, err := repo.New(tx).ListOrganizationRoleAssignmentsBySlug(ctx, repo.ListOrganizationRoleAssignmentsBySlugParams{
+			OrganizationID: gramOrgID,
+			WorkosRoleSlug: authz.SystemRoleAdmin,
+		})
+		if err != nil {
+			return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "count remaining admins").Log(ctx, r.logger)
+		}
+		if len(remainingAdmins) == 0 {
+			return memberRoleUpdateContext{}, oops.E(oops.CodeBadRequest, nil, "cannot remove admin role: this is the last admin in the organization").Log(ctx, r.logger)
+		}
 	}
 
 	memberName := conv.Default(connectedUser.DisplayName, connectedUser.Email)
