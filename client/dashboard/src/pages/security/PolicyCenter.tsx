@@ -385,7 +385,6 @@ function PolicyCenterContent() {
               <TableHead>Name</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Categories</TableHead>
-              <TableHead>Progress</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[60px]" />
             </TableRow>
@@ -416,16 +415,6 @@ function PolicyCenterContent() {
                         </Badge>
                       ))}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    {policy.pendingMessages > 0 ? (
-                      <span className="text-muted-foreground text-xs">
-                        {policy.totalMessages - policy.pendingMessages}/
-                        {policy.totalMessages} analyzed
-                      </span>
-                    ) : (
-                      <Badge variant="secondary">Complete</Badge>
-                    )}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Switch

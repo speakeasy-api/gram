@@ -16,9 +16,11 @@ import type {
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useRevealAll } from "@/pages/security/reveal-all-context";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import {
@@ -848,7 +850,21 @@ function MaskedContent({ onReveal }: { onReveal: () => void }) {
 }
 
 function MaskedMatchInline({ value }: { value: string }) {
-  const [revealed, setRevealed] = useState(false);
+  const reveal = useRevealAll();
+  // Read individual fields into stable scalars so the effect depends on
+  // primitives (not the per-render object useRevealAll returns).
+  const generation = reveal?.generation;
+  const revealAll = reveal?.revealAll ?? false;
+  const [revealed, setRevealed] = useState(revealAll);
+  // Only sync when the global toggle actually fires (generation changes).
+  // Depending on the context object would clobber per-row clicks immediately.
+  const lastSyncedGeneration = useRef(generation);
+  useEffect(() => {
+    if (generation === undefined) return;
+    if (lastSyncedGeneration.current === generation) return;
+    lastSyncedGeneration.current = generation;
+    setRevealed(revealAll);
+  }, [generation, revealAll]);
 
   if (!revealed) {
     return (
@@ -899,7 +915,11 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className="cursor-pointer">
+        <button
+          type="button"
+          className="cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Badge variant="destructive" className="text-xs">
             <Icon name="shield-alert" className="mr-1 size-3" />
             {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
@@ -909,6 +929,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
       <PopoverContent
         align="start"
         className="max-h-[70vh] w-80 overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="space-y-3">
           <div className="text-sm font-semibold">Risk Findings</div>
@@ -968,7 +989,13 @@ export function ChatDetailPanel({
   onDelete,
   collapseNonRisk,
 }: ChatDetailPanelProps) {
-  const isAdmin = useIsAdmin();
+  const isSuperAdmin = useIsAdmin();
+  const { hasScope } = useRBAC();
+  // Export + delete should be available to anyone with org:admin (the scope
+  // that already gates /risk-overview and /logs/risk-events). Falling back to
+  // the platform super-admin flag locked out customer org admins who can
+  // already see the data in this panel.
+  const canManageChat = isSuperAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [enabledEntryTypes, setEnabledEntryTypes] = useState<
     FilterableTraceEntryType[]
@@ -1092,7 +1119,7 @@ export function ChatDetailPanel({
             )}
           </div>
           <div className="flex items-center gap-1">
-            {isAdmin && (
+            {canManageChat && (
               <>
                 <button
                   onClick={() =>

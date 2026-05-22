@@ -207,6 +207,15 @@ var _ = Service("risk", func() {
 			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
+			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
+			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
+			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Filter results to messages created strictly before this timestamp (ISO 8601).", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
 			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
 				Minimum(1)
@@ -223,6 +232,11 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("chat_id")
+			Param("category")
+			Param("rule_id")
+			Param("unique_match")
+			Param("from")
+			Param("to")
 			Param("cursor")
 			Param("limit")
 			Response(StatusOK)
@@ -297,6 +311,103 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.overview")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskOverview"}`)
+	})
+
+	Method("listRiskCategories", func() {
+		Description("Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RiskCategoriesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.categories")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskCategories")
+		Meta("openapi:extension:x-speakeasy-group", "risk.categories")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCategories"}`)
+	})
+
+	Method("getRiskUserBreakdown", func() {
+		Description("Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("external_user_id", String, "External user identifier to scope the breakdown to.")
+			Attribute("from", String, "Inclusive start of the window. Defaults to the same 7-day window as the overview.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+			Required("external_user_id")
+		})
+
+		Result(RiskUserBreakdownResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.overview.userBreakdown")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("external_user_id")
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskUserBreakdown")
+		Meta("openapi:extension:x-speakeasy-group", "risk.overview")
+		Meta("openapi:extension:x-speakeasy-name-override", "userBreakdown")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUserBreakdown"}`)
+	})
+
+	Method("getRiskRuleBreakdown", func() {
+		Description("Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("category", String, "Required category key to break down by rule_id (e.g. secrets, pii).")
+			Attribute("from", String, "Inclusive start of the window. Defaults to the same 7-day window as the overview.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+			Required("category")
+		})
+
+		Result(RiskRuleBreakdownResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.overview.rules")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("category")
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskRuleBreakdown")
+		Meta("openapi:extension:x-speakeasy-group", "risk.overview")
+		Meta("openapi:extension:x-speakeasy-name-override", "rules")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskRuleBreakdown"}`)
 	})
 
 	Method("getRiskPolicyStatus", func() {
@@ -485,9 +596,10 @@ var RiskOverviewResult = Type("RiskOverviewResult", func() {
 	Attribute("active_policies", Int64, "Enabled risk policies for the current project.")
 	Attribute("top_categories", ArrayOf(RiskOverviewCategory), "Top policy categories by finding count.")
 	Attribute("top_users", ArrayOf(RiskOverviewUser), "Top users by finding count.")
+	Attribute("top_rules", ArrayOf(RiskRuleBreakdownEntry), "Top rule_ids by finding count.")
 	Attribute("time_series_findings", ArrayOf(RiskOverviewTimeSeriesFinding), "Time-series finding counts by category in the window.")
 
-	Required("from", "to", "messages_scanned", "findings", "flagged_sessions", "active_policies", "top_categories", "top_users", "time_series_findings")
+	Required("from", "to", "messages_scanned", "findings", "flagged_sessions", "active_policies", "top_categories", "top_users", "top_rules", "time_series_findings")
 })
 
 var RiskOverviewCategory = Type("RiskOverviewCategory", func() {
@@ -497,11 +609,63 @@ var RiskOverviewCategory = Type("RiskOverviewCategory", func() {
 	Required("category", "findings")
 })
 
+var RiskCategoryDefinition = Type("RiskCategoryDefinition", func() {
+	Description("One canonical risk category and how findings are classified into it.")
+
+	Attribute("key", String, "Canonical category key (e.g. 'secrets', 'pii', 'shadow_mcp').")
+	Attribute("label", String, "Human-readable category label for UI rendering.")
+	Attribute("description", String, "Plain-English description of what this category covers.")
+	Attribute("icon", String, "Lucide icon name suggested for this category.")
+	Attribute("source", String, "When non-empty, findings whose source equals this value belong to this category.")
+	Attribute("rule_ids", ArrayOf(String), "When non-empty, findings whose rule_id is in this exact list belong to this category. Checked before rule_id_prefix.")
+	Attribute("rule_id_prefix", String, "When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').")
+
+	Required("key", "label", "description", "icon", "source", "rule_ids", "rule_id_prefix")
+})
+
+var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
+	Description("Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.")
+
+	Attribute("categories", ArrayOf(RiskCategoryDefinition), "Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.")
+
+	Required("categories")
+})
+
+var RiskRuleBreakdownEntry = Type("RiskRuleBreakdownEntry", func() {
+	Attribute("rule_id", String, "Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has no rule_id (treat as 'unspecified').")
+	Attribute("source", String, "Source bucket the rule belongs to (gitleaks, presidio, etc.) for label/icon resolution on the dashboard.")
+	Attribute("findings", Int64, "Finding count for this rule within the window.")
+
+	Required("rule_id", "source", "findings")
+})
+
+var RiskUserBreakdownResult = Type("RiskUserBreakdownResult", func() {
+	Attribute("from", String, "Inclusive start of the window used.", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive end of the window used.", func() { Format(FormatDateTime) })
+	Attribute("external_user_id", String, "External user the breakdown is scoped to.")
+	Attribute("findings", Int64, "Total findings for this user in the window.")
+	Attribute("categories", ArrayOf(RiskOverviewCategory), "Category breakdown for this user, ordered by finding count descending.")
+	Attribute("rules", ArrayOf(RiskRuleBreakdownEntry), "Rule_id breakdown for this user, ordered by finding count descending.")
+
+	Required("from", "to", "external_user_id", "findings", "categories", "rules")
+})
+
+var RiskRuleBreakdownResult = Type("RiskRuleBreakdownResult", func() {
+	Attribute("from", String, "Inclusive start of the window used.", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive end of the window used.", func() { Format(FormatDateTime) })
+	Attribute("category", String, "Category the breakdown is scoped to.")
+	Attribute("rules", ArrayOf(RiskRuleBreakdownEntry), "Rules in this category, ordered by finding count descending.")
+	Attribute("total", Int64, "Total findings across all rules in this category and window.")
+
+	Required("from", "to", "category", "rules", "total")
+})
+
 var RiskOverviewUser = Type("RiskOverviewUser", func() {
 	Attribute("email", String, "User email, or Unknown user when unavailable.")
+	Attribute("external_user_id", String, "External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.")
 	Attribute("findings", Int64, "Finding count for this user.")
 
-	Required("email", "findings")
+	Required("email", "external_user_id", "findings")
 })
 
 var RiskOverviewTimeSeriesFinding = Type("RiskOverviewTimeSeriesFinding", func() {

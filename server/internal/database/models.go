@@ -42,7 +42,12 @@ type AiIntegrationSync struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	LastPolledAt          pgtype.Timestamptz
+	PollWatermarkAt       pgtype.Timestamptz
+	NextPollAfter         pgtype.Timestamptz
+	LastPollError         pgtype.Text
+	LastPollFailedAt      pgtype.Timestamptz
+	LastPollSuccessAt     pgtype.Timestamptz
+	ConsecutiveFailures   int32
 	ID                    uuid.UUID
 }
 

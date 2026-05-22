@@ -51,13 +51,18 @@ fi
 if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
   # Extract the connector UUID + URL pairs we actually care about.
   # `tools` is dropped — it can be huge and we don't need it here.
+  # cmux's field naming has drifted across versions (snake_case vs
+  # camelCase, `uuid` vs `id` for the connector identifier) so we try
+  # multiple candidates per slot and keep the first non-null. This is
+  # the field that becomes the `mcp__<server>__tool` prefix server-side,
+  # so getting it wrong silently shows users a UUID instead of "Slack".
   inv=$(jq -c '
     [
       (.remoteMcpServersConfig // [])[]
       | {
-          connector_uuid: .uuid,
-          name:           .name,
-          url:            .url,
+          connector_uuid: (.uuid // .connectorUuid // .connector_uuid // .id // .connectorId // .connector_id // null),
+          name:           (.name // .displayName // .display_name // null),
+          url:            (.url // .serverUrl // .server_url // null),
           source:         "claude.ai"
         }
     ]

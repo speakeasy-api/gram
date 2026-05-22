@@ -88,4 +88,52 @@ var _ = Service("domains", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "deleteDomain"}`)
 	})
+
+	Method("listMcpEndpoints", func() {
+		Description("List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListCustomDomainMcpEndpointsResult)
+
+		HTTP(func() {
+			GET("/rpc/domain.listMcpEndpoints")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listCustomDomainMcpEndpoints")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMcpEndpoints")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CustomDomainMcpEndpoints"}`)
+	})
+})
+
+var CustomDomainMcpEndpoint = Type("CustomDomainMcpEndpoint", func() {
+	Description("An MCP endpoint registered under a custom domain, with its parent MCP server and project denormalised for display in the dashboard's delete-impact preview.")
+
+	Attribute("id", String, "The ID of the MCP endpoint", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The endpoint slug")
+	Attribute("project_id", String, "The ID of the project the endpoint belongs to", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_name", String, "The display name of the project the endpoint belongs to")
+	Attribute("project_slug", String, "The url-friendly slug of the project the endpoint belongs to")
+	Attribute("mcp_server_id", String, "The ID of the parent MCP server", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_name", String, "The display name of the parent MCP server. May be empty if the parent has no configured name.")
+	Attribute("mcp_server_slug", String, "The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.")
+
+	Required("id", "slug", "project_id", "project_name", "project_slug", "mcp_server_id")
+})
+
+var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResult", func() {
+	Description("Result of listing the MCP endpoints registered under an organization's custom domain.")
+
+	Attribute("mcp_endpoints", ArrayOf(CustomDomainMcpEndpoint))
+	Required("mcp_endpoints")
 })

@@ -64,14 +64,44 @@ WHERE c.project_id = $1
   )
   AND (
     $6 = ''
+    OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = c.id
+        AND at.assistant_id = $6::uuid
+        AND at.deleted IS FALSE
+    )
+  )
+  AND (
+    $7 = ''
     OR (
-      $6 = 'unresolved' AND NOT EXISTS (
+      $7 = 'unresolved' AND NOT EXISTS (
         SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
       )
     )
     OR (
-      $6 != 'unresolved' AND EXISTS (
-        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $6
+      $7 != 'unresolved' AND EXISTS (
+        SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $7
+      )
+    )
+  )
+  AND (
+    $8::text = ''
+    OR (
+      $8::text = 'true' AND EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = $1
+          AND rr.found IS TRUE
+      )
+    )
+    OR (
+      $8::text = 'false' AND NOT EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = $1
+          AND rr.found IS TRUE
       )
     )
   )
@@ -83,7 +113,9 @@ type CountChatsWithResolutionsParams struct {
 	FromTime         pgtype.Timestamptz
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
+	AssistantID      interface{}
 	ResolutionStatus interface{}
+	HasRiskFilter    string
 }
 
 func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
@@ -93,7 +125,9 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 		arg.FromTime,
 		arg.ToTime,
 		arg.Search,
+		arg.AssistantID,
 		arg.ResolutionStatus,
+		arg.HasRiskFilter,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -1155,7 +1189,15 @@ WITH limited_chats AS (
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
-    ) as avg_score
+    ) as avg_score,
+    (
+      SELECT COUNT(*)::integer
+      FROM risk_results rr
+      JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      WHERE cm.chat_id = c.id
+        AND rr.project_id = $3
+        AND rr.found IS TRUE
+    ) as risk_findings_count
   FROM chats c
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
@@ -1170,14 +1212,44 @@ WITH limited_chats AS (
     )
     AND (
       $8 = ''
+      OR EXISTS (
+        SELECT 1 FROM assistant_threads at
+        WHERE at.chat_id = c.id
+          AND at.assistant_id = $8::uuid
+          AND at.deleted IS FALSE
+      )
+    )
+    AND (
+      $9 = ''
       OR (
-        $8 = 'unresolved' AND NOT EXISTS (
+        $9 = 'unresolved' AND NOT EXISTS (
           SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
         )
       )
       OR (
-        $8 != 'unresolved' AND EXISTS (
-          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $8
+        $9 != 'unresolved' AND EXISTS (
+          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = $9
+        )
+      )
+    )
+    AND (
+      $10::text = ''
+      OR (
+        $10::text = 'true' AND EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = $3
+            AND rr.found IS TRUE
+        )
+      )
+      OR (
+        $10::text = 'false' AND NOT EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = $3
+            AND rr.found IS TRUE
         )
       )
     )
@@ -1189,8 +1261,8 @@ WITH limited_chats AS (
     CASE WHEN $1 = 'score' AND $2 = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
     c.created_at DESC
-  LIMIT $10
-  OFFSET $9
+  LIMIT $12
+  OFFSET $11
 )
 SELECT
     lc.id as chat_id,
@@ -1203,6 +1275,7 @@ SELECT
     lc.num_messages,
     lc.last_message_timestamp,
     lc.avg_score,
+    lc.risk_findings_count,
     cr.id as resolution_id,
     cr.user_goal,
     cr.resolution,
@@ -1238,7 +1311,9 @@ type ListChatsWithResolutionsParams struct {
 	FromTime         pgtype.Timestamptz
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
+	AssistantID      interface{}
 	ResolutionStatus interface{}
+	HasRiskFilter    string
 	PageOffset       int32
 	PageLimit        int32
 }
@@ -1254,6 +1329,7 @@ type ListChatsWithResolutionsRow struct {
 	NumMessages          int32
 	LastMessageTimestamp pgtype.Timestamptz
 	AvgScore             interface{}
+	RiskFindingsCount    int32
 	ResolutionID         uuid.NullUUID
 	UserGoal             pgtype.Text
 	Resolution           pgtype.Text
@@ -1272,7 +1348,9 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 		arg.FromTime,
 		arg.ToTime,
 		arg.Search,
+		arg.AssistantID,
 		arg.ResolutionStatus,
+		arg.HasRiskFilter,
 		arg.PageOffset,
 		arg.PageLimit,
 	)
@@ -1294,6 +1372,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 			&i.NumMessages,
 			&i.LastMessageTimestamp,
 			&i.AvgScore,
+			&i.RiskFindingsCount,
 			&i.ResolutionID,
 			&i.UserGoal,
 			&i.Resolution,

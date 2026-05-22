@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -86,14 +87,41 @@ func sanitizeMCPName(name string) string {
 }
 
 // matchCachedMCPEntry returns the cached entry whose derived server prefix
-// equals serverPrefix, or nil if none match.
+// equals serverPrefix, or nil if none match. For Cowork-shipped entries the
+// prefix Claude derives is the connector UUID rather than a sanitized name,
+// so we also accept a ConnectorUUID match on the cached entry.
 func matchCachedMCPEntry(entries []MCPServerEntry, serverPrefix string) *MCPServerEntry {
 	for i := range entries {
+		if entries[i].ConnectorUUID != "" && entries[i].ConnectorUUID == serverPrefix {
+			return &entries[i]
+		}
 		if mcpServerPrefix(entries[i].Source, entries[i].PluginName, entries[i].Name) == serverPrefix {
 			return &entries[i]
 		}
 	}
 	return nil
+}
+
+// applyMCPInventoryAttrs decorates a telemetry attribute map with the
+// server URL resolved from the SessionStart MCP inventory and replaces
+// the prefix-derived gram.tool_call.source with the human-readable
+// server name from the inventory. This unifies the display name across
+// both flows: Claude Code's tool prefix is a sanitized form
+// ("claude_ai_Slack"), while Cowork's is the connector UUID — both are
+// replaced by the inventory's Name ("Slack") so dashboards don't need
+// per-flow logic. When the matched entry has no Name (defensive
+// fallback) or no entry matched at all, the original prefix-derived
+// source is left intact.
+func applyMCPInventoryAttrs(attrs map[attr.Key]any, matched *MCPServerEntry) {
+	if matched == nil {
+		return
+	}
+	if matched.URL != "" {
+		attrs[attr.MCPServerURLKey] = matched.URL
+	}
+	if matched.Name != "" {
+		attrs[attr.ToolCallSourceKey] = matched.Name
+	}
 }
 
 // resolvedMCPMatch returns the canonical server identifier for a matched

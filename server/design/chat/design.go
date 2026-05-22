@@ -130,7 +130,13 @@ var _ = Service("chat", func() {
 
 			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
+				Format(FormatUUID)
+			})
 			Attribute("resolution_status", String, "Filter by resolution status")
+			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
+				Enum("", "true", "false")
+			})
 			Attribute("from", String, "Filter chats created after this timestamp (ISO 8601)", func() {
 				Format(FormatDateTime)
 			})
@@ -162,7 +168,9 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.listChatsWithResolutions")
 			Param("search")
 			Param("external_user_id")
+			Param("assistant_id")
 			Param("resolution_status")
+			Param("has_risk")
 			Param("from")
 			Param("to")
 			Param("limit")
@@ -263,6 +271,7 @@ var ChatOverview = Type("ChatOverview", func() {
 		Description("When the last message in the chat was created.")
 		Format(FormatDateTime)
 	})
+	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.")
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })

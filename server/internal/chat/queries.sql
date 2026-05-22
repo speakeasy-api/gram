@@ -266,6 +266,15 @@ WHERE c.project_id = @project_id
     OR c.title ILIKE '%' || @search || '%'
   )
   AND (
+    @assistant_id = ''
+    OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = c.id
+        AND at.assistant_id = @assistant_id::uuid
+        AND at.deleted IS FALSE
+    )
+  )
+  AND (
     @resolution_status = ''
     OR (
       @resolution_status = 'unresolved' AND NOT EXISTS (
@@ -275,6 +284,27 @@ WHERE c.project_id = @project_id
     OR (
       @resolution_status != 'unresolved' AND EXISTS (
         SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
+      )
+    )
+  )
+  AND (
+    @has_risk_filter::text = ''
+    OR (
+      @has_risk_filter::text = 'true' AND EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = @project_id
+          AND rr.found IS TRUE
+      )
+    )
+    OR (
+      @has_risk_filter::text = 'false' AND NOT EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = @project_id
+          AND rr.found IS TRUE
       )
     )
   );
@@ -294,7 +324,15 @@ WITH limited_chats AS (
     COALESCE(
       (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
       0
-    ) as avg_score
+    ) as avg_score,
+    (
+      SELECT COUNT(*)::integer
+      FROM risk_results rr
+      JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      WHERE cm.chat_id = c.id
+        AND rr.project_id = @project_id
+        AND rr.found IS TRUE
+    ) as risk_findings_count
   FROM chats c
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
@@ -308,6 +346,15 @@ WITH limited_chats AS (
       OR c.title ILIKE '%' || @search || '%'
     )
     AND (
+      @assistant_id = ''
+      OR EXISTS (
+        SELECT 1 FROM assistant_threads at
+        WHERE at.chat_id = c.id
+          AND at.assistant_id = @assistant_id::uuid
+          AND at.deleted IS FALSE
+      )
+    )
+    AND (
       @resolution_status = ''
       OR (
         @resolution_status = 'unresolved' AND NOT EXISTS (
@@ -317,6 +364,27 @@ WITH limited_chats AS (
       OR (
         @resolution_status != 'unresolved' AND EXISTS (
           SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
+        )
+      )
+    )
+    AND (
+      @has_risk_filter::text = ''
+      OR (
+        @has_risk_filter::text = 'true' AND EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = @project_id
+            AND rr.found IS TRUE
+        )
+      )
+      OR (
+        @has_risk_filter::text = 'false' AND NOT EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = @project_id
+            AND rr.found IS TRUE
         )
       )
     )
@@ -342,6 +410,7 @@ SELECT
     lc.num_messages,
     lc.last_message_timestamp,
     lc.avg_score,
+    lc.risk_findings_count,
     cr.id as resolution_id,
     cr.user_goal,
     cr.resolution,

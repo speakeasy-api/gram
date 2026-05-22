@@ -344,7 +344,9 @@
               name="action"
               value="approve"
               class="btn btn-primary"
-              {{if not .ConsentEnabled}}disabled{{end}}
+              {{if
+              not
+              .ConsentEnabled}}disabled{{end}}
             >
               Give Access
             </button>

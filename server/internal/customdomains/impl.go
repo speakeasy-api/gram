@@ -16,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -172,9 +174,31 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	repo := repo.New(dbtx)
+	// The mcp_endpoints.custom_domain_id FK has ON DELETE SET NULL, but that
+	// only fires for hard deletes. Soft-delete the child endpoints explicitly
+	// so they don't outlive the tombstoned custom domain. The cascade spans
+	// every project under the owning org — custom domains are org-scoped —
+	// so the org:admin gate above authorizes the entire fan-out.
+	deletedEndpoints, err := mcpendpointsrepo.New(dbtx).SoftDeleteMCPEndpointsByCustomDomainID(ctx, domain.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete child mcp endpoints").Log(ctx, s.logger)
+	}
 
-	if err := repo.DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID); err != nil {
+	for _, endpoint := range deletedEndpoints {
+		if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        endpoint.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			McpEndpointURN:   urn.NewMcpEndpoint(endpoint.ID),
+			Slug:             endpoint.Slug,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log mcp endpoint deletion").Log(ctx, s.logger)
+		}
+	}
+
+	if err := repo.New(dbtx).DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain").Log(ctx, s.logger)
 	}
 
@@ -200,4 +224,26 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	)
 
 	return nil
+}
+
+func (s *Service) ListMcpEndpoints(ctx context.Context, _ *gen.ListMcpEndpointsPayload) (*gen.ListCustomDomainMcpEndpointsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	domain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+	}
+
+	rows, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsByCustomDomainID(ctx, domain.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp endpoints by custom domain").Log(ctx, s.logger)
+	}
+
+	return &gen.ListCustomDomainMcpEndpointsResult{McpEndpoints: mv.BuildCustomDomainMcpEndpointListView(rows)}, nil
 }
