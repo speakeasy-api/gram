@@ -13,6 +13,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const countActiveUserSessionsByIssuerID = `-- name: CountActiveUserSessionsByIssuerID :one
+SELECT COUNT(*) AS active_count
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = $1
+  AND iss.project_id = $2
+  AND s.deleted IS FALSE
+  AND iss.deleted IS FALSE
+`
+
+type CountActiveUserSessionsByIssuerIDParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Count of non-deleted user_sessions for an issuer, project-scoped through the
+// join on user_session_issuers. Used by the roast endpoint to scale severity.
+func (q *Queries) CountActiveUserSessionsByIssuerID(ctx context.Context, arg CountActiveUserSessionsByIssuerIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveUserSessionsByIssuerID, arg.UserSessionIssuerID, arg.ProjectID)
+	var active_count int64
+	err := row.Scan(&active_count)
+	return active_count, err
+}
+
 const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
