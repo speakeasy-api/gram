@@ -76,10 +76,10 @@ func newTestCollectionsService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 
-	svc := collections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, testenv.DefaultSiteURL(t))
+	svc := collections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, testenv.DefaultSiteURL(t))
 	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger)
 
 	return ctx, &testInstance{

@@ -71,6 +71,7 @@ const breadcrumbSubstitutions = {
   "audit-logs": "Audit Logs",
   "admin-settings": "Admin Settings",
   "risk-overview": "Risk Overview",
+  "risk-events": "Risk Events",
   "risk-policies": "Risk Policies",
   // The URL segments `slack` and `clis` are preserved for backwards
   // compatibility, but the sidebar/route titles were rebranded — map them
@@ -122,11 +123,27 @@ function PageHeaderBreadcrumbs({
     .map((segment, index) => {
       const relativeUrl = "/" + allSegments.slice(0, index + 1).join("/");
 
-      let display = segment;
-      if (allSubstitutions[segment]) {
-        display = allSubstitutions[segment];
-      } else if (!toPreserve.includes(segment)) {
-        display = capitalize(segment);
+      // Decode for both display and param matching. `useParams()` returns
+      // decoded values, so an encoded segment like adam%40speakeasy.com would
+      // otherwise miss the toPreserve check and get JS-capitalized.
+      let decoded = segment;
+      try {
+        decoded = decodeURIComponent(segment);
+      } catch {
+        // ignore malformed encodings; fall back to the raw segment
+      }
+
+      let display = decoded;
+      const subSegment = allSubstitutions[segment];
+      const subDecoded = allSubstitutions[decoded];
+      if (subSegment !== undefined) {
+        display = subSegment;
+      } else if (subDecoded !== undefined) {
+        display = subDecoded;
+      } else if (!toPreserve.includes(decoded) && !decoded.includes("@")) {
+        // Only synthesize a Title-Case display for path-segment slugs.
+        // Route params and email-like identifiers keep their original casing.
+        display = capitalize(decoded);
       }
 
       return {

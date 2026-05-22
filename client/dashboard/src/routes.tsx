@@ -30,10 +30,16 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
+import {
+  LogsRoot,
+  LogsMCPPage,
+  LogsRiskEventsPage,
+  LogsToolsPage,
+} from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
   InsightsAgentsPage,
   InsightsEmployeeDetailPage,
@@ -70,7 +76,14 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
-import SecurityOverview from "./pages/security/SecurityOverview";
+import SecurityOverview, {
+  RiskOverviewRoot,
+} from "./pages/security/SecurityOverview";
+import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
+import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
+import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
+import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
+import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -332,6 +345,17 @@ const ROUTE_STRUCTURE = {
         url: "built-in/:builtInSlug",
         component: BuiltInMCPDetailPage,
       },
+      // TODO(AGE-1902): collapse with :toolsetSlug once Hosted (toolset-backed)
+      // MCP data moves to mcp_servers/mcp_endpoints. Until then this route is
+      // distinct so the new mcp_servers-backed details page renders against
+      // mcp_servers without disturbing the existing toolset-backed path. The
+      // `x/` prefix is the generic experimental namespace shared with the
+      // `/x/mcp/{slug}` runtime path that already serves these servers.
+      x: {
+        title: "MCP Server Details",
+        url: "x/:mcpServerSlug",
+        component: MCPServerDetails,
+      },
       details: {
         title: "MCP Details",
         url: ":toolsetSlug",
@@ -421,6 +445,11 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: LogsMCPPage,
       },
+      riskEvents: {
+        title: "Risk Events",
+        url: "risk-events",
+        component: LogsRiskEventsPage,
+      },
       agents: {
         title: "Agent Sessions",
         url: "agents",
@@ -439,7 +468,35 @@ const ROUTE_STRUCTURE = {
     url: "risk-overview",
     icon: "shield",
     stage: "beta",
-    component: SecurityOverview,
+    component: RiskOverviewRoot,
+    indexComponent: SecurityOverview,
+    subPages: {
+      usersIndex: {
+        title: "Users",
+        url: "users",
+        component: RiskOverviewUsersIndex,
+      },
+      userDetail: {
+        title: "User",
+        url: "users/:externalUserId",
+        component: RiskOverviewUserDetail,
+      },
+      categoriesIndex: {
+        title: "Categories",
+        url: "categories",
+        component: RiskOverviewCategoriesIndex,
+      },
+      rulesIndex: {
+        title: "Rules",
+        url: "rules",
+        component: RiskOverviewRulesIndex,
+      },
+      categoryDetail: {
+        title: "Category",
+        url: "categories/:category",
+        component: RiskOverviewCategoryDetail,
+      },
+    },
   },
   policyCenter: {
     title: "Risk Policies",

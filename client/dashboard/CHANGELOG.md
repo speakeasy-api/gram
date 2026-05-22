@@ -1,5 +1,66 @@
 # dashboard
 
+## 0.59.0
+
+### Minor Changes
+
+- d755880: Assistants spec panel now has a "Sessions" quick link that opens Agent Sessions filtered to that assistant.
+
+## 0.58.0
+
+### Minor Changes
+
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings.
+
+### Patch Changes
+
+- 3db9f30: Deleting a custom domain now soft-deletes every `mcp_endpoints` row registered under it across all projects in the org, emits one `mcp-endpoint:delete` audit event per cascaded row, and the dashboard delete-confirmation modal previews the impacted endpoints via the new `/rpc/domain.listMcpEndpoints` endpoint.
+- 7b002eb: The Assistants spec panel now links each attached MCP server to its MCP details page, so you can jump straight from the draft view to inspect or configure the server.
+- 85790f1: The active/paused indicator on each assistant card is now an interactive switch — you can pause or resume an assistant directly from the assistants list without opening it.
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings
+- 35a7938: Improved server names in hooks logs. Improved UI for inspecting indiivudal logs
+- Updated dependencies [12a0fa3]
+  - @gram-ai/elements@1.33.1
+
+## 0.57.0
+
+### Minor Changes
+
+- 5e00422: Add the initial Remote MCP-backed MCP server management UI under the `gram-remote-mcp` feature flag.
+- f9b43d9: Add deny rules (exceptions) to RBAC role editor, allowing admins to grant broad access then carve out specific resources or tools that a role should not access
+
+### Patch Changes
+
+- 2cdae0e: Fix token graph blanking when filtering by agent type on /insights/costs
+- 8dcf760: update @speakeasy-api/moonshine dependency to 1.36.1
+
+## 0.56.0
+
+### Minor Changes
+
+- 639952a: Add a beta Risk Events log under Logs for reviewing and managing policy-flagged or blocked findings.
+
+### Patch Changes
+
+- 93d7919: Keep the OAuth wizard auto-configure path on OAuth Proxy setup with DCR credentials, even when user-session onboarding is enabled for the organization.
+- 3f928eb: Fixes agent log drawer accessibility warnings
+
+## 0.55.0
+
+### Minor Changes
+
+- 129e642: Add "Install All" button to collection detail page for bulk server installation
+- 4ea14f3: Enforce RBAC on the collections API. `List` and `ListServers` now require `org:read`; `Create`, `Update`, `Delete`, `AttachServer`, and `DetachServer` require `org:admin`. The dashboard's sidebar, collections list, and detail pages open up to `org:read` members, while create/edit/delete and server attach/detach controls stay behind `org:admin`.
+- 4eadd44: Show assigned roles on pending organization invites and allow org admins to change the role before acceptance. Invite creation and invite role changes now emit audit log entries.
+- b8ed614: Adds filtering and clearer presentation for trace entries
+
+### Patch Changes
+
+- 7a82597: Filter the plugin "Add Server" dialog to exclude toolsets already attached to the plugin, preventing duplicate entries.
+- fb40041: Show a graceful message in AI Insights and the Playground when an organization runs out of chat credits. Previously the chat would silently stop streaming on a 402 from the gateway because the AI SDK masks stream errors by default. The thread now renders `You've reached the chat credit limit for this account. Click the "Get Support" button at the top of the page to reach out about upgrading.` and the new `describeStreamError` / `CREDITS_EXHAUSTED_MESSAGE` exports are available on `@gram-ai/elements` for downstream consumers that want to react to the same condition.
+- Updated dependencies [fb40041]
+  - @gram-ai/elements@1.33.0
+
 ## 0.54.0
 
 ### Minor Changes

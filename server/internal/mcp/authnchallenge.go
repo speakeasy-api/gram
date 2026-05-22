@@ -32,26 +32,52 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// LegacyMcpEndpointRef identifies an MCP endpoint by (mcp_slug,
-// custom_domain_id) — the tuple of toolset columns that addresses a
-// served MCP server outside of any project context. Structurally
-// similar to the new MCP Endpoint concept
-// (mcpendpointsrepo.McpEndpoint) but distinct: this reference points
-// into the legacy toolsets-driven MCP surface, where each toolset row
-// exposes one (slug, optional domain) pair, not a separate
-// mcp_endpoints row. Resolved to a *toolsets_repo.Toolset by
-// (*Service).resolveMcp.
-type LegacyMcpEndpointRef struct {
-	McpSlug        string        `json:"mcp_slug"`
+// EndpointRef is the cached-state addressing reference for an
+// in-flight Gram-as-AS authn challenge. It captures only what's needed
+// to re-resolve the originating endpoint when a handler resumes a
+// challenge from Redis (e.g. HandleIDPCallback after the IDP round-trip,
+// or HandleConsent on POST). Keeping this as a reference rather than a
+// snapshot is deliberate: downstream handlers re-resolve the endpoint
+// on each entry so mutations to the underlying row (issuer change,
+// visibility flip) take effect inside the 10-min challenge window.
+type EndpointRef struct {
+	// Set when the endpoint belongs to a custom domain, otherwise null.
 	CustomDomainID uuid.NullUUID `json:"custom_domain_id"`
+
+	// BaseURL is the public base URL the challenge was minted under,
+	// stamped at mint time. For custom-domain challenges this is
+	// "https://<custom-domain>"; otherwise it is the server's default
+	// URL (s.serverURL.String()). Always populated by new mints so
+	// HandleIDPCallback can rebuild the consent redirect from cache
+	// alone — the IDP callback is registered at a global URL and loses
+	// the request's customdomains.Context. In-flight states minted
+	// before this field landed will have BaseURL="" and fall back to
+	// the server default origin until the 10-min challenge TTL elapses.
+	BaseURL string `json:"base_url,omitempty"`
+
+	// McpServerID, when valid, identifies the mcp_servers row that owns
+	// this challenge. Populated by /x/mcp callers whose endpoint
+	// addresses resolve through mcp_endpoints → mcp_servers; zero for
+	// /mcp callers.
+	McpServerID uuid.NullUUID `json:"mcp_server_id"`
+
+	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
+	// /x/mcp challenges.
+	McpSlug string `json:"mcp_slug"`
+
+	// RouteBase is the URL path prefix the challenge was minted under
+	// ("mcp" or "x/mcp"). Empty value is treated as "mcp" by callers for
+	// backward compatibility with states minted before this field was
+	// added.
+	RouteBase string `json:"route_base,omitempty"`
 }
 
 // AuthnChallengeState is the in-flight context of a single Gram-as-AS authn
@@ -61,15 +87,15 @@ type LegacyMcpEndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
-	ID                  string               `json:"id"`
-	UserSessionIssuerID uuid.UUID            `json:"user_session_issuer_id"`
-	Endpoint            LegacyMcpEndpointRef `json:"endpoint"`
-	ClientID            string               `json:"client_id"`
-	RedirectURI         string               `json:"redirect_uri"`
-	State               string               `json:"state,omitempty"`
-	CodeChallenge       string               `json:"code_challenge"`
-	CodeChallengeMethod string               `json:"code_challenge_method"`
-	CSRFToken           string               `json:"csrf_token"`
+	ID                  string      `json:"id"`
+	UserSessionIssuerID uuid.UUID   `json:"user_session_issuer_id"`
+	Endpoint            EndpointRef `json:"endpoint"`
+	ClientID            string      `json:"client_id"`
+	RedirectURI         string      `json:"redirect_uri"`
+	State               string      `json:"state,omitempty"`
+	CodeChallenge       string      `json:"code_challenge"`
+	CodeChallengeMethod string      `json:"code_challenge_method"`
+	CSRFToken           string      `json:"csrf_token"`
 	// Subject is stamped exactly once before consent is rendered:
 	// HandleAuthorize stamps `anonymous:<uuid>` for public toolsets, and
 	// HandleIDPCallback stamps `user:<id>` for private toolsets. Pointer so
@@ -126,28 +152,28 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 
 // validateUserSessionToken delegates the JWT verify + revocation check to
 // usersessions.Signer.ValidateBearer, then — for user / API-key subjects —
-// stamps a contextvalues.AuthContext scoped to the toolset's org/project.
+// stamps a contextvalues.AuthContext scoped to the endpoint's org/project.
 // Returns ok=false on any of: missing token, bad signature, expired/
 // notBefore, audience mismatch, jti revoked, unparseable subject URN.
 //
 // Anonymous subjects deliberately leave the context untouched (ok=true,
 // no AuthContext set). The request belongs to no known principal, so
-// stamping the toolset's org as ActiveOrganizationID would misrepresent
+// stamping the endpoint's org as ActiveOrganizationID would misrepresent
 // the caller as a member of that org. Downstream code on the public
-// path reads org/project off the toolset row directly, the same way it
-// does for unauthenticated public-toolset traffic.
+// path reads org/project off the resolved endpoint directly, the same
+// way it does for unauthenticated public-endpoint traffic.
 //
 // SessionID and AccountType are populated for non-anonymous subjects so
 // authz.Engine.ShouldEnforce / PrepareContext treat the request as a
 // real authenticated session — without them the mcp:connect RBAC check
-// silently bypasses on enterprise toolsets (ShouldEnforce returns false
+// silently bypasses on enterprise endpoints (ShouldEnforce returns false
 // when AccountType != "enterprise"; PrepareContext skips when SessionID
 // is nil).
-func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, *urn.SessionSubject, bool) {
+func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, bool) {
 	if token == "" {
 		return ctx, nil, false
 	}
-	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, urn.NewToolset(toolset.ID).String(), s.chatSessionsManager)
+	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
 		return ctx, nil, false
 	}
@@ -156,13 +182,14 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, to
 		return ctx, &subject, true
 	}
 
-	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, toolset.OrganizationID)
+	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, endpoint.OrganizationID)
 	if err != nil {
 		return ctx, nil, false
 	}
+	projectID := endpoint.ProjectID
 	authCtx := &contextvalues.AuthContext{
-		ActiveOrganizationID:  toolset.OrganizationID,
-		ProjectID:             &toolset.ProjectID,
+		ActiveOrganizationID:  endpoint.OrganizationID,
+		ProjectID:             &projectID,
 		UserID:                "",
 		ExternalUserID:        "",
 		APIKeyID:              "",
@@ -194,14 +221,16 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, to
 //
 // Header shape (RFC 9728 §5.3):
 //
-//	Bearer resource_metadata="<base>/.well-known/oauth-protected-resource/mcp/<slug>"
+//	Bearer resource_metadata="<protectedResourceURL>"
 //
-// The path is the canonical RFC 9728 prefix path — exactly what a
-// spec-compliant client constructs from a resource URL of `<base>/mcp/<slug>`.
-func WriteAuthenticateChallenge(w http.ResponseWriter, baseURL, mcpSlug, message string) error {
+// Callers build the URL — the canonical RFC 9728 path is
+// `<base>/.well-known/oauth-protected-resource/<routeBase>/<slug>`, which is
+// exactly what a spec-compliant client constructs from a resource URL of
+// `<base>/<routeBase>/<slug>`.
+func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, message string) error {
 	w.Header().Set(
 		"WWW-Authenticate",
-		fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+		fmt.Sprintf(`Bearer resource_metadata="%s"`, protectedResourceURL),
 	)
 	if message == "" {
 		return oops.C(oops.CodeUnauthorized)
@@ -209,58 +238,104 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, baseURL, mcpSlug, message
 	return oops.E(oops.CodeUnauthorized, nil, "%s", message)
 }
 
+// BaseURLForRequest returns the public base URL the runtime request was
+// addressed at — the custom domain when one is bound to the request
+// context, the server's default origin otherwise. Exposed so /x/mcp
+// callers building post-resolution OAuth URLs see the same origin /mcp
+// callers do.
+func (s *Service) BaseURLForRequest(r *http.Request) string {
+	if domainCtx := customdomains.FromContext(r.Context()); domainCtx != nil {
+		return fmt.Sprintf("https://%s", domainCtx.Domain)
+	}
+	return s.serverURL.String()
+}
+
+// ApplyIssuerGate runs the issuer-gated authentication branch shared by
+// the toolset-keyed (/mcp) and mcp_server-keyed (/x/mcp) MCP runtime
+// paths. It validates the bearer token as a user-session JWT, falls back
+// to an assistant-runtime JWT scoped to the endpoint's project, and on
+// success resolves the upstream remote-session access token configured
+// for the issuer.
+//
+// On success: returns the request context stamped with the resolved
+// principal plus the upstream access token. The token is "" when the
+// issuer has no remote_session_clients bound; today the inv.Check in
+// remotesessions.ResolveOneAccessToken caps the upstream to exactly 0 or
+// 1, so the return type is a single string rather than a slice. Callers
+// wrap the non-empty value into an oauthTokenInputs as needed for
+// downstream tool-dispatch chains.
+//
+// On failure: writes a 401 + WWW-Authenticate to w and returns the
+// CodeUnauthorized error from WriteAuthenticateChallenge. The
+// resource_metadata URL is built from baseURL + endpoint.RouteBase +
+// endpoint.Slug so a /x/mcp request gets pointed at /x/mcp's
+// protected-resource metadata, not /mcp's.
+//
+// /x/mcp uses this to gate requests on mcp_servers.user_session_issuer_id
+// before dispatching to its remote backend or delegating to
+// ServeToolsetResolved with the gate skipped.
+func (s *Service) ApplyIssuerGate(
+	ctx context.Context,
+	w http.ResponseWriter,
+	authToken, baseURL string,
+	endpoint *ResolvedMcpEndpoint,
+) (context.Context, string, error) {
+	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
+	if err != nil {
+		return ctx, "", oops.E(oops.CodeUnexpected, err, "build protected-resource URL").Log(ctx, s.logger)
+	}
+
+	newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, endpoint)
+	if !ok {
+		// Accept an assistant-runtime JWT, but only when the assistant
+		// belongs to the endpoint's project — otherwise a token minted
+		// in project A could resolve a remote_session linked under
+		// the same user in project B.
+		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() {
+			ssubj := urn.NewUserSubject(claims.UserID)
+			newCtx, subject, ok = assistCtx, &ssubj, true
+		}
+	}
+	if !ok {
+		return ctx, "", WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+	}
+
+	// Resolve the upstream remote_session for this subject before
+	// running the legacy auth chain. The resolver short-circuits to
+	// no-op when the issuer has no remote_session_clients bound;
+	// otherwise it either supplies the upstream access token (fed
+	// into tokenInputs so it satisfies the endpoint's oauth2 scheme
+	// downstream) or fails with ErrNoValidToken — which the user
+	// resolves by re-linking via {routeBase}/{slug}/connect.
+	var upstreamToken string
+	if subject != nil {
+		upstream, rerr := s.remoteChallengeMgr.ResolveOneAccessToken(newCtx, endpoint.ProjectID, endpoint.UserSessionIssuerID, *subject)
+		switch {
+		case errors.Is(rerr, remotesessions.ErrNoValidToken):
+			return ctx, "", WriteAuthenticateChallenge(w, protectedResourceURL, "")
+		case rerr != nil:
+			return ctx, "", oops.E(oops.CodeUnexpected, rerr, "resolve remote session").Log(newCtx, s.logger)
+		}
+		upstreamToken = upstream
+	}
+	return newCtx, upstreamToken, nil
+}
+
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
 
-// resolveMcp loads the Toolset addressed by a LegacyMcpEndpointRef. Note
-// that this resolution differs from other places where we resolve MCPs in
-// the legacy MCP pathway. It pins the MCP to only be resolved through a
-// single context rather than allowing it to be resolved willy-nilly by
-// platform slug. Returns errToolsetNotFound on pgx.ErrNoRows.
-func (s *Service) resolveMcp(ctx context.Context, endpoint LegacyMcpEndpointRef) (*toolsets_repo.Toolset, error) {
-	var toolset toolsets_repo.Toolset
-	var err error
-	if endpoint.CustomDomainID.Valid {
-		toolset, err = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
-			McpSlug:        conv.ToPGText(endpoint.McpSlug),
-			CustomDomainID: endpoint.CustomDomainID,
-		})
-	} else {
-		toolset, err = s.toolsetsRepo.GetToolsetByPlatformMcpSlug(ctx, conv.ToPGText(endpoint.McpSlug))
-	}
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, errToolsetNotFound
-	case err != nil:
-		return nil, fmt.Errorf("lookup toolset: %w", err)
-	}
-	return &toolset, nil
-}
-
-// compareToolsetEndpoint asserts the stored endpoint reference matches
-// the toolset's (mcp_slug, custom_domain_id) tuple. Replaces the
-// historical ToolsetID-equality state-confusion guard. Today there is
-// one endpoint per toolset and the comparison is direct; the helper
-// centralises it so a future model with multiple mcp_endpoints rows
-// per toolset can expand the check to "endpoint is in the toolset's
-// endpoint set" without churning callers.
-func compareToolsetEndpoint(toolset *toolsets_repo.Toolset, endpoint LegacyMcpEndpointRef) error {
-	if conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), "") != endpoint.McpSlug {
-		return errToolsetEndpointMismatch
-	}
-	if toolset.CustomDomainID != endpoint.CustomDomainID {
-		return errToolsetEndpointMismatch
-	}
-	return nil
-}
-
-// requireUserSessionIssuer verifies the toolset's user_session_issuer_id FK
-// still resolves to a live row. Returns CodeNotFound when the issuer was
-// deleted out from under the toolset, CodeUnexpected on lookup failure.
-// Callers are responsible for first checking toolset.UserSessionIssuerID.Valid.
-func (s *Service) requireUserSessionIssuer(ctx context.Context, toolset *toolsets_repo.Toolset) error {
+// RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
+// FK still resolves to a live row. Returns CodeNotFound when the issuer
+// was deleted out from under the endpoint, CodeUnexpected on lookup
+// failure. Callers are responsible for first checking that the endpoint
+// is issuer-gated.
+//
+// Exported so /x/mcp's [Service.buildResolvedMcpEndpoint] can include
+// the live-FK check in the same chokepoint as the
+// NewResolvedMcpEndpointFromMcpServer construction.
+func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
 	if _, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-		ID:        toolset.UserSessionIssuerID.UUID,
-		ProjectID: toolset.ProjectID,
+		ID:        endpoint.UserSessionIssuerID,
+		ProjectID: endpoint.ProjectID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")

@@ -11,7 +11,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -24,7 +23,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -57,37 +55,36 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
+	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	if err != nil {
+		return err
+	}
+	return s.ServeToken(w, r, endpoint)
+}
+
+// ServeToken is the post-resolution entry point for the OAuth 2.1
+// token endpoint, shared by /mcp's HandleToken (toolset-keyed) and
+// /x/mcp's mcp_endpoint-keyed route registration. Performs the common
+// upfront work — parse form, authenticate the client — then dispatches
+// on grant_type to handleTokenAuthorizationCodeGrant or
+// handleTokenRefreshTokenGrant. Both grant handlers funnel through
+// mintSessionAndRespond which writes the RFC 6749 §5.1 response.
+func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	ctx := r.Context()
 
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
 		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
 
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
-		return err
-	}
-
-	logger := s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
+	logger := endpoint.LogWith(s.logger)
 
 	clientID, clientSecret, _ := extractClientCredentials(r)
 	if clientID == "" {
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		ClientID:            clientID,
 	})
 	if err != nil {
@@ -107,16 +104,13 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 
 	// Base URL the AS metadata advertises — equals the JWT `iss` claim so
 	// the two sides of the contract stay aligned across custom domains.
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
+	baseURL := s.BaseURLForRequest(r)
 
 	switch r.PostForm.Get("grant_type") {
 	case "authorization_code":
-		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, toolset, &clientRow, mcpSlug, baseURL, logger)
+		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, &clientRow, baseURL, logger)
 	case "refresh_token":
-		return s.handleTokenRefreshTokenGrant(ctx, w, r, toolset, &clientRow, mcpSlug, baseURL, logger)
+		return s.handleTokenRefreshTokenGrant(ctx, w, r, endpoint, &clientRow, baseURL, logger)
 	default:
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
 	}
@@ -134,9 +128,9 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	ctx context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
-	toolset *toolsets_repo.Toolset,
+	endpoint *ResolvedMcpEndpoint,
 	clientRow *usersessions_repo.UserSessionClient,
-	mcpSlug, baseURL string,
+	baseURL string,
 	logger *slog.Logger,
 ) error {
 	req := usersessions.AuthCodeTokenRequestFromForm(r.PostForm)
@@ -148,7 +142,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// Atomic GETDEL: single-use authorization code. If two clients race to
 	// redeem the same code, exactly one wins the GETDEL; the other gets
 	// ErrCacheMiss and is rejected as invalid_grant (RFC 6749 §4.1.2 / §10.5).
-	grantKey := "userSessionGrant:" + toolset.UserSessionIssuerID.UUID.String() + ":" + req.Code
+	grantKey := "userSessionGrant:" + endpoint.UserSessionIssuerID.String() + ":" + req.Code
 	grant, err := s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
 	if err != nil {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
@@ -164,7 +158,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
-	return s.mintSessionAndRespond(ctx, w, toolset, clientRow, grant.Subject, mcpSlug, baseURL, logger)
+	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, baseURL, logger)
 }
 
 // handleTokenRefreshTokenGrant implements RFC 6749 §6 (and OAuth 2.1's
@@ -181,9 +175,9 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	ctx context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
-	toolset *toolsets_repo.Toolset,
+	endpoint *ResolvedMcpEndpoint,
 	clientRow *usersessions_repo.UserSessionClient,
-	mcpSlug, baseURL string,
+	baseURL string,
 	logger *slog.Logger,
 ) error {
 	req := usersessions.RefreshTokenRequestFromForm(r.PostForm)
@@ -196,7 +190,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	// is already gone (unknown / replayed / revoked), pgx.ErrNoRows surfaces
 	// here as invalid_grant.
 	oldSession, err := usersessions_repo.New(s.db).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		RefreshTokenHash:    sha256Hex(req.RefreshToken),
 	})
 	if err != nil {
@@ -225,7 +219,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		logger.WarnContext(ctx, "failed to revoke old access token jti on refresh", attr.SlogError(err))
 	}
 
-	return s.mintSessionAndRespond(ctx, w, toolset, clientRow, oldSession.SubjectUrn, mcpSlug, baseURL, logger)
+	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, oldSession.SubjectUrn, baseURL, logger)
 }
 
 // accessTokenLifetime is the wall-clock validity of a minted access-token
@@ -256,10 +250,10 @@ const accessTokenLifetime = 1 * time.Hour
 func (s *Service) mintSessionAndRespond(
 	ctx context.Context,
 	w http.ResponseWriter,
-	toolset *toolsets_repo.Toolset,
+	endpoint *ResolvedMcpEndpoint,
 	clientRow *usersessions_repo.UserSessionClient,
 	subject urn.SessionSubject,
-	mcpSlug, baseURL string,
+	baseURL string,
 	logger *slog.Logger,
 ) error {
 	// Resolve the issuer's session_duration — the refresh-token (i.e. total
@@ -268,8 +262,8 @@ func (s *Service) mintSessionAndRespond(
 	// those here, raw SQL bypassed the writer and the conversion is
 	// calendar-dependent — fail with 500 rather than silently approximate.
 	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-		ID:        toolset.UserSessionIssuerID.UUID,
-		ProjectID: toolset.ProjectID,
+		ID:        endpoint.UserSessionIssuerID,
+		ProjectID: endpoint.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -288,8 +282,11 @@ func (s *Service) mintSessionAndRespond(
 		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").Log(ctx, logger)
 	}
 
-	issuerURL := baseURL + "/mcp/" + mcpSlug
-	access, jti, err := s.userSessionSigner.Mint(subject, urn.NewToolset(toolset.ID).String(), issuerURL, accessTokenLifetime)
+	issuerURL, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build issuer URL").Log(ctx, logger)
+	}
+	access, jti, err := s.userSessionSigner.Mint(subject, endpoint.AudienceURN, issuerURL, accessTokenLifetime)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").Log(ctx, logger)
 	}
@@ -301,7 +298,7 @@ func (s *Service) mintSessionAndRespond(
 
 	now := time.Now()
 	if _, err := usersessions_repo.New(s.db).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		UserSessionClientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true},
 		SubjectUrn:          subject,
 		Jti:                 jti,

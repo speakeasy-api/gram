@@ -75,12 +75,13 @@ function CollectionDetailInner() {
     useState<CatalogServer | null>(null);
   const [showBulkInstallDialog, setShowBulkInstallDialog] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingServers, setEditingServers] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editVisibility, setEditVisibility] = useState<"public" | "private">(
     "private",
   );
-  const [editSelectedToolsetIds, setEditSelectedToolsetIds] = useState<
+  const [selectedServerToolsetIds, setSelectedServerToolsetIds] = useState<
     Set<string>
   >(new Set());
   const [serverSearch, setServerSearch] = useState("");
@@ -162,7 +163,7 @@ function CollectionDetailInner() {
   );
 
   const toggleToolset = (toolsetId: string) => {
-    setEditSelectedToolsetIds((prev) => {
+    setSelectedServerToolsetIds((prev) => {
       const next = new Set(prev);
       if (next.has(toolsetId)) {
         next.delete(toolsetId);
@@ -373,7 +374,6 @@ function CollectionDetailInner() {
                         setEditName(collection.name);
                         setEditDescription(collection.description);
                         setEditVisibility(collection.visibility);
-                        setEditSelectedToolsetIds(new Set(attachedToolsetIds));
                         setEditing(true);
                       }}
                     >
@@ -405,7 +405,9 @@ function CollectionDetailInner() {
             {editing && (
               <RequireScope scope="org:admin" level="section">
                 <div className="mb-4 space-y-4 rounded-lg border p-5">
-                  <h2 className="text-base font-semibold">Edit Collection</h2>
+                  <h2 className="text-base font-semibold">
+                    Edit collection details
+                  </h2>
                   <div>
                     <label className="mb-1 block text-sm font-medium">
                       Name
@@ -461,11 +463,106 @@ function CollectionDetailInner() {
                     </div>
                   </div>
 
-                  {/* Server picker (edit mode only) */}
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      MCP Servers ({editSelectedToolsetIds.size} selected)
-                    </label>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={isSaving || !editName}
+                      onClick={async () => {
+                        setIsSaving(true);
+                        try {
+                          await updateCollection.mutateAsync({
+                            request: {
+                              updateRequestBody: {
+                                collectionId: collection.id,
+                                name: editName,
+                                description: editDescription,
+                                visibility: editVisibility,
+                              },
+                            },
+                          });
+
+                          setEditing(false);
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                    >
+                      <Button.Text>
+                        {isSaving ? "Saving..." : "Save"}
+                      </Button.Text>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={isSaving}
+                      onClick={() => {
+                        setEditing(false);
+                      }}
+                    >
+                      <Button.Text>Cancel</Button.Text>
+                    </Button>
+                  </div>
+                </div>
+              </RequireScope>
+            )}
+
+            {/* About */}
+            {!editing && (
+              <div className="mb-4 rounded-lg border p-5">
+                <h2 className="mb-2 text-base font-semibold">
+                  About this collection
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  {collection.description || "No description provided."}
+                </p>
+              </div>
+            )}
+
+            {/* MCP Servers */}
+            <div className="rounded-lg border p-5">
+              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">Included servers</h2>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    These servers install together into the selected project.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="shrink-0">
+                    <Server className="mr-1 h-3 w-3" />
+                    {servers.length}
+                  </Badge>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      disabled={isLoading || isSaving}
+                      onClick={() => {
+                        setServerSearch("");
+                        setSelectedServerToolsetIds(
+                          new Set(attachedToolsetIds),
+                        );
+                        setEditingServers((current) => !current);
+                      }}
+                    >
+                      <Button.Text>
+                        {editingServers ? "Cancel Edit" : "Edit Servers"}
+                      </Button.Text>
+                    </Button>
+                  </RequireScope>
+                </div>
+              </div>
+              {editingServers && (
+                <RequireScope scope="org:admin" level="section">
+                  <div className="mb-4 rounded-lg border p-4">
+                    <div className="mb-3">
+                      <h3 className="text-sm font-medium">Edit servers</h3>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        Select the MCP-enabled servers that should be included
+                        in this collection.
+                      </p>
+                    </div>
                     <div className="rounded-md border">
                       <div className="relative border-b">
                         <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
@@ -498,7 +595,9 @@ function CollectionDetailInner() {
                               className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
                             >
                               <Checkbox
-                                checked={editSelectedToolsetIds.has(toolset.id)}
+                                checked={selectedServerToolsetIds.has(
+                                  toolset.id,
+                                )}
                                 disabled={isSaving}
                                 onCheckedChange={() =>
                                   toggleToolset(toolset.id)
@@ -528,155 +627,114 @@ function CollectionDetailInner() {
                         )}
                       </div>
                     </div>
-                  </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={isSaving}
+                        onClick={async () => {
+                          setIsSaving(true);
+                          try {
+                            const toAttach = [
+                              ...selectedServerToolsetIds,
+                            ].filter((id) => !attachedToolsetIds.has(id));
+                            const toDetach = [...attachedToolsetIds].filter(
+                              (id) => !selectedServerToolsetIds.has(id),
+                            );
 
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={isSaving || !editName}
-                      onClick={async () => {
-                        setIsSaving(true);
-                        try {
-                          // Update collection metadata
-                          await updateCollection.mutateAsync({
-                            request: {
-                              updateRequestBody: {
-                                collectionId: collection.id,
-                                name: editName,
-                                description: editDescription,
-                                visibility: editVisibility,
-                              },
-                            },
-                          });
-
-                          // Diff server changes: attach new, detach removed
-                          const toAttach = [...editSelectedToolsetIds].filter(
-                            (id) => !attachedToolsetIds.has(id),
-                          );
-                          const toDetach = [...attachedToolsetIds].filter(
-                            (id) => !editSelectedToolsetIds.has(id),
-                          );
-
-                          await Promise.all([
-                            ...toAttach.map((toolsetId) =>
-                              attachServer.mutateAsync({
-                                request: {
-                                  attachServerRequestBody: {
-                                    collectionId: collection.id,
-                                    toolsetId,
+                            await Promise.all([
+                              ...toAttach.map((toolsetId) =>
+                                attachServer.mutateAsync({
+                                  request: {
+                                    attachServerRequestBody: {
+                                      collectionId: collection.id,
+                                      toolsetId,
+                                    },
                                   },
-                                },
-                              }),
-                            ),
-                            ...toDetach.map((toolsetId) =>
-                              detachServer.mutateAsync({
-                                request: {
-                                  attachServerRequestBody: {
-                                    collectionId: collection.id,
-                                    toolsetId,
+                                }),
+                              ),
+                              ...toDetach.map((toolsetId) =>
+                                detachServer.mutateAsync({
+                                  request: {
+                                    attachServerRequestBody: {
+                                      collectionId: collection.id,
+                                      toolsetId,
+                                    },
                                   },
-                                },
-                              }),
-                            ),
-                          ]);
-
-                          setEditing(false);
+                                }),
+                              ),
+                            ]);
+                            setEditingServers(false);
+                            setSelectedServerToolsetIds(new Set());
+                            setServerSearch("");
+                          } finally {
+                            setIsSaving(false);
+                          }
+                        }}
+                      >
+                        <Button.Text>
+                          {isSaving
+                            ? "Saving..."
+                            : `Save ${selectedServerToolsetIds.size} ${selectedServerToolsetIds.size === 1 ? "Server" : "Servers"}`}
+                        </Button.Text>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={isSaving}
+                        onClick={() => {
+                          setEditingServers(false);
+                          setSelectedServerToolsetIds(new Set());
                           setServerSearch("");
-                        } finally {
-                          setIsSaving(false);
-                        }
-                      }}
-                    >
-                      <Button.Text>
-                        {isSaving ? "Saving..." : "Save"}
-                      </Button.Text>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={isSaving}
-                      onClick={() => {
-                        setEditing(false);
-                        setServerSearch("");
-                      }}
-                    >
-                      <Button.Text>Cancel</Button.Text>
-                    </Button>
+                        }}
+                      >
+                        <Button.Text>Cancel</Button.Text>
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </RequireScope>
-            )}
-
-            {/* About */}
-            {!editing && (
-              <div className="mb-4 rounded-lg border p-5">
-                <h2 className="mb-2 text-base font-semibold">
-                  About this collection
-                </h2>
+                </RequireScope>
+              )}
+              {editingServers ? null : isLoading ? (
                 <p className="text-muted-foreground text-sm">
-                  {collection.description || "No description provided."}
+                  Loading servers...
                 </p>
-              </div>
-            )}
-
-            {/* MCP Servers (read-only list) */}
-            {!editing && (
-              <div className="rounded-lg border p-5">
-                <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2 className="text-base font-semibold">
-                      Included servers
-                    </h2>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                      These servers install together into the selected project.
-                    </p>
-                  </div>
-                  <Badge variant="secondary" className="shrink-0">
-                    <Server className="mr-1 h-3 w-3" />
-                    {servers.length}
-                  </Badge>
-                </div>
-                {isLoading ? (
+              ) : servers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Server className="text-muted-foreground mb-2 h-8 w-8" />
                   <p className="text-muted-foreground text-sm">
-                    Loading servers...
+                    No servers in this collection yet.
                   </p>
-                ) : servers.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <Server className="text-muted-foreground mb-2 h-8 w-8" />
-                    <p className="text-muted-foreground text-sm">
-                      No servers in this collection yet.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {rawServers.map((server, index) => {
-                      const installableServer = installableServers[index];
-                      return (
-                        <div
-                          key={server.registrySpecifier}
-                          className="bg-card hover:bg-accent/30 flex flex-col gap-4 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center"
-                        >
-                          <div className="bg-muted/60 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border">
-                            {server.iconUrl ? (
-                              <img
-                                src={server.iconUrl}
-                                alt=""
-                                className="h-6 w-6 rounded"
-                              />
-                            ) : (
-                              <ServerIcon className="text-muted-foreground h-5 w-5" />
-                            )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {rawServers.map((server, index) => {
+                    const installableServer = installableServers[index];
+                    return (
+                      <div
+                        key={server.registrySpecifier}
+                        className="bg-card hover:bg-accent/30 flex flex-col gap-4 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center"
+                      >
+                        <div className="bg-muted/60 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border">
+                          {server.iconUrl ? (
+                            <img
+                              src={server.iconUrl}
+                              alt=""
+                              className="h-6 w-6 rounded"
+                            />
+                          ) : (
+                            <ServerIcon className="text-muted-foreground h-5 w-5" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-medium">
+                              {server.title ?? server.registrySpecifier}
+                            </span>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="truncate text-sm font-medium">
-                                {server.title ?? server.registrySpecifier}
-                              </span>
-                            </div>
-                            <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
-                              {server.description || server.registrySpecifier}
-                            </p>
-                          </div>
+                          <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
+                            {server.description || server.registrySpecifier}
+                          </p>
+                        </div>
+                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                           <RequireScope scope="project:write" level="component">
                             <Button
                               size="sm"
@@ -698,12 +756,12 @@ function CollectionDetailInner() {
                             </Button>
                           </RequireScope>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Sidebar */}

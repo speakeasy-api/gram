@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 
 export interface FilterChip {
   display: string;
@@ -36,6 +37,9 @@ export function ObserveFilterBar({
   onServerSelectionChange,
   userEmailOptions,
   onUserEmailSelectionChange,
+  roleOptions,
+  selectedRoleIds,
+  onRoleSelectionChange,
   activeFilters,
   selectedTypes,
   onTypesChange,
@@ -47,11 +51,15 @@ export function ObserveFilterBar({
   onClearCustomRange,
   projectSlug,
   className,
+  serverNameMappings,
 }: {
   serverOptions: string[];
   onServerSelectionChange: (values: string[]) => void;
   userEmailOptions: string[];
   onUserEmailSelectionChange: (values: string[]) => void;
+  roleOptions: Array<{ id: string; name: string }>;
+  selectedRoleIds: string[];
+  onRoleSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
   selectedTypes: TypesToInclude[];
   onTypesChange: (types: TypesToInclude[]) => void;
@@ -63,6 +71,7 @@ export function ObserveFilterBar({
   onClearCustomRange: () => void;
   projectSlug?: string;
   className?: string;
+  serverNameMappings?: ReturnType<typeof useServerNameMappings>;
 }) {
   const selectedServers = useMemo(
     () =>
@@ -82,12 +91,20 @@ export function ObserveFilterBar({
     [activeFilters],
   );
 
+  const serverOptionsWithDisplayNames = useMemo(() => {
+    const rawToDisplay = serverNameMappings?.rawToDisplay;
+    return serverOptions.map((rawName) => ({
+      label: rawToDisplay?.get(rawName) ?? rawName,
+      value: rawName,
+    }));
+  }, [serverOptions, serverNameMappings?.rawToDisplay]);
+
   return (
     <div
       className={cn("flex shrink-0 flex-wrap items-center gap-2", className)}
     >
       <MultiSelect
-        options={serverOptions.map((s) => ({ label: s, value: s }))}
+        options={serverOptionsWithDisplayNames}
         defaultValue={selectedServers}
         onValueChange={onServerSelectionChange}
         placeholder="Filter by server name"
@@ -101,6 +118,15 @@ export function ObserveFilterBar({
         onValueChange={onUserEmailSelectionChange}
         placeholder="Filter by user email"
         className="min-w-[200px] flex-1"
+        hideSelectAll
+        singleLine
+      />
+      <MultiSelect
+        options={roleOptions.map((r) => ({ label: r.name, value: r.id }))}
+        defaultValue={selectedRoleIds}
+        onValueChange={onRoleSelectionChange}
+        placeholder="Filter by role"
+        className="min-w-[160px] flex-1"
         hideSelectAll
         singleLine
       />

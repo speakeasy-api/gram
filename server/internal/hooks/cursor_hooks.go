@@ -18,7 +18,6 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -37,7 +36,12 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		logger.WarnContext(ctx, "rejected unauthorized cursor hook request",
 			attr.SlogEvent("cursor_hook_unauthorized"),
 		)
-		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		return &gen.CursorHookResult{
+			Permission:        new("deny"),
+			UserMessage:       new("Speakeasy hooks: unauthorized — check your Gram API key and project slug."),
+			AdditionalContext: nil,
+			AgentMessage:      nil,
+		}, nil
 	}
 
 	orgID := authCtx.ActiveOrganizationID
@@ -422,6 +426,11 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		// matches the bare tool name.
 		if stripped, ok := strings.CutPrefix(toolName, "MCP:"); ok {
 			attrs[attr.ToolNameKey] = stripped
+		}
+		// Cursor surfaces the MCP server URL on the payload directly (no
+		// SessionStart inventory), so persist it alongside the tool call.
+		if payload.URL != nil && *payload.URL != "" {
+			attrs[attr.MCPServerURLKey] = *payload.URL
 		}
 	}
 

@@ -92,6 +92,45 @@ func TestBackfillWorkOSOrganization_ExternalIDChangeDoesNotChangeOrganizationID(
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
+func TestBackfillWorkOSOrganization_DoesNotClearDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_backfill_preserves_disabled")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_backfill_disabled"
+	const workosOrgID = "org_01JBACKFILLDISABLED"
+
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	_, err := orgrepo.New(conn).DisableOrganizationByWorkosID(ctx, orgrepo.DisableOrganizationByWorkosIDParams{
+		WorkosID:          conv.ToPGText(workosOrgID),
+		WorkosLastEventID: conv.ToPGText(""),
+	})
+	require.NoError(t, err)
+
+	workosClient := newWorkOSSnapshotClient(t, ctx,
+		workos.Organization{
+			ID:         workosOrgID,
+			Name:       "Backfill Still Disabled",
+			ExternalID: organizationID,
+			CreatedAt:  "2026-05-07T11:00:00Z",
+			UpdatedAt:  "2026-05-07T12:00:00Z",
+		},
+		nil,
+		nil,
+	)
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+
+	err = activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	org, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, "Backfill Still Disabled", org.Name)
+	require.True(t, org.DisabledAt.Valid)
+}
+
 func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *testing.T) {
 	t.Parallel()
 
@@ -355,7 +394,7 @@ func seedOrganizationRoleWithCursor(t *testing.T, ctx context.Context, conn *pgx
 	t.Helper()
 
 	updatedAt := time.Date(2026, 5, 7, 10, 0, 0, 0, time.UTC)
-	err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	_, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    organizationID,
 		WorkosSlug:        slug,
 		WorkosName:        name,

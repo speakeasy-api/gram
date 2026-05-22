@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -81,6 +82,7 @@ func collectEventDefNames(dir string) ([]string, error) {
 		}
 		names = append(names, eventDefNamesInFile(f)...)
 	}
+	sort.Strings(names)
 	return names, nil
 }
 

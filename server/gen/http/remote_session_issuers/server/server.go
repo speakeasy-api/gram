@@ -21,7 +21,6 @@ type Server struct {
 	Mounts                      []*MountPoint
 	DiscoverRemoteSessionIssuer http.Handler
 	CreateRemoteSessionIssuer   http.Handler
-	RegisterRemoteSessionIssuer http.Handler
 	UpdateRemoteSessionIssuer   http.Handler
 	ListRemoteSessionIssuers    http.Handler
 	GetRemoteSessionIssuer      http.Handler
@@ -57,7 +56,6 @@ func New(
 		Mounts: []*MountPoint{
 			{"DiscoverRemoteSessionIssuer", "POST", "/rpc/remoteSessionIssuers.discover"},
 			{"CreateRemoteSessionIssuer", "POST", "/rpc/remoteSessionIssuers.create"},
-			{"RegisterRemoteSessionIssuer", "POST", "/rpc/remoteSessionIssuers.register"},
 			{"UpdateRemoteSessionIssuer", "POST", "/rpc/remoteSessionIssuers.update"},
 			{"ListRemoteSessionIssuers", "GET", "/rpc/remoteSessionIssuers.list"},
 			{"GetRemoteSessionIssuer", "GET", "/rpc/remoteSessionIssuers.get"},
@@ -65,7 +63,6 @@ func New(
 		},
 		DiscoverRemoteSessionIssuer: NewDiscoverRemoteSessionIssuerHandler(e.DiscoverRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 		CreateRemoteSessionIssuer:   NewCreateRemoteSessionIssuerHandler(e.CreateRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		RegisterRemoteSessionIssuer: NewRegisterRemoteSessionIssuerHandler(e.RegisterRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 		UpdateRemoteSessionIssuer:   NewUpdateRemoteSessionIssuerHandler(e.UpdateRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 		ListRemoteSessionIssuers:    NewListRemoteSessionIssuersHandler(e.ListRemoteSessionIssuers, mux, decoder, encoder, errhandler, formatter),
 		GetRemoteSessionIssuer:      NewGetRemoteSessionIssuerHandler(e.GetRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
@@ -80,7 +77,6 @@ func (s *Server) Service() string { return "remoteSessionIssuers" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DiscoverRemoteSessionIssuer = m(s.DiscoverRemoteSessionIssuer)
 	s.CreateRemoteSessionIssuer = m(s.CreateRemoteSessionIssuer)
-	s.RegisterRemoteSessionIssuer = m(s.RegisterRemoteSessionIssuer)
 	s.UpdateRemoteSessionIssuer = m(s.UpdateRemoteSessionIssuer)
 	s.ListRemoteSessionIssuers = m(s.ListRemoteSessionIssuers)
 	s.GetRemoteSessionIssuer = m(s.GetRemoteSessionIssuer)
@@ -94,7 +90,6 @@ func (s *Server) MethodNames() []string { return remotesessionissuers.MethodName
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountDiscoverRemoteSessionIssuerHandler(mux, h.DiscoverRemoteSessionIssuer)
 	MountCreateRemoteSessionIssuerHandler(mux, h.CreateRemoteSessionIssuer)
-	MountRegisterRemoteSessionIssuerHandler(mux, h.RegisterRemoteSessionIssuer)
 	MountUpdateRemoteSessionIssuerHandler(mux, h.UpdateRemoteSessionIssuer)
 	MountListRemoteSessionIssuersHandler(mux, h.ListRemoteSessionIssuers)
 	MountGetRemoteSessionIssuerHandler(mux, h.GetRemoteSessionIssuer)
@@ -191,60 +186,6 @@ func NewCreateRemoteSessionIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createRemoteSessionIssuer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionIssuers")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountRegisterRemoteSessionIssuerHandler configures the mux to serve the
-// "remoteSessionIssuers" service "registerRemoteSessionIssuer" endpoint.
-func MountRegisterRemoteSessionIssuerHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/remoteSessionIssuers.register", f)
-}
-
-// NewRegisterRemoteSessionIssuerHandler creates a HTTP handler which loads the
-// HTTP request and calls the "remoteSessionIssuers" service
-// "registerRemoteSessionIssuer" endpoint.
-func NewRegisterRemoteSessionIssuerHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeRegisterRemoteSessionIssuerRequest(mux, decoder)
-		encodeResponse = EncodeRegisterRemoteSessionIssuerResponse(encoder)
-		encodeError    = EncodeRegisterRemoteSessionIssuerError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "registerRemoteSessionIssuer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -1,11 +1,30 @@
 import type { Gram } from "@gram/client";
-import type {
-  ExternalMCPToolDefinition,
-  RemoteSessionIssuerDraft,
-  Tool,
+import {
+  CreateRemoteSessionClientFormTokenEndpointAuthMethod,
+  type ExternalMCPToolDefinition,
+  type RemoteSessionIssuerDraft,
+  type Tool,
 } from "@gram/client/models/components";
 
+import {
+  type AuthedFetch,
+  proxyRegisterUpstreamClient,
+} from "@/lib/proxyRegisterUpstreamClient";
 import { getServerURL } from "@/lib/utils";
+
+function narrowTokenEndpointAuthMethod(
+  value: string | null | undefined,
+): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
+  if (
+    value ===
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
+    value ===
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost
+  ) {
+    return value;
+  }
+  return undefined;
+}
 
 export const ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG =
   "onboard-external-mcp-to-user-sessions";
@@ -110,15 +129,15 @@ export function externalMcpUserSessionOAuthConfigFromMetadata({
 
 export async function onboardExternalMcpToUserSessions({
   client,
+  authedFetch,
   toolsetSlug,
-  toolsetName,
   oauth,
   options,
   sessionDurationHours = DEFAULT_USER_SESSION_DURATION_HOURS,
 }: {
   client: Gram;
+  authedFetch: AuthedFetch;
   toolsetSlug: string;
-  toolsetName: string;
   oauth: ExternalMcpUserSessionOAuthConfig;
   options?: RequestOptions;
   sessionDurationHours?: number;
@@ -166,13 +185,20 @@ export async function onboardExternalMcpToUserSessions({
     options,
   );
 
-  await client.remoteSessionIssuers.register(
+  const proxyRegistered = await proxyRegisterUpstreamClient(authedFetch, {
+    registrationEndpoint:
+      draft?.registrationEndpoint ?? oauth.registrationEndpoint,
+  });
+  await client.remoteSessionClients.create(
     {
-      registerRemoteSessionIssuerForm: {
+      createRemoteSessionClientForm: {
         remoteSessionIssuerId: remoteSessionIssuer.id,
         userSessionIssuerId: userSessionIssuer.id,
-        clientName: toolsetName || "Gram",
-        redirectUris: [remoteLoginCallbackURL()],
+        clientId: proxyRegistered.clientId,
+        clientSecret: proxyRegistered.clientSecret || undefined,
+        tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(
+          proxyRegistered.tokenEndpointAuthMethod,
+        ),
       },
     },
     undefined,

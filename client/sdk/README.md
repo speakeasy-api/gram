@@ -233,6 +233,7 @@ run();
 
 * [deleteDomain](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 * [getDomain](docs/sdks/domains/README.md#getdomain) - getDomain domains
+* [listMcpEndpoints](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 * [registerDomain](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 
 ### [Environments](docs/sdks/environments/README.md)
@@ -290,6 +291,7 @@ run();
 
 ### [McpEndpoints](docs/sdks/mcpendpoints/README.md)
 
+* [checkSlugAvailability](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 * [create](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 * [delete](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 * [get](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
@@ -397,7 +399,6 @@ run();
 * [discover](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
 * [get](docs/sdks/remotesessionissuers/README.md#get) - getRemoteSessionIssuer remoteSessionIssuers
 * [list](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
-* [register](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
 * [update](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 
 ### [RemoteSessions](docs/sdks/remotesessions/README.md)
@@ -418,6 +419,16 @@ run();
 ### [Risk.Capabilities](docs/sdks/capabilities/README.md)
 
 * [get](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
+
+### [Risk.Categories](docs/sdks/categories/README.md)
+
+* [list](docs/sdks/categories/README.md#list) - listRiskCategories risk
+
+### [Risk.Overview](docs/sdks/overview/README.md)
+
+* [get](docs/sdks/overview/README.md#get) - getRiskOverview risk
+* [rules](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+* [userBreakdown](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 
 ### [Risk.Policies](docs/sdks/policies/README.md)
 
@@ -625,6 +636,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`deploymentsRedeployDeployment`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`domainsDeleteDomain`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`domainsGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
+- [`domainsListMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 - [`domainsRegisterDomain`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`environmentsClone`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
@@ -655,6 +667,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`mcpEndpointsCheckSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`mcpEndpointsCreate`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`mcpEndpointsDelete`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 - [`mcpEndpointsGet`](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
@@ -729,7 +742,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteSessionIssuersDiscover`](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
 - [`remoteSessionIssuersGet`](docs/sdks/remotesessionissuers/README.md#get) - getRemoteSessionIssuer remoteSessionIssuers
 - [`remoteSessionIssuersList`](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
-- [`remoteSessionIssuersRegister`](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
 - [`remoteSessionIssuersUpdate`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 - [`remoteSessionsList`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`remoteSessionsRevoke`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
@@ -738,6 +750,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskApprovalsDelete`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
 - [`riskApprovalsList`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
 - [`riskCapabilitiesGet`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
+- [`riskCategoriesList`](docs/sdks/categories/README.md#list) - listRiskCategories risk
+- [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
+- [`riskOverviewRules`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`riskOverviewUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`riskPoliciesCreate`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`riskPoliciesDelete`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 - [`riskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
@@ -860,6 +876,7 @@ To learn about this feature and how to get started, check
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
+- [`useCheckMcpEndpointSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneClientFromOAuthProxyProviderMutation`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`useCloneEnvironmentMutation`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
@@ -893,6 +910,7 @@ To learn about this feature and how to get started, check
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
 - [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
+- [`useCustomDomainMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
@@ -1005,7 +1023,6 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
-- [`useRegisterRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
 - [`useRemoteMcpServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`useRemoteSessionClient`](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
 - [`useRemoteSessionClients`](docs/sdks/remotesessionclients/README.md#list) - listRemoteSessionClients remoteSessionClients
@@ -1028,16 +1045,20 @@ To learn about this feature and how to get started, check
 - [`useRiskApprovalsDeleteMutation`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
 - [`useRiskApproveShadowMCPMutation`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
 - [`useRiskCapabilities`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
+- [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`useRiskListResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`useRiskListShadowMCPApprovals`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
+- [`useRiskOverview`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`useRiskPoliciesDeleteMutation`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 - [`useRiskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
 - [`useRiskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
 - [`useRiskPoliciesTriggerMutation`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+- [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry

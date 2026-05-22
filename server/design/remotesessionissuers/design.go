@@ -3,7 +3,6 @@ package remotesessionissuers
 import (
 	. "goa.design/goa/v3/dsl"
 
-	"github.com/speakeasy-api/gram/server/design/remotesessionclients"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
@@ -65,31 +64,6 @@ var _ = Service("remoteSessionIssuers", func() {
 		Meta("openapi:operationId", "createRemoteSessionIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateRemoteSessionIssuer"}`)
-	})
-
-	Method("registerRemoteSessionIssuer", func() {
-		Description("Perform an RFC 7591 Dynamic Client Registration call against an existing issuer's registration_endpoint and persist the issued credentials as a new remote_session_client. The issuer must already have a registration_endpoint configured.")
-
-		Payload(func() {
-			Extend(RegisterRemoteSessionIssuerForm)
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		Result(remotesessionclients.RemoteSessionClient)
-
-		HTTP(func() {
-			POST("/rpc/remoteSessionIssuers.register")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "registerRemoteSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "register")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RegisterRemoteSessionIssuer"}`)
 	})
 
 	Method("updateRemoteSessionIssuer", func() {
@@ -306,19 +280,4 @@ var ListRemoteSessionIssuersResult = Type("ListRemoteSessionIssuersResult", func
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 
 	Required("items")
-})
-
-var RegisterRemoteSessionIssuerForm = Type("RegisterRemoteSessionIssuerForm", func() {
-	Description("Form for registering a new remote_session_client against an existing remote_session_issuer via RFC 7591 Dynamic Client Registration.")
-
-	Attribute("remote_session_issuer_id", String, "The remote_session_issuer to register against. Must have a registration_endpoint configured.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("user_session_issuer_id", String, "The user_session_issuer the issued client is paired with.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("client_name", String, "Optional client_name to send in the RFC 7591 registration request.")
-	Attribute("redirect_uris", ArrayOf(String), "Optional redirect_uris to send in the RFC 7591 registration request.")
-
-	Required("remote_session_issuer_id", "user_session_issuer_id")
 })

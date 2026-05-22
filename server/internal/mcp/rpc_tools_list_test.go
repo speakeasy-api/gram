@@ -13,7 +13,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -211,7 +210,7 @@ func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant mcp:connect only for "allowed_tool".
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -248,7 +247,7 @@ func TestServePublic_RBAC_ToolsList_ServerLevelGrantReturnsAll(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Server-level grant (no tool dimension) — all tools allowed.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -278,7 +277,7 @@ func TestServePublic_RBAC_ToolsList_NoGrantsDenied(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// mcp:connect grant for a DIFFERENT toolset — should not match.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -303,7 +302,7 @@ func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant access to tool_a and tool_c but not tool_b.
 	ctx = authztest.WithExactGrants(t, ctx,
@@ -348,7 +347,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant mcp:connect scoped to read_only disposition only.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -386,7 +385,7 @@ func TestServePublic_RBAC_ToolsList_DisabledRBACAllowsAll(t *testing.T) {
 	// Engine with RBAC disabled — simulates org without RBAC feature flag.
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// No grants in context at all. With RBAC disabled, every tool should pass.
 	for _, tool := range []string{"tool_one", "tool_two", "tool_three"} {
@@ -406,7 +405,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *tes
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Server-level grant (no disposition key) — all dispositions allowed.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{

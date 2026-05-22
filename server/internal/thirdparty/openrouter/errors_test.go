@@ -141,7 +141,6 @@ func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
-		&mockChatResolutionAnalyzer{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}

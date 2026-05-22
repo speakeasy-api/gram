@@ -166,6 +166,7 @@ const (
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
+	McpServerIDKey                 = attribute.Key("gram.mcp_server.id")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
 	MimeTypeKey                    = attribute.Key("mime.type")
@@ -210,6 +211,8 @@ const (
 	AccessMemberIDKey               = attribute.Key("gram.access.member.id")
 	AccessRoleIDKey                 = attribute.Key("gram.access.role.id")
 	AccessRoleSlugKey               = attribute.Key("gram.access.role.slug")
+	AccessRoleSourceKey             = attribute.Key("gram.access.role.source")
+	AccessRoleDBWriteFailedKey      = attribute.Key("gram.access.role.db_write_failed_post_workos")
 	OrganizationRoleAssignmentIDKey = attribute.Key("gram.org.role_assignment.id")
 	OrganizationIDKey               = attribute.Key("gram.org.id")
 	OrganizationSlugKey             = attribute.Key("gram.org.slug")
@@ -279,6 +282,9 @@ const (
 	// the stored chat_message alone. Mirrors the value written to the
 	// risk_results.match column by hook-time blocks.
 	MCPMatchKey = attribute.Key("gram.mcp.match")
+	// MCPServerURLKey is the MCP server URL resolved from the SessionStart
+	// inventory snapshot (HTTP/SSE servers only). Empty for stdio servers.
+	MCPServerURLKey = attribute.Key("gram.mcp.server_url")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
@@ -911,6 +917,16 @@ func SlogAccessRoleID(v string) slog.Attr      { return slog.String(string(Acces
 func AccessRoleSlug(v string) attribute.KeyValue { return AccessRoleSlugKey.String(v) }
 func SlogAccessRoleSlug(v string) slog.Attr      { return slog.String(string(AccessRoleSlugKey), v) }
 
+func AccessRoleSource(v string) attribute.KeyValue { return AccessRoleSourceKey.String(v) }
+func SlogAccessRoleSource(v string) slog.Attr      { return slog.String(string(AccessRoleSourceKey), v) }
+
+func AccessRoleDBWriteFailed(v bool) attribute.KeyValue {
+	return AccessRoleDBWriteFailedKey.Bool(v)
+}
+func SlogAccessRoleDBWriteFailed(v bool) slog.Attr {
+	return slog.Bool(string(AccessRoleDBWriteFailedKey), v)
+}
+
 func OrganizationRoleAssignmentID(v string) attribute.KeyValue {
 	return OrganizationRoleAssignmentIDKey.String(v)
 }
@@ -1128,6 +1144,9 @@ func SlogResourceURN(v string) slog.Attr      { return slog.String(string(Resour
 
 func ResourceURI(v string) attribute.KeyValue { return ResourceURIKey.String(v) }
 func SlogResourceURI(v string) slog.Attr      { return slog.String(string(ResourceURIKey), v) }
+
+func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
+func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }

@@ -21,13 +21,19 @@ type CreateRemoteSessionClientRequestBody struct {
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuer this client is paired with.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// Manual-path client_id supplied by the caller.
-	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// Manual-path client secret. Gram encrypts before persisting.
+	// client_id supplied by the caller.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// client_secret supplied by the caller. Gram encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
-	// When true, Gram fires an outbound RFC 7591 DCR call against the issuer's
-	// registration_endpoint and ignores client_id and client_secret.
-	AutoRegister *bool `form:"auto_register,omitempty" json:"auto_register,omitempty" xml:"auto_register,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Omit to default
+	// to client_secret_basic.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 }
 
 // CloneClientFromOAuthProxyProviderRequestBody is the type of the
@@ -41,6 +47,15 @@ type CloneClientFromOAuthProxyProviderRequestBody struct {
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
 	// The user_session_issuer the new client is paired with.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// How the cloned client authenticates at the issuer's token endpoint. Omit to
+	// default to client_secret_basic.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance should request for the cloned
+	// client. Omit to fall back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange for the cloned client.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 }
 
 // UpdateRemoteSessionClientRequestBody is the type of the
@@ -53,6 +68,14 @@ type UpdateRemoteSessionClientRequestBody struct {
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Re-pair with a different user_session_issuer.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Change how the client authenticates at the issuer's token endpoint.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
+	// unchanged.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Replace the upstream OAuth audience sent for this client. Omit to leave
+	// unchanged.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 }
 
 // CreateRemoteSessionClientResponseBody is the type of the
@@ -73,8 +96,17 @@ type CreateRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CloneClientFromOAuthProxyProviderResponseBody is the type of the
@@ -95,8 +127,17 @@ type CloneClientFromOAuthProxyProviderResponseBody struct {
 	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateRemoteSessionClientResponseBody is the type of the
@@ -117,8 +158,17 @@ type UpdateRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListRemoteSessionClientsResponseBody is the type of the
@@ -147,8 +197,17 @@ type GetRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateRemoteSessionClientUnauthorizedResponseBody is the type of the
@@ -1308,8 +1367,17 @@ type RemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateRemoteSessionClientRequestBody builds the HTTP request body from
@@ -1317,11 +1385,18 @@ type RemoteSessionClientResponseBody struct {
 // "remoteSessionClients" service.
 func NewCreateRemoteSessionClientRequestBody(p *remotesessionclients.CreateRemoteSessionClientPayload) *CreateRemoteSessionClientRequestBody {
 	body := &CreateRemoteSessionClientRequestBody{
-		RemoteSessionIssuerID: p.RemoteSessionIssuerID,
-		UserSessionIssuerID:   p.UserSessionIssuerID,
-		ClientID:              p.ClientID,
-		ClientSecret:          p.ClientSecret,
-		AutoRegister:          p.AutoRegister,
+		RemoteSessionIssuerID:   p.RemoteSessionIssuerID,
+		UserSessionIssuerID:     p.UserSessionIssuerID,
+		ClientID:                p.ClientID,
+		ClientSecret:            p.ClientSecret,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+		Audience:                p.Audience,
+	}
+	if p.Scope != nil {
+		body.Scope = make([]string, len(p.Scope))
+		for i, val := range p.Scope {
+			body.Scope[i] = val
+		}
 	}
 	return body
 }
@@ -1331,9 +1406,17 @@ func NewCreateRemoteSessionClientRequestBody(p *remotesessionclients.CreateRemot
 // "remoteSessionClients" service.
 func NewCloneClientFromOAuthProxyProviderRequestBody(p *remotesessionclients.CloneClientFromOAuthProxyProviderPayload) *CloneClientFromOAuthProxyProviderRequestBody {
 	body := &CloneClientFromOAuthProxyProviderRequestBody{
-		OauthProxyProviderID:  p.OauthProxyProviderID,
-		RemoteSessionIssuerID: p.RemoteSessionIssuerID,
-		UserSessionIssuerID:   p.UserSessionIssuerID,
+		OauthProxyProviderID:    p.OauthProxyProviderID,
+		RemoteSessionIssuerID:   p.RemoteSessionIssuerID,
+		UserSessionIssuerID:     p.UserSessionIssuerID,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+		Audience:                p.Audience,
+	}
+	if p.Scope != nil {
+		body.Scope = make([]string, len(p.Scope))
+		for i, val := range p.Scope {
+			body.Scope[i] = val
+		}
 	}
 	return body
 }
@@ -1343,9 +1426,17 @@ func NewCloneClientFromOAuthProxyProviderRequestBody(p *remotesessionclients.Clo
 // "remoteSessionClients" service.
 func NewUpdateRemoteSessionClientRequestBody(p *remotesessionclients.UpdateRemoteSessionClientPayload) *UpdateRemoteSessionClientRequestBody {
 	body := &UpdateRemoteSessionClientRequestBody{
-		ID:                  p.ID,
-		ClientSecret:        p.ClientSecret,
-		UserSessionIssuerID: p.UserSessionIssuerID,
+		ID:                      p.ID,
+		ClientSecret:            p.ClientSecret,
+		UserSessionIssuerID:     p.UserSessionIssuerID,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+		Audience:                p.Audience,
+	}
+	if p.Scope != nil {
+		body.Scope = make([]string, len(p.Scope))
+		for i, val := range p.Scope {
+			body.Scope[i] = val
+		}
 	}
 	return body
 }
@@ -1355,15 +1446,23 @@ func NewUpdateRemoteSessionClientRequestBody(p *remotesessionclients.UpdateRemot
 // from a HTTP "OK" response.
 func NewCreateRemoteSessionClientRemoteSessionClientOK(body *CreateRemoteSessionClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-		ClientID:              *body.ClientID,
-		ClientIDIssuedAt:      *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt: body.ClientSecretExpiresAt,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:     *body.UserSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v
@@ -1524,15 +1623,23 @@ func NewCreateRemoteSessionClientGatewayError(body *CreateRemoteSessionClientGat
 // result from a HTTP "OK" response.
 func NewCloneClientFromOAuthProxyProviderRemoteSessionClientOK(body *CloneClientFromOAuthProxyProviderResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-		ClientID:              *body.ClientID,
-		ClientIDIssuedAt:      *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt: body.ClientSecretExpiresAt,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:     *body.UserSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v
@@ -1697,15 +1804,23 @@ func NewCloneClientFromOAuthProxyProviderGatewayError(body *CloneClientFromOAuth
 // from a HTTP "OK" response.
 func NewUpdateRemoteSessionClientRemoteSessionClientOK(body *UpdateRemoteSessionClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-		ClientID:              *body.ClientID,
-		ClientIDIssuedAt:      *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt: body.ClientSecretExpiresAt,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:     *body.UserSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v
@@ -2034,15 +2149,23 @@ func NewListRemoteSessionClientsGatewayError(body *ListRemoteSessionClientsGatew
 // a HTTP "OK" response.
 func NewGetRemoteSessionClientRemoteSessionClientOK(body *GetRemoteSessionClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-		ClientID:              *body.ClientID,
-		ClientIDIssuedAt:      *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt: body.ClientSecretExpiresAt,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:     *body.UserSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		Audience:                body.Audience,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v
@@ -2393,6 +2516,11 @@ func ValidateCreateRemoteSessionClientResponseBody(body *CreateRemoteSessionClie
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -2447,6 +2575,11 @@ func ValidateCloneClientFromOAuthProxyProviderResponseBody(body *CloneClientFrom
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -2500,6 +2633,11 @@ func ValidateUpdateRemoteSessionClientResponseBody(body *UpdateRemoteSessionClie
 	}
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2570,6 +2708,11 @@ func ValidateGetRemoteSessionClientResponseBody(body *GetRemoteSessionClientResp
 	}
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4083,6 +4226,11 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

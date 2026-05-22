@@ -1013,8 +1013,14 @@ func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.E
 		if p.ExternalUserID != nil {
 			values.Add("external_user_id", *p.ExternalUserID)
 		}
+		if p.AssistantID != nil {
+			values.Add("assistant_id", *p.AssistantID)
+		}
 		if p.ResolutionStatus != nil {
 			values.Add("resolution_status", *p.ResolutionStatus)
+		}
+		if p.HasRisk != nil {
+			values.Add("has_risk", *p.HasRisk)
 		}
 		if p.From != nil {
 			values.Add("from", *p.From)
@@ -1713,6 +1719,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		TotalTokens:          v.TotalTokens,
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
+		RiskFindingsCount:    v.RiskFindingsCount,
 	}
 
 	return res
@@ -1756,6 +1763,7 @@ func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResol
 		TotalTokens:          v.TotalTokens,
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
+		RiskFindingsCount:    v.RiskFindingsCount,
 	}
 	res.Resolutions = make([]*chat.ChatResolution, len(v.Resolutions))
 	for i, val := range v.Resolutions {

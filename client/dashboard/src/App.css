@@ -96,6 +96,43 @@
   }
 }
 
+@keyframes nav-shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+.nav-shimmer {
+  background: linear-gradient(
+    90deg,
+    currentColor 25%,
+    oklch(1 0 0 / 0.6) 50%,
+    currentColor 75%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: nav-shimmer 1.2s ease-in-out infinite;
+}
+
+.dark .nav-shimmer {
+  background: linear-gradient(
+    90deg,
+    currentColor 25%,
+    oklch(1 0 0 / 0.4) 50%,
+    currentColor 75%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: nav-shimmer 1.2s ease-in-out infinite;
+}
+
 .server-card:hover .scroll-dots-target,
 .dot-card:hover .scroll-dots-target {
   animation: scroll-dots 3s linear infinite;

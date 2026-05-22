@@ -1,5 +1,87 @@
 # server
 
+## 0.58.0
+
+### Minor Changes
+
+- d755880: Assistants spec panel now has a "Sessions" quick link that opens Agent Sessions filtered to that assistant.
+
+## 0.57.0
+
+### Minor Changes
+
+- 3db9f30: Deleting a custom domain now soft-deletes every `mcp_endpoints` row registered under it across all projects in the org, emits one `mcp-endpoint:delete` audit event per cascaded row, and the dashboard delete-confirmation modal previews the impacted endpoints via the new `/rpc/domain.listMcpEndpoints` endpoint.
+- 3531836: Add a nullable `audience` column to `remote_session_clients` and surface it on the remoteSessionClients management API. When set, the upstream OAuth dance attaches the `audience` parameter to the authorize redirect, the authorization-code → token exchange, and every refresh-token request; when unset the parameter is omitted entirely.
+- 3531836: Add a nullable `scope` column to `remote_session_clients` and surface it on the remoteSessionClients management API. When set, the upstream OAuth dance requests these scopes instead of echoing the issuer's full `scopes_supported`, which avoids over-granting Gram access on providers that advertise broad scope sets.
+- 3452d17: Cron triggers now accept an optional `note` field, matching wake triggers. The note is included in every scheduled tick the assistant sees, letting one assistant carry multiple cron triggers with distinct per-schedule steering (e.g. "run daily digest" vs "check deploy status").
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings.
+
+### Patch Changes
+
+- 4f00967: Fix token graph blanking when filtering by agent type on /insights/costs. Claude Code usage metrics were missing the hook_source attribute, causing the filter to return no data for non-cursor agents.
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings
+- 35a7938: Improved server names in hooks logs. Improved UI for inspecting indiivudal logs
+- bf85fad: Slack-triggered assistant chats now open a fresh assistant thread for each top-level message instead of folding distinct conversations onto a single per-channel thread. Top-level Slack messages and DMs used to share one Gram thread (and one Fly runtime) per channel, so unrelated users' messages bled into the same context window.
+- 99d3d7f: Assistants on Slack now surface MCP OAuth re-auth via an ephemeral Block Kit button instead of dumping the raw URL into the thread, so only the user that needs to authenticate sees the prompt.
+
+## 0.56.0
+
+### Minor Changes
+
+- 978d13f: Integrate `/x/mcp` with `mcp_servers.user_session_issuer_id`. The `mcpServers.create` and `mcpServers.update` management endpoints now accept an optional `user_session_issuer_id`, and `McpServer` carries it on read. When set on an `mcp_server`, `/x/mcp` requests are issuer-gated: callers without a valid Authorization receive 401 + `WWW-Authenticate` pointing at `/.well-known/oauth-protected-resource/x/mcp/{slug}`, and the full OAuth surface — dynamic client registration, authorize, IDP callback, consent, token, revoke — is mounted under `/x/mcp/{slug}/...` against the same JWT machinery `/mcp` uses, with audience bound to `urn.NewUserSessionIssuer(...)` so tokens stay portable across toolset-backed and remote-backed servers under the same issuer. Both well-known metadata routes under `/x/mcp` now return the issuer-gated metadata shape for any addressed `mcp_server` with an issuer set, including remote-backed servers (previously 404). The `/oauth/proxy-register` DCR helper now also registers `<server>/x/mcp/remote_login_callback` so remote-OAuth `mcp_servers` reached via `/x/mcp/{slug}/connect` can complete the upstream callback against the same upstream client registration.
+- 9aa2fed: Assistants can now authenticate with OAuth-protected MCP servers. When a configured MCP server requires user authentication, the assistant relays the authorization link through an available output tool; once the user completes authentication, the assistant reconnects and continues its task.
+- 0ef489c: Slack assistants can now manage the full message and channel lifecycle: edit, delete, and ephemeral messages; pull permalinks; open DMs; create, join, leave, invite, archive, and rename channels; manage pins, bookmarks, usergroup membership, reminders, file uploads, canvases, and presence/DND. Closes the previous gap where assistants could read Slack but barely write to it.
+
+### Patch Changes
+
+- 4f16ea3: Chat completions no longer generate hidden reasoning tokens. Previously, OpenRouter could route requests through models that produced reasoning output Gram discarded before storage — yet still billed. The proxy and every internal completion caller (chat title generation, Slack agent loop, risk policy naming, structured object completion) now explicitly disable reasoning, eliminating that silent cost without changing observed behavior.
+- 11d0b70: Anthropic prompt caching now actually takes effect for assistant chats. The `/chat/completions` proxy used to strip `cache_control` markers off the request body before forwarding to OpenRouter, so every Anthropic call billed at the full input rate. The proxy now preserves the markers at the top level, on tool definitions, and on message content blocks, so Claude requests with stable prefixes can serve from cache.
+- 5746c4e: Assistants can now update their own triggers. Previously, calling `configure_trigger` on an existing trigger returned a generic internal error every time, even though the assistant could read its triggers fine — its scoped tool was being silently swapped for a stricter variant that demanded fields the assistant isn't allowed to send. As a side effect, an assistant's trigger list no longer leaks sibling assistants' triggers in the same project.
+- 4e1be24: Outbound OpenRouter chat completions now carry a session ID, user, source metadata, and distributed-trace identifiers so OpenRouter's dashboard can group requests per conversation and roll up cost per customer, and so Datadog traces correlate with OpenRouter's request records.
+- 31bafa1: Deprecated obsolete outbox event types and explicitly adds versioning in the name scheme of events. In particular, `risk_finding.created` is replaced by `risk_finding.created_v1`.
+
+## 0.55.1
+
+### Patch Changes
+
+- cb50037: Allow client_secret_post as an optional auth method in remote session negotiation
+
+## 0.55.0
+
+### Minor Changes
+
+- ecdd727: support remote mcp interceptor payload mutation; implement shadowmcp and mcp:connect interceptors
+- a8cf1e0: Emit audit log entries for collection mutations: `mcp_collection:create`, `:update`, `:delete`, `:attach_server`, and `:detach_server`. Update/AttachServer/DetachServer now run in a transaction alongside the audit insert, and a new `urn.McpCollection` identifier (prefix `mcp_collection`) is used as the audit subject.
+- 4ea14f3: Enforce RBAC on the collections API. `List` and `ListServers` now require `org:read`; `Create`, `Update`, `Delete`, `AttachServer`, and `DetachServer` require `org:admin`. The dashboard's sidebar, collections list, and detail pages open up to `org:read` members, while create/edit/delete and server attach/detach controls stay behind `org:admin`.
+- 5dcb8aa: `RiskResult.rule_id` and `RiskResult.description` now follow a consistent shape across every detection source.
+
+  `rule_id` is lowercase, snake_case, with an optional dot-separated category prefix:
+
+  - `secret.<rule>` for credentials and secrets (e.g. `secret.anthropic_api_key`)
+  - `pii.<rule>` for personal, financial, and medical data (e.g. `pii.credit_card`, `pii.medical_license`)
+  - `shadow_mcp` for unverified MCP tool calls
+  - `destructive.tool` for MCP tool calls flagged as destructive
+  - `destructive.<category>.<name>` for destructive shell, git, database, and cloud commands (e.g. `destructive.shell.rm_rf`, `destructive.git.push_force`)
+  - `prompt_injection` for prompt injection findings
+
+  `(source, rule_id)` is the stable identifier downstream consumers should match on. The dotted prefix alone is enough to bucket findings by risk category.
+
+  `description` is a short human-readable sentence describing the finding. It never echoes the matched value and is safe to display verbatim.
+
+  Historical rows written before this release keep their original `rule_id` and `description` values; a follow-up migration will rewrite them.
+
+- 4eadd44: Show assigned roles on pending organization invites and allow org admins to change the role before acceptance. Invite creation and invite role changes now emit audit log entries.
+- 95e1458: The webhooks feature now generates a catalog of event types and schemas for them. This is emitted as an OpenAPI 3.1 document that is synced to svix.
+- 376a74b: Added granular webhook event types for audit log entries — each auditable subject (deployments, projects, MCP servers, API keys, toolsets, risk policies, sessions, and more) now emits its own typed webhook event (e.g. audit_log.deployment_event_v1), enabling subscribers to filter by subject domain rather than receiving all audit activity under a single event type.
+
+### Patch Changes
+
+- bede6e6: Exclude per-request plugin download API key creation from the audit log to prevent flooding with `api_key:create` events.
+- 4aceb60: skip WorkOS reads when org already linked locally
+- 4eadd44: Invite acceptance now uses Gram invite tokens plus WorkOS User Management Magic Auth codes.
+  The server validates the invite token, creates and consumes the Magic Auth code for the invited email, verifies the email match, and completes provisioning.
+- 1562656: Drop Presidio IP_ADDRESS false positives produced from short-form IPv6 strings (`b::`, `dead::`, `1::`, …) and IPv4 unspecified `0.0.0.0`. Analysis of prod risk_results showed these single-hex-group `<hex>::` matches dominated IP_ADDRESS noise alongside the existing `::` filter; they're now dropped before becoming findings.
+
 ## 0.54.0
 
 ### Minor Changes

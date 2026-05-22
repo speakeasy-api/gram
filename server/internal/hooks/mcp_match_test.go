@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // The tool-name prefix Claude Code derives from each entry of `claude mcp
@@ -43,6 +45,7 @@ func TestMatchCachedMCPEntry(t *testing.T) {
 		{Source: "claude.ai", Name: "Linear (Speakeasy)", URL: "https://chat.speakeasy.com/mcp/linear"},
 		{Source: "plugin", PluginName: "slack", Name: "slack", URL: "https://mcp.slack.com/mcp"},
 		{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"},
+		{Source: "claude.ai", Name: "Slack", URL: "https://mcp.example.com/slack", ConnectorUUID: "a1b2c3d4-e5f6-7890-abcd-ef0123456789"},
 	}
 
 	got := matchCachedMCPEntry(entries, "gram")
@@ -56,30 +59,110 @@ func TestMatchCachedMCPEntry(t *testing.T) {
 	if assert.NotNil(t, got) {
 		assert.Equal(t, "https://chat.speakeasy.com/mcp/linear", got.URL)
 	}
+
+	// Cowork inventory: tool names use the connector UUID as the server
+	// prefix, so the matcher resolves the entry by its ConnectorUUID field.
+	got = matchCachedMCPEntry(entries, "a1b2c3d4-e5f6-7890-abcd-ef0123456789")
+	if assert.NotNil(t, got) {
+		assert.Equal(t, "Slack", got.Name)
+		assert.Equal(t, "https://mcp.example.com/slack", got.URL)
+	}
+}
+
+func TestApplyMCPInventoryAttrs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil matched leaves attrs untouched", func(t *testing.T) {
+		t.Parallel()
+		attrs := map[attr.Key]any{attr.ToolCallSourceKey: "some-uuid"}
+		applyMCPInventoryAttrs(attrs, nil)
+		assert.Equal(t, "some-uuid", attrs[attr.ToolCallSourceKey])
+		_, hasURL := attrs[attr.MCPServerURLKey]
+		assert.False(t, hasURL)
+	})
+
+	t.Run("claude.ai entry overrides sanitized source with raw name", func(t *testing.T) {
+		t.Parallel()
+		attrs := map[attr.Key]any{attr.ToolCallSourceKey: "claude_ai_Slack"}
+		applyMCPInventoryAttrs(attrs, &MCPServerEntry{
+			Source: "claude.ai", Name: "Slack", URL: "https://mcp.example.com/slack",
+		})
+		assert.Equal(t, "Slack", attrs[attr.ToolCallSourceKey])
+		assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
+	})
+
+	t.Run("cowork entry overrides uuid source with name", func(t *testing.T) {
+		t.Parallel()
+		attrs := map[attr.Key]any{attr.ToolCallSourceKey: "a1b2c3d4-uuid"}
+		applyMCPInventoryAttrs(attrs, &MCPServerEntry{
+			Source: "claude.ai", Name: "Slack", URL: "https://mcp.example.com/slack",
+			ConnectorUUID: "a1b2c3d4-uuid",
+		})
+		assert.Equal(t, "Slack", attrs[attr.ToolCallSourceKey])
+		assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
+	})
+
+	t.Run("entry without name leaves source intact", func(t *testing.T) {
+		t.Parallel()
+		attrs := map[attr.Key]any{attr.ToolCallSourceKey: "a1b2c3d4-uuid"}
+		applyMCPInventoryAttrs(attrs, &MCPServerEntry{
+			Source: "claude.ai", URL: "https://mcp.example.com/slack",
+			ConnectorUUID: "a1b2c3d4-uuid",
+		})
+		assert.Equal(t, "a1b2c3d4-uuid", attrs[attr.ToolCallSourceKey])
+		assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
+	})
 }
 
 func TestIsGramHostedMCPURL(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		url  string
-		want bool
-	}{
-		{"https://app.getgram.ai/mcp/team-foo", true},
-		{"https://APP.GETGRAM.AI/mcp/team-foo", true}, // case-insensitive
-		{"http://app.getgram.ai/mcp/team-foo", true},  // http allowed (rare but valid)
-		{"https://chat.speakeasy.com/mcp/linear", false},
-		{"https://evil.getgram.ai/mcp/x", false}, // subdomain squat must NOT pass
-		{"https://mcp.slack.com/mcp", false},
-		{"http://localhost:8080/mcp/x", false},
-		{"", false},
-		{"not a url at all", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.url, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, isGramHostedMCPURL(tc.url))
-		})
-	}
+
+	t.Run("canonical host only", func(t *testing.T) {
+		t.Parallel()
+		cases := []struct {
+			url  string
+			want bool
+		}{
+			{"https://app.getgram.ai/mcp/team-foo", true},
+			{"https://APP.GETGRAM.AI/mcp/team-foo", true}, // case-insensitive
+			{"http://app.getgram.ai/mcp/team-foo", true},  // http allowed (rare but valid)
+			{"https://chat.speakeasy.com/mcp/linear", false},
+			{"https://evil.getgram.ai/mcp/x", false}, // subdomain squat must NOT pass
+			{"https://mcp.slack.com/mcp", false},
+			{"http://localhost:8080/mcp/x", false},
+			{"", false},
+			{"not a url at all", false},
+		}
+		for _, tc := range cases {
+			t.Run(tc.url, func(t *testing.T) {
+				t.Parallel()
+				assert.Equal(t, tc.want, isGramHostedMCPURL(tc.url))
+			})
+		}
+	})
+
+	t.Run("with additional trusted hosts", func(t *testing.T) {
+		t.Parallel()
+		cases := []struct {
+			url         string
+			extraHosts  []string
+			want        bool
+			description string
+		}{
+			{"https://chat.speakeasy.com/mcp/linear", []string{"chat.speakeasy.com"}, true, "custom domain matches"},
+			{"https://CHAT.SPEAKEASY.COM/mcp/linear", []string{"chat.speakeasy.com"}, true, "custom domain case-insensitive"},
+			{"https://app.getgram.ai/mcp/x", []string{"chat.speakeasy.com"}, true, "canonical still works with extra hosts"},
+			{"https://other.example.com/mcp/x", []string{"chat.speakeasy.com"}, false, "unknown host rejected"},
+			{"https://mcp.slack.com/mcp", []string{"chat.speakeasy.com"}, false, "third party rejected"},
+			{"", []string{"chat.speakeasy.com"}, false, "empty URL"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.description, func(t *testing.T) {
+				t.Parallel()
+				assert.Equal(t, tc.want, isGramHostedMCPURL(tc.url, tc.extraHosts...))
+			})
+		}
+	})
 }
 
 func TestParseClaudeToolName(t *testing.T) {

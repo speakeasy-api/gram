@@ -18,12 +18,13 @@ import (
 
 // Server lists the mcpEndpoints service endpoint HTTP handlers.
 type Server struct {
-	Mounts            []*MountPoint
-	CreateMcpEndpoint http.Handler
-	GetMcpEndpoint    http.Handler
-	ListMcpEndpoints  http.Handler
-	UpdateMcpEndpoint http.Handler
-	DeleteMcpEndpoint http.Handler
+	Mounts                           []*MountPoint
+	CreateMcpEndpoint                http.Handler
+	GetMcpEndpoint                   http.Handler
+	ListMcpEndpoints                 http.Handler
+	UpdateMcpEndpoint                http.Handler
+	CheckMcpEndpointSlugAvailability http.Handler
+	DeleteMcpEndpoint                http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,13 +58,15 @@ func New(
 			{"GetMcpEndpoint", "GET", "/rpc/mcpEndpoints.get"},
 			{"ListMcpEndpoints", "GET", "/rpc/mcpEndpoints.list"},
 			{"UpdateMcpEndpoint", "POST", "/rpc/mcpEndpoints.update"},
+			{"CheckMcpEndpointSlugAvailability", "GET", "/rpc/mcpEndpoints.checkSlugAvailability"},
 			{"DeleteMcpEndpoint", "DELETE", "/rpc/mcpEndpoints.delete"},
 		},
-		CreateMcpEndpoint: NewCreateMcpEndpointHandler(e.CreateMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
-		GetMcpEndpoint:    NewGetMcpEndpointHandler(e.GetMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
-		ListMcpEndpoints:  NewListMcpEndpointsHandler(e.ListMcpEndpoints, mux, decoder, encoder, errhandler, formatter),
-		UpdateMcpEndpoint: NewUpdateMcpEndpointHandler(e.UpdateMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
-		DeleteMcpEndpoint: NewDeleteMcpEndpointHandler(e.DeleteMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
+		CreateMcpEndpoint:                NewCreateMcpEndpointHandler(e.CreateMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
+		GetMcpEndpoint:                   NewGetMcpEndpointHandler(e.GetMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
+		ListMcpEndpoints:                 NewListMcpEndpointsHandler(e.ListMcpEndpoints, mux, decoder, encoder, errhandler, formatter),
+		UpdateMcpEndpoint:                NewUpdateMcpEndpointHandler(e.UpdateMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
+		CheckMcpEndpointSlugAvailability: NewCheckMcpEndpointSlugAvailabilityHandler(e.CheckMcpEndpointSlugAvailability, mux, decoder, encoder, errhandler, formatter),
+		DeleteMcpEndpoint:                NewDeleteMcpEndpointHandler(e.DeleteMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -76,6 +79,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetMcpEndpoint = m(s.GetMcpEndpoint)
 	s.ListMcpEndpoints = m(s.ListMcpEndpoints)
 	s.UpdateMcpEndpoint = m(s.UpdateMcpEndpoint)
+	s.CheckMcpEndpointSlugAvailability = m(s.CheckMcpEndpointSlugAvailability)
 	s.DeleteMcpEndpoint = m(s.DeleteMcpEndpoint)
 }
 
@@ -88,6 +92,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetMcpEndpointHandler(mux, h.GetMcpEndpoint)
 	MountListMcpEndpointsHandler(mux, h.ListMcpEndpoints)
 	MountUpdateMcpEndpointHandler(mux, h.UpdateMcpEndpoint)
+	MountCheckMcpEndpointSlugAvailabilityHandler(mux, h.CheckMcpEndpointSlugAvailability)
 	MountDeleteMcpEndpointHandler(mux, h.DeleteMcpEndpoint)
 }
 
@@ -285,6 +290,60 @@ func NewUpdateMcpEndpointHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateMcpEndpoint")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpEndpoints")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCheckMcpEndpointSlugAvailabilityHandler configures the mux to serve the
+// "mcpEndpoints" service "checkMcpEndpointSlugAvailability" endpoint.
+func MountCheckMcpEndpointSlugAvailabilityHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/mcpEndpoints.checkSlugAvailability", f)
+}
+
+// NewCheckMcpEndpointSlugAvailabilityHandler creates a HTTP handler which
+// loads the HTTP request and calls the "mcpEndpoints" service
+// "checkMcpEndpointSlugAvailability" endpoint.
+func NewCheckMcpEndpointSlugAvailabilityHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCheckMcpEndpointSlugAvailabilityRequest(mux, decoder)
+		encodeResponse = EncodeCheckMcpEndpointSlugAvailabilityResponse(encoder)
+		encodeError    = EncodeCheckMcpEndpointSlugAvailabilityError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "checkMcpEndpointSlugAvailability")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpEndpoints")
 		payload, err := decodeRequest(r)
 		if err != nil {

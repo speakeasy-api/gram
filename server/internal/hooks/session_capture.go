@@ -16,7 +16,6 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -50,6 +49,30 @@ func isConversationEvent(eventName string) bool {
 	}
 }
 
+// defaultChatTitleForSession picks the default chat title based on the
+// session's agent variant stamped by SessionStart. If the variant is
+// unknown (no SessionStart cached yet, or stamped with an unrecognized
+// value) we fall back to the ambiguous "Claude Session" title rather than
+// assuming claude-code — the title generator will replace it with a real
+// one once enough conversation is on file.
+func (s *Service) defaultChatTitleForSession(ctx context.Context, sessionID string) string {
+	if sessionID == "" {
+		return activities.DefaultClaudeAmbiguous
+	}
+	var variant string
+	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+		return activities.DefaultClaudeAmbiguous
+	}
+	switch variant {
+	case agentVariantCowork:
+		return activities.DefaultCoworkChatTitle
+	case agentVariantClaudeCode:
+		return activities.DefaultClaudeChatTitle
+	default:
+		return activities.DefaultClaudeAmbiguous
+	}
+}
+
 // sessionIDToUUID converts a Claude Code session_id string to a UUID.
 // The session_id is expected to already be a valid UUID string.
 // If parsing fails, falls back to generating a deterministic UUIDv5 from the session_id.
@@ -75,6 +98,8 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 		StopReason:         nil,
 		SuppressOutput:     nil,
 		SystemMessage:      nil,
+		Decision:           nil,
+		Reason:             nil,
 	}
 	if hookEventName == "PreToolUse" {
 		result.HookSpecificOutput = &HookSpecificOutput{
@@ -87,9 +112,47 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 	return result
 }
 
+// constructBlockResponse builds a hook result that blocks the current event
+// using the JSON shape Claude Code expects for the given hook. Per
+// https://code.claude.com/docs/en/hooks#decision-control:
+//
+//   - UserPromptSubmit / PostToolUse / Stop / SubagentStop: top-level
+//     `decision: "block"` + free-text `reason`. The reason is surfaced to
+//     the user (UserPromptSubmit) or to Claude (PostToolUse / Stop).
+//   - PreToolUse: nested `hookSpecificOutput.permissionDecision: "deny"`
+//   - `permissionDecisionReason`. Top-level `decision` is rejected.
+//
+// Other events (SessionStart, SessionEnd, Notification, PostToolUseFailure)
+// cannot block at all and must not be passed in.
+func constructBlockResponse(hookEventName, reason string) *gen.ClaudeHookResult {
+	result := makeHookResult(hookEventName)
+	if hookEventName == "PreToolUse" {
+		deny := "deny"
+		if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
+			output.PermissionDecision = &deny
+			output.PermissionDecisionReason = &reason
+		}
+		// systemMessage renders as a warning in the user's terminal;
+		// permissionDecisionReason is what Claude itself sees and may quote
+		// back. Set both so the user gets visible feedback regardless of how
+		// the client renders the deny.
+		result.SystemMessage = &reason
+		return result
+	}
+	block := "block"
+	result.Decision = &block
+	result.Reason = &reason
+	return result
+}
+
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
-// When a blocking risk policy matches, it denies the prompt with HTTP 403.
-// The send_hook.sh script converts 4xx responses to exit code 2 (block).
+// When a blocking risk policy matches, it returns 200 with a top-level
+// `decision: "block"` + `reason`, the shape Claude Code documents for
+// UserPromptSubmit. Claude Code erases the prompt from context and surfaces
+// the reason to the user. Returning 200 with a shaped body (instead of 4xx
+// or exit-code-2) is what makes the block reason render — stderr-only
+// blocks don't carry the reason field at all.
+// https://code.claude.com/docs/en/hooks#decision-control
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
 		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
@@ -100,7 +163,7 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.Claud
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
-			return nil, oops.E(oops.CodeForbidden, nil, "%s", userReason)
+			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
 	}
 	return makeHookResult(payload.HookEventName), nil
@@ -231,7 +294,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, ""))); err != nil {
 		return err
 	}
 
@@ -300,7 +363,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
@@ -354,7 +417,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	// If this was an error, we could optionally set tool_outcome based on isError
 	_ = isError
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
 }
 
 // marshalToJSON converts any value to a JSON string.

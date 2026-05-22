@@ -53,11 +53,6 @@ import (
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-// ChatResolutionAnalyzer schedules async chat resolution analysis.
-type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
-}
-
 type Service struct {
 	auth             *auth.Auth
 	db               *pgxpool.Pool
@@ -239,6 +234,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
+				RiskFindingsCount:    nil,
 				TotalInputTokens:     nil,
 				TotalOutputTokens:    nil,
 				TotalTokens:          nil,
@@ -276,6 +272,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
+				RiskFindingsCount:    nil,
 				TotalInputTokens:     nil,
 				TotalOutputTokens:    nil,
 				TotalTokens:          nil,
@@ -319,6 +316,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
+			RiskFindingsCount:    nil,
 			TotalInputTokens:     nil,
 			TotalOutputTokens:    nil,
 			TotalTokens:          nil,
@@ -367,7 +365,9 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	// Convert optional filter parameters (use empty string for SQL NULL check)
 	search := conv.PtrValOr(payload.Search, "")
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
+	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 
 	// Parse time filters
 	var fromTime, toTime pgtype.Timestamptz
@@ -389,9 +389,11 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		ProjectID:        *authCtx.ProjectID,
 		Search:           search,
 		ExternalUserID:   externalUserID,
+		AssistantID:      assistantID,
 		FromTime:         fromTime,
 		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
+		HasRiskFilter:    hasRiskFilter,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to count chats").Log(ctx, s.logger)
@@ -402,9 +404,11 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 		ProjectID:        *authCtx.ProjectID,
 		Search:           search,
 		ExternalUserID:   externalUserID,
+		AssistantID:      assistantID,
 		FromTime:         fromTime,
 		ToTime:           toTime,
 		ResolutionStatus: resolutionStatus,
+		HasRiskFilter:    hasRiskFilter,
 		SortBy:           payload.SortBy,
 		SortOrder:        payload.SortOrder,
 		PageLimit:        int32(limit),
@@ -427,6 +431,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 			if row.LastMessageTimestamp.Valid {
 				lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 			}
+			riskCount := int(row.RiskFindingsCount)
 			chatMap[chatID] = &gen.ChatOverviewWithResolutions{
 				ID:                   chatID,
 				Title:                row.Title.String,
@@ -437,6 +442,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 				CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
+				RiskFindingsCount:    &riskCount,
 				Resolutions:          make([]*gen.ChatResolution, 0),
 				TotalInputTokens:     nil,
 				TotalOutputTokens:    nil,
@@ -576,6 +582,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
+		RiskFindingsCount:    nil,
 		Messages:             resultMessages,
 		TotalInputTokens:     nil,
 		TotalOutputTokens:    nil,
@@ -830,6 +837,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if r.Header.Get("Gram-Skip-Capture") == "1" {
 		completionChatID = uuid.Nil
 	}
+	reasoning := chatRequest.Reasoning
+	if reasoning == nil {
+		reasoning = &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil}
+	}
+
 	completionReq := openrouter.CompletionRequest{
 		OrgID:          orgID,
 		ProjectID:      authCtx.ProjectID.String(),
@@ -850,6 +862,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		},
 		APIKeyID:                  authCtx.APIKeyID,
 		JSONSchema:                jsonSchema,
+		Reasoning:                 reasoning,
+		CacheControl:              chatRequest.CacheControl,
 		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
 	}
 

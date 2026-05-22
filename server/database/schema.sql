@@ -864,6 +864,8 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   client_id_issued_at timestamptz,
   client_secret_expires_at timestamptz,
   token_endpoint_auth_method TEXT,
+  scope TEXT[],
+  audience TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2232,13 +2234,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
   ON ai_integration_configs (organization_id, provider)
   WHERE deleted IS FALSE;
 
--- AI integration syncs: provider-specific high-water marks and future sync
--- metadata. Cursor usage polling uses last_polled_at as its watermark.
+-- AI integration syncs: provider-specific query cursors, scheduler state,
+-- and failure metadata.
 CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
-  last_polled_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_poll_error TEXT,
+  last_poll_failed_at timestamptz,
+  last_poll_success_at timestamptz,
+  consecutive_failures integer NOT NULL DEFAULT 0,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
 
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
@@ -2592,6 +2599,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_ke
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_key
   ON plugin_github_connections (marketplace_token)
   WHERE marketplace_token IS NOT NULL;
+
+-- Per-project marketplace configuration applied to the marketplace.json
+-- generated for Claude Code, Cursor, and Codex. Designed to be extensible:
+-- add new nullable columns here for future settings (description, owner email,
+-- logo URL, etc.) rather than overloading plugin_github_connections, which is
+-- only populated on first GitHub publish.
+CREATE TABLE IF NOT EXISTS project_marketplace_settings (
+  project_id uuid NOT NULL,
+  -- Override for the marketplace name. NULL falls back to the server-side
+  -- default ("speakeasy") so the default lives in code, not data.
+  marketplace_name TEXT CHECK (marketplace_name IS NULL OR (marketplace_name <> '' AND CHAR_LENGTH(marketplace_name) <= 64)),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT project_marketplace_settings_pkey PRIMARY KEY (project_id),
+  CONSTRAINT project_marketplace_settings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
 
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.

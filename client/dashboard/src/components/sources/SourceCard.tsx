@@ -7,7 +7,10 @@ import { DotCard } from "@/components/ui/dot-card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
-import { formatRemoteMcpDisplay, sourceTypeToUrnKind } from "@/lib/sources";
+import {
+  formatRemoteMcpUrlForDisplay,
+  sourceTypeToUrnKind,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
@@ -123,8 +126,20 @@ export function SourceCard({
           },
         ];
 
+  const remoteMcpUrlDisplay =
+    asset.type === "remotemcp"
+      ? formatRemoteMcpUrlForDisplay(asset.url)
+      : undefined;
+  const remoteMcpTrimmedName =
+    asset.type === "remotemcp" ? asset.name?.trim() : undefined;
   const displayName =
-    asset.type === "remotemcp" ? formatRemoteMcpDisplay(asset) : asset.name;
+    asset.type === "remotemcp"
+      ? remoteMcpTrimmedName || remoteMcpUrlDisplay || ""
+      : asset.name;
+  const displaySubtitle =
+    asset.type === "remotemcp" && remoteMcpTrimmedName
+      ? remoteMcpUrlDisplay
+      : undefined;
 
   const iconContent = (() => {
     if (asset.type === "externalmcp" && asset.iconUrl) {
@@ -151,14 +166,27 @@ export function SourceCard({
       <DotCard icon={iconContent}>
         {/* Header row with name and actions */}
         <div className="mb-2 flex items-start justify-between gap-2">
-          <Type
-            variant="subheading"
-            as="div"
-            className="text-md group-hover:text-primary flex-1 truncate transition-colors"
-            title={displayName}
-          >
-            {displayName}
-          </Type>
+          <div className="min-w-0 flex-1">
+            <Type
+              variant="subheading"
+              as="div"
+              className="text-md group-hover:text-primary truncate transition-colors"
+              title={displayName}
+            >
+              {displayName}
+            </Type>
+            {displaySubtitle && (
+              <Type
+                as="div"
+                muted
+                small
+                className="truncate"
+                title={displaySubtitle}
+              >
+                {displaySubtitle}
+              </Type>
+            )}
+          </div>
           <div className="flex shrink-0 items-center gap-1">
             {causingFailure && <AssetIsCausingFailureNotice />}
             {actions.length > 0 && (

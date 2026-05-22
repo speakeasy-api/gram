@@ -11,6 +11,7 @@ import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Column } from "@speakeasy-api/moonshine";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
@@ -28,6 +29,7 @@ export function useChallengeRowColumns(
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
   const { data: membersData } = useMembers();
+  const { data: toolsetsData } = useListToolsetsForOrg();
   const projectMap = useMemo(() => {
     const m = new Map<string, { slug: string; name: string }>();
     for (const p of organization.projects) {
@@ -35,6 +37,16 @@ export function useChallengeRowColumns(
     }
     return m;
   }, [organization.projects]);
+  const toolsetMap = useMemo(() => {
+    const m = new Map<
+      string,
+      { slug: string; name: string; projectId: string }
+    >();
+    for (const t of toolsetsData?.toolsets ?? []) {
+      m.set(t.id, { slug: t.slug, name: t.name, projectId: t.projectId });
+    }
+    return m;
+  }, [toolsetsData]);
   const memberMap = useMemo(() => {
     const m = new Map<string, { email: string; photoUrl?: string }>();
     for (const member of membersData?.members ?? []) {
@@ -162,6 +174,7 @@ export function useChallengeRowColumns(
               challenge={row}
               orgSlug={orgSlug ?? ""}
               projectMap={projectMap}
+              toolsetMap={toolsetMap}
             />
           </div>
         ),
@@ -234,6 +247,7 @@ export function useChallengeRowColumns(
   }, [
     orgSlug,
     projectMap,
+    toolsetMap,
     memberMap,
     animatingOutIds,
     outcomeFilter,

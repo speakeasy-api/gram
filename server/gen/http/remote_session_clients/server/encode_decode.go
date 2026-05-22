@@ -1446,15 +1446,23 @@ func EncodeDeleteRemoteSessionClientError(encoder func(context.Context, http.Res
 // *types.RemoteSessionClient.
 func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.RemoteSessionClient) *RemoteSessionClientResponseBody {
 	res := &RemoteSessionClientResponseBody{
-		ID:                    v.ID,
-		ProjectID:             v.ProjectID,
-		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
-		UserSessionIssuerID:   v.UserSessionIssuerID,
-		ClientID:              v.ClientID,
-		ClientIDIssuedAt:      v.ClientIDIssuedAt,
-		ClientSecretExpiresAt: v.ClientSecretExpiresAt,
-		CreatedAt:             v.CreatedAt,
-		UpdatedAt:             v.UpdatedAt,
+		ID:                      v.ID,
+		ProjectID:               v.ProjectID,
+		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
+		UserSessionIssuerID:     v.UserSessionIssuerID,
+		ClientID:                v.ClientID,
+		ClientIDIssuedAt:        v.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		Audience:                v.Audience,
+		CreatedAt:               v.CreatedAt,
+		UpdatedAt:               v.UpdatedAt,
+	}
+	if v.Scope != nil {
+		res.Scope = make([]string, len(v.Scope))
+		for i, val := range v.Scope {
+			res.Scope[i] = val
+		}
 	}
 
 	return res

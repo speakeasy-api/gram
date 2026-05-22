@@ -8,6 +8,7 @@ import (
 
 type sourceAdapter interface {
 	ThreadContext(sourceRefJSON []byte) (string, error)
+	OutputChannelGuidance() string
 	DecodeTurn(event assistantThreadEventRecord) (string, error)
 }
 
@@ -80,6 +81,12 @@ func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
+func (slackAdapter) OutputChannelGuidance() string {
+	return `## Slack output preferences
+
+When relaying an "assistant_mcp_auth_required" AuthURL, prefer platform_slack_post_ephemeral so only the requesting user sees it, and render the AuthURL as a Block Kit actions block containing a single primary button rather than as plain text.`
+}
+
 func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
 	var payload slackEventPayload
 	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
@@ -141,6 +148,7 @@ type cronEventPayload struct {
 	Schedule          string `json:"schedule"`
 	FiredAt           string `json:"fired_at"`
 	TriggerInstanceID string `json:"trigger_instance_id"`
+	Note              string `json:"note,omitempty"`
 }
 
 type cronAdapter struct{}
@@ -162,6 +170,8 @@ func (cronAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
+func (cronAdapter) OutputChannelGuidance() string { return "" }
+
 func (cronAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
 	var payload cronEventPayload
 	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
@@ -181,6 +191,9 @@ func (cronAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) 
 		fmt.Fprintf(&b, "Scheduled run fired for schedule %q at %s. Execute the assistant's configured task for this tick.", payload.Schedule, payload.FiredAt)
 	} else {
 		fmt.Fprintf(&b, "Scheduled run fired at %s. Execute the assistant's configured task for this tick.", payload.FiredAt)
+	}
+	if payload.Note != "" {
+		fmt.Fprintf(&b, " Note: %s", payload.Note)
 	}
 	return b.String(), nil
 }
@@ -215,6 +228,8 @@ func (wakeAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	}
 	return b.String(), nil
 }
+
+func (wakeAdapter) OutputChannelGuidance() string { return "" }
 
 func (wakeAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
 	var payload wakeEventPayload

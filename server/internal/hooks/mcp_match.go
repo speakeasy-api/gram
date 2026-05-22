@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -85,14 +87,41 @@ func sanitizeMCPName(name string) string {
 }
 
 // matchCachedMCPEntry returns the cached entry whose derived server prefix
-// equals serverPrefix, or nil if none match.
+// equals serverPrefix, or nil if none match. For Cowork-shipped entries the
+// prefix Claude derives is the connector UUID rather than a sanitized name,
+// so we also accept a ConnectorUUID match on the cached entry.
 func matchCachedMCPEntry(entries []MCPServerEntry, serverPrefix string) *MCPServerEntry {
 	for i := range entries {
+		if entries[i].ConnectorUUID != "" && entries[i].ConnectorUUID == serverPrefix {
+			return &entries[i]
+		}
 		if mcpServerPrefix(entries[i].Source, entries[i].PluginName, entries[i].Name) == serverPrefix {
 			return &entries[i]
 		}
 	}
 	return nil
+}
+
+// applyMCPInventoryAttrs decorates a telemetry attribute map with the
+// server URL resolved from the SessionStart MCP inventory and replaces
+// the prefix-derived gram.tool_call.source with the human-readable
+// server name from the inventory. This unifies the display name across
+// both flows: Claude Code's tool prefix is a sanitized form
+// ("claude_ai_Slack"), while Cowork's is the connector UUID — both are
+// replaced by the inventory's Name ("Slack") so dashboards don't need
+// per-flow logic. When the matched entry has no Name (defensive
+// fallback) or no entry matched at all, the original prefix-derived
+// source is left intact.
+func applyMCPInventoryAttrs(attrs map[attr.Key]any, matched *MCPServerEntry) {
+	if matched == nil {
+		return
+	}
+	if matched.URL != "" {
+		attrs[attr.MCPServerURLKey] = matched.URL
+	}
+	if matched.Name != "" {
+		attrs[attr.ToolCallSourceKey] = matched.Name
+	}
 }
 
 // resolvedMCPMatch returns the canonical server identifier for a matched
@@ -114,8 +143,9 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 }
 
 // isGramHostedMCPURL reports whether rawURL points at a Gram-managed MCP
-// server. Exact host match, case-insensitive.
-func isGramHostedMCPURL(rawURL string) bool {
+// server. Checks the canonical host plus any additional trusted hosts.
+// Exact host match, case-insensitive.
+func isGramHostedMCPURL(rawURL string, additionalTrustedHosts ...string) bool {
 	if rawURL == "" {
 		return false
 	}
@@ -123,7 +153,34 @@ func isGramHostedMCPURL(rawURL string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(u.Hostname(), gramHostedMCPHost)
+	hostname := u.Hostname()
+	if strings.EqualFold(hostname, gramHostedMCPHost) {
+		return true
+	}
+	for _, h := range additionalTrustedHosts {
+		if strings.EqualFold(hostname, h) {
+			return true
+		}
+	}
+	return false
+}
+
+// isGramHostedMCPURLForOrg checks if a URL is a Gram-managed MCP server for
+// the given organization. It checks against the canonical host first (no DB
+// hit), then falls back to checking the org's custom domain if needed.
+func (s *Service) isGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID string) bool {
+	// Fast path: check canonical host first to avoid DB lookup for app.getgram.ai URLs
+	if isGramHostedMCPURL(rawURL) {
+		return true
+	}
+	if rawURL == "" || orgID == "" {
+		return false
+	}
+	customDomain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, orgID)
+	if err != nil || !customDomain.Verified || !customDomain.Activated {
+		return false
+	}
+	return isGramHostedMCPURL(rawURL, customDomain.Domain)
 }
 
 // isMatchedMCPApproved returns whether the call has been allowlisted

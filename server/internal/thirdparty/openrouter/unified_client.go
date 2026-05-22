@@ -29,11 +29,6 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
 }
 
-// ChatResolutionAnalyzer schedules async chat resolution analysis.
-type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
-}
-
 // TelemetryLogger emits telemetry events for observability.
 type TelemetryLogger interface {
 	Log(ctx context.Context, params telemetry.LogParams)
@@ -52,7 +47,6 @@ type ChatClient struct {
 	messageCaptureStrategy MessageCaptureStrategy
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
-	chatResolutionAnalyzer ChatResolutionAnalyzer
 	telemetryLogger        TelemetryLogger
 }
 
@@ -64,7 +58,6 @@ func NewUnifiedClient(
 	captureStrategy MessageCaptureStrategy,
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
-	chatResolutionAnalyzer ChatResolutionAnalyzer,
 	telemetryLogger TelemetryLogger,
 ) *ChatClient {
 	return &ChatClient{
@@ -74,7 +67,6 @@ func NewUnifiedClient(
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
-		chatResolutionAnalyzer: chatResolutionAnalyzer,
 		telemetryLogger:        telemetryLogger,
 	}
 }
@@ -143,6 +135,34 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		Tools:          req.Tools,
 		Temperature:    temp,
 		ResponseFormat: nil,
+		Reasoning:      req.Reasoning,
+		CacheControl:   req.CacheControl,
+		SessionID:      "",
+		User:           req.OrgID,
+		Metadata:       nil,
+		Trace:          nil,
+	}
+
+	if req.ChatID != uuid.Nil {
+		reqBody.SessionID = req.ChatID.String()
+	}
+
+	if req.UsageSource != "" {
+		reqBody.Metadata = map[string]string{"source": string(req.UsageSource)}
+	}
+
+	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
+		var parentSpanID string
+		if spanCtx.HasSpanID() {
+			parentSpanID = spanCtx.SpanID().String()
+		}
+		reqBody.Trace = &TraceConfig{
+			TraceID:        spanCtx.TraceID().String(),
+			TraceName:      "",
+			SpanName:       "",
+			GenerationName: "",
+			ParentSpanID:   parentSpanID,
+		}
 	}
 
 	// Add JSON schema if provided
@@ -239,19 +259,6 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 			projectID.String(),
 		); err != nil {
 			c.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
-		}
-	}
-
-	// Schedule chat resolution analysis (will reset timer if already scheduled)
-	if c.chatResolutionAnalyzer != nil && req.ChatID != uuid.Nil {
-		if err := c.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
-			context.WithoutCancel(ctx),
-			req.ChatID,
-			projectID,
-			req.OrgID,
-			req.APIKeyID,
-		); err != nil {
-			c.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
 		}
 	}
 
@@ -445,8 +452,10 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		UserEmail:                 "",
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
+		CacheControl:              nil,
 		ChatID:                    uuid.Nil,
 		APIKeyID:                  "",
+		Reasoning:                 &Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		NormalizeOutboundMessages: false,
 	}
 

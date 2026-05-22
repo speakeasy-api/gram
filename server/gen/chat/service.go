@@ -88,6 +88,10 @@ type Chat struct {
 	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int
 }
 
 type ChatMessage struct {
@@ -145,6 +149,10 @@ type ChatOverview struct {
 	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int
 }
 
 // Chat overview with embedded resolution data
@@ -178,6 +186,10 @@ type ChatOverviewWithResolutions struct {
 	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int
 }
 
 // Resolution information for a chat
@@ -260,8 +272,13 @@ type ListChatsWithResolutionsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
+	// Filter to chats produced by this assistant
+	AssistantID *string
 	// Filter by resolution status
 	ResolutionStatus *string
+	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
+	// filter.
+	HasRisk *string
 	// Filter chats created after this timestamp (ISO 8601)
 	From *string
 	// Filter chats created before this timestamp (ISO 8601)
