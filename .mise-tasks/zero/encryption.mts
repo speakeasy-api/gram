@@ -6,7 +6,11 @@
 import { randomBytes } from "node:crypto";
 import { $ } from "zx";
 
-const toPopulate = ["GRAM_ENCRYPTION_KEY", "GRAM_JWT_SIGNING_KEY"];
+const toPopulate = [
+  "GRAM_ENCRYPTION_KEY",
+  "GRAM_ADMIN_ENCRYPTION_KEY",
+  "GRAM_JWT_SIGNING_KEY",
+];
 
 async function run() {
   for (const key of toPopulate) {

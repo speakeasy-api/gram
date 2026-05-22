@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mock-oidc :: sign in</title>
+    <style>
+      :root {
+        --bg: #000;
+        --fg: #00ff41;
+        --fg-dim: #008f11;
+        --fg-muted: #006400;
+        --accent: #39ff14;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+          monospace;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        padding: 2rem 1rem;
+        text-shadow: 0 0 4px rgba(0, 255, 65, 0.45);
+      }
+      .container {
+        max-width: 640px;
+        margin: 0 auto;
+        border: 1px solid var(--fg);
+        padding: 1.25rem 1.5rem;
+        background: rgba(0, 20, 0, 0.35);
+      }
+      .prompt::before {
+        content: "$ ";
+        color: var(--fg-dim);
+      }
+      h1 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0 0 0.25rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      p.subtitle {
+        margin: 0 0 1.25rem;
+        color: var(--fg);
+      }
+      .client {
+        border: 1px dashed var(--fg-dim);
+        padding: 0.5rem 0.75rem;
+        margin-bottom: 1.25rem;
+        color: var(--fg);
+        font-size: 0.85rem;
+      }
+      .client .label {
+        color: var(--fg);
+      }
+      .users {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      form {
+        all: unset;
+        display: block;
+      }
+      .user {
+        all: unset;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        padding: 0.65rem 0.75rem;
+        width: 100%;
+        cursor: pointer;
+        border: 1px solid var(--fg-muted);
+        background: transparent;
+        color: var(--fg);
+        font: inherit;
+        transition:
+          border-color 80ms linear,
+          background 80ms linear;
+      }
+      .user:hover,
+      .user:focus-visible {
+        border-color: var(--accent);
+        background: rgba(0, 255, 65, 0.08);
+        color: var(--accent);
+        outline: none;
+      }
+      .meta {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+      }
+      .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 600;
+        color: #ffa500;
+      }
+      .email {
+        font-size: 0.8rem;
+        color: #cc7000;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        justify-content: flex-end;
+        flex: none;
+        max-width: 40%;
+      }
+      .badge {
+        font-size: 0.7rem;
+        padding: 1px 6px;
+        border: 1px solid var(--fg-dim);
+        color: var(--fg-dim);
+        letter-spacing: 0.04em;
+        text-transform: lowercase;
+        white-space: nowrap;
+      }
+      .badge.unverified {
+        border-color: #ff5555;
+        color: #ff5555;
+      }
+      footer {
+        max-width: 640px;
+        margin: 1rem auto 0;
+        color: var(--fg-muted);
+        font-size: 0.75rem;
+        text-align: left;
+      }
+      footer::before {
+        content: "// ";
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="prompt">mock-oidc auth</h1>
+      <div class="client">
+        <span class="label">client_id=</span>{{ .ClientID }}<br />
+        <span class="label">name=</span>{{ .ClientName }}
+      </div>
+      <p class="subtitle">Select an identity to authenticate as</p>
+      <div class="users">
+        {{ range .Users }}
+        <form method="POST" action="/authorize">
+          <input type="hidden" name="user_email" value="{{ .Email }}" />
+          <input type="hidden" name="state_token" value="{{ $.StateToken }}" />
+          <button type="submit" class="user">
+            <span class="meta">
+              <span class="name">{{ .Name }}</span>
+              <span class="email">{{ .Email }}</span>
+            </span>
+            <span class="badges">
+              {{ if .HD }}<span class="badge">{{ .HD }}</span>{{ end }} {{ if
+              not .EmailVerified }}<span class="badge unverified"
+                >unverified</span
+              >{{ end }}
+            </span>
+          </button>
+        </form>
+        {{ end }}
+      </div>
+    </div>
+  </body>
+</html>
