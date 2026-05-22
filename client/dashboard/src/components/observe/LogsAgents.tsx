@@ -84,7 +84,6 @@ export function LogsAgentsContent() {
       "gram_search_chats",
       "gram_get_deployment_logs",
       "gram_load_chat",
-      "gram_list_chats_with_resolutions",
       "gram_list_chats",
     ],
   });
@@ -608,7 +607,6 @@ function AgentSessionsPageContent({
           {selectedChat && (
             <ChatDetailPanel
               chatId={selectedChat.id}
-              resolutions={selectedChat.resolutions}
               onClose={() => setSelectedChat(null)}
               onDelete={onDeleteChat}
             />

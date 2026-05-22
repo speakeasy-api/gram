@@ -245,7 +245,6 @@ function RiskOverviewCategoryDetailContent() {
           {selectedChatId && (
             <ChatDetailPanel
               chatId={selectedChatId}
-              resolutions={[]}
               onClose={() => setSelectedChatId(null)}
               onDelete={() => setSelectedChatId(null)}
               collapseNonRisk

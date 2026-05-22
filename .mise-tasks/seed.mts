@@ -1340,7 +1340,6 @@ const MCP_LOGS_TOOL_URNS = new Set([
   "tools:http:gram:gram_get_observability_overview",
   "tools:http:gram:gram_list_toolsets",
   "tools:http:gram:gram_get_mcp_metadata",
-  "tools:http:gram:gram_list_chats_with_resolutions",
   "tools:http:gram:gram_get_deployment_logs",
   "tools:http:gram:gram_list_chats",
   // Audit log tools
