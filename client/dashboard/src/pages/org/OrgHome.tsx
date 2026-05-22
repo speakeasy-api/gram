@@ -15,6 +15,7 @@ import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
@@ -44,6 +45,8 @@ import {
   ChevronUp,
   Copy,
   History,
+  LayoutGrid,
+  List,
   MoreHorizontal,
   Plus,
   Settings,
@@ -96,6 +99,10 @@ export function OrgHomeInner() {
   const [expanded, setExpanded] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
+  const [viewMode, setViewMode] = useLocalStorageState<"list" | "grid">(
+    "gram:org-home-view",
+    "list",
+  );
 
   const { favoriteSet, isFavorite, toggleFavorite } = useProjectFavorites(
     organization.id,
@@ -203,16 +210,28 @@ export function OrgHomeInner() {
     return fallbackMembers;
   };
 
-  const renderProjectRow = (project: OrgProject) => (
-    <ProjectRow
-      key={project.id}
-      project={project}
-      latestLog={latestActionByProjectSlug.get(project.slug)}
-      facepile={getFacepileMembers(project.slug)}
-      isFavorite={isFavorite(project.id)}
-      onToggleFavorite={() => toggleFavorite(project.id)}
-    />
-  );
+  const renderProjectItem = (project: OrgProject) => {
+    const props = {
+      key: project.id,
+      project,
+      latestLog: latestActionByProjectSlug.get(project.slug),
+      facepile: getFacepileMembers(project.slug),
+      isFavorite: isFavorite(project.id),
+      onToggleFavorite: () => toggleFavorite(project.id),
+    };
+    return viewMode === "grid" ? (
+      <ProjectCard {...props} />
+    ) : (
+      <ProjectRow {...props} />
+    );
+  };
+
+  const renderProjectContainer = (children: React.ReactNode) =>
+    viewMode === "grid" ? (
+      <ProjectGrid>{children}</ProjectGrid>
+    ) : (
+      <ProjectList>{children}</ProjectList>
+    );
 
   return (
     <>
@@ -242,6 +261,7 @@ export function OrgHomeInner() {
               placeholder="Search projects..."
               className="flex-1"
             />
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
             {canAdmin && (
               <AddNewMenu
                 onCreateProject={() => setCreateDialogOpen(true)}
@@ -277,34 +297,34 @@ export function OrgHomeInner() {
                       Your favorites
                     </Type>
                   </div>
-                  <ProjectList>
-                    {favoriteProjects.map(renderProjectRow)}
-                  </ProjectList>
+                  {renderProjectContainer(
+                    favoriteProjects.map(renderProjectItem),
+                  )}
                 </section>
               )}
 
-              <ProjectList>
-                {visibleOtherProjects.map(renderProjectRow)}
-                {hasMore && (
-                  <button
-                    type="button"
-                    onClick={() => setExpanded((prev) => !prev)}
-                    className="text-muted-foreground hover:text-foreground hover:bg-muted/40 flex items-center justify-center gap-1.5 py-3 text-sm font-medium transition-colors"
-                  >
-                    {expanded ? (
-                      <>
-                        Show less
-                        <ChevronUp className="size-4" />
-                      </>
-                    ) : (
-                      <>
-                        Show all {otherProjects.length} projects
-                        <ChevronDown className="size-4" />
-                      </>
-                    )}
-                  </button>
-                )}
-              </ProjectList>
+              {renderProjectContainer(
+                visibleOtherProjects.map(renderProjectItem),
+              )}
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded((prev) => !prev)}
+                  className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 rounded-lg border border-dashed py-3 text-sm font-medium transition-colors"
+                >
+                  {expanded ? (
+                    <>
+                      Show less
+                      <ChevronUp className="size-4" />
+                    </>
+                  ) : (
+                    <>
+                      Show all {otherProjects.length} projects
+                      <ChevronDown className="size-4" />
+                    </>
+                  )}
+                </button>
+              )}
 
               {otherProjects.length === 0 && favoriteProjects.length === 0 && (
                 <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
@@ -393,6 +413,70 @@ function ProjectList({ children }: { children: React.ReactNode }) {
   );
 }
 
+function ProjectGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {children}
+    </div>
+  );
+}
+
+function ViewModeToggle({
+  value,
+  onChange,
+}: {
+  value: "list" | "grid";
+  onChange: (mode: "list" | "grid") => void;
+}) {
+  return (
+    <div className="border-border bg-card flex h-[42px] shrink-0 items-center gap-0.5 rounded-md border p-1">
+      <ViewModeButton
+        active={value === "grid"}
+        onClick={() => onChange("grid")}
+        ariaLabel="Grid view"
+      >
+        <LayoutGrid className="size-4" strokeWidth={1.75} />
+      </ViewModeButton>
+      <ViewModeButton
+        active={value === "list"}
+        onClick={() => onChange("list")}
+        ariaLabel="List view"
+      >
+        <List className="size-4" strokeWidth={1.75} />
+      </ViewModeButton>
+    </div>
+  );
+}
+
+function ViewModeButton({
+  active,
+  onClick,
+  ariaLabel,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      aria-pressed={active}
+      className={cn(
+        "flex size-8 items-center justify-center rounded transition-colors",
+        active
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ProjectRow({
   project,
   latestLog,
@@ -410,17 +494,14 @@ function ProjectRow({
 
   return (
     <div className="group hover:bg-muted/40 relative flex items-center gap-4 px-4 py-3 transition-colors">
-      <Link
-        to={`/${orgSlug}/projects/${project.slug}`}
-        className="absolute inset-0 z-0"
-        aria-label={`Open ${project.name}`}
-      />
+      {/* Decorative content: pointer-events-none routes clicks through to the
+          Link overlay below, while the actions region opts back in. */}
       <ProjectAvatar
         project={project}
-        className="relative z-10 h-9 w-9 shrink-0 rounded-md"
+        className="pointer-events-none h-9 w-9 shrink-0 rounded-md"
       />
 
-      <div className="relative z-10 flex min-w-0 flex-1 items-center gap-6">
+      <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-6">
         <div className="w-44 min-w-0 shrink-0">
           <Type
             variant="subheading"
@@ -439,12 +520,83 @@ function ProjectRow({
         </div>
       </div>
 
-      <Facepile members={facepile} />
+      <div className="pointer-events-none">
+        <Facepile members={facepile} />
+      </div>
 
       <ProjectRowActions
         project={project}
         isFavorite={isFavorite}
         onToggleFavorite={onToggleFavorite}
+      />
+
+      {/* Anchor overlay sits on top of pointer-events-none children, so the
+          entire row is one navigation target — interactive controls above
+          opt in via pointer-events-auto. */}
+      <Link
+        to={`/${orgSlug}/projects/${project.slug}`}
+        aria-label={`Open ${project.name}`}
+        className="absolute inset-0"
+      />
+    </div>
+  );
+}
+
+function ProjectCard({
+  project,
+  latestLog,
+  facepile,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  project: OrgProject;
+  latestLog: AuditLog | undefined;
+  facepile: AccessMember[];
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+}) {
+  const { orgSlug } = useSlugs();
+
+  return (
+    <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 rounded-lg border p-4 transition-all hover:shadow-sm">
+      <div className="pointer-events-none flex items-start gap-3">
+        <ProjectAvatar
+          project={project}
+          className="h-10 w-10 shrink-0 rounded-md"
+        />
+        <div className="min-w-0 flex-1">
+          <Type
+            variant="subheading"
+            as="div"
+            className="text-foreground truncate text-sm font-medium"
+          >
+            {project.name}
+          </Type>
+          <Type small muted className="truncate font-mono text-xs">
+            {project.slug}
+          </Type>
+        </div>
+      </div>
+
+      <div className="pointer-events-none min-h-[42px] flex-1">
+        <RecentActionBlock log={latestLog} />
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <div className="pointer-events-none">
+          <Facepile members={facepile} />
+        </div>
+        <ProjectRowActions
+          project={project}
+          isFavorite={isFavorite}
+          onToggleFavorite={onToggleFavorite}
+        />
+      </div>
+
+      <Link
+        to={`/${orgSlug}/projects/${project.slug}`}
+        aria-label={`Open ${project.name}`}
+        className="absolute inset-0 rounded-lg"
       />
     </div>
   );
