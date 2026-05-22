@@ -75,6 +75,9 @@ func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.
 
 	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
+		if df, ok := errors.AsType[*discoveryError](err); ok {
+			return nil, oops.E(oops.CodeGatewayError, err, "%s", df.UserMessage()).Log(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeGatewayError, err, "discover issuer metadata").Log(ctx, logger)
 	}
 
@@ -415,14 +418,62 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 	return nil
 }
 
+// discoveryError captures enough context about a failed RFC 8414 fetch that
+// the handler can compose a user-facing message naming the well-known URL and,
+// when available, the upstream HTTP status. Status is zero when no HTTP
+// response was received (transport error, malformed URL, etc.).
+type discoveryError struct {
+	WellKnownURL string
+	Status       int
+	cause        error
+}
+
+func (e *discoveryError) Error() string {
+	switch {
+	case e.WellKnownURL == "":
+		return e.cause.Error()
+	case e.Status > 0:
+		return fmt.Sprintf("discover %s: HTTP %d: %s", e.WellKnownURL, e.Status, e.cause)
+	default:
+		return fmt.Sprintf("discover %s: %s", e.WellKnownURL, e.cause)
+	}
+}
+
+func (e *discoveryError) Unwrap() error { return e.cause }
+
+// UserMessage produces the public, user-facing summary surfaced through the
+// management API. Callers wrap it in an oops.E to attach the gateway error
+// code and id.
+func (e *discoveryError) UserMessage() string {
+	switch {
+	case e.Status == http.StatusNotFound:
+		return fmt.Sprintf("OAuth metadata not found at %s", e.WellKnownURL)
+	case e.Status >= 400:
+		return fmt.Sprintf("Unexpected HTTP %d from %s", e.Status, e.WellKnownURL)
+	case e.Status == http.StatusOK:
+		// 200 made it back but the body was unreadable or malformed.
+		return fmt.Sprintf("OAuth metadata at %s was not a valid RFC 8414 document", e.WellKnownURL)
+	case e.WellKnownURL != "":
+		return fmt.Sprintf("Could not reach OAuth metadata at %s", e.WellKnownURL)
+	default:
+		return "Could not compute OAuth metadata URL for the supplied issuer"
+	}
+}
+
 // discoverIssuerMetadata fetches and parses an RFC 8414
 // .well-known/oauth-authorization-server document, returning the parsed body
 // and any deviations from the spec callers should be aware of. The supplied
-// guardian.Policy gates the outbound dial.
+// guardian.Policy gates the outbound dial. Failures are wrapped in a
+// *discoveryError so the handler can attach the upstream URL and status to
+// the user-facing error.
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
 	wellKnown, err := wellKnownURL(issuerURL)
 	if err != nil {
-		return rfc8414Document{}, nil, fmt.Errorf("compute well-known url: %w", err)
+		return rfc8414Document{}, nil, &discoveryError{
+			WellKnownURL: "",
+			Status:       0,
+			cause:        fmt.Errorf("compute well-known url: %w", err),
+		}
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, discoveryHTTPTimeout)
@@ -430,28 +481,48 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, wellKnown, nil)
 	if err != nil {
-		return rfc8414Document{}, nil, fmt.Errorf("build discovery request: %w", err)
+		return rfc8414Document{}, nil, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       0,
+			cause:        fmt.Errorf("build discovery request: %w", err),
+		}
 	}
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := policy.Client().Do(req)
 	if err != nil {
-		return rfc8414Document{}, nil, fmt.Errorf("fetch discovery document: %w", err)
+		return rfc8414Document{}, nil, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       0,
+			cause:        fmt.Errorf("fetch discovery document: %w", err),
+		}
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
-		return rfc8414Document{}, nil, fmt.Errorf("discovery returned status %d", resp.StatusCode)
+		return rfc8414Document{}, nil, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       resp.StatusCode,
+			cause:        fmt.Errorf("discovery returned status %d", resp.StatusCode),
+		}
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return rfc8414Document{}, nil, fmt.Errorf("read discovery body: %w", err)
+		return rfc8414Document{}, nil, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       resp.StatusCode,
+			cause:        fmt.Errorf("read discovery body: %w", err),
+		}
 	}
 
 	var doc rfc8414Document
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return rfc8414Document{}, nil, fmt.Errorf("decode discovery document: %w", err)
+		return rfc8414Document{}, nil, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       resp.StatusCode,
+			cause:        fmt.Errorf("decode discovery document: %w", err),
+		}
 	}
 
 	warnings := collectDiscoveryWarnings(issuerURL, doc)

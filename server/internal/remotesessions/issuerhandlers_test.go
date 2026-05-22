@@ -491,3 +491,55 @@ func TestDiscoverRemoteSessionIssuer_BadURL(t *testing.T) {
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
+
+// statusOnlyServer returns an httptest.Server that responds to the well-known
+// path with the supplied HTTP status and no body. Use it to exercise the
+// discoveryFailure → UserMessage path in DiscoverRemoteSessionIssuer.
+func statusOnlyServer(t *testing.T, status int) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/.well-known/oauth-authorization-server") {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestDiscoverRemoteSessionIssuer_NotFoundSurfacesWellKnownURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := statusOnlyServer(t, http.StatusNotFound)
+
+	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Contains(t, err.Error(), "OAuth metadata not found at")
+	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
+}
+
+func TestDiscoverRemoteSessionIssuer_UnexpectedStatusSurfacesCode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := statusOnlyServer(t, http.StatusServiceUnavailable)
+
+	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Contains(t, err.Error(), "Unexpected HTTP 503")
+	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
+}
