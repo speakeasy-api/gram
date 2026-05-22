@@ -42,10 +42,13 @@ type ListChatsResponseBody struct {
 type LoadChatResponseBody struct {
 	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
-	// The generation of the messages in this response
+	// The generation that this response's messages belong to. A generation is an
+	// immutable snapshot of the transcript; a new one is opened on compaction or
+	// message edits, while normal turns append to the current one.
 	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
-	// The highest generation present for this chat. Callers paginate by requesting
-	// lower generations until 0.
+	// The highest generation number present for this chat. To load the full
+	// history, walk from `max_generation` down to 0, requesting each generation in
+	// turn.
 	MaxGeneration *int `form:"max_generation,omitempty" json:"max_generation,omitempty" xml:"max_generation,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`

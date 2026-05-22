@@ -62,10 +62,13 @@ var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsa
 type Chat struct {
 	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessage
-	// The generation of the messages in this response
+	// The generation that this response's messages belong to. A generation is an
+	// immutable snapshot of the transcript; a new one is opened on compaction or
+	// message edits, while normal turns append to the current one.
 	Generation int
-	// The highest generation present for this chat. Callers paginate by requesting
-	// lower generations until 0.
+	// The highest generation number present for this chat. To load the full
+	// history, walk from `max_generation` down to 0, requesting each generation in
+	// turn.
 	MaxGeneration int
 	// The ID of the chat
 	ID string
@@ -315,7 +318,12 @@ type LoadChatPayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
-	// Generation to load. If omitted, the latest generation is returned.
+	// Generation to load. A generation is an immutable snapshot of the chat
+	// transcript: a new one is opened whenever the conversation is compacted or an
+	// earlier message is edited, while normal turns append to the current
+	// generation. Generations are numbered from 0 (oldest) up to `max_generation`
+	// (latest). Omit this attribute to receive the latest generation, or page
+	// through history by walking from `max_generation` down to 0.
 	Generation *int
 }
 

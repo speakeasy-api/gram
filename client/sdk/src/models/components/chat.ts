@@ -19,7 +19,7 @@ export type Chat = {
    */
   externalUserId?: string | undefined;
   /**
-   * The generation of the messages in this response
+   * The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.
    */
   generation: number;
   /**
@@ -31,7 +31,7 @@ export type Chat = {
    */
   lastMessageTimestamp: Date;
   /**
-   * The highest generation present for this chat. Callers paginate by requesting lower generations until 0.
+   * The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
    */
   maxGeneration: number;
   /**

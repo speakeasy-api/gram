@@ -1256,7 +1256,6 @@ export function ChatDetailPanel({
             </div>
           )}
 
-
           <EntryTypeFilterBar
             value={enabledEntryTypes}
             counts={entryTypeCounts}

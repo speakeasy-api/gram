@@ -5702,11 +5702,11 @@ paths:
                     description: The ID of the chat
                     type: string
                 - allowEmptyValue: true
-                  description: Generation to load. If omitted, the latest generation is returned.
+                  description: 'Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.'
                   in: query
                   name: generation
                   schema:
-                    description: Generation to load. If omitted, the latest generation is returned.
+                    description: 'Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.'
                     format: int64
                     minimum: 0
                     type: integer
@@ -28824,7 +28824,7 @@ components:
                     description: The ID of the external user who created the chat
                 generation:
                     type: integer
-                    description: The generation of the messages in this response
+                    description: The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.
                     format: int64
                 id:
                     type: string
@@ -28835,7 +28835,7 @@ components:
                     format: date-time
                 max_generation:
                     type: integer
-                    description: The highest generation present for this chat. Callers paginate by requesting lower generations until 0.
+                    description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
                     format: int64
                 messages:
                     type: array

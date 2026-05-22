@@ -46,7 +46,7 @@ var _ = Service("chat", func() {
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
 			Attribute("id", String, "The ID of the chat")
-			Attribute("generation", Int, "Generation to load. If omitted, the latest generation is returned.", func() {
+			Attribute("generation", Int, "Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.", func() {
 				Minimum(0)
 			})
 			Required("id")
@@ -283,8 +283,8 @@ var ChatOverview = Type("ChatOverview", func() {
 var Chat = Type("Chat", func() {
 	Extend(ChatOverview)
 	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation")
-	Attribute("generation", Int, "The generation of the messages in this response")
-	Attribute("max_generation", Int, "The highest generation present for this chat. Callers paginate by requesting lower generations until 0.")
+	Attribute("generation", Int, "The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.")
+	Attribute("max_generation", Int, "The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.")
 
 	Required("messages", "generation", "max_generation")
 })
