@@ -113,7 +113,8 @@ INSERT INTO remote_session_clients (
     client_secret_expires_at,
     token_endpoint_auth_method,
     scope,
-    audience
+    audience,
+    legacy_callback_url
 )
 VALUES (
     $1,
@@ -125,7 +126,8 @@ VALUES (
     $7,
     $8,
     $9::text[],
-    $10
+    $10,
+    $11
 )
 RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
@@ -141,6 +143,7 @@ type CreateRemoteSessionClientParams struct {
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
 	Audience                pgtype.Text
+	LegacyCallbackUrl       bool
 }
 
 func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemoteSessionClientParams) (RemoteSessionClient, error) {
@@ -155,6 +158,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.TokenEndpointAuthMethod,
 		arg.Scope,
 		arg.Audience,
+		arg.LegacyCallbackUrl,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -531,6 +535,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -554,6 +559,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
 	ClientAudience          pgtype.Text
+	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -581,6 +587,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.TokenEndpointAuthMethod,
 		&i.ClientScope,
 		&i.ClientAudience,
+		&i.LegacyCallbackUrl,
 		&i.RemoteSessionIssuerID,
 		&i.UserSessionIssuerID,
 		&i.IssuerSlug,
@@ -1030,6 +1037,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -1064,6 +1072,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
 	ClientAudience          pgtype.Text
+	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -1094,6 +1103,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.TokenEndpointAuthMethod,
 			&i.ClientScope,
 			&i.ClientAudience,
+			&i.LegacyCallbackUrl,
 			&i.RemoteSessionIssuerID,
 			&i.UserSessionIssuerID,
 			&i.IssuerSlug,
