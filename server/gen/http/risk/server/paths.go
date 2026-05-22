@@ -96,3 +96,8 @@ func TriggerRiskAnalysisRiskPath() string {
 func SuggestCustomDetectionRuleRiskPath() string {
 	return "/rpc/risk.customRules.suggest"
 }
+
+// TestDetectionRuleRiskPath returns the URL path to the risk service testDetectionRule HTTP endpoint.
+func TestDetectionRuleRiskPath() string {
+	return "/rpc/risk.rules.test"
+}

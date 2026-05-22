@@ -68,6 +68,11 @@ type Service interface {
 	// JSON-schema constrained response so the dashboard can prefill the create
 	// form.
 	SuggestCustomDetectionRule(context.Context, *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error)
+	// Run a single detection rule against pasted sample text and return any
+	// matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection,
+	// custom regex) that the analyzer runs in production so the playground match
+	// shape mirrors the chat-message path.
+	TestDetectionRule(context.Context, *TestDetectionRulePayload) (res *TestDetectionRuleResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -90,7 +95,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "suggestCustomDetectionRule"}
+var MethodNames = [19]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -482,6 +487,54 @@ type SuggestCustomDetectionRuleResult struct {
 	Regex string
 	// Suggested severity level.
 	Severity string
+}
+
+type TestDetectionRuleMatch struct {
+	// Canonical rule id of the match (may differ from the requested rule id when
+	// one input matches multiple rules).
+	RuleID string
+	// Human-readable description of why this match was flagged.
+	Description *string
+	// Matched substring of the sample.
+	Match string
+	// Inclusive start byte offset of the match in the sample.
+	StartPos int
+	// Exclusive end byte offset of the match in the sample.
+	EndPos int
+	// Detection source (e.g. `gitleaks`, `presidio`, `prompt_injection`, `custom`).
+	Source string
+	// Confidence score in the range 0.0 to 1.0.
+	Confidence float64
+	// Tags from the underlying rule.
+	Tags []string
+}
+
+// TestDetectionRulePayload is the payload type of the risk service
+// testDetectionRule method.
+type TestDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Rule identifier to evaluate (e.g. `secret.aws_access_token`,
+	// `pii.email_address`, `custom.acme_token`).
+	RuleID string
+	// Sample text to scan.
+	Text string
+	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
+	// persist custom rules yet; ignored for built-in rules.
+	Regex *string
+}
+
+// TestDetectionRuleResult is the result type of the risk service
+// testDetectionRule method.
+type TestDetectionRuleResult struct {
+	// Matches the rule found in the sample.
+	Matches []*TestDetectionRuleMatch
+	// False when the rule has no text-only detector (e.g. `shadow_mcp`,
+	// `destructive_tool`).
+	Supported bool
+	// Why the rule isn't supported when `supported` is false.
+	Reason *string
 }
 
 // TriggerRiskAnalysisPayload is the payload type of the risk service

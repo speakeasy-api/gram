@@ -34,6 +34,7 @@ type Endpoints struct {
 	RevokeShadowMCPApproval    goa.Endpoint
 	TriggerRiskAnalysis        goa.Endpoint
 	SuggestCustomDetectionRule goa.Endpoint
+	TestDetectionRule          goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "risk" service with endpoints.
@@ -59,6 +60,7 @@ func NewEndpoints(s Service) *Endpoints {
 		RevokeShadowMCPApproval:    NewRevokeShadowMCPApprovalEndpoint(s, a.APIKeyAuth),
 		TriggerRiskAnalysis:        NewTriggerRiskAnalysisEndpoint(s, a.APIKeyAuth),
 		SuggestCustomDetectionRule: NewSuggestCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		TestDetectionRule:          NewTestDetectionRuleEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -82,6 +84,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RevokeShadowMCPApproval = m(e.RevokeShadowMCPApproval)
 	e.TriggerRiskAnalysis = m(e.TriggerRiskAnalysis)
 	e.SuggestCustomDetectionRule = m(e.SuggestCustomDetectionRule)
+	e.TestDetectionRule = m(e.TestDetectionRule)
 }
 
 // NewCreateRiskPolicyEndpoint returns an endpoint function that calls the
@@ -1143,5 +1146,64 @@ func NewSuggestCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.Auth
 			return nil, err
 		}
 		return s.SuggestCustomDetectionRule(ctx, p)
+	}
+}
+
+// NewTestDetectionRuleEndpoint returns an endpoint function that calls the
+// method "testDetectionRule" of service "risk".
+func NewTestDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TestDetectionRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.TestDetectionRule(ctx, p)
 	}
 }

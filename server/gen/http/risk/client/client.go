@@ -89,6 +89,10 @@ type Client struct {
 	// the suggestCustomDetectionRule endpoint.
 	SuggestCustomDetectionRuleDoer goahttp.Doer
 
+	// TestDetectionRule Doer is the HTTP client used to make requests to the
+	// testDetectionRule endpoint.
+	TestDetectionRuleDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -127,6 +131,7 @@ func NewClient(
 		RevokeShadowMCPApprovalDoer:    doer,
 		TriggerRiskAnalysisDoer:        doer,
 		SuggestCustomDetectionRuleDoer: doer,
+		TestDetectionRuleDoer:          doer,
 		RestoreResponseBody:            restoreBody,
 		scheme:                         scheme,
 		host:                           host,
@@ -562,6 +567,30 @@ func (c *Client) SuggestCustomDetectionRule() goa.Endpoint {
 		resp, err := c.SuggestCustomDetectionRuleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "suggestCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TestDetectionRule returns an endpoint that makes HTTP requests to the risk
+// service testDetectionRule server.
+func (c *Client) TestDetectionRule() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTestDetectionRuleRequest(c.encoder)
+		decodeResponse = DecodeTestDetectionRuleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTestDetectionRuleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TestDetectionRuleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "testDetectionRule", err)
 		}
 		return decodeResponse(resp)
 	}

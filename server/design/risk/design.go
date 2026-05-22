@@ -589,6 +589,41 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "suggest")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestCustomRule", "type": "mutation"}`)
 	})
+
+	Method("testDetectionRule", func() {
+		Description("Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("rule_id", String, "Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).", func() {
+				MinLength(1)
+				MaxLength(200)
+			})
+			Attribute("text", String, "Sample text to scan.", func() {
+				MinLength(1)
+				MaxLength(50000)
+			})
+			Attribute("regex", String, "Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.")
+			Required("rule_id", "text")
+		})
+
+		Result(TestDetectionRuleResult)
+
+		HTTP(func() {
+			POST("/rpc/risk.rules.test")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "testDetectionRule")
+		Meta("openapi:extension:x-speakeasy-group", "risk.rules")
+		Meta("openapi:extension:x-speakeasy-name-override", "test")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskTestDetectionRule", "type": "mutation"}`)
+	})
 })
 
 var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", func() {
@@ -600,6 +635,25 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 		Enum("info", "low", "medium", "high", "critical")
 	})
 	Required("rule_id", "title", "description", "regex", "severity")
+})
+
+var TestDetectionRuleMatch = Type("TestDetectionRuleMatch", func() {
+	Attribute("rule_id", String, "Canonical rule id of the match (may differ from the requested rule id when one input matches multiple rules).")
+	Attribute("description", String, "Human-readable description of why this match was flagged.")
+	Attribute("match", String, "Matched substring of the sample.")
+	Attribute("start_pos", Int, "Inclusive start byte offset of the match in the sample.")
+	Attribute("end_pos", Int, "Exclusive end byte offset of the match in the sample.")
+	Attribute("source", String, "Detection source (e.g. `gitleaks`, `presidio`, `prompt_injection`, `custom`).")
+	Attribute("confidence", Float64, "Confidence score in the range 0.0 to 1.0.")
+	Attribute("tags", ArrayOf(String), "Tags from the underlying rule.")
+	Required("rule_id", "match", "start_pos", "end_pos", "source", "confidence")
+})
+
+var TestDetectionRuleResult = Type("TestDetectionRuleResult", func() {
+	Attribute("matches", ArrayOf(TestDetectionRuleMatch), "Matches the rule found in the sample.")
+	Attribute("supported", Boolean, "False when the rule has no text-only detector (e.g. `shadow_mcp`, `destructive_tool`).")
+	Attribute("reason", String, "Why the rule isn't supported when `supported` is false.")
+	Required("matches", "supported")
 })
 
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {

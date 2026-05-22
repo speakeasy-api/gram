@@ -4370,6 +4370,248 @@ func DecodeSuggestCustomDetectionRuleResponse(decoder func(*http.Response) goaht
 	}
 }
 
+// BuildTestDetectionRuleRequest instantiates a HTTP request object with method
+// and path set to call the "risk" service "testDetectionRule" endpoint
+func (c *Client) BuildTestDetectionRuleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TestDetectionRuleRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "testDetectionRule", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTestDetectionRuleRequest returns an encoder for requests sent to the
+// risk testDetectionRule server.
+func EncodeTestDetectionRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.TestDetectionRulePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "testDetectionRule", "*risk.TestDetectionRulePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewTestDetectionRuleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "testDetectionRule", err)
+		}
+		return nil
+	}
+}
+
+// DecodeTestDetectionRuleResponse returns a decoder for responses returned by
+// the risk testDetectionRule endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeTestDetectionRuleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTestDetectionRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body TestDetectionRuleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			res := NewTestDetectionRuleResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body TestDetectionRuleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			return nil, NewTestDetectionRuleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TestDetectionRuleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			return nil, NewTestDetectionRuleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TestDetectionRuleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			return nil, NewTestDetectionRuleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TestDetectionRuleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			return nil, NewTestDetectionRuleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TestDetectionRuleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			return nil, NewTestDetectionRuleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TestDetectionRuleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			return nil, NewTestDetectionRuleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TestDetectionRuleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			return nil, NewTestDetectionRuleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TestDetectionRuleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+				}
+				err = ValidateTestDetectionRuleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+				}
+				return nil, NewTestDetectionRuleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TestDetectionRuleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+				}
+				err = ValidateTestDetectionRuleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+				}
+				return nil, NewTestDetectionRuleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "testDetectionRule", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TestDetectionRuleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "testDetectionRule", err)
+			}
+			err = ValidateTestDetectionRuleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "testDetectionRule", err)
+			}
+			return nil, NewTestDetectionRuleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "testDetectionRule", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalRiskPolicyResponseBodyToTypesRiskPolicy builds a value of type
 // *types.RiskPolicy from a value of type *RiskPolicyResponseBody.
 func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody) *types.RiskPolicy {
@@ -4533,6 +4775,29 @@ func unmarshalShadowMCPApprovalResponseBodyToTypesShadowMCPApproval(v *ShadowMCP
 		ServerName: v.ServerName,
 		ApprovedBy: v.ApprovedBy,
 		ApprovedAt: *v.ApprovedAt,
+	}
+
+	return res
+}
+
+// unmarshalTestDetectionRuleMatchResponseBodyToRiskTestDetectionRuleMatch
+// builds a value of type *risk.TestDetectionRuleMatch from a value of type
+// *TestDetectionRuleMatchResponseBody.
+func unmarshalTestDetectionRuleMatchResponseBodyToRiskTestDetectionRuleMatch(v *TestDetectionRuleMatchResponseBody) *risk.TestDetectionRuleMatch {
+	res := &risk.TestDetectionRuleMatch{
+		RuleID:      *v.RuleID,
+		Description: v.Description,
+		Match:       *v.Match,
+		StartPos:    *v.StartPos,
+		EndPos:      *v.EndPos,
+		Source:      *v.Source,
+		Confidence:  *v.Confidence,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
 	}
 
 	return res

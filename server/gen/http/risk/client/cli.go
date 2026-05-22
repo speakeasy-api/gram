@@ -947,3 +947,59 @@ func BuildSuggestCustomDetectionRulePayload(riskSuggestCustomDetectionRuleBody s
 
 	return v, nil
 }
+
+// BuildTestDetectionRulePayload builds the payload for the risk
+// testDetectionRule endpoint from CLI flags.
+func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDetectionRuleApikeyToken string, riskTestDetectionRuleSessionToken string, riskTestDetectionRuleProjectSlugInput string) (*risk.TestDetectionRulePayload, error) {
+	var err error
+	var body TestDetectionRuleRequestBody
+	{
+		err = json.Unmarshal([]byte(riskTestDetectionRuleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.RuleID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.rule_id", body.RuleID, utf8.RuneCountInString(body.RuleID), 1, true))
+		}
+		if utf8.RuneCountInString(body.RuleID) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.rule_id", body.RuleID, utf8.RuneCountInString(body.RuleID), 200, false))
+		}
+		if utf8.RuneCountInString(body.Text) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.text", body.Text, utf8.RuneCountInString(body.Text), 1, true))
+		}
+		if utf8.RuneCountInString(body.Text) > 50000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.text", body.Text, utf8.RuneCountInString(body.Text), 50000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskTestDetectionRuleApikeyToken != "" {
+			apikeyToken = &riskTestDetectionRuleApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskTestDetectionRuleSessionToken != "" {
+			sessionToken = &riskTestDetectionRuleSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskTestDetectionRuleProjectSlugInput != "" {
+			projectSlugInput = &riskTestDetectionRuleProjectSlugInput
+		}
+	}
+	v := &risk.TestDetectionRulePayload{
+		RuleID: body.RuleID,
+		Text:   body.Text,
+		Regex:  body.Regex,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

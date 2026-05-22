@@ -234,6 +234,7 @@ export * from "./settoolsetusersessionissuer.js";
 export * from "./submitfeedback.js";
 export * from "./suggestcustomdetectionrule.js";
 export * from "./switchauthscopes.js";
+export * from "./testdetectionrule.js";
 export * from "./triggerriskanalysis.js";
 export * from "./updateassistant.js";
 export * from "./updatecollection.js";

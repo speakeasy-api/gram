@@ -37,6 +37,7 @@ type Server struct {
 	RevokeShadowMCPApproval    http.Handler
 	TriggerRiskAnalysis        http.Handler
 	SuggestCustomDetectionRule http.Handler
+	TestDetectionRule          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -84,6 +85,7 @@ func New(
 			{"RevokeShadowMCPApproval", "DELETE", "/rpc/risk.approvals.delete"},
 			{"TriggerRiskAnalysis", "POST", "/rpc/risk.policies.trigger"},
 			{"SuggestCustomDetectionRule", "POST", "/rpc/risk.customRules.suggest"},
+			{"TestDetectionRule", "POST", "/rpc/risk.rules.test"},
 		},
 		CreateRiskPolicy:           NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPolicies:           NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
@@ -103,6 +105,7 @@ func New(
 		RevokeShadowMCPApproval:    NewRevokeShadowMCPApprovalHandler(e.RevokeShadowMCPApproval, mux, decoder, encoder, errhandler, formatter),
 		TriggerRiskAnalysis:        NewTriggerRiskAnalysisHandler(e.TriggerRiskAnalysis, mux, decoder, encoder, errhandler, formatter),
 		SuggestCustomDetectionRule: NewSuggestCustomDetectionRuleHandler(e.SuggestCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		TestDetectionRule:          NewTestDetectionRuleHandler(e.TestDetectionRule, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -129,6 +132,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RevokeShadowMCPApproval = m(s.RevokeShadowMCPApproval)
 	s.TriggerRiskAnalysis = m(s.TriggerRiskAnalysis)
 	s.SuggestCustomDetectionRule = m(s.SuggestCustomDetectionRule)
+	s.TestDetectionRule = m(s.TestDetectionRule)
 }
 
 // MethodNames returns the methods served.
@@ -154,6 +158,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRevokeShadowMCPApprovalHandler(mux, h.RevokeShadowMCPApproval)
 	MountTriggerRiskAnalysisHandler(mux, h.TriggerRiskAnalysis)
 	MountSuggestCustomDetectionRuleHandler(mux, h.SuggestCustomDetectionRule)
+	MountTestDetectionRuleHandler(mux, h.TestDetectionRule)
 }
 
 // Mount configures the mux to serve the risk endpoints.
@@ -1093,6 +1098,59 @@ func NewSuggestCustomDetectionRuleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "suggestCustomDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTestDetectionRuleHandler configures the mux to serve the "risk" service
+// "testDetectionRule" endpoint.
+func MountTestDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.rules.test", f)
+}
+
+// NewTestDetectionRuleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "testDetectionRule" endpoint.
+func NewTestDetectionRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTestDetectionRuleRequest(mux, decoder)
+		encodeResponse = EncodeTestDetectionRuleResponse(encoder)
+		encodeError    = EncodeTestDetectionRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "testDetectionRule")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

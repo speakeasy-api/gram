@@ -107,7 +107,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis|suggest-custom-detection-rule)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis|suggest-custom-detection-rule|test-detection-rule)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -1309,6 +1309,12 @@ func ParseEndpoint(
 		riskSuggestCustomDetectionRuleSessionTokenFlag     = riskSuggestCustomDetectionRuleFlags.String("session-token", "", "")
 		riskSuggestCustomDetectionRuleProjectSlugInputFlag = riskSuggestCustomDetectionRuleFlags.String("project-slug-input", "", "")
 
+		riskTestDetectionRuleFlags                = flag.NewFlagSet("test-detection-rule", flag.ExitOnError)
+		riskTestDetectionRuleBodyFlag             = riskTestDetectionRuleFlags.String("body", "REQUIRED", "")
+		riskTestDetectionRuleApikeyTokenFlag      = riskTestDetectionRuleFlags.String("apikey-token", "", "")
+		riskTestDetectionRuleSessionTokenFlag     = riskTestDetectionRuleFlags.String("session-token", "", "")
+		riskTestDetectionRuleProjectSlugInputFlag = riskTestDetectionRuleFlags.String("project-slug-input", "", "")
+
 		slackFlags = flag.NewFlagSet("slack", flag.ContinueOnError)
 
 		slackCreateSlackAppFlags                = flag.NewFlagSet("create-slack-app", flag.ExitOnError)
@@ -1999,6 +2005,7 @@ func ParseEndpoint(
 	riskRevokeShadowMCPApprovalFlags.Usage = riskRevokeShadowMCPApprovalUsage
 	riskTriggerRiskAnalysisFlags.Usage = riskTriggerRiskAnalysisUsage
 	riskSuggestCustomDetectionRuleFlags.Usage = riskSuggestCustomDetectionRuleUsage
+	riskTestDetectionRuleFlags.Usage = riskTestDetectionRuleUsage
 
 	slackFlags.Usage = slackUsage
 	slackCreateSlackAppFlags.Usage = slackCreateSlackAppUsage
@@ -2965,6 +2972,9 @@ func ParseEndpoint(
 
 			case "suggest-custom-detection-rule":
 				epf = riskSuggestCustomDetectionRuleFlags
+
+			case "test-detection-rule":
+				epf = riskTestDetectionRuleFlags
 
 			}
 
@@ -4000,6 +4010,9 @@ func ParseEndpoint(
 			case "suggest-custom-detection-rule":
 				endpoint = c.SuggestCustomDetectionRule()
 				data, err = riskc.BuildSuggestCustomDetectionRulePayload(*riskSuggestCustomDetectionRuleBodyFlag, *riskSuggestCustomDetectionRuleApikeyTokenFlag, *riskSuggestCustomDetectionRuleSessionTokenFlag, *riskSuggestCustomDetectionRuleProjectSlugInputFlag)
+			case "test-detection-rule":
+				endpoint = c.TestDetectionRule()
+				data, err = riskc.BuildTestDetectionRulePayload(*riskTestDetectionRuleBodyFlag, *riskTestDetectionRuleApikeyTokenFlag, *riskTestDetectionRuleSessionTokenFlag, *riskTestDetectionRuleProjectSlugInputFlag)
 			}
 		case "slack":
 			c := slackc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8940,6 +8953,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    revoke-shadow-mcp-approval: Remove a previously-approved shadow-MCP server for a policy.`)
 	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `+"`"+`limit=0`+"`"+` to backfill every unanalyzed message.`)
 	fmt.Fprintln(os.Stderr, `    suggest-custom-detection-rule: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.`)
+	fmt.Fprintln(os.Stderr, `    test-detection-rule: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s risk COMMAND --help\n", os.Args[0])
@@ -9398,6 +9412,30 @@ func riskSuggestCustomDetectionRuleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk suggest-custom-detection-rule --body '{\n      \"existing_rule_ids\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskTestDetectionRuleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk test-detection-rule", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk test-detection-rule --body '{\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.

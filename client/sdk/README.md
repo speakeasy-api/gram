@@ -449,6 +449,10 @@ run();
 * [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
 
+### [Risk.Rules](docs/sdks/rules/README.md)
+
+* [test](docs/sdks/rules/README.md#test) - testDetectionRule risk
+
 ### [Slack](docs/sdks/slack/README.md)
 
 * [configureSlackApp](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
@@ -768,6 +772,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPoliciesUpdate`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
+- [`riskRulesTest`](docs/sdks/rules/README.md#test) - testDetectionRule risk
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
@@ -1064,6 +1069,7 @@ To learn about this feature and how to get started, check
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
+- [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk
 - [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access

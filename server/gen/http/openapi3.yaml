@@ -19804,6 +19804,112 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskListResults
+    /rpc/risk.rules.test:
+        post:
+            description: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.
+            operationId: testDetectionRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TestDetectionRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TestDetectionRuleResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: testDetectionRule risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.rules
+            x-speakeasy-name-override: test
+            x-speakeasy-react-hook:
+                name: RiskTestDetectionRule
+                type: mutation
     /rpc/slack-apps.configure:
         post:
             description: Store Slack credentials (client ID, client secret, signing secret) for an app.
@@ -36323,6 +36429,81 @@ components:
                 - attributes
                 - resource_attributes
                 - service
+        TestDetectionRuleMatch:
+            type: object
+            properties:
+                confidence:
+                    type: number
+                    description: Confidence score in the range 0.0 to 1.0.
+                    format: double
+                description:
+                    type: string
+                    description: Human-readable description of why this match was flagged.
+                end_pos:
+                    type: integer
+                    description: Exclusive end byte offset of the match in the sample.
+                    format: int64
+                match:
+                    type: string
+                    description: Matched substring of the sample.
+                rule_id:
+                    type: string
+                    description: Canonical rule id of the match (may differ from the requested rule id when one input matches multiple rules).
+                source:
+                    type: string
+                    description: Detection source (e.g. `gitleaks`, `presidio`, `prompt_injection`, `custom`).
+                start_pos:
+                    type: integer
+                    description: Inclusive start byte offset of the match in the sample.
+                    format: int64
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: Tags from the underlying rule.
+            required:
+                - rule_id
+                - match
+                - start_pos
+                - end_pos
+                - source
+                - confidence
+        TestDetectionRuleRequestBody:
+            type: object
+            properties:
+                regex:
+                    type: string
+                    description: Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.
+                rule_id:
+                    type: string
+                    description: Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).
+                    minLength: 1
+                    maxLength: 200
+                text:
+                    type: string
+                    description: Sample text to scan.
+                    minLength: 1
+                    maxLength: 50000
+            required:
+                - rule_id
+                - text
+        TestDetectionRuleResult:
+            type: object
+            properties:
+                matches:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TestDetectionRuleMatch'
+                    description: Matches the rule found in the sample.
+                reason:
+                    type: string
+                    description: Why the rule isn't supported when `supported` is false.
+                supported:
+                    type: boolean
+                    description: False when the rule has no text-only detector (e.g. `shadow_mcp`, `destructive_tool`).
+            required:
+                - matches
+                - supported
         TierLimits:
             type: object
             properties:
