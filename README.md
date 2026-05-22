@@ -7,7 +7,6 @@
  </a>
 
 <h3 align="center">Gram - The MCP Cloud Platform</h3>
-
 <p align="center">
     <br />
     <a href="https://www.speakeasy.com/product/gram"><strong>Learn more »</strong></a>
