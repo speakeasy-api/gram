@@ -166,6 +166,18 @@ ORDER BY seq ASC;
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
 
+-- name: GetChatMessageStats :one
+-- Chat-wide aggregates (total message count + most recent message timestamp).
+-- Used by loadChat so every paginated response can carry the chat's real
+-- last_message_timestamp without depending on chats.updated_at, which is bumped
+-- by metadata edits (e.g. title changes) and would drift from the actual last
+-- message.
+SELECT
+  COUNT(*)::bigint AS total,
+  MAX(created_at)::timestamptz AS last_message_at
+FROM chat_messages
+WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
+
 -- name: ListLatestGenerationChatMessages :many
 -- Returns only the latest-generation rows; older generations are audit-only.
 SELECT cm.* FROM chat_messages cm

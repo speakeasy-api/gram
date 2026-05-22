@@ -114,7 +114,7 @@ export class Chat extends ClientSDK {
    * loadChat chat
    *
    * @remarks
-   * Load a chat by its ID
+   * Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
    */
   async load(
     request: operations.LoadChatRequest,

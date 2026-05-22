@@ -19,7 +19,8 @@ import (
 type Service interface {
 	// List all chats for a project
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
-	// Load a chat by its ID
+	// Load a chat by its ID. Messages are paginated one generation per request;
+	// omit `generation` to receive the latest generation.
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Generate a title for a chat based on its messages
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
@@ -59,8 +60,16 @@ var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsa
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
-	// The list of messages in the chat
+	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessage
+	// The generation that this response's messages belong to. A generation is an
+	// immutable snapshot of the transcript; a new one is opened on compaction or
+	// message edits, while normal turns append to the current one.
+	Generation int
+	// The highest generation number present for this chat. To load the full
+	// history, walk from `max_generation` down to 0, requesting each generation in
+	// turn.
+	MaxGeneration int
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -309,6 +318,13 @@ type LoadChatPayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
+	// Generation to load. A generation is an immutable snapshot of the chat
+	// transcript: a new one is opened whenever the conversation is compacted or an
+	// earlier message is edited, while normal turns append to the current
+	// generation. Generations are numbered from 0 (oldest) up to `max_generation`
+	// (latest). Omit this attribute to receive the latest generation, or page
+	// through history by walking from `max_generation` down to 0.
+	Generation *int
 }
 
 // SubmitFeedbackPayload is the payload type of the chat service submitFeedback

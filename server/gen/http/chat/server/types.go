@@ -40,8 +40,16 @@ type ListChatsResponseBody struct {
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
-	// The list of messages in the chat
+	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
+	// The generation that this response's messages belong to. A generation is an
+	// immutable snapshot of the transcript; a new one is opened on compaction or
+	// message edits, while normal turns append to the current one.
+	Generation int `form:"generation" json:"generation" xml:"generation"`
+	// The highest generation number present for this chat. To load the full
+	// history, walk from `max_generation` down to 0, requesting each generation in
+	// turn.
+	MaxGeneration int `form:"max_generation" json:"max_generation" xml:"max_generation"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -1524,6 +1532,8 @@ func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody 
 // "loadChat" endpoint of the "chat" service.
 func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	body := &LoadChatResponseBody{
+		Generation:           res.Generation,
+		MaxGeneration:        res.MaxGeneration,
 		ID:                   res.ID,
 		Title:                res.Title,
 		UserID:               res.UserID,
@@ -2604,9 +2614,10 @@ func NewListChatsPayload(sessionToken *string, projectSlugInput *string, chatSes
 }
 
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, generation *int, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
+	v.Generation = generation
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

@@ -529,9 +529,24 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
-		ChatID:    chat.ID,
-		ProjectID: *authCtx.ProjectID,
+	maxGeneration, err := s.repo.GetMaxGenerationForChat(ctx, chat.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat generation").Log(ctx, s.logger)
+	}
+
+	generation := maxGeneration
+	if payload.Generation != nil {
+		requested := *payload.Generation
+		if requested < 0 || int64(requested) > int64(maxGeneration) {
+			return nil, oops.E(oops.CodeInvalid, nil, "generation out of range")
+		}
+		generation = int32(requested) //nolint:gosec // bounded by maxGeneration above
+	}
+
+	messages, err := s.repo.ListChatMessagesByGeneration(ctx, repo.ListChatMessagesByGenerationParams{
+		ChatID:     chat.ID,
+		ProjectID:  *authCtx.ProjectID,
+		Generation: generation,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
@@ -555,21 +570,35 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
-	// Infer source from the most recent message with a source
-	var source *string
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Source.Valid && messages[i].Source.String != "" {
-			s := messages[i].Source.String
-			source = &s
-			break
-		}
+	// Chat-wide aggregates (count + most recent message timestamp) are computed
+	// from a single cheap query so every paginated response carries the chat's
+	// real totals regardless of which page was requested. Source inference and
+	// ClickHouse metric enrichment only run on the latest-page request because
+	// they depend on the latest generation's message slice and the dashboard
+	// only consumes them from the first response.
+	stats, err := s.repo.GetChatMessageStats(ctx, repo.GetChatMessageStatsParams{
+		ChatID:    chat.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat message stats").Log(ctx, s.logger)
 	}
 
-	// Get last message timestamp from the most recent message, or fall back to
-	// the chat's own created_at so the response always carries a valid datetime.
 	lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
-	if len(messages) > 0 {
-		lastMessageTimestamp = messages[len(messages)-1].CreatedAt.Time.Format(time.RFC3339)
+	if stats.LastMessageAt.Valid {
+		lastMessageTimestamp = stats.LastMessageAt.Time.Format(time.RFC3339)
+	}
+
+	isLatestRequest := generation == maxGeneration
+	var source *string
+	if isLatestRequest {
+		for i := len(messages) - 1; i >= 0; i-- {
+			if messages[i].Source.Valid && messages[i].Source.String != "" {
+				s := messages[i].Source.String
+				source = &s
+				break
+			}
+		}
 	}
 
 	result := &gen.Chat{
@@ -578,21 +607,24 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UserID:               &chat.UserID.String,
 		ExternalUserID:       &chat.ExternalUserID.String,
 		Source:               source,
-		NumMessages:          len(messages),
+		NumMessages:          int(stats.Total),
 		CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		RiskFindingsCount:    nil,
 		Messages:             resultMessages,
+		Generation:           int(generation),
+		MaxGeneration:        int(maxGeneration),
 		TotalInputTokens:     nil,
 		TotalOutputTokens:    nil,
 		TotalTokens:          nil,
 		TotalCost:            nil,
 	}
 
-	// Enrich with metrics from ClickHouse
-	if err := s.enrichChatWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
-		s.logger.WarnContext(ctx, "failed to enrich chat with metrics", attr.SlogError(err))
+	if isLatestRequest {
+		if err := s.enrichChatWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
+			s.logger.WarnContext(ctx, "failed to enrich chat with metrics", attr.SlogError(err))
+		}
 	}
 
 	return result, nil

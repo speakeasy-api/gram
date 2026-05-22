@@ -13,7 +13,8 @@ import type {
   ChatMessage,
   TelemetryLogRecord,
 } from "@gram/client/models/components";
-import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
+import { useSearchLogsMutation } from "@gram/client/react-query";
+import { useLoadChatAllGenerations } from "./useLoadChatAllGenerations";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -86,6 +87,7 @@ function getTraceExportSlug(chat: { id: string; title?: string | null }) {
 function exportTraceDataAsJson({
   chatId,
   chat,
+  messages,
   telemetryLogLimit,
   telemetryLogs,
   riskResults,
@@ -94,8 +96,8 @@ function exportTraceDataAsJson({
   chat: {
     id: string;
     title?: string | null;
-    messages: ChatMessage[];
   };
+  messages: ChatMessage[];
   telemetryLogLimit: number;
   telemetryLogs: TelemetryLogRecord[];
   riskResults: RiskResult[];
@@ -113,7 +115,7 @@ function exportTraceDataAsJson({
       },
       panelData: {
         chat,
-        messages: chat.messages,
+        messages,
         telemetryLogs,
         riskResults,
       },
@@ -954,11 +956,13 @@ export function ChatDetailPanel({
   const [enabledEntryTypes, setEnabledEntryTypes] = useState<
     FilterableTraceEntryType[]
   >([...DEFAULT_ENABLED_ENTRY_TYPES]);
-  const { data: chat, isLoading: chatLoading } = useLoadChat(
-    { id: chatId },
-    undefined,
-    {},
-  );
+  const {
+    chat,
+    messages: chatMessages,
+    isLoading: chatLoading,
+    isLoadingMore: chatLoadingMore,
+    hasErrors: chatLoadHasErrors,
+  } = useLoadChatAllGenerations(chatId);
 
   // Fetch telemetry logs for this chat
   const {
@@ -1029,9 +1033,9 @@ export function ChatDetailPanel({
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
-  const entryTypeCounts = getEntryTypeCounts(chat.messages);
+  const entryTypeCounts = getEntryTypeCounts(chatMessages);
   const visibleEntryCount = getVisibleMessageCount(
-    chat.messages,
+    chatMessages,
     enabledEntryTypes,
   );
 
@@ -1069,6 +1073,7 @@ export function ChatDetailPanel({
                     exportTraceDataAsJson({
                       chatId,
                       chat,
+                      messages: chatMessages,
                       telemetryLogLimit: PANEL_TELEMETRY_LOG_LIMIT,
                       telemetryLogs: logs,
                       riskResults,
@@ -1182,9 +1187,7 @@ export function ChatDetailPanel({
                 <div className="text-muted-foreground mb-1 text-xs">
                   Messages:
                 </div>
-                <div className="text-sm font-medium">
-                  {chat.messages.length}
-                </div>
+                <div className="text-sm font-medium">{chatMessages.length}</div>
               </div>
               <div>
                 <div className="text-muted-foreground mb-1 text-xs">
@@ -1241,17 +1244,29 @@ export function ChatDetailPanel({
             </div>
           </div>
 
+          {chatLoadHasErrors && (
+            <div className="border-destructive/30 bg-destructive/10 text-destructive border-b px-6 py-3 text-sm">
+              Some older conversation segments failed to load. The transcript
+              below is incomplete.
+            </div>
+          )}
+          {chatLoadingMore && !chatLoadHasErrors && (
+            <div className="text-muted-foreground border-b px-6 py-2 text-xs">
+              Loading older conversation segments…
+            </div>
+          )}
+
           <EntryTypeFilterBar
             value={enabledEntryTypes}
             counts={entryTypeCounts}
-            totalCount={chat.messages.length}
+            totalCount={chatMessages.length}
             visibleCount={visibleEntryCount}
             onChange={setEnabledEntryTypes}
           />
 
           {/* Chat Messages */}
           <ChatMessagesList
-            messages={chat.messages}
+            messages={chatMessages}
             riskResultsByMessage={riskResultsByMessage}
             collapseNonRisk={collapseNonRisk}
             enabledEntryTypes={enabledEntryTypes}
