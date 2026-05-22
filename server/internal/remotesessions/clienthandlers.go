@@ -107,6 +107,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:       false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)
