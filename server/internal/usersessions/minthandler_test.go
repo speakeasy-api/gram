@@ -2,6 +2,7 @@ package usersessions_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,6 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestMintUserSessionRequiresMCPConnect(t *testing.T) {
@@ -59,6 +63,20 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, got.AccessToken)
 	require.Equal(t, 3600, got.ExpiresIn)
+
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
+		got.AccessToken,
+		urn.NewToolset(toolset.ID).String(),
+	)
+	require.NoError(t, err)
+
+	row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Jti:                 claims.ID,
+	})
+	require.NoError(t, err)
+	require.False(t, row.UserSessionClientID.Valid)
+	require.True(t, strings.HasPrefix(row.RefreshTokenHash, "dashboard-mint:"))
 }
 
 func createIssuerGatedMintToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsetsrepo.Toolset {

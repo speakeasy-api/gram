@@ -21,12 +21,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// mintAccessTokenLifetime mirrors mcp.authnchallenge_token.accessTokenLifetime
-// so dashboard-minted JWTs and /token-minted JWTs have the same wall-clock
-// validity. Hardcoded short — OAuth 2.1 best practice — because the dashboard
-// doesn't have a refresh-token surface; the dashboard re-mints by calling
-// this method again with a fresh dashboard session.
-const mintAccessTokenLifetime = 1 * time.Hour
+const (
+	// mintAccessTokenLifetime mirrors mcp.authnchallenge_token.accessTokenLifetime
+	// so dashboard-minted JWTs and /token-minted JWTs have the same wall-clock
+	// validity. Hardcoded short — OAuth 2.1 best practice — because the dashboard
+	// doesn't have a refresh-token surface; the dashboard re-mints by calling
+	// this method again with a fresh dashboard session.
+	mintAccessTokenLifetime = 1 * time.Hour
+
+	// dashboardMintRefreshTokenHashPrefix marks user_sessions rows minted by the
+	// dashboard instead of a DCR-registered OAuth client.
+	dashboardMintRefreshTokenHashPrefix = "dashboard-mint"
+)
 
 // MintUserSession issues a user-session JWT against an issuer-gated toolset
 // on behalf of the authenticated dashboard user. The resulting JWT has the
@@ -41,10 +47,10 @@ const mintAccessTokenLifetime = 1 * time.Hour
 // cannot read the response body, so the resulting JWT cannot be exfiltrated.
 //
 // Persists a user_sessions row with user_session_client_id = NULL — the
-// minted JWT has no DCR-registered OAuth client behind it. The row is
-// otherwise identical to a /token-issued session so userSessions.list,
-// userSessions.revoke, and the runtime revocation cache all work
-// unchanged.
+// minted JWT has no DCR-registered OAuth client behind it. Its refresh token
+// hash uses dashboardMintRefreshTokenHashPrefix as the source sentinel. The row
+// is otherwise identical to a /token-issued session so userSessions.list,
+// userSessions.revoke, and the runtime revocation cache all work unchanged.
 func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSessionPayload) (*gen.MintUserSessionResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ProjectID == nil {
@@ -128,7 +134,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		// this method again. Store a sentinel that satisfies the
 		// NOT NULL + unique constraint without colliding with any real
 		// sha256 hash; the column will be migrated to nullable separately.
-		RefreshTokenHash: fmt.Sprintf("dashboard-mint:%s", jti),
+		RefreshTokenHash: fmt.Sprintf("%s:%s", dashboardMintRefreshTokenHashPrefix, jti),
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 	}); err != nil {

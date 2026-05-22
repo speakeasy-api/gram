@@ -5,6 +5,7 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
 import { Toolset } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -27,7 +28,6 @@ import { useToolset } from "@/hooks/toolTypes";
 import {
   getExternalMcpOAuthStatusQueryKey,
   useExternalMcpOAuthStatus,
-  useMcpOAuthRequired,
 } from "./playground-auth-utils";
 
 interface PlaygroundAuthProps {

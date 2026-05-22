@@ -4,45 +4,6 @@ import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod/v4";
 
-const OAuthProtectedResourceMetadataSchema = z.object({
-  authorization_servers: z.array(z.string()).optional(),
-});
-
-/**
- * Standard RFC 9728 OAuth protected-resource discovery against an MCP URL.
- * Returns whether the MCP server advertises OAuth protection — no toolset-field
- * sniffing, no catalog scrape. A 404 means the MCP runtime did not register
- * OAuth metadata for this slug, which we treat as "OAuth not required".
- */
-export function useMcpOAuthRequired(mcpUrl: string | undefined): {
-  oauthRequired: boolean;
-  isLoading: boolean;
-} {
-  const { data, isLoading } = useQuery({
-    queryKey: ["mcpOAuthRequired", mcpUrl],
-    queryFn: async (): Promise<boolean> => {
-      if (!mcpUrl) return false;
-      const parsed = new URL(mcpUrl);
-      const wellKnownUrl = `${parsed.origin}/.well-known/oauth-protected-resource${parsed.pathname}`;
-      const response = await fetch(wellKnownUrl, {
-        headers: { Accept: "application/json" },
-      });
-      if (response.status === 404) return false;
-      if (!response.ok) return false;
-      const parsedBody = OAuthProtectedResourceMetadataSchema.safeParse(
-        await response.json(),
-      );
-      if (!parsedBody.success) return false;
-      return (parsedBody.data.authorization_servers?.length ?? 0) > 0;
-    },
-    enabled: !!mcpUrl,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-
-  return { oauthRequired: data ?? false, isLoading };
-}
-
 const ExternalMcpOAuthStatusResponseSchema = z.object({
   status: z.enum(["authenticated", "needs_auth", "disconnected"]),
   provider_name: z.string().optional(),

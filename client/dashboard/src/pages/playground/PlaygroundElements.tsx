@@ -9,6 +9,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
 import type { Toolset } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -30,10 +31,7 @@ import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import {
-  useExternalMcpOAuthStatus,
-  useMcpOAuthRequired,
-} from "./playground-auth-utils";
+import { useExternalMcpOAuthStatus } from "./playground-auth-utils";
 import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
 import {
   PlaygroundMcpAppsProvider,
