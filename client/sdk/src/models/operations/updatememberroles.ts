@@ -6,12 +6,12 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
-export type UpdateMemberRoleSecurity = {
+export type UpdateMemberRolesSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type UpdateMemberRoleRequest = {
+export type UpdateMemberRolesRequest = {
   /**
    * API Key header
    */
@@ -20,19 +20,19 @@ export type UpdateMemberRoleRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  updateMemberRoleForm: components.UpdateMemberRoleForm;
+  updateMemberRolesForm: components.UpdateMemberRolesForm;
 };
 
 /** @internal */
-export type UpdateMemberRoleSecurity$Outbound = {
+export type UpdateMemberRolesSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const UpdateMemberRoleSecurity$outboundSchema: z.ZodMiniType<
-  UpdateMemberRoleSecurity$Outbound,
-  UpdateMemberRoleSecurity
+export const UpdateMemberRolesSecurity$outboundSchema: z.ZodMiniType<
+  UpdateMemberRolesSecurity$Outbound,
+  UpdateMemberRolesSecurity
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
@@ -46,44 +46,44 @@ export const UpdateMemberRoleSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function updateMemberRoleSecurityToJSON(
-  updateMemberRoleSecurity: UpdateMemberRoleSecurity,
+export function updateMemberRolesSecurityToJSON(
+  updateMemberRolesSecurity: UpdateMemberRolesSecurity,
 ): string {
   return JSON.stringify(
-    UpdateMemberRoleSecurity$outboundSchema.parse(updateMemberRoleSecurity),
+    UpdateMemberRolesSecurity$outboundSchema.parse(updateMemberRolesSecurity),
   );
 }
 
 /** @internal */
-export type UpdateMemberRoleRequest$Outbound = {
+export type UpdateMemberRolesRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  UpdateMemberRoleForm: components.UpdateMemberRoleForm$Outbound;
+  UpdateMemberRolesForm: components.UpdateMemberRolesForm$Outbound;
 };
 
 /** @internal */
-export const UpdateMemberRoleRequest$outboundSchema: z.ZodMiniType<
-  UpdateMemberRoleRequest$Outbound,
-  UpdateMemberRoleRequest
+export const UpdateMemberRolesRequest$outboundSchema: z.ZodMiniType<
+  UpdateMemberRolesRequest$Outbound,
+  UpdateMemberRolesRequest
 > = z.pipe(
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    updateMemberRoleForm: components.UpdateMemberRoleForm$outboundSchema,
+    updateMemberRolesForm: components.UpdateMemberRolesForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
-      updateMemberRoleForm: "UpdateMemberRoleForm",
+      updateMemberRolesForm: "UpdateMemberRolesForm",
     });
   }),
 );
 
-export function updateMemberRoleRequestToJSON(
-  updateMemberRoleRequest: UpdateMemberRoleRequest,
+export function updateMemberRolesRequestToJSON(
+  updateMemberRolesRequest: UpdateMemberRolesRequest,
 ): string {
   return JSON.stringify(
-    UpdateMemberRoleRequest$outboundSchema.parse(updateMemberRoleRequest),
+    UpdateMemberRolesRequest$outboundSchema.parse(updateMemberRolesRequest),
   );
 }

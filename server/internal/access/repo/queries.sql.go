@@ -440,15 +440,10 @@ SELECT
 FROM organization_user_relationships AS our
 JOIN users
   ON users.id = our.user_id
-LEFT JOIN LATERAL (
-  SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at
-  FROM organization_role_assignments
-  WHERE organization_role_assignments.organization_id = our.organization_id
-    AND organization_role_assignments.workos_user_id = users.workos_id
-    AND organization_role_assignments.deleted_at IS NULL
-  ORDER BY organization_role_assignments.created_at
-  LIMIT 1
-) AS ora ON TRUE
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = our.organization_id
+  AND ora.workos_user_id = users.workos_id
+  AND ora.deleted_at IS NULL
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
   AND organization_roles.organization_id = our.organization_id
@@ -564,6 +559,51 @@ func (q *Queries) ListActiveOrganizationRoles(ctx context.Context, organizationI
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveRoleIDsByWorkosUser = `-- name: ListActiveRoleIDsByWorkosUser :many
+SELECT
+  COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.workos_user_id = $2
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY role_id
+`
+
+type ListActiveRoleIDsByWorkosUserParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+func (q *Queries) ListActiveRoleIDsByWorkosUser(ctx context.Context, arg ListActiveRoleIDsByWorkosUserParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveRoleIDsByWorkosUser, arg.OrganizationID, arg.WorkosUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_id string
+		if err := rows.Scan(&role_id); err != nil {
+			return nil, err
+		}
+		items = append(items, role_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1167,6 +1207,63 @@ func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg Rep
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const softDeleteAllRoleAssignmentsByWorkosUser = `-- name: SoftDeleteAllRoleAssignmentsByWorkosUser :execrows
+UPDATE organization_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND workos_user_id = $2
+  AND deleted_at IS NULL
+`
+
+type SoftDeleteAllRoleAssignmentsByWorkosUserParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+func (q *Queries) SoftDeleteAllRoleAssignmentsByWorkosUser(ctx context.Context, arg SoftDeleteAllRoleAssignmentsByWorkosUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteAllRoleAssignmentsByWorkosUser, arg.OrganizationID, arg.WorkosUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteRoleAssignmentsBySlug = `-- name: SoftDeleteRoleAssignmentsBySlug :execrows
+UPDATE organization_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_role_assignments.organization_id = $1
+  AND organization_role_assignments.workos_user_id = $2
+  AND organization_role_assignments.role_urn IN (
+    SELECT 'role:organization:' || organization_roles.id::text
+    FROM organization_roles
+    WHERE organization_roles.organization_id = $1
+      AND organization_roles.workos_slug = $3
+    UNION ALL
+    SELECT 'role:global:' || global_roles.id::text
+    FROM global_roles
+    WHERE global_roles.workos_slug = $3
+  )
+  AND organization_role_assignments.deleted_at IS NULL
+`
+
+type SoftDeleteRoleAssignmentsBySlugParams struct {
+	OrganizationID string
+	WorkosUserID   string
+	WorkosRoleSlug string
+}
+
+// Soft-deletes all active role assignments matching a specific role slug for a given user.
+// Used when deleting a role to remove just that role's assignments without affecting other roles.
+func (q *Queries) SoftDeleteRoleAssignmentsBySlug(ctx context.Context, arg SoftDeleteRoleAssignmentsBySlugParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteRoleAssignmentsBySlug, arg.OrganizationID, arg.WorkosUserID, arg.WorkosRoleSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertGlobalRole = `-- name: UpsertGlobalRole :exec

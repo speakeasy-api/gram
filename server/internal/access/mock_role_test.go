@@ -63,8 +63,8 @@ func (m *MockRoleProvider) DeleteRole(ctx context.Context, orgID string, roleSlu
 	return mockErr(args, 0)
 }
 
-func (m *MockRoleProvider) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*thirdpartyworkos.Member, error) {
-	args := m.Called(ctx, membershipID, roleSlug)
+func (m *MockRoleProvider) UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*thirdpartyworkos.Member, error) {
+	args := m.Called(ctx, membershipID, roleSlugs)
 	if member, ok := args.Get(0).(*thirdpartyworkos.Member); ok {
 		return member, mockErr(args, 1)
 	}
@@ -104,11 +104,15 @@ func mockSystemRole(id, name, slug string) thirdpartyworkos.Role {
 }
 
 func mockMember(orgID, membershipID, userID, roleSlug string) thirdpartyworkos.Member {
+	return mockMemberMultiRole(orgID, membershipID, userID, roleSlug)
+}
+
+func mockMemberMultiRole(orgID, membershipID, userID string, roleSlugs ...string) thirdpartyworkos.Member {
 	return thirdpartyworkos.Member{
 		ID:             membershipID,
 		UserID:         userID,
 		OrganizationID: orgID,
-		RoleSlug:       roleSlug,
+		RoleSlugs:      roleSlugs,
 		CreatedAt:      mockMembershipTimestamp,
 	}
 }

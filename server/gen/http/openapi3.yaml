@@ -2060,10 +2060,10 @@ paths:
             x-speakeasy-name-override: resolveChallenge
             x-speakeasy-react-hook:
                 name: ResolveChallenge
-    /rpc/access.updateMemberRole:
+    /rpc/access.updateMemberRoles:
         put:
-            description: Change a team member's role assignment.
-            operationId: updateMemberRole
+            description: Update a team member's role assignments.
+            operationId: updateMemberRoles
             parameters:
                 - allowEmptyValue: true
                   description: API Key header
@@ -2083,7 +2083,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateMemberRoleForm'
+                            $ref: '#/components/schemas/UpdateMemberRolesForm'
                 required: true
             responses:
                 "200":
@@ -2149,12 +2149,12 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
-            summary: updateMemberRole access
+            summary: updateMemberRoles access
             tags:
                 - access
-            x-speakeasy-name-override: updateMemberRole
+            x-speakeasy-name-override: updateMemberRoles
             x-speakeasy-react-hook:
-                name: UpdateMemberRole
+                name: UpdateMemberRoles
     /rpc/access.updateRole:
         put:
             description: Update an existing custom role.
@@ -27482,14 +27482,16 @@ components:
                 photo_url:
                     type: string
                     description: Avatar URL.
-                role_id:
-                    type: string
-                    description: Currently assigned role ID.
+                role_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: All role IDs assigned to this member.
             required:
                 - id
                 - name
                 - email
-                - role_id
+                - role_ids
                 - joined_at
         AddDeploymentPackageForm:
             type: object
@@ -38111,18 +38113,20 @@ components:
             required:
                 - id
                 - visibility
-        UpdateMemberRoleForm:
+        UpdateMemberRolesForm:
             type: object
             properties:
-                role_id:
-                    type: string
-                    description: The new role ID to assign.
+                role_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: The role IDs to assign. Replaces all existing role assignments.
                 user_id:
                     type: string
                     description: The user ID to update.
             required:
                 - user_id
-                - role_id
+                - role_ids
         UpdateOAuthProxyServerForm:
             type: object
             properties:

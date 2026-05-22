@@ -1715,25 +1715,25 @@ func EncodeListGrantsError(encoder func(context.Context, http.ResponseWriter) go
 	}
 }
 
-// EncodeUpdateMemberRoleResponse returns an encoder for responses returned by
-// the access updateMemberRole endpoint.
-func EncodeUpdateMemberRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeUpdateMemberRolesResponse returns an encoder for responses returned by
+// the access updateMemberRoles endpoint.
+func EncodeUpdateMemberRolesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*access.AccessMember)
 		enc := encoder(ctx, w)
-		body := NewUpdateMemberRoleResponseBody(res)
+		body := NewUpdateMemberRolesResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeUpdateMemberRoleRequest returns a decoder for requests sent to the
-// access updateMemberRole endpoint.
-func DecodeUpdateMemberRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpdateMemberRolePayload, error) {
-	return func(r *http.Request) (*access.UpdateMemberRolePayload, error) {
-		var payload *access.UpdateMemberRolePayload
+// DecodeUpdateMemberRolesRequest returns a decoder for requests sent to the
+// access updateMemberRoles endpoint.
+func DecodeUpdateMemberRolesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpdateMemberRolesPayload, error) {
+	return func(r *http.Request) (*access.UpdateMemberRolesPayload, error) {
+		var payload *access.UpdateMemberRolesPayload
 		var (
-			body UpdateMemberRoleRequestBody
+			body UpdateMemberRolesRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -1747,7 +1747,7 @@ func DecodeUpdateMemberRoleRequest(mux goahttp.Muxer, decoder func(*http.Request
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateUpdateMemberRoleRequestBody(&body)
+		err = ValidateUpdateMemberRolesRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -1764,7 +1764,7 @@ func DecodeUpdateMemberRoleRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpdateMemberRolePayload(&body, apikeyToken, sessionToken)
+		payload = NewUpdateMemberRolesPayload(&body, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1784,9 +1784,9 @@ func DecodeUpdateMemberRoleRequest(mux goahttp.Muxer, decoder func(*http.Request
 	}
 }
 
-// EncodeUpdateMemberRoleError returns an encoder for errors returned by the
-// updateMemberRole access endpoint.
-func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeUpdateMemberRolesError returns an encoder for errors returned by the
+// updateMemberRoles access endpoint.
+func EncodeUpdateMemberRolesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -1803,7 +1803,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleUnauthorizedResponseBody(res)
+				body = NewUpdateMemberRolesUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -1817,7 +1817,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleForbiddenResponseBody(res)
+				body = NewUpdateMemberRolesForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -1831,7 +1831,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleBadRequestResponseBody(res)
+				body = NewUpdateMemberRolesBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -1845,7 +1845,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleNotFoundResponseBody(res)
+				body = NewUpdateMemberRolesNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -1859,7 +1859,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleConflictResponseBody(res)
+				body = NewUpdateMemberRolesConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -1873,7 +1873,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleUnsupportedMediaResponseBody(res)
+				body = NewUpdateMemberRolesUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -1887,7 +1887,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleInvalidResponseBody(res)
+				body = NewUpdateMemberRolesInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -1901,7 +1901,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleInvariantViolationResponseBody(res)
+				body = NewUpdateMemberRolesInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1915,7 +1915,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleUnexpectedResponseBody(res)
+				body = NewUpdateMemberRolesUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1929,7 +1929,7 @@ func EncodeUpdateMemberRoleError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateMemberRoleGatewayErrorResponseBody(res)
+				body = NewUpdateMemberRolesGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -3435,8 +3435,15 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		Name:     v.Name,
 		Email:    v.Email,
 		PhotoURL: v.PhotoURL,
-		RoleID:   v.RoleID,
 		JoinedAt: v.JoinedAt,
+	}
+	if v.RoleIds != nil {
+		res.RoleIds = make([]string, len(v.RoleIds))
+		for i, val := range v.RoleIds {
+			res.RoleIds[i] = val
+		}
+	} else {
+		res.RoleIds = []string{}
 	}
 
 	return res

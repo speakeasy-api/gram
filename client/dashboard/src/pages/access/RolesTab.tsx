@@ -105,7 +105,7 @@ export function RolesTab() {
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
 
   const membersOfDeletingRole = deletingRole
-    ? members.filter((m) => m.roleId === deletingRole.id)
+    ? members.filter((m) => m.roleIds.includes(deletingRole.id))
     : [];
 
   const deleteRole = useDeleteRoleMutation({

@@ -27,7 +27,7 @@ type Server struct {
 	ListScopes           http.Handler
 	ListMembers          http.Handler
 	ListGrants           http.Handler
-	UpdateMemberRole     http.Handler
+	UpdateMemberRoles    http.Handler
 	GetRBACStatus        http.Handler
 	EnableRBAC           http.Handler
 	DisableRBAC          http.Handler
@@ -71,7 +71,7 @@ func New(
 			{"ListScopes", "GET", "/rpc/access.listScopes"},
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
-			{"UpdateMemberRole", "PUT", "/rpc/access.updateMemberRole"},
+			{"UpdateMemberRoles", "PUT", "/rpc/access.updateMemberRoles"},
 			{"GetRBACStatus", "GET", "/rpc/access.getRBACStatus"},
 			{"EnableRBAC", "POST", "/rpc/access.enableRBAC"},
 			{"DisableRBAC", "POST", "/rpc/access.disableRBAC"},
@@ -87,7 +87,7 @@ func New(
 		ListScopes:           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
 		ListMembers:          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
-		UpdateMemberRole:     NewUpdateMemberRoleHandler(e.UpdateMemberRole, mux, decoder, encoder, errhandler, formatter),
+		UpdateMemberRoles:    NewUpdateMemberRolesHandler(e.UpdateMemberRoles, mux, decoder, encoder, errhandler, formatter),
 		GetRBACStatus:        NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
 		EnableRBAC:           NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
 		DisableRBAC:          NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
@@ -110,7 +110,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListScopes = m(s.ListScopes)
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
-	s.UpdateMemberRole = m(s.UpdateMemberRole)
+	s.UpdateMemberRoles = m(s.UpdateMemberRoles)
 	s.GetRBACStatus = m(s.GetRBACStatus)
 	s.EnableRBAC = m(s.EnableRBAC)
 	s.DisableRBAC = m(s.DisableRBAC)
@@ -132,7 +132,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListScopesHandler(mux, h.ListScopes)
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
-	MountUpdateMemberRoleHandler(mux, h.UpdateMemberRole)
+	MountUpdateMemberRolesHandler(mux, h.UpdateMemberRoles)
 	MountGetRBACStatusHandler(mux, h.GetRBACStatus)
 	MountEnableRBACHandler(mux, h.EnableRBAC)
 	MountDisableRBACHandler(mux, h.DisableRBAC)
@@ -570,21 +570,21 @@ func NewListGrantsHandler(
 	})
 }
 
-// MountUpdateMemberRoleHandler configures the mux to serve the "access"
-// service "updateMemberRole" endpoint.
-func MountUpdateMemberRoleHandler(mux goahttp.Muxer, h http.Handler) {
+// MountUpdateMemberRolesHandler configures the mux to serve the "access"
+// service "updateMemberRoles" endpoint.
+func MountUpdateMemberRolesHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("PUT", "/rpc/access.updateMemberRole", f)
+	mux.Handle("PUT", "/rpc/access.updateMemberRoles", f)
 }
 
-// NewUpdateMemberRoleHandler creates a HTTP handler which loads the HTTP
-// request and calls the "access" service "updateMemberRole" endpoint.
-func NewUpdateMemberRoleHandler(
+// NewUpdateMemberRolesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "updateMemberRoles" endpoint.
+func NewUpdateMemberRolesHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -593,13 +593,13 @@ func NewUpdateMemberRoleHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeUpdateMemberRoleRequest(mux, decoder)
-		encodeResponse = EncodeUpdateMemberRoleResponse(encoder)
-		encodeError    = EncodeUpdateMemberRoleError(encoder, formatter)
+		decodeRequest  = DecodeUpdateMemberRolesRequest(mux, decoder)
+		encodeResponse = EncodeUpdateMemberRolesResponse(encoder)
+		encodeError    = EncodeUpdateMemberRolesError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "updateMemberRole")
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateMemberRoles")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

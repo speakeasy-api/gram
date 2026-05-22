@@ -41,18 +41,18 @@ func TestService_UpdateRole(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "custom-builder").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder", authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "custom-builder").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder", authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 
@@ -100,11 +100,11 @@ func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
 	// admin and member are system roles — WorkOS UpdateRole must NOT be called.
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "admin").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin", authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 
@@ -187,11 +187,11 @@ func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "admin").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin", authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 

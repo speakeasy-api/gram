@@ -282,32 +282,45 @@ func BuildListGrantsPayload(accessListGrantsApikeyToken string, accessListGrants
 	return v, nil
 }
 
-// BuildUpdateMemberRolePayload builds the payload for the access
-// updateMemberRole endpoint from CLI flags.
-func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdateMemberRoleApikeyToken string, accessUpdateMemberRoleSessionToken string) (*access.UpdateMemberRolePayload, error) {
+// BuildUpdateMemberRolesPayload builds the payload for the access
+// updateMemberRoles endpoint from CLI flags.
+func BuildUpdateMemberRolesPayload(accessUpdateMemberRolesBody string, accessUpdateMemberRolesApikeyToken string, accessUpdateMemberRolesSessionToken string) (*access.UpdateMemberRolesPayload, error) {
 	var err error
-	var body UpdateMemberRoleRequestBody
+	var body UpdateMemberRolesRequestBody
 	{
-		err = json.Unmarshal([]byte(accessUpdateMemberRoleBody), &body)
+		err = json.Unmarshal([]byte(accessUpdateMemberRolesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_id\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }'")
+		}
+		if body.RoleIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var apikeyToken *string
 	{
-		if accessUpdateMemberRoleApikeyToken != "" {
-			apikeyToken = &accessUpdateMemberRoleApikeyToken
+		if accessUpdateMemberRolesApikeyToken != "" {
+			apikeyToken = &accessUpdateMemberRolesApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if accessUpdateMemberRoleSessionToken != "" {
-			sessionToken = &accessUpdateMemberRoleSessionToken
+		if accessUpdateMemberRolesSessionToken != "" {
+			sessionToken = &accessUpdateMemberRolesSessionToken
 		}
 	}
-	v := &access.UpdateMemberRolePayload{
+	v := &access.UpdateMemberRolesPayload{
 		UserID: body.UserID,
-		RoleID: body.RoleID,
+	}
+	if body.RoleIds != nil {
+		v.RoleIds = make([]string, len(body.RoleIds))
+		for i, val := range body.RoleIds {
+			v.RoleIds[i] = val
+		}
+	} else {
+		v.RoleIds = []string{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

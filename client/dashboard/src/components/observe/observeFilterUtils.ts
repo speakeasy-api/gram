@@ -53,7 +53,7 @@ export function resolveRoleEmails(
   if (roleIds.length === 0) return [];
   const roleSet = new Set(roleIds);
   const emails = members
-    .filter((m) => roleSet.has(m.roleId))
+    .filter((m) => m.roleIds.some((id) => roleSet.has(id)))
     .map((m) => m.email);
   return [...new Set(emails)];
 }
