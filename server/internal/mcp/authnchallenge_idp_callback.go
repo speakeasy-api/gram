@@ -96,11 +96,12 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").Log(ctx, logger)
 	}
 
-	// Validate the user belongs to the endpoint's organization before
-	// issuing a token. The mcp:connect RBAC policy operates at org level;
-	// this is the first gate.
-	if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, endpoint.OrganizationID, gramUserID); !ok {
-		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").Log(ctx, logger)
+	// Public toolsets admit any authenticated user; only private gates
+	// on org membership here.
+	if !endpoint.IsPublic {
+		if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, endpoint.OrganizationID, gramUserID); !ok {
+			return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").Log(ctx, logger)
+		}
 	}
 
 	// Mint a fresh state ID so the /connect URL we redirect to is NOT the

@@ -20,8 +20,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
-	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -101,15 +99,18 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate consent csrf token").Log(ctx, logger)
 	}
+	// Ambient cookies / Bearer tokens MUST NOT identify the caller on
+	// this endpoint — /authorize is reachable cross-site, so honouring
+	// them turns it into a CSRF primitive against the resulting
+	// remote_sessions row. Public callers that want a user-bound
+	// session opt in via requireUserIdentity; HandleIDPCallback then
+	// stamps Subject from authoritative IDP claims.
+	forceIDP := !endpoint.IsPublic || req.RequireUserIdentity
+
 	var subject *urn.SessionSubject
-	if endpoint.IsPublic {
-		if uid, ok := s.tryIdentifyGramUser(ctx, r, endpoint); ok {
-			sub := urn.NewUserSubject(uid)
-			subject = &sub
-		} else {
-			sub := urn.NewAnonymousSubject(uuid.NewString())
-			subject = &sub
-		}
+	if !forceIDP {
+		sub := urn.NewAnonymousSubject(uuid.NewString())
+		subject = &sub
 	}
 
 	baseURL := s.BaseURLForRequest(r)
@@ -131,7 +132,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").Log(ctx, logger)
 	}
 
-	if !endpoint.IsPublic {
+	if forceIDP {
 		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").Log(ctx, logger)
@@ -149,60 +150,12 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return nil
 	}
 
-	// Public endpoint: skip IDP and route straight to consent.
 	consentURL, err := endpoint.ConsentURL(baseURL, challengeID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)
 	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
-}
-
-// tryIdentifyGramUser best-effort resolves a Gram user_id from the request's
-// session cookie / Gram-Session header or a Bearer user-session JWT scoped
-// to this endpoint's audience. Returns ("", false) if neither yields a
-// user:<id>; failures never propagate. Caller falls back to anonymous.
-//
-// Uses a cache-only session lookup (sessions.GetSession) rather than a full
-// Authenticate to keep this off the org/billing/admin path — UserID is the
-// only field we need.
-func (s *Service) tryIdentifyGramUser(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint) (string, bool) {
-	if uid, ok := s.identifyByGramSession(ctx, r); ok {
-		return uid, true
-	}
-	return s.identifyByUserSessionJWT(ctx, r, endpoint)
-}
-
-func (s *Service) identifyByGramSession(ctx context.Context, r *http.Request) (string, bool) {
-	headerToken := r.Header.Get(constants.SessionHeader)
-	cookieToken, _ := contextvalues.GetSessionTokenFromContext(ctx)
-	// Header and cookie are tried independently — a stale Gram-Session header
-	// shouldn't shadow a valid dashboard cookie on the same request.
-	for _, token := range [2]string{headerToken, cookieToken} {
-		if token == "" {
-			continue
-		}
-		session, err := s.sessions.GetSession(ctx, token)
-		if err == nil && session.UserID != "" {
-			return session.UserID, true
-		}
-	}
-	return "", false
-}
-
-func (s *Service) identifyByUserSessionJWT(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint) (string, bool) {
-	token := AuthorizationBearerToken(r)
-	if token == "" {
-		return "", false
-	}
-	subject, _, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
-	if err != nil {
-		return "", false
-	}
-	if subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
-		return "", false
-	}
-	return subject.ID, true
 }
 
 // writeAuthorizeOAuthError unwraps a *usersessions.OAuthError to its code +

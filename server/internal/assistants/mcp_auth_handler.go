@@ -179,7 +179,13 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		return oops.E(oops.CodeUnexpected, err, "sign mcp auth flow state").Log(ctx, s.logger)
 	}
 
-	authURL, err := buildMCPAuthURL(metadata.AuthorizationEndpoint, registration.ClientID, redirectURI, state, codeChallenge)
+	// Gram-extension params (requireUserIdentity) are only safe to send
+	// to Gram-served endpoints; foreign ASes may reject unknown params
+	// or log them.
+	authorizeOnGram := metadata.AuthorizationEndpoint != "" && s.core.serverURL != nil &&
+		sameHost(metadata.AuthorizationEndpoint, s.core.serverURL.Host)
+
+	authURL, err := buildMCPAuthURL(metadata.AuthorizationEndpoint, registration.ClientID, redirectURI, state, codeChallenge, authorizeOnGram)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build mcp auth url").Log(ctx, s.logger)
 	}
@@ -452,7 +458,7 @@ func mcpSlugFromURL(u *url.URL) (string, error) {
 	return slug, nil
 }
 
-func buildMCPAuthURL(endpoint, clientID, redirectURI, state, codeChallenge string) (string, error) {
+func buildMCPAuthURL(endpoint, clientID, redirectURI, state, codeChallenge string, gramExtensions bool) (string, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return "", fmt.Errorf("parse authorize endpoint: %w", err)
@@ -464,8 +470,20 @@ func buildMCPAuthURL(endpoint, clientID, redirectURI, state, codeChallenge strin
 	q.Set("state", state)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
+	if gramExtensions {
+		q.Set("requireUserIdentity", "1")
+	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+// sameHost matches rawURL's host against want. Port-strict.
+func sameHost(rawURL, want string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return u.Host == want
 }
 
 func newPKCEPair() (string, string, error) {
