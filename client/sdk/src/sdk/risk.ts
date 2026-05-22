@@ -10,6 +10,7 @@ import { CustomRules } from "./customrules.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { Results } from "./results.js";
+import { Rules } from "./rules.js";
 
 export class Risk extends ClientSDK {
   private _approvals?: Approvals;
@@ -45,5 +46,10 @@ export class Risk extends ClientSDK {
   private _results?: Results;
   get results(): Results {
     return (this._results ??= new Results(this._options));
+  }
+
+  private _rules?: Rules;
+  get rules(): Rules {
+    return (this._rules ??= new Rules(this._options));
   }
 }

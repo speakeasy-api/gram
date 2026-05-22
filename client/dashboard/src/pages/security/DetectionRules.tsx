@@ -33,7 +33,11 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useRiskSuggestCustomRuleMutation } from "@gram/client/react-query/index.js";
+import {
+  useRiskSuggestCustomRuleMutation,
+  useRiskTestDetectionRuleMutation,
+} from "@gram/client/react-query/index.js";
+import type { TestDetectionRuleMatch } from "@gram/client/models/components/testdetectionrulematch.js";
 import {
   BUILTIN_RULES_BY_CATEGORY,
   resolveSeverity,
@@ -85,14 +89,8 @@ export default function DetectionRules() {
 }
 
 function DetectionRulesContent() {
-  const {
-    severityOverrides,
-    customRules,
-    setSeverityOverride,
-    addCustomRule,
-    updateCustomRule,
-    removeCustomRule,
-  } = useDetectionRulesStore();
+  const { customRules, addCustomRule, updateCustomRule, removeCustomRule } =
+    useDetectionRulesStore();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedRule | null>(null);
@@ -106,7 +104,7 @@ function DetectionRulesContent() {
         <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
         <Page.Section.Description>
           Built-in detection rules grouped by category. Click a rule to view its
-          description and override the default severity, or add your own custom
+          description and try it against pasted text, or add your own custom
           regex rule.
         </Page.Section.Description>
         <Page.Section.CTA>
@@ -129,7 +127,6 @@ function DetectionRulesContent() {
             )}
 
             <BuiltinRulesSection
-              severityOverrides={severityOverrides}
               expanded={expanded}
               onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
               onSelect={(rule) => setSelected({ kind: "builtin", rule })}
@@ -140,9 +137,7 @@ function DetectionRulesContent() {
 
       <RuleDetailSheet
         selection={selected}
-        severityOverrides={severityOverrides}
         onClose={() => setSelected(null)}
-        onOverrideSeverity={setSeverityOverride}
         onUpdateCustomRule={updateCustomRule}
         onDeleteCustomRule={(id) => {
           removeCustomRule(id);
@@ -218,12 +213,10 @@ function CustomRulesSection({
 /* -------------------------------------------------------------------------- */
 
 function BuiltinRulesSection({
-  severityOverrides,
   expanded,
   onToggle,
   onSelect,
 }: {
-  severityOverrides: Record<string, SeverityLevel>;
   expanded: RuleCategory | "custom" | null;
   onToggle: (cat: RuleCategory) => void;
   onSelect: (rule: BuiltinRule) => void;
@@ -381,16 +374,12 @@ export function SeverityBadge({ severity }: { severity: SeverityLevel }) {
 
 function RuleDetailSheet({
   selection,
-  severityOverrides,
   onClose,
-  onOverrideSeverity,
   onUpdateCustomRule,
   onDeleteCustomRule,
 }: {
   selection: SelectedRule | null;
-  severityOverrides: Record<string, SeverityLevel>;
   onClose: () => void;
-  onOverrideSeverity: (ruleId: string, severity: SeverityLevel | null) => void;
   onUpdateCustomRule: (
     id: string,
     patch: Partial<Omit<CustomDetectionRule, "id" | "createdAt">>,
@@ -399,15 +388,9 @@ function RuleDetailSheet({
 }) {
   return (
     <Sheet open={!!selection} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
+      <SheetContent className="flex flex-col overflow-y-auto sm:max-w-xl">
         {selection?.kind === "builtin" && (
-          <BuiltinRuleDetail
-            rule={selection.rule}
-            override={severityOverrides[selection.rule.id]}
-            onOverride={(severity) =>
-              onOverrideSeverity(selection.rule.id, severity)
-            }
-          />
+          <BuiltinRuleDetail rule={selection.rule} />
         )}
         {selection?.kind === "custom" && (
           <CustomRuleDetail
@@ -421,17 +404,8 @@ function RuleDetailSheet({
   );
 }
 
-function BuiltinRuleDetail({
-  rule,
-  override,
-  onOverride,
-}: {
-  rule: BuiltinRule;
-  override: SeverityLevel | undefined;
-  onOverride: (severity: SeverityLevel | null) => void;
-}) {
+function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
   const meta = RULE_CATEGORY_META[rule.category];
-  const effective = override ?? rule.defaultSeverity;
   return (
     <>
       <SheetHeader className="px-6 pt-6">
@@ -455,51 +429,7 @@ function BuiltinRuleDetail({
           <p className="text-sm leading-relaxed">{rule.description}</p>
         </DetailField>
 
-        <DetailField label="Default severity">
-          <div className="flex items-center gap-2">
-            <SeverityBadge severity={rule.defaultSeverity} />
-            <span className="text-muted-foreground text-xs">
-              {SEVERITY_META[rule.defaultSeverity].description}
-            </span>
-          </div>
-        </DetailField>
-
-        <DetailField label="Override severity">
-          <div className="flex items-center gap-2">
-            <Select
-              value={effective}
-              onValueChange={(v) =>
-                onOverride(
-                  v === rule.defaultSeverity ? null : (v as SeverityLevel),
-                )
-              }
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SEVERITY_LEVELS.map((level) => (
-                  <SelectItem key={level} value={level}>
-                    {SEVERITY_META[level].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {override !== undefined && override !== rule.defaultSeverity && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onOverride(null)}
-              >
-                Reset to default
-              </Button>
-            )}
-          </div>
-          <p className="text-muted-foreground mt-2 text-xs">
-            Overrides change how findings for this rule render in dashboards and
-            risk reports.
-          </p>
-        </DetailField>
+        <RulePlayground ruleId={rule.id} regex={null} />
       </div>
     </>
   );
@@ -565,24 +495,7 @@ function CustomRuleDetail({
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Severity</Label>
-          <Select
-            value={severity}
-            onValueChange={(v) => setSeverity(v as SeverityLevel)}
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SEVERITY_LEVELS.map((level) => (
-                <SelectItem key={level} value={level}>
-                  {SEVERITY_META[level].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <RulePlayground ruleId={rule.id} regex={regex} />
       </div>
       <SheetFooter className="border-border flex-row justify-between border-t px-6 py-4">
         <Button
@@ -602,6 +515,113 @@ function CustomRuleDetail({
         </Button>
       </SheetFooter>
     </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Rule playground — paste sample text, run the rule via the scanner API     */
+/* -------------------------------------------------------------------------- */
+
+function RulePlayground({
+  ruleId,
+  regex,
+}: {
+  ruleId: string;
+  regex: string | null;
+}) {
+  const [sample, setSample] = useState("");
+  const [matches, setMatches] = useState<TestDetectionRuleMatch[] | null>(null);
+  const [reason, setReason] = useState<string | null>(null);
+
+  const mutation = useRiskTestDetectionRuleMutation({
+    onSuccess: (data) => {
+      setMatches(data.matches);
+      setReason(data.supported ? null : (data.reason ?? "Rule not supported"));
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to run rule";
+      toast.error(message);
+    },
+  });
+
+  const handleRun = () => {
+    setMatches(null);
+    setReason(null);
+    mutation.mutate({
+      request: {
+        testDetectionRuleRequestBody: {
+          ruleId,
+          text: sample,
+          ...(regex ? { regex } : {}),
+        },
+      },
+    });
+  };
+
+  return (
+    <DetailField label="Playground">
+      <p className="text-muted-foreground mb-2 text-xs">
+        Paste any text to run this rule against it. Uses the same scanner code
+        the worker runs on chat messages.
+      </p>
+      <TextArea
+        value={sample}
+        onChange={setSample}
+        rows={4}
+        placeholder="Paste a sample, an MCP payload, or a chat message snippet…"
+      />
+      <div className="mt-2 flex justify-end">
+        <Button
+          size="sm"
+          disabled={sample.trim().length === 0 || mutation.isPending}
+          onClick={handleRun}
+        >
+          {mutation.isPending ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : null}
+          Run rule
+        </Button>
+      </div>
+      {matches !== null && (
+        <div className="border-border mt-3 rounded-lg border">
+          <div className="border-border bg-muted/40 flex items-center justify-between border-b px-3 py-2 text-xs font-medium">
+            <span>
+              {matches.length} match{matches.length === 1 ? "" : "es"}
+            </span>
+            {reason && <span className="text-muted-foreground">{reason}</span>}
+          </div>
+          {matches.length === 0 ? (
+            <p className="text-muted-foreground px-3 py-4 text-xs">
+              No findings for this rule in the sample.
+            </p>
+          ) : (
+            <ul className="divide-border divide-y">
+              {matches.map((m, idx) => (
+                <li key={idx} className="px-3 py-2 text-xs">
+                  <div className="text-muted-foreground mb-1 flex items-center justify-between font-mono">
+                    <span>{m.ruleId}</span>
+                    <span>
+                      {m.startPos}–{m.endPos}
+                      {" · "}conf {m.confidence.toFixed(2)}
+                      {" · "}
+                      {m.source}
+                    </span>
+                  </div>
+                  <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
+                    {m.match}
+                  </pre>
+                  {m.description && (
+                    <p className="text-muted-foreground mt-1">
+                      {m.description}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </DetailField>
   );
 }
 

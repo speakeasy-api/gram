@@ -99,6 +99,19 @@ type SuggestCustomDetectionRuleRequestBody struct {
 	ExistingRuleIds []string `form:"existing_rule_ids,omitempty" json:"existing_rule_ids,omitempty" xml:"existing_rule_ids,omitempty"`
 }
 
+// TestDetectionRuleRequestBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP request body.
+type TestDetectionRuleRequestBody struct {
+	// Rule identifier to evaluate (e.g. `secret.aws_access_token`,
+	// `pii.email_address`, `custom.acme_token`).
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Sample text to scan.
+	Text string `form:"text" json:"text" xml:"text"`
+	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
+	// persist custom rules yet; ignored for built-in rules.
+	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+}
+
 // CreateRiskPolicyResponseBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP response body.
 type CreateRiskPolicyResponseBody struct {
@@ -394,6 +407,18 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
 	// Suggested severity level.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
+}
+
+// TestDetectionRuleResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body.
+type TestDetectionRuleResponseBody struct {
+	// Matches the rule found in the sample.
+	Matches []*TestDetectionRuleMatchResponseBody `form:"matches,omitempty" json:"matches,omitempty" xml:"matches,omitempty"`
+	// False when the rule has no text-only detector (e.g. `shadow_mcp`,
+	// `destructive_tool`).
+	Supported *bool `form:"supported,omitempty" json:"supported,omitempty" xml:"supported,omitempty"`
+	// Why the rule isn't supported when `supported` is false.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // CreateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
@@ -3910,6 +3935,189 @@ type SuggestCustomDetectionRuleGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// TestDetectionRuleUnauthorizedResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body for the "unauthorized" error.
+type TestDetectionRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleForbiddenResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body for the "forbidden" error.
+type TestDetectionRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleBadRequestResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body for the "bad_request" error.
+type TestDetectionRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleNotFoundResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body for the "not_found" error.
+type TestDetectionRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleConflictResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body for the "conflict" error.
+type TestDetectionRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleUnsupportedMediaResponseBody is the type of the "risk"
+// service "testDetectionRule" endpoint HTTP response body for the
+// "unsupported_media" error.
+type TestDetectionRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleInvalidResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body for the "invalid" error.
+type TestDetectionRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleInvariantViolationResponseBody is the type of the "risk"
+// service "testDetectionRule" endpoint HTTP response body for the
+// "invariant_violation" error.
+type TestDetectionRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleUnexpectedResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body for the "unexpected" error.
+type TestDetectionRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestDetectionRuleGatewayErrorResponseBody is the type of the "risk" service
+// "testDetectionRule" endpoint HTTP response body for the "gateway_error"
+// error.
+type TestDetectionRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RiskPolicyResponseBody is used to define fields on response body types.
 type RiskPolicyResponseBody struct {
 	// The risk policy ID.
@@ -4126,6 +4334,28 @@ type ShadowMCPApprovalResponseBody struct {
 	ApprovedAt *string `form:"approved_at,omitempty" json:"approved_at,omitempty" xml:"approved_at,omitempty"`
 }
 
+// TestDetectionRuleMatchResponseBody is used to define fields on response body
+// types.
+type TestDetectionRuleMatchResponseBody struct {
+	// Canonical rule id of the match (may differ from the requested rule id when
+	// one input matches multiple rules).
+	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
+	// Human-readable description of why this match was flagged.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Matched substring of the sample.
+	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
+	// Inclusive start byte offset of the match in the sample.
+	StartPos *int `form:"start_pos,omitempty" json:"start_pos,omitempty" xml:"start_pos,omitempty"`
+	// Exclusive end byte offset of the match in the sample.
+	EndPos *int `form:"end_pos,omitempty" json:"end_pos,omitempty" xml:"end_pos,omitempty"`
+	// Detection source (e.g. `gitleaks`, `presidio`, `prompt_injection`, `custom`).
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Confidence score in the range 0.0 to 1.0.
+	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
+	// Tags from the underlying rule.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+}
+
 // NewCreateRiskPolicyRequestBody builds the HTTP request body from the payload
 // of the "createRiskPolicy" endpoint of the "risk" service.
 func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRiskPolicyRequestBody {
@@ -4246,6 +4476,17 @@ func NewSuggestCustomDetectionRuleRequestBody(p *risk.SuggestCustomDetectionRule
 		for i, val := range p.ExistingRuleIds {
 			body.ExistingRuleIds[i] = val
 		}
+	}
+	return body
+}
+
+// NewTestDetectionRuleRequestBody builds the HTTP request body from the
+// payload of the "testDetectionRule" endpoint of the "risk" service.
+func NewTestDetectionRuleRequestBody(p *risk.TestDetectionRulePayload) *TestDetectionRuleRequestBody {
+	body := &TestDetectionRuleRequestBody{
+		RuleID: p.RuleID,
+		Text:   p.Text,
+		Regex:  p.Regex,
 	}
 	return body
 }
@@ -7484,6 +7725,175 @@ func NewSuggestCustomDetectionRuleGatewayError(body *SuggestCustomDetectionRuleG
 	return v
 }
 
+// NewTestDetectionRuleResultOK builds a "risk" service "testDetectionRule"
+// endpoint result from a HTTP "OK" response.
+func NewTestDetectionRuleResultOK(body *TestDetectionRuleResponseBody) *risk.TestDetectionRuleResult {
+	v := &risk.TestDetectionRuleResult{
+		Supported: *body.Supported,
+		Reason:    body.Reason,
+	}
+	v.Matches = make([]*risk.TestDetectionRuleMatch, len(body.Matches))
+	for i, val := range body.Matches {
+		if val == nil {
+			v.Matches[i] = nil
+			continue
+		}
+		v.Matches[i] = unmarshalTestDetectionRuleMatchResponseBodyToRiskTestDetectionRuleMatch(val)
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleUnauthorized builds a risk service testDetectionRule
+// endpoint unauthorized error.
+func NewTestDetectionRuleUnauthorized(body *TestDetectionRuleUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleForbidden builds a risk service testDetectionRule
+// endpoint forbidden error.
+func NewTestDetectionRuleForbidden(body *TestDetectionRuleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleBadRequest builds a risk service testDetectionRule
+// endpoint bad_request error.
+func NewTestDetectionRuleBadRequest(body *TestDetectionRuleBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleNotFound builds a risk service testDetectionRule
+// endpoint not_found error.
+func NewTestDetectionRuleNotFound(body *TestDetectionRuleNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleConflict builds a risk service testDetectionRule
+// endpoint conflict error.
+func NewTestDetectionRuleConflict(body *TestDetectionRuleConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleUnsupportedMedia builds a risk service testDetectionRule
+// endpoint unsupported_media error.
+func NewTestDetectionRuleUnsupportedMedia(body *TestDetectionRuleUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleInvalid builds a risk service testDetectionRule endpoint
+// invalid error.
+func NewTestDetectionRuleInvalid(body *TestDetectionRuleInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleInvariantViolation builds a risk service
+// testDetectionRule endpoint invariant_violation error.
+func NewTestDetectionRuleInvariantViolation(body *TestDetectionRuleInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleUnexpected builds a risk service testDetectionRule
+// endpoint unexpected error.
+func NewTestDetectionRuleUnexpected(body *TestDetectionRuleUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestDetectionRuleGatewayError builds a risk service testDetectionRule
+// endpoint gateway_error error.
+func NewTestDetectionRuleGatewayError(body *TestDetectionRuleGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateCreateRiskPolicyResponseBody runs the validations defined on
 // CreateRiskPolicyResponseBody
 func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (err error) {
@@ -7997,6 +8407,25 @@ func ValidateSuggestCustomDetectionRuleResponseBody(body *SuggestCustomDetection
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"info", "low", "medium", "high", "critical"}))
+		}
+	}
+	return
+}
+
+// ValidateTestDetectionRuleResponseBody runs the validations defined on
+// TestDetectionRuleResponseBody
+func ValidateTestDetectionRuleResponseBody(body *TestDetectionRuleResponseBody) (err error) {
+	if body.Matches == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("matches", "body"))
+	}
+	if body.Supported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("supported", "body"))
+	}
+	for _, e := range body.Matches {
+		if e != nil {
+			if err2 := ValidateTestDetectionRuleMatchResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -12570,6 +12999,246 @@ func ValidateSuggestCustomDetectionRuleGatewayErrorResponseBody(body *SuggestCus
 	return
 }
 
+// ValidateTestDetectionRuleUnauthorizedResponseBody runs the validations
+// defined on testDetectionRule_unauthorized_response_body
+func ValidateTestDetectionRuleUnauthorizedResponseBody(body *TestDetectionRuleUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleForbiddenResponseBody runs the validations defined
+// on testDetectionRule_forbidden_response_body
+func ValidateTestDetectionRuleForbiddenResponseBody(body *TestDetectionRuleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleBadRequestResponseBody runs the validations defined
+// on testDetectionRule_bad_request_response_body
+func ValidateTestDetectionRuleBadRequestResponseBody(body *TestDetectionRuleBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleNotFoundResponseBody runs the validations defined
+// on testDetectionRule_not_found_response_body
+func ValidateTestDetectionRuleNotFoundResponseBody(body *TestDetectionRuleNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleConflictResponseBody runs the validations defined
+// on testDetectionRule_conflict_response_body
+func ValidateTestDetectionRuleConflictResponseBody(body *TestDetectionRuleConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleUnsupportedMediaResponseBody runs the validations
+// defined on testDetectionRule_unsupported_media_response_body
+func ValidateTestDetectionRuleUnsupportedMediaResponseBody(body *TestDetectionRuleUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleInvalidResponseBody runs the validations defined on
+// testDetectionRule_invalid_response_body
+func ValidateTestDetectionRuleInvalidResponseBody(body *TestDetectionRuleInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleInvariantViolationResponseBody runs the validations
+// defined on testDetectionRule_invariant_violation_response_body
+func ValidateTestDetectionRuleInvariantViolationResponseBody(body *TestDetectionRuleInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleUnexpectedResponseBody runs the validations defined
+// on testDetectionRule_unexpected_response_body
+func ValidateTestDetectionRuleUnexpectedResponseBody(body *TestDetectionRuleUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleGatewayErrorResponseBody runs the validations
+// defined on testDetectionRule_gateway_error_response_body
+func ValidateTestDetectionRuleGatewayErrorResponseBody(body *TestDetectionRuleGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRiskPolicyResponseBody runs the validations defined on
 // RiskPolicyResponseBody
 func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
@@ -12838,6 +13507,30 @@ func ValidateShadowMCPApprovalResponseBody(body *ShadowMCPApprovalResponseBody) 
 	}
 	if body.ApprovedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.approved_at", *body.ApprovedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateTestDetectionRuleMatchResponseBody runs the validations defined on
+// TestDetectionRuleMatchResponseBody
+func ValidateTestDetectionRuleMatchResponseBody(body *TestDetectionRuleMatchResponseBody) (err error) {
+	if body.RuleID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rule_id", "body"))
+	}
+	if body.Match == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match", "body"))
+	}
+	if body.StartPos == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("start_pos", "body"))
+	}
+	if body.EndPos == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("end_pos", "body"))
+	}
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Confidence == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confidence", "body"))
 	}
 	return
 }

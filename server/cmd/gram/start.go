@@ -1051,7 +1051,7 @@ func newStartCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, auditLogger, cache.NewRedisCacheAdapter(redisClient), c.String("pi-classifier-url") != "")
+			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, auditLogger, cache.NewRedisCacheAdapter(redisClient), c.String("pi-classifier-url") != "", hookPIIScanner, hookPIScanner)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 

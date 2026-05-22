@@ -67,6 +67,12 @@ type Service struct {
 	audit            *audit.Logger
 	cache            cache.Cache
 	piClassifier     bool
+	// Scanners reused by the rule-playground endpoint (testDetectionRule)
+	// so the dashboard sees the exact same matcher output the worker
+	// produces during chat-message analysis. Optional: when nil the
+	// playground returns an "unsupported" response for that scanner family.
+	piiScanner ra.PIIScanner
+	piScanner  *ra.PromptInjectionScanner
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -95,6 +101,8 @@ func NewObserver(
 		audit:            auditLogger,
 		cache:            nil,
 		piClassifier:     false,
+		piiScanner:       nil,
+		piScanner:        nil,
 	}
 }
 
@@ -110,6 +118,8 @@ func NewService(
 	auditLogger *audit.Logger,
 	redisCache cache.Cache,
 	piClassifier bool,
+	piiScanner ra.PIIScanner,
+	piScanner *ra.PromptInjectionScanner,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -126,6 +136,8 @@ func NewService(
 		audit:            auditLogger,
 		cache:            redisCache,
 		piClassifier:     piClassifier,
+		piiScanner:       piiScanner,
+		piScanner:        piScanner,
 	}
 }
 
@@ -1560,6 +1572,180 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		Regex:       parsed.Regex,
 		Severity:    parsed.Severity,
 	}, nil
+}
+
+// TestDetectionRule runs a single detection rule against pasted sample text
+// and returns its matches. The handler dispatches to the same scanners the
+// worker uses during chat-message analysis (gitleaks for secrets.*, the
+// configured PIIScanner for pii.*, the PromptInjectionScanner for
+// prompt_injection.*, and a regex matcher for custom.*) so the playground
+// output mirrors what would be recorded as a risk_result in production.
+//
+// shadow_mcp.* and destructive_tool.* are inherently tool-call shaped —
+// they have no text-only detector — so the handler returns supported:false
+// for them rather than fabricating a match.
+func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetectionRulePayload) (*gen.TestDetectionRuleResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	ruleID := strings.TrimSpace(payload.RuleID)
+	text := payload.Text
+	if ruleID == "" || text == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "rule_id and text are required")
+	}
+
+	switch {
+	case strings.HasPrefix(ruleID, "secret."):
+		return s.testGitleaksRule(ctx, ruleID, text)
+	case strings.HasPrefix(ruleID, "pii."):
+		return s.testPresidioRule(ctx, ruleID, text)
+	case ruleID == "prompt_injection.default" || strings.HasPrefix(ruleID, "prompt_injection."):
+		return s.testPromptInjectionRule(ctx, authCtx.ActiveOrganizationID, text)
+	case strings.HasPrefix(ruleID, "custom."):
+		regex := ""
+		if payload.Regex != nil {
+			regex = *payload.Regex
+		}
+		return s.testCustomRule(ruleID, regex, text)
+	default:
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("This rule has no text-only detector. Playground requires gitleaks/presidio/prompt-injection/custom rule families."),
+		}, nil
+	}
+}
+
+func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
+	findings, err := ra.ScanWithGitleaks(text)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "run gitleaks").Log(ctx, s.logger)
+	}
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
+	for _, f := range findings {
+		if f.RuleID != ruleID {
+			continue
+		}
+		matches = append(matches, findingToMatch(f))
+	}
+	return &gen.TestDetectionRuleResult{
+		Matches:   matches,
+		Supported: true,
+		Reason:    nil,
+	}, nil
+}
+
+func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
+	if s.piiScanner == nil {
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("PII scanner is not configured on this server."),
+		}, nil
+	}
+	entity := strings.ToUpper(strings.TrimPrefix(ruleID, "pii."))
+	batches, err := s.piiScanner.AnalyzeBatch(ctx, []string{text}, []string{entity}, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "run presidio").Log(ctx, s.logger)
+	}
+	matches := make([]*gen.TestDetectionRuleMatch, 0)
+	if len(batches) > 0 {
+		for _, f := range batches[0] {
+			if f.DeadLetterReason != "" {
+				continue
+			}
+			if f.RuleID != ruleID {
+				continue
+			}
+			matches = append(matches, findingToMatch(f))
+		}
+	}
+	return &gen.TestDetectionRuleResult{
+		Matches:   matches,
+		Supported: true,
+		Reason:    nil,
+	}, nil
+}
+
+func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, text string) (*gen.TestDetectionRuleResult, error) {
+	if s.piScanner == nil {
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("Prompt-injection scanner is not configured on this server."),
+		}, nil
+	}
+	findings, err := s.piScanner.Scan(ctx, text, orgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").Log(ctx, s.logger)
+	}
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
+	for _, f := range findings {
+		if f.DeadLetterReason != "" {
+			continue
+		}
+		matches = append(matches, findingToMatch(f))
+	}
+	return &gen.TestDetectionRuleResult{
+		Matches:   matches,
+		Supported: true,
+		Reason:    nil,
+	}, nil
+}
+
+func (s *Service) testCustomRule(ruleID, pattern, text string) (*gen.TestDetectionRuleResult, error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("Custom rules require a regex pattern. Custom rules are stored client-side, so pass `regex` in the request body."),
+		}, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid custom regex")
+	}
+	idxs := re.FindAllStringIndex(text, -1)
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(idxs))
+	for _, pair := range idxs {
+		matches = append(matches, &gen.TestDetectionRuleMatch{
+			RuleID:      ruleID,
+			Description: new("Custom regex match"),
+			Match:       text[pair[0]:pair[1]],
+			StartPos:    pair[0],
+			EndPos:      pair[1],
+			Source:      "custom",
+			Confidence:  1.0,
+			Tags:        nil,
+		})
+	}
+	return &gen.TestDetectionRuleResult{
+		Matches:   matches,
+		Supported: true,
+		Reason:    nil,
+	}, nil
+}
+
+//go:fix inline
+func strPtr(s string) *string { return new(s) }
+
+func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
+	return &gen.TestDetectionRuleMatch{
+		RuleID:      f.RuleID,
+		Description: new(f.Description),
+		Match:       f.Match,
+		StartPos:    f.StartPos,
+		EndPos:      f.EndPos,
+		Source:      f.Source,
+		Confidence:  f.Confidence,
+		Tags:        f.Tags,
+	}
 }
 
 // policyToType converts a database row to the API type, enriching it with
