@@ -358,7 +358,7 @@ function AddNewMenu({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button size="sm" className="shrink-0">
+        <Button className="h-[42px] shrink-0 px-4">
           <Plus className="size-4" />
           Add new
           <ChevronDown className="size-3.5 opacity-70" />
