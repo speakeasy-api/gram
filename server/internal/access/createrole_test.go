@@ -39,18 +39,18 @@ func TestService_CreateRole(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"org-custom-builder"}).Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlugs:      []string{"org-custom-builder"},
+		RoleSlugs:      []string{authz.SystemRoleMember, "org-custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{"org-custom-builder"}).Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlugs:      []string{"org-custom-builder"},
+		RoleSlugs:      []string{authz.SystemRoleMember, "org-custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 

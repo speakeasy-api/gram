@@ -104,11 +104,15 @@ func mockSystemRole(id, name, slug string) thirdpartyworkos.Role {
 }
 
 func mockMember(orgID, membershipID, userID, roleSlug string) thirdpartyworkos.Member {
+	return mockMemberMultiRole(orgID, membershipID, userID, roleSlug)
+}
+
+func mockMemberMultiRole(orgID, membershipID, userID string, roleSlugs ...string) thirdpartyworkos.Member {
 	return thirdpartyworkos.Member{
 		ID:             membershipID,
 		UserID:         userID,
 		OrganizationID: orgID,
-		RoleSlugs:      []string{roleSlug},
+		RoleSlugs:      roleSlugs,
 		CreatedAt:      mockMembershipTimestamp,
 	}
 }

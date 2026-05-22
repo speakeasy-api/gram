@@ -197,8 +197,8 @@ async function seed() {
   try {
     const dbUser = process.env.DB_USER || "gram";
     const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET whitelisted = TRUE WHERE id = '${activeOrgID}';"`.quiet();
-    log.info("Set active org as whitelisted");
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET whitelisted = TRUE, gram_account_type = 'pro' WHERE id = '${activeOrgID}';"`.quiet();
+    log.info("Set active org as whitelisted (downgraded to pro for seeding)");
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
     log.warn(
@@ -325,6 +325,19 @@ async function seed() {
       organizationId: activeOrgID,
       toolUrns,
     });
+  }
+
+  // Set enterprise account type last so RBAC enforcement doesn't block seeding.
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET gram_account_type = 'enterprise' WHERE id = '${activeOrgID}';"`.quiet();
+    log.info("Set active org to enterprise account type");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Failed to set enterprise account type: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
   }
 
   success = true;

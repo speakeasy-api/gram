@@ -398,15 +398,10 @@ SELECT
 FROM organization_user_relationships AS our
 JOIN users
   ON users.id = our.user_id
-LEFT JOIN LATERAL (
-  SELECT *
-  FROM organization_role_assignments
-  WHERE organization_role_assignments.organization_id = our.organization_id
-    AND organization_role_assignments.workos_user_id = users.workos_id
-    AND organization_role_assignments.deleted_at IS NULL
-  ORDER BY organization_role_assignments.created_at
-  LIMIT 1
-) AS ora ON TRUE
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = our.organization_id
+  AND ora.workos_user_id = users.workos_id
+  AND ora.deleted_at IS NULL
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
   AND organization_roles.organization_id = our.organization_id
@@ -564,3 +559,50 @@ WHERE organization_role_assignments.organization_id = @organization_id
   RETURNING 1
 )
 SELECT COUNT(*)::bigint FROM upserted;
+
+-- name: SoftDeleteAllRoleAssignmentsByWorkosUser :execrows
+UPDATE organization_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workos_user_id = @workos_user_id
+  AND deleted_at IS NULL;
+
+-- name: ListActiveRoleIDsByWorkosUser :many
+SELECT
+  COALESCE(organization_roles.id::text, global_roles.id::text, '')::text AS role_id
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.workos_user_id = @workos_user_id
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY role_id;
+
+-- name: SoftDeleteRoleAssignmentsBySlug :execrows
+-- Soft-deletes all active role assignments matching a specific role slug for a given user.
+-- Used when deleting a role to remove just that role's assignments without affecting other roles.
+UPDATE organization_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_role_assignments.organization_id = @organization_id
+  AND organization_role_assignments.workos_user_id = @workos_user_id
+  AND organization_role_assignments.role_urn IN (
+    SELECT 'role:organization:' || organization_roles.id::text
+    FROM organization_roles
+    WHERE organization_roles.organization_id = @organization_id
+      AND organization_roles.workos_slug = sqlc.arg(workos_role_slug)
+    UNION ALL
+    SELECT 'role:global:' || global_roles.id::text
+    FROM global_roles
+    WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
+  )
+  AND organization_role_assignments.deleted_at IS NULL;

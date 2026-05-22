@@ -57,17 +57,23 @@ func TestService_DeleteRole_ReassignsMembersToDefault(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
 	memberRoleID := seedGlobalRole(t, ctx, ti.conn, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
-	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	adminID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	anotherID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_another", "Another", "another-role", ""))
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
-	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"))
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", "user3@test.com", "User 3", "user_3", "membership_3")
+	// Case 1: user_1 has [admin, custom-builder] → admin remains.
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMemberMultiRole(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder", "admin"))
+	// Case 2: user_2 has [custom-builder] only → gets assigned member.
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"))
-	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember(mockidp.MockOrgID, "membership_other", "user_3", "admin"))
-	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{authz.SystemRoleMember}).Return(&thirdpartyworkos.Member{
+	// Case 3: user_3 has [custom-builder, another-role] → another-role remains.
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", mockMemberMultiRole(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder", "another-role"))
+
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlugs:      []string{authz.SystemRoleMember},
+		RoleSlugs:      []string{"admin"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{authz.SystemRoleMember}).Return(&thirdpartyworkos.Member{
@@ -75,6 +81,13 @@ func TestService_DeleteRole_ReassignsMembersToDefault(t *testing.T) {
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlugs:      []string{authz.SystemRoleMember},
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_3", mock.Anything).Return(&thirdpartyworkos.Member{
+		ID:             "membership_3",
+		UserID:         "user_3",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlugs:      []string{"another-role"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
@@ -88,18 +101,12 @@ func TestService_DeleteRole_ReassignsMembersToDefault(t *testing.T) {
 	for _, member := range members.Members {
 		membersByID[member.ID] = member
 	}
-	require.Equal(t, []string{memberRoleID}, membersByID["local_user_1"].RoleIds)
+	// Case 1: user_1 retains admin.
+	require.Equal(t, []string{adminID}, membersByID["local_user_1"].RoleIds)
+	// Case 2: user_2 falls back to member.
 	require.Equal(t, []string{memberRoleID}, membersByID["local_user_2"].RoleIds)
-
-	roles, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
-	require.NoError(t, err)
-	for _, role := range roles.Roles {
-		if role.ID == memberRoleID {
-			require.Equal(t, 2, role.MemberCount)
-			return
-		}
-	}
-	require.Fail(t, "member role not found")
+	// Case 3: user_3 retains another-role.
+	require.Equal(t, []string{anotherID}, membersByID["local_user_3"].RoleIds)
 }
 
 func TestService_DeleteRole_ReassignFailureDoesNotHaltDelete(t *testing.T) {

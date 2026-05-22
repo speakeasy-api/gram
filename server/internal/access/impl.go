@@ -360,20 +360,16 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 		attr.AccessMemberID(payload.UserID),
 	)
 
-	// TODO: support assigning multiple roles simultaneously in RoleManager.
-	// For now, delegate to the single-role replacement path using the first role.
-	memberUpdate, err := s.roleMgr.UpdateMemberRole(ctx, ac.ActiveOrganizationID, payload.UserID, payload.RoleIds[0], accessAuditActor{
+	memberUpdate, err := s.roleMgr.UpdateMemberRoles(ctx, ac.ActiveOrganizationID, payload.UserID, payload.RoleIds, accessAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		DisplayName: ac.Email,
 	})
 	if err != nil {
 		return nil, err
 	}
-	roleSlug := memberUpdate.RoleSlug
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
-		attr.AccessRoleSlug(roleSlug),
 	)
 
 	return memberUpdate.After, nil
