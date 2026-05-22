@@ -2,7 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.33.0",
+  "version": "1.33.1",
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -230,7 +230,6 @@
     "msw-storybook-addon": "^2.0.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-is": "19.2.3",
     "remark-gfm": "^4.0.1",
     "storybook": "^10.0.8",
     "tailwindcss": "^4.2.4",

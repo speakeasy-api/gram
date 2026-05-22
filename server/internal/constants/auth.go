@@ -17,6 +17,10 @@ const (
 	ProjectSlugSecuritySchema = "project_slug"
 	ProjectHeader             = "Gram-Project"
 
+	AdminAuthSecurityScheme = "admin_auth"
+	AdminSessionCookie      = "gram_admin"
+	AdminLoginStateCookie   = "gram_admin_login_state"
+
 	WorkOSSignatureSecurityScheme = "workos_signature"
 	WorkOSSignatureHeader         = "WorkOS-Signature"
 )

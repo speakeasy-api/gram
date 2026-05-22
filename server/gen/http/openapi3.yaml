@@ -6,19 +6,63 @@ info:
 servers:
     - url: https://app.getgram.ai
 paths:
-    /admin/diagnostics.poke:
+    /admin/auth.callback:
         get:
             tags:
                 - admin
-            summary: poke admin
-            operationId: admin#poke
+            summary: callback admin
+            operationId: admin#callback
+            parameters:
+                - name: code
+                  in: query
+                  description: The authorization code returned by the provider on success
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The authorization code returned by the provider on success
+                - name: state
+                  in: query
+                  description: The state parameter returned, which should match the one generated in the login step
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: The state parameter returned, which should match the one generated in the login step
+                - name: error
+                  in: query
+                  description: OAuth error code returned by the provider (e.g. login_required for prompt=none failures)
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: OAuth error code returned by the provider (e.g. login_required for prompt=none failures)
+                - name: error_description
+                  in: query
+                  description: Human-readable OAuth error description
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Human-readable OAuth error description
+                - name: gram_admin_login_state
+                  in: cookie
+                  description: The state cookie value for CSRF sanity checking against the state parameter
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The state cookie value for CSRF sanity checking against the state parameter
             responses:
-                "200":
-                    description: OK response.
-                    content:
-                        application/json:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Location:
+                            description: The URL to redirect the client to after processing the callback
                             schema:
-                                $ref: '#/components/schemas/PokeResponseBody'
+                                type: string
+                                description: The URL to redirect the client to after processing the callback
+                        Set-Cookie:
+                            description: Admin session cookie
+                            schema:
+                                type: string
+                                description: Admin session cookie
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -73,6 +117,673 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/auth.login:
+        get:
+            tags:
+                - admin
+            summary: login admin
+            operationId: admin#login
+            parameters:
+                - name: return_to
+                  in: query
+                  description: Optional URL to return the user to after login. Relative paths and absolute URLs whose origin is in the admin allowed-origins list are accepted.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional URL to return the user to after login. Relative paths and absolute URLs whose origin is in the admin allowed-origins list are accepted.
+                - name: prompt
+                  in: query
+                  description: Optional OAuth prompt parameter forwarded to the provider. Pass 'none' to attempt silent re-authentication.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional OAuth prompt parameter forwarded to the provider. Pass 'none' to attempt silent re-authentication.
+            responses:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Location:
+                            description: The URL to redirect the user to for Google authentication
+                            schema:
+                                type: string
+                                description: The URL to redirect the user to for Google authentication
+                        Set-Cookie:
+                            description: CSRF state cookie for sanity-checking the callback
+                            schema:
+                                type: string
+                                description: CSRF state cookie for sanity-checking the callback
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+    /admin/auth.logout:
+        post:
+            tags:
+                - admin
+            summary: logout admin
+            operationId: admin#logout
+            parameters:
+                - name: gram_admin
+                  in: cookie
+                  description: The session cookie value to clear for logging out
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The session cookie value to clear for logging out
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+    /admin/organization.get:
+        get:
+            tags:
+                - admin
+            summary: getOrganization admin
+            description: Returns full admin details for a single organization by id or slug.
+            operationId: adminGetOrganization
+            parameters:
+                - name: id_or_slug
+                  in: query
+                  description: Organization ID or slug.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization ID or slug.
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.members:
+        get:
+            tags:
+                - admin
+            summary: listOrganizationMembers admin
+            description: Lists members of an organization (admin view, no auth scoping).
+            operationId: adminListOrganizationMembers
+            parameters:
+                - name: organization_id
+                  in: query
+                  description: Organization ID.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization ID.
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListOrganizationMembersResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.projects:
+        get:
+            tags:
+                - admin
+            summary: listOrganizationProjects admin
+            description: Lists projects belonging to an organization (admin view, no auth scoping).
+            operationId: adminListOrganizationProjects
+            parameters:
+                - name: organization_id
+                  in: query
+                  description: Organization ID.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization ID.
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListOrganizationProjectsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.update:
+        post:
+            tags:
+                - admin
+            summary: updateOrganization admin
+            description: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.
+            operationId: adminUpdateOrganization
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateOrganizationRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organizations.list:
+        get:
+            description: Lists organizations for admin operations with optional search and filters.
+            operationId: adminListOrganizations
+            parameters:
+                - allowEmptyValue: true
+                  description: Search term applied to name and slug (case-insensitive substring).
+                  in: query
+                  name: q
+                  schema:
+                    description: Search term applied to name and slug (case-insensitive substring).
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by gram_account_type (e.g. free, pro, enterprise).
+                  in: query
+                  name: account_type
+                  schema:
+                    description: Filter by gram_account_type (e.g. free, pro, enterprise).
+                    type: string
+                - allowEmptyValue: true
+                  description: Include organizations with disabled_at set. Defaults to false.
+                  in: query
+                  name: include_disabled
+                  schema:
+                    description: Include organizations with disabled_at set. Defaults to false.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: 'Pagination cursor: id of the last item from the previous page.'
+                  in: query
+                  name: cursor
+                  schema:
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListOrganizationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listOrganizations admin
+            tags:
+                - admin
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+    /admin/project.get:
+        get:
+            tags:
+                - admin
+            summary: getProject admin
+            description: Returns full admin details for a project by id or slug, including aggregated counts of child resources.
+            operationId: adminGetProject
+            parameters:
+                - name: id_or_slug
+                  in: query
+                  description: Project ID or slug.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Project ID or slug.
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminProjectDetail'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /rpc/access.createRole:
         post:
             description: Create a new custom role.
@@ -1349,10 +2060,10 @@ paths:
             x-speakeasy-name-override: resolveChallenge
             x-speakeasy-react-hook:
                 name: ResolveChallenge
-    /rpc/access.updateMemberRole:
+    /rpc/access.updateMemberRoles:
         put:
-            description: Change a team member's role assignment.
-            operationId: updateMemberRole
+            description: Update a team member's role assignments.
+            operationId: updateMemberRoles
             parameters:
                 - allowEmptyValue: true
                   description: API Key header
@@ -1372,7 +2083,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateMemberRoleForm'
+                            $ref: '#/components/schemas/UpdateMemberRolesForm'
                 required: true
             responses:
                 "200":
@@ -1438,12 +2149,12 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
-            summary: updateMemberRole access
+            summary: updateMemberRoles access
             tags:
                 - access
-            x-speakeasy-name-override: updateMemberRole
+            x-speakeasy-name-override: updateMemberRoles
             x-speakeasy-react-hook:
-                name: UpdateMemberRole
+                name: UpdateMemberRoles
     /rpc/access.updateRole:
         put:
             description: Update an existing custom role.
@@ -4799,11 +5510,30 @@ paths:
                     description: Filter by external user ID
                     type: string
                 - allowEmptyValue: true
+                  description: Filter to chats produced by this assistant
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Filter to chats produced by this assistant
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Filter by resolution status
                   in: query
                   name: resolution_status
                   schema:
                     description: Filter by resolution status
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+                  in: query
+                  name: has_risk
+                  schema:
+                    description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+                    enum:
+                        - ""
+                        - "true"
+                        - "false"
                     type: string
                 - allowEmptyValue: true
                   description: Filter chats created after this timestamp (ISO 8601)
@@ -4960,7 +5690,7 @@ paths:
                 type: query
     /rpc/chat.load:
         get:
-            description: Load a chat by its ID
+            description: Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
             operationId: loadChat
             parameters:
                 - allowEmptyValue: true
@@ -4971,6 +5701,15 @@ paths:
                   schema:
                     description: The ID of the chat
                     type: string
+                - allowEmptyValue: true
+                  description: 'Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.'
+                  in: query
+                  name: generation
+                  schema:
+                    description: 'Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.'
+                    format: int64
+                    minimum: 0
+                    type: integer
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -7010,6 +7749,87 @@ paths:
             x-speakeasy-name-override: getDomain
             x-speakeasy-react-hook:
                 name: getDomain
+    /rpc/domain.listMcpEndpoints:
+        get:
+            description: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
+            operationId: listCustomDomainMcpEndpoints
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCustomDomainMcpEndpointsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listMcpEndpoints domains
+            tags:
+                - domains
+            x-speakeasy-name-override: listMcpEndpoints
+            x-speakeasy-react-hook:
+                name: CustomDomainMcpEndpoints
     /rpc/domain.register:
         post:
             description: Create a custom domain for an organization
@@ -18324,6 +19144,466 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: RiskCapabilities
+    /rpc/risk.categories:
+        get:
+            description: 'Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.'
+            operationId: listRiskCategories
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskCategoriesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskCategories risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.categories
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: RiskCategories
+    /rpc/risk.overview.get:
+        get:
+            description: Get risk overview metrics and trend data for the current project.
+            operationId: getRiskOverview
+            parameters:
+                - allowEmptyValue: true
+                  description: Inclusive start of the overview window. Defaults to the start of the 7-day calendar window ending at to.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive start of the overview window. Defaults to the start of the 7-day calendar window ending at to.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive end of the overview window. Defaults to now.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive end of the overview window. Defaults to now.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskOverviewResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskOverview risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.overview
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: RiskOverview
+    /rpc/risk.overview.rules:
+        get:
+            description: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
+            operationId: getRiskRuleBreakdown
+            parameters:
+                - allowEmptyValue: true
+                  description: Required category key to break down by rule_id (e.g. secrets, pii).
+                  in: query
+                  name: category
+                  required: true
+                  schema:
+                    description: Required category key to break down by rule_id (e.g. secrets, pii).
+                    type: string
+                - allowEmptyValue: true
+                  description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive end of the window. Defaults to now.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive end of the window. Defaults to now.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskRuleBreakdownResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskRuleBreakdown risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.overview
+            x-speakeasy-name-override: rules
+            x-speakeasy-react-hook:
+                name: RiskRuleBreakdown
+    /rpc/risk.overview.userBreakdown:
+        get:
+            description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+            operationId: getRiskUserBreakdown
+            parameters:
+                - allowEmptyValue: true
+                  description: External user identifier to scope the breakdown to.
+                  in: query
+                  name: external_user_id
+                  required: true
+                  schema:
+                    description: External user identifier to scope the breakdown to.
+                    type: string
+                - allowEmptyValue: true
+                  description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive end of the window. Defaults to now.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive end of the window. Defaults to now.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskUserBreakdownResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskUserBreakdown risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.overview
+            x-speakeasy-name-override: userBreakdown
+            x-speakeasy-react-hook:
+                name: RiskUserBreakdown
     /rpc/risk.policies.create:
         post:
             description: Create a new risk analysis policy for the current project.
@@ -19183,6 +20463,43 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: Optional rule category key to filter by (e.g. secrets, pii, financial).
+                  in: query
+                  name: category
+                  schema:
+                    description: Optional rule category key to filter by (e.g. secrets, pii, financial).
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+                  in: query
+                  name: rule_id
+                  schema:
+                    description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+                    type: string
+                - allowEmptyValue: true
+                  description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+                  in: query
+                  name: unique_match
+                  schema:
+                    description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Filter results to messages created at or after this timestamp (ISO 8601).
+                  in: query
+                  name: from
+                  schema:
+                    description: Filter results to messages created at or after this timestamp (ISO 8601).
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter results to messages created strictly before this timestamp (ISO 8601).
+                  in: query
+                  name: to
+                  schema:
+                    description: Filter results to messages created strictly before this timestamp (ISO 8601).
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
                   description: Cursor to fetch the next page of results.
                   in: query
                   name: cursor
@@ -19293,6 +20610,175 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskListResults
+    /rpc/risk.results.listForAgent:
+        get:
+            description: List risk analysis results with the `match` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `match` value — a non-sensitive server URL or command identifier — is passed through verbatim.
+            operationId: listRiskResultsForAgent
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional policy ID to filter by.
+                  in: query
+                  name: policy_id
+                  schema:
+                    description: Optional policy ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional chat ID to filter by.
+                  in: query
+                  name: chat_id
+                  schema:
+                    description: Optional chat ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional rule category key to filter by (e.g. secrets, pii, financial).
+                  in: query
+                  name: category
+                  schema:
+                    description: Optional rule category key to filter by (e.g. secrets, pii, financial).
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+                  in: query
+                  name: rule_id
+                  schema:
+                    description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+                    type: string
+                - allowEmptyValue: true
+                  description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+                  in: query
+                  name: unique_match
+                  schema:
+                    description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Filter results to messages created at or after this timestamp (ISO 8601).
+                  in: query
+                  name: from
+                  schema:
+                    description: Filter results to messages created at or after this timestamp (ISO 8601).
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter results to messages created strictly before this timestamp (ISO 8601).
+                  in: query
+                  name: to
+                  schema:
+                    description: Filter results to messages created strictly before this timestamp (ISO 8601).
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskResultsForAgentResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskResultsForAgent risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: listForAgent
+            x-speakeasy-react-hook:
+                name: RiskListResultsForAgent
     /rpc/slack-apps.configure:
         post:
             description: Store Slack credentials (client ID, client secret, signing secret) for an app.
@@ -26358,14 +27844,16 @@ components:
                 photo_url:
                     type: string
                     description: Avatar URL.
-                role_id:
-                    type: string
-                    description: Currently assigned role ID.
+                role_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: All role IDs assigned to this member.
             required:
                 - id
                 - name
                 - email
-                - role_id
+                - role_ids
                 - joined_at
         AddDeploymentPackageForm:
             type: object
@@ -26570,6 +28058,215 @@ components:
                 - plugin_id
                 - toolset_id
                 - display_name
+        AdminListOrganizationMembersResult:
+            type: object
+            properties:
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOrganizationMember'
+                    description: The members of the organization.
+            required:
+                - members
+        AdminListOrganizationProjectsResult:
+            type: object
+            properties:
+                projects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminProject'
+                    description: The projects belonging to the organization.
+            required:
+                - projects
+        AdminListOrganizationsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOrganization'
+                    description: The page of organizations.
+            required:
+                - organizations
+        AdminOrganization:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: Gram account type (e.g. free, pro, enterprise).
+                created_at:
+                    type: string
+                    description: The creation date of the organization.
+                    format: date-time
+                disabled_at:
+                    type: string
+                    description: The time at which the organization was disabled, if any.
+                    format: date-time
+                free_trial_ends_at:
+                    type: string
+                    description: The time at which the free trial ends.
+                    format: date-time
+                free_trial_started_at:
+                    type: string
+                    description: The time at which the free trial started.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the organization
+                member_count:
+                    type: integer
+                    description: Number of active members in the organization.
+                    format: int64
+                name:
+                    type: string
+                    description: The name of the organization
+                slug:
+                    type: string
+                    description: The slug of the organization
+                updated_at:
+                    type: string
+                    description: The last update date of the organization.
+                    format: date-time
+                whitelisted:
+                    type: boolean
+                    description: Whether the organization is whitelisted for full access.
+                workos_id:
+                    type: string
+                    description: WorkOS organization ID, if linked.
+            description: Organization details surfaced to admin operators.
+            required:
+                - id
+                - name
+                - slug
+                - account_type
+                - whitelisted
+                - member_count
+                - created_at
+                - updated_at
+        AdminOrganizationMember:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                display_name:
+                    type: string
+                    description: User display name.
+                email:
+                    type: string
+                    description: User email address.
+                id:
+                    type: string
+                    description: User ID.
+                last_login:
+                    type: string
+                    description: The time the user last logged in, if any.
+                    format: date-time
+                updated_at:
+                    type: string
+                    format: date-time
+            description: Organization member surfaced to admin operators.
+            required:
+                - id
+                - email
+                - display_name
+                - created_at
+                - updated_at
+        AdminProject:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the project.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the project
+                name:
+                    type: string
+                    description: The name of the project
+                slug:
+                    type: string
+                    description: The slug of the project
+                updated_at:
+                    type: string
+                    description: The last update date of the project.
+                    format: date-time
+            description: Project summary surfaced to admin operators.
+            required:
+                - id
+                - name
+                - slug
+                - created_at
+                - updated_at
+        AdminProjectDetail:
+            type: object
+            properties:
+                api_key_count:
+                    type: integer
+                    description: Number of active API keys in the project.
+                    format: int64
+                assistant_count:
+                    type: integer
+                    description: Number of active assistants in the project.
+                    format: int64
+                created_at:
+                    type: string
+                    format: date-time
+                deployment_count:
+                    type: integer
+                    description: Total number of deployments in the project.
+                    format: int64
+                environment_count:
+                    type: integer
+                    description: Number of active environments in the project.
+                    format: int64
+                functions_runner_version:
+                    type: string
+                    description: Functions runner version pin, if set.
+                http_tool_count:
+                    type: integer
+                    description: Number of active HTTP tool definitions in the project.
+                    format: int64
+                id:
+                    type: string
+                    description: Project ID.
+                logo_asset_id:
+                    type: string
+                    description: Project logo asset ID, if set.
+                name:
+                    type: string
+                    description: Project name.
+                organization_id:
+                    type: string
+                    description: Owning organization ID.
+                slug:
+                    type: string
+                    description: Project slug.
+                toolset_count:
+                    type: integer
+                    description: Number of active toolsets in the project.
+                    format: int64
+                updated_at:
+                    type: string
+                    format: date-time
+            description: Full project detail surfaced to admin operators, including aggregated counts of child resources.
+            required:
+                - id
+                - name
+                - slug
+                - organization_id
+                - toolset_count
+                - deployment_count
+                - http_tool_count
+                - environment_count
+                - api_key_count
+                - assistant_count
+                - created_at
+                - updated_at
         AllowedOrigin:
             type: object
             properties:
@@ -27309,6 +29006,10 @@ components:
                 external_user_id:
                     type: string
                     description: The ID of the external user who created the chat
+                generation:
+                    type: integer
+                    description: The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.
+                    format: int64
                 id:
                     type: string
                     description: The ID of the chat
@@ -27316,14 +29017,22 @@ components:
                     type: string
                     description: When the last message in the chat was created.
                     format: date-time
+                max_generation:
+                    type: integer
+                    description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
+                    format: int64
                 messages:
                     type: array
                     items:
                         $ref: '#/components/schemas/ChatMessage'
-                    description: The list of messages in the chat
+                    description: The list of messages in the chat for the returned generation
                 num_messages:
                     type: integer
                     description: The number of messages in the chat
+                    format: int64
+                risk_findings_count:
+                    type: integer
+                    description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
                     format: int64
                 source:
                     type: string
@@ -27356,6 +29065,8 @@ components:
                     description: The ID of the user who created the chat
             required:
                 - messages
+                - generation
+                - max_generation
                 - id
                 - title
                 - num_messages
@@ -27426,6 +29137,10 @@ components:
                     type: integer
                     description: The number of messages in the chat
                     format: int64
+                risk_findings_count:
+                    type: integer
+                    description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+                    format: int64
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -27488,6 +29203,10 @@ components:
                     items:
                         $ref: '#/components/schemas/ChatResolution'
                     description: List of resolutions for this chat
+                risk_findings_count:
+                    type: integer
+                    description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+                    format: int64
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -27711,8 +29430,14 @@ components:
                 continue:
                     type: boolean
                     description: Whether to continue (SessionStart only)
+                decision:
+                    type: string
+                    description: Top-level block decision for UserPromptSubmit / PostToolUse / Stop / SubagentStop. Use 'block' to halt processing.
                 hookSpecificOutput:
                     description: Hook-specific output as JSON object
+                reason:
+                    type: string
+                    description: Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).
                 stopReason:
                     type: string
                     description: Reason if blocked (SessionStart only)
@@ -28876,6 +30601,44 @@ components:
                 - created_at
                 - updated_at
                 - is_updating
+        CustomDomainMcpEndpoint:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the MCP endpoint
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The ID of the parent MCP server
+                    format: uuid
+                mcp_server_name:
+                    type: string
+                    description: The display name of the parent MCP server. May be empty if the parent has no configured name.
+                mcp_server_slug:
+                    type: string
+                    description: The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.
+                project_id:
+                    type: string
+                    description: The ID of the project the endpoint belongs to
+                    format: uuid
+                project_name:
+                    type: string
+                    description: The display name of the project the endpoint belongs to
+                project_slug:
+                    type: string
+                    description: The url-friendly slug of the project the endpoint belongs to
+                slug:
+                    type: string
+                    description: The endpoint slug
+            description: An MCP endpoint registered under a custom domain, with its parent MCP server and project denormalised for display in the dashboard's delete-impact preview.
+            required:
+                - id
+                - slug
+                - project_id
+                - project_name
+                - project_slug
+                - mcp_server_id
         DeleteGlobalToolVariationForm:
             type: object
             properties:
@@ -30221,6 +31984,10 @@ components:
                     type: boolean
                     description: 'Whether to include time series data (default: true)'
                     default: true
+                remote_mcp_server_id:
+                    type: string
+                    description: Optional Remote MCP server ID filter
+                    format: uuid
                 to:
                     type: string
                     description: End time in ISO 8601 format
@@ -31133,6 +32900,16 @@ components:
             required:
                 - chats
                 - total
+        ListCustomDomainMcpEndpointsResult:
+            type: object
+            properties:
+                mcp_endpoints:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CustomDomainMcpEndpoint'
+            description: Result of listing the MCP endpoints registered under an organization's custom domain.
+            required:
+                - mcp_endpoints
         ListDeploymentForm:
             type: object
             properties:
@@ -31481,6 +33258,24 @@ components:
                     description: Cursor for the next page of results.
             required:
                 - chats
+        ListRiskResultsForAgentResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskResultRedacted'
+                    description: The list of risk results with match content redacted to opaque fingerprints.
+                total_count:
+                    type: integer
+                    description: Total number of findings across all enabled policies.
+                    format: int64
+            required:
+                - results
+                - total_count
         ListRiskResultsResult:
             type: object
             properties:
@@ -33168,13 +34963,6 @@ components:
                 - policy
                 - sort_order
                 - created_at
-        PokeResponseBody:
-            type: object
-            properties:
-                ok:
-                    type: boolean
-            required:
-                - ok
         Project:
             type: object
             properties:
@@ -34101,6 +35889,52 @@ components:
                     description: Whether the prompt-injection ML classifier is configured on this server.
             required:
                 - pi_classifier_enabled
+        RiskCategoriesResult:
+            type: object
+            properties:
+                categories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskCategoryDefinition'
+                    description: Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.
+            description: Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.
+            required:
+                - categories
+        RiskCategoryDefinition:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Plain-English description of what this category covers.
+                icon:
+                    type: string
+                    description: Lucide icon name suggested for this category.
+                key:
+                    type: string
+                    description: Canonical category key (e.g. 'secrets', 'pii', 'shadow_mcp').
+                label:
+                    type: string
+                    description: Human-readable category label for UI rendering.
+                rule_id_prefix:
+                    type: string
+                    description: When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').
+                rule_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: When non-empty, findings whose rule_id is in this exact list belong to this category. Checked before rule_id_prefix.
+                source:
+                    type: string
+                    description: When non-empty, findings whose source equals this value belong to this category.
+            description: One canonical risk category and how findings are classified into it.
+            required:
+                - key
+                - label
+                - description
+                - icon
+                - source
+                - rule_ids
+                - rule_id_prefix
         RiskChatSummary:
             type: object
             properties:
@@ -34126,6 +35960,112 @@ components:
                 - chat_id
                 - findings_count
                 - latest_detected
+        RiskOverviewCategory:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: Policy category key.
+                findings:
+                    type: integer
+                    description: Finding count for this category.
+                    format: int64
+            required:
+                - category
+                - findings
+        RiskOverviewResult:
+            type: object
+            properties:
+                active_policies:
+                    type: integer
+                    description: Enabled risk policies for the current project.
+                    format: int64
+                findings:
+                    type: integer
+                    description: Policy findings in the window.
+                    format: int64
+                flagged_sessions:
+                    type: integer
+                    description: Chat sessions with at least one finding in the window.
+                    format: int64
+                from:
+                    type: string
+                    description: Inclusive start of the overview window.
+                    format: date-time
+                messages_scanned:
+                    type: integer
+                    description: Messages analyzed by risk policies in the window.
+                    format: int64
+                time_series_findings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskOverviewTimeSeriesFinding'
+                    description: Time-series finding counts by category in the window.
+                to:
+                    type: string
+                    description: Exclusive end of the overview window.
+                    format: date-time
+                top_categories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskOverviewCategory'
+                    description: Top policy categories by finding count.
+                top_rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskRuleBreakdownEntry'
+                    description: Top rule_ids by finding count.
+                top_users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskOverviewUser'
+                    description: Top users by finding count.
+            required:
+                - from
+                - to
+                - messages_scanned
+                - findings
+                - flagged_sessions
+                - active_policies
+                - top_categories
+                - top_users
+                - top_rules
+                - time_series_findings
+        RiskOverviewTimeSeriesFinding:
+            type: object
+            properties:
+                bucket_start:
+                    type: string
+                    description: Time bucket start.
+                    format: date-time
+                category:
+                    type: string
+                    description: Policy category key.
+                findings:
+                    type: integer
+                    description: Finding count for this category and time bucket.
+                    format: int64
+            required:
+                - bucket_start
+                - category
+                - findings
+        RiskOverviewUser:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: User email, or Unknown user when unavailable.
+                external_user_id:
+                    type: string
+                    description: External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.
+                findings:
+                    type: integer
+                    description: Finding count for this user.
+                    format: int64
+            required:
+                - email
+                - external_user_id
+                - findings
         RiskPolicy:
             type: object
             properties:
@@ -34315,6 +36255,153 @@ components:
                 - chat_message_id
                 - source
                 - created_at
+        RiskResultRedacted:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: The chat session containing the message.
+                    format: uuid
+                chat_message_id:
+                    type: string
+                    description: The chat message that was scanned.
+                    format: uuid
+                chat_title:
+                    type: string
+                    description: Title of the chat session.
+                confidence:
+                    type: number
+                    description: Confidence score for this finding.
+                    format: double
+                created_at:
+                    type: string
+                    description: When this result was created.
+                    format: date-time
+                description:
+                    type: string
+                    description: Human-readable description of the finding.
+                id:
+                    type: string
+                    description: The result ID.
+                    format: uuid
+                match_redacted:
+                    type: string
+                    description: Opaque fingerprint of the original match in the form `<redacted len=N sha=XXXXXXXX>` where N is the byte length of the original match and XXXXXXXX is the first 8 hex characters of sha256(match). For shadow_mcp findings the original match value (a non-sensitive server URL or command identifier) is passed through verbatim.
+                policy_id:
+                    type: string
+                    description: The risk policy ID.
+                    format: uuid
+                policy_version:
+                    type: integer
+                    description: Policy version when this result was produced.
+                    format: int64
+                position_known:
+                    type: boolean
+                    description: Whether the original finding carried byte-position information within the source message. Exact positions are intentionally not exposed to avoid reconstruction attacks.
+                rule_id:
+                    type: string
+                    description: The matched rule identifier.
+                source:
+                    type: string
+                    description: Detection source (e.g. gitleaks, presidio, shadow_mcp).
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: Tags from the detection rule.
+                user_id:
+                    type: string
+                    description: The user who owns the chat session.
+            required:
+                - id
+                - policy_id
+                - policy_version
+                - chat_message_id
+                - source
+                - created_at
+                - match_redacted
+                - position_known
+        RiskRuleBreakdownEntry:
+            type: object
+            properties:
+                findings:
+                    type: integer
+                    description: Finding count for this rule within the window.
+                    format: int64
+                rule_id:
+                    type: string
+                    description: Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has no rule_id (treat as 'unspecified').
+                source:
+                    type: string
+                    description: Source bucket the rule belongs to (gitleaks, presidio, etc.) for label/icon resolution on the dashboard.
+            required:
+                - rule_id
+                - source
+                - findings
+        RiskRuleBreakdownResult:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: Category the breakdown is scoped to.
+                from:
+                    type: string
+                    description: Inclusive start of the window used.
+                    format: date-time
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskRuleBreakdownEntry'
+                    description: Rules in this category, ordered by finding count descending.
+                to:
+                    type: string
+                    description: Exclusive end of the window used.
+                    format: date-time
+                total:
+                    type: integer
+                    description: Total findings across all rules in this category and window.
+                    format: int64
+            required:
+                - from
+                - to
+                - category
+                - rules
+                - total
+        RiskUserBreakdownResult:
+            type: object
+            properties:
+                categories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskOverviewCategory'
+                    description: Category breakdown for this user, ordered by finding count descending.
+                external_user_id:
+                    type: string
+                    description: External user the breakdown is scoped to.
+                findings:
+                    type: integer
+                    description: Total findings for this user in the window.
+                    format: int64
+                from:
+                    type: string
+                    description: Inclusive start of the window used.
+                    format: date-time
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskRuleBreakdownEntry'
+                    description: Rule_id breakdown for this user, ordered by finding count descending.
+                to:
+                    type: string
+                    description: Exclusive end of the window used.
+                    format: date-time
+            required:
+                - from
+                - to
+                - external_user_id
+                - findings
+                - categories
+                - rules
         Role:
             type: object
             properties:
@@ -34388,6 +36475,54 @@ components:
                     description: Selector constraints. Null means unrestricted.
             required:
                 - scope
+        RoleSummary:
+            type: object
+            properties:
+                cost_per_user:
+                    type: number
+                    description: Average cost per user (total_cost / user_count)
+                    format: double
+                role_id:
+                    type: string
+                    description: Role identifier extracted from role URN
+                role_name:
+                    type: string
+                    description: Human-readable role name
+                total_chats:
+                    type: integer
+                    description: Total chat sessions across all users
+                    format: int64
+                total_cost:
+                    type: number
+                    description: Total cost across all users with this role
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Sum of input tokens across all users
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Sum of output tokens across all users
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Sum of all tokens across all users
+                    format: int64
+                user_count:
+                    type: integer
+                    description: Number of users with this role
+                    format: int64
+            description: Aggregated usage summary for a role
+            required:
+                - role_id
+                - role_name
+                - user_count
+                - total_cost
+                - cost_per_user
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
+                - total_chats
         ScopeDefinition:
             type: object
             properties:
@@ -34716,6 +36851,13 @@ components:
                     description: Cursor for pagination (user identifier from last item)
                 filter:
                     $ref: '#/components/schemas/SearchUsersFilter'
+                group_by:
+                    type: string
+                    description: Grouping dimension for results
+                    default: employee
+                    enum:
+                        - employee
+                        - role
                 limit:
                     type: integer
                     description: Number of items to return (1-1000)
@@ -34746,11 +36888,16 @@ components:
                 next_cursor:
                     type: string
                     description: Cursor for next page
+                roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleSummary'
+                    description: List of role usage summaries (populated when group_by=role)
                 users:
                     type: array
                     items:
                         $ref: '#/components/schemas/UserSummary'
-                    description: List of user usage summaries
+                    description: List of user usage summaries (populated when group_by=employee)
             description: Result of searching user usage summaries
             required:
                 - users
@@ -36458,18 +38605,20 @@ components:
             required:
                 - id
                 - visibility
-        UpdateMemberRoleForm:
+        UpdateMemberRolesForm:
             type: object
             properties:
-                role_id:
-                    type: string
-                    description: The new role ID to assign.
+                role_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: The role IDs to assign. Replaces all existing role assignments.
                 user_id:
                     type: string
                     description: The user ID to update.
             required:
                 - user_id
-                - role_id
+                - role_ids
         UpdateOAuthProxyServerForm:
             type: object
             properties:
@@ -36492,6 +38641,20 @@ components:
                     $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
             required:
                 - oauth_proxy_server
+        UpdateOrganizationRequestBody:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: New gram_account_type (e.g. free, pro, enterprise).
+                id:
+                    type: string
+                    description: Organization ID.
+                whitelisted:
+                    type: boolean
+                    description: New whitelisted flag.
+            required:
+                - id
         UpdatePackageForm:
             type: object
             properties:
@@ -37590,6 +39753,11 @@ components:
                 - verified
                 - message
     securitySchemes:
+        admin_auth_header_Authorization:
+            type: apiKey
+            description: Admin session auth for admin endpoints. Cookie-only credential; session is validated against Google on every request.
+            name: Authorization
+            in: header
         apikey_header_Authorization:
             type: apiKey
             description: key based auth.
@@ -37622,7 +39790,7 @@ tags:
     - name: access
       description: Manage roles, team member access control, and authorization challenge events.
     - name: admin
-      description: Operational endpoints for administrative tasks.
+      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: assets
       description: Manages assets used by Gram projects.
     - name: assistantMemories

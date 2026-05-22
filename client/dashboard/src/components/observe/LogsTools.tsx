@@ -92,6 +92,10 @@ export function LogsTools() {
     setDateRangeParam,
     setCustomRangeParam,
     clearCustomRange,
+    selectedRoleIds,
+    roleOptions,
+    handleRoleSelectionChange,
+    roleFilterPending,
   } = useObserveFilters();
 
   const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
@@ -117,6 +121,7 @@ export function LogsTools() {
         "hooks-traces",
         activeFilters,
         selectedHookTypes,
+        selectedRoleIds,
         from.toISOString(),
         to.toISOString(),
       ],
@@ -137,6 +142,7 @@ export function LogsTools() {
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      enabled: !roleFilterPending,
       throwOnError: false,
     }),
   );
@@ -237,6 +243,9 @@ export function LogsTools() {
             addFilter={addFilter}
             selectedHookTypes={selectedHookTypes}
             onHookTypesChange={handleHookTypesChange}
+            roleOptions={roleOptions}
+            selectedRoleIds={selectedRoleIds}
+            onRoleSelectionChange={handleRoleSelectionChange}
             expandedTraceId={expandedTraceId}
             toggleExpand={toggleExpand}
             selectedLog={selectedLog}
@@ -273,6 +282,9 @@ function HooksInnerContent({
   activeFilters,
   selectedHookTypes,
   onHookTypesChange,
+  roleOptions,
+  selectedRoleIds,
+  onRoleSelectionChange,
   expandedTraceId,
   toggleExpand,
   selectedLog,
@@ -304,6 +316,9 @@ function HooksInnerContent({
   addFilter: (chip: FilterChip) => void;
   selectedHookTypes: TypesToInclude[];
   onHookTypesChange: (types: TypesToInclude[]) => void;
+  roleOptions: Array<{ id: string; name: string }>;
+  selectedRoleIds: string[];
+  onRoleSelectionChange: (values: string[]) => void;
   expandedTraceId: string | null;
   toggleExpand: (traceId: string) => void;
   selectedLog: TelemetryLogRecord | null;
@@ -323,6 +338,7 @@ function HooksInnerContent({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }) {
   const orgRoutes = useOrgRoutes();
+
   return (
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -354,6 +370,9 @@ function HooksInnerContent({
             activeFilters={activeFilters}
             selectedTypes={selectedHookTypes}
             onTypesChange={onHookTypesChange}
+            roleOptions={roleOptions}
+            selectedRoleIds={selectedRoleIds}
+            onRoleSelectionChange={onRoleSelectionChange}
             dateRange={dateRange}
             customRange={customRange}
             customRangeLabel={customRangeLabel}
@@ -361,6 +380,7 @@ function HooksInnerContent({
             onCustomRangeChange={onCustomRangeChange}
             onClearCustomRange={onClearCustomRange}
             projectSlug={projectSlug}
+            serverNameMappings={serverNameMappings}
           />
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -391,6 +411,7 @@ function HooksInnerContent({
                     isLoading={isLoading}
                     groupedTraces={groupedTraces}
                     activeFilters={activeFilters}
+                    selectedRoleIds={selectedRoleIds}
                     expandedTraceId={expandedTraceId}
                     isFetchingNextPage={isFetchingNextPage}
                     onToggleExpand={toggleExpand}
@@ -428,6 +449,7 @@ export function LogsToolsContent({
   isLoading,
   groupedTraces,
   activeFilters,
+  selectedRoleIds,
   expandedTraceId,
   isFetchingNextPage,
   onToggleExpand,
@@ -438,6 +460,7 @@ export function LogsToolsContent({
   isLoading: boolean;
   groupedTraces: HookTrace[];
   activeFilters: FilterChip[];
+  selectedRoleIds: string[];
   expandedTraceId: string | null;
   isFetchingNextPage: boolean;
   onToggleExpand: (traceId: string) => void;
@@ -464,7 +487,7 @@ export function LogsToolsContent({
   }
 
   if (groupedTraces.length === 0) {
-    const hasFilters = activeFilters.length > 0;
+    const hasFilters = activeFilters.length > 0 || selectedRoleIds.length > 0;
 
     if (!hasFilters) {
       return <HooksEmptyState />;

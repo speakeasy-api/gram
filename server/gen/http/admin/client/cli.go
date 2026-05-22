@@ -6,3 +6,258 @@
 // $ goa gen github.com/speakeasy-api/gram/server/design
 
 package client
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+
+	admin "github.com/speakeasy-api/gram/server/gen/admin"
+)
+
+// BuildLoginPayload builds the payload for the admin login endpoint from CLI
+// flags.
+func BuildLoginPayload(adminLoginReturnTo string, adminLoginPrompt string) (*admin.LoginPayload, error) {
+	var returnTo *string
+	{
+		if adminLoginReturnTo != "" {
+			returnTo = &adminLoginReturnTo
+		}
+	}
+	var prompt *string
+	{
+		if adminLoginPrompt != "" {
+			prompt = &adminLoginPrompt
+		}
+	}
+	v := &admin.LoginPayload{}
+	v.ReturnTo = returnTo
+	v.Prompt = prompt
+
+	return v, nil
+}
+
+// BuildCallbackPayload builds the payload for the admin callback endpoint from
+// CLI flags.
+func BuildCallbackPayload(adminCallbackCode string, adminCallbackStateParam string, adminCallbackError string, adminCallbackErrorDescription string, adminCallbackStateCookie string) (*admin.CallbackPayload, error) {
+	var code *string
+	{
+		if adminCallbackCode != "" {
+			code = &adminCallbackCode
+		}
+	}
+	var stateParam string
+	{
+		stateParam = adminCallbackStateParam
+	}
+	var error_ *string
+	{
+		if adminCallbackError != "" {
+			error_ = &adminCallbackError
+		}
+	}
+	var errorDescription *string
+	{
+		if adminCallbackErrorDescription != "" {
+			errorDescription = &adminCallbackErrorDescription
+		}
+	}
+	var stateCookie *string
+	{
+		if adminCallbackStateCookie != "" {
+			stateCookie = &adminCallbackStateCookie
+		}
+	}
+	v := &admin.CallbackPayload{}
+	v.Code = code
+	v.StateParam = stateParam
+	v.Error = error_
+	v.ErrorDescription = errorDescription
+	v.StateCookie = stateCookie
+
+	return v, nil
+}
+
+// BuildLogoutPayload builds the payload for the admin logout endpoint from CLI
+// flags.
+func BuildLogoutPayload(adminLogoutSessionID string) (*admin.LogoutPayload, error) {
+	var sessionID *string
+	{
+		if adminLogoutSessionID != "" {
+			sessionID = &adminLogoutSessionID
+		}
+	}
+	v := &admin.LogoutPayload{}
+	v.SessionID = sessionID
+
+	return v, nil
+}
+
+// BuildGetProjectPayload builds the payload for the admin getProject endpoint
+// from CLI flags.
+func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdminSessionToken string) (*admin.GetProjectPayload, error) {
+	var idOrSlug string
+	{
+		idOrSlug = adminGetProjectIDOrSlug
+	}
+	var adminSessionToken *string
+	{
+		if adminGetProjectAdminSessionToken != "" {
+			adminSessionToken = &adminGetProjectAdminSessionToken
+		}
+	}
+	v := &admin.GetProjectPayload{}
+	v.IDOrSlug = idOrSlug
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildUpdateOrganizationPayload builds the payload for the admin
+// updateOrganization endpoint from CLI flags.
+func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpdateOrganizationAdminSessionToken string) (*admin.UpdateOrganizationPayload, error) {
+	var err error
+	var body UpdateOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminUpdateOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminUpdateOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminUpdateOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.UpdateOrganizationPayload{
+		ID:          body.ID,
+		AccountType: body.AccountType,
+		Whitelisted: body.Whitelisted,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetOrganizationPayload builds the payload for the admin getOrganization
+// endpoint from CLI flags.
+func BuildGetOrganizationPayload(adminGetOrganizationIDOrSlug string, adminGetOrganizationAdminSessionToken string) (*admin.GetOrganizationPayload, error) {
+	var idOrSlug string
+	{
+		idOrSlug = adminGetOrganizationIDOrSlug
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationPayload{}
+	v.IDOrSlug = idOrSlug
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOrganizationMembersPayload builds the payload for the admin
+// listOrganizationMembers endpoint from CLI flags.
+func BuildListOrganizationMembersPayload(adminListOrganizationMembersOrganizationID string, adminListOrganizationMembersAdminSessionToken string) (*admin.ListOrganizationMembersPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminListOrganizationMembersOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationMembersAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationMembersAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationMembersPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOrganizationProjectsPayload builds the payload for the admin
+// listOrganizationProjects endpoint from CLI flags.
+func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizationID string, adminListOrganizationProjectsAdminSessionToken string) (*admin.ListOrganizationProjectsPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminListOrganizationProjectsOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationProjectsAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationProjectsAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationProjectsPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOrganizationsPayload builds the payload for the admin
+// listOrganizations endpoint from CLI flags.
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+	var err error
+	var q *string
+	{
+		if adminListOrganizationsQ != "" {
+			q = &adminListOrganizationsQ
+		}
+	}
+	var accountType *string
+	{
+		if adminListOrganizationsAccountType != "" {
+			accountType = &adminListOrganizationsAccountType
+		}
+	}
+	var includeDisabled *bool
+	{
+		if adminListOrganizationsIncludeDisabled != "" {
+			var val bool
+			val, err = strconv.ParseBool(adminListOrganizationsIncludeDisabled)
+			includeDisabled = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeDisabled, must be BOOL")
+			}
+		}
+	}
+	var cursor *string
+	{
+		if adminListOrganizationsCursor != "" {
+			cursor = &adminListOrganizationsCursor
+		}
+	}
+	var limit *int
+	{
+		if adminListOrganizationsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListOrganizationsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationsPayload{}
+	v.Q = q
+	v.AccountType = accountType
+	v.IncludeDisabled = includeDisabled
+	v.Cursor = cursor
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

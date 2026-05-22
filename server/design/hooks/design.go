@@ -50,6 +50,11 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Attribute("suppressOutput", Boolean, "Whether to suppress the hook's output")
 	Attribute("systemMessage", String, "Warning message shown to the user in the terminal")
 	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
+	// UserPromptSubmit, PostToolUse, Stop, and SubagentStop use a top-level
+	// `decision` field to block: "block" tells Claude to halt processing.
+	// PreToolUse uses hookSpecificOutput.permissionDecision instead.
+	Attribute("decision", String, "Top-level block decision for UserPromptSubmit / PostToolUse / Stop / SubagentStop. Use 'block' to halt processing.")
+	Attribute("reason", String, "Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).")
 })
 
 // Cursor hook payload

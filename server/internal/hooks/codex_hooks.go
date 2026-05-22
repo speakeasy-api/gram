@@ -15,7 +15,6 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -32,7 +31,10 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		logger.WarnContext(ctx, "rejected unauthorized codex hook request",
 			attr.SlogEvent("codex_hook_unauthorized"),
 		)
-		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		return &gen.CodexHookResult{
+			Decision: new("deny"),
+			Reason:   new("Speakeasy hooks: unauthorized — check your Gram API key and project slug."),
+		}, nil
 	}
 
 	orgID := authCtx.ActiveOrganizationID
@@ -86,8 +88,14 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 	s.recordCodexHook(ctx, payload, orgID, projectID, blockReason)
 
 	if blockReason != "" {
-		// HTTP 4xx causes the hook.sh to exit 2, which signals a block to the Codex CLI.
-		return nil, oops.E(oops.CodeForbidden, nil, "%s", userReason)
+		// Return the Codex hook JSON shape (decision=deny + reason) so the
+		// Codex CLI surfaces the block reason to the user. Returning a 4xx
+		// here would hide the reason behind whatever generic message the
+		// transport layer renders.
+		return &gen.CodexHookResult{
+			Decision: new("deny"),
+			Reason:   &userReason,
+		}, nil
 	}
 
 	return &gen.CodexHookResult{

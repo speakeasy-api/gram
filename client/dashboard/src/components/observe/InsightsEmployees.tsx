@@ -796,7 +796,11 @@ function buildEmployees(
         id: member.id,
         name: member.name,
         email: member.email,
-        role: roleNameById.get(member.roleId) ?? member.roleId,
+        role:
+          member.roleIds
+            .map((id) => roleNameById.get(id))
+            .filter(Boolean)
+            .join(", ") || "Unknown",
         status,
         tokenCount,
         photoUrl: member.photoUrl,

@@ -56,14 +56,15 @@ type workosRoleSlug struct {
 }
 
 type workosOrganizationMembership struct {
-	ID               string         `json:"id"`
-	UserID           string         `json:"user_id"`
-	OrganizationID   string         `json:"organization_id"`
-	OrganizationName string         `json:"organization_name"`
-	Role             workosRoleSlug `json:"role"`
-	Status           string         `json:"status"`
-	CreatedAt        string         `json:"created_at"`
-	UpdatedAt        string         `json:"updated_at"`
+	ID               string           `json:"id"`
+	UserID           string           `json:"user_id"`
+	OrganizationID   string           `json:"organization_id"`
+	OrganizationName string           `json:"organization_name"`
+	Role             workosRoleSlug   `json:"role"`
+	Roles            []workosRoleSlug `json:"roles"`
+	Status           string           `json:"status"`
+	CreatedAt        string           `json:"created_at"`
+	UpdatedAt        string           `json:"updated_at"`
 }
 
 type workosOrganizationMembershipList struct {

@@ -1,7 +1,10 @@
 package risk
 
 import (
+	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -35,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -669,7 +673,143 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
 		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize, totalCount)
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount)
+
+	category := ""
+	if payload.Category != nil {
+		category = *payload.Category
+	}
+	ruleID := ""
+	if payload.RuleID != nil {
+		ruleID = *payload.RuleID
+	}
+	uniqueMatch := false
+	if payload.UniqueMatch != nil {
+		uniqueMatch = *payload.UniqueMatch
+	}
+	fromTime, err := parseOptionalTimestamptz(payload.From)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid from").Log(ctx, s.logger)
+	}
+	toTime, err := parseOptionalTimestamptz(payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid to").Log(ctx, s.logger)
+	}
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, uniqueMatch, fromTime, toTime)
+}
+
+func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
+	empty := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	if raw == nil {
+		return empty, nil
+	}
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" {
+		return empty, nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, trimmed)
+	if err != nil {
+		return empty, fmt.Errorf("parse timestamp: %w", err)
+	}
+	return pgtype.Timestamptz{Time: parsed.UTC(), InfinityModifier: pgtype.Finite, Valid: true}, nil
+}
+
+// ListRiskResultsForAgent serves the same data as ListRiskResults but strips
+// raw `match` content from non-shadow_mcp findings before returning, so the
+// agent / MCP surface never holds secret values in model context. Shadow-MCP
+// findings pass `match` through verbatim because the value is a server URL
+// or stdio command identifier the dashboard already exposes unmasked.
+func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.ListRiskResultsForAgentPayload) (*gen.ListRiskResultsForAgentResult, error) {
+	base, err := s.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		ApikeyToken:      payload.ApikeyToken,
+		SessionToken:     payload.SessionToken,
+		ProjectSlugInput: payload.ProjectSlugInput,
+		PolicyID:         payload.PolicyID,
+		ChatID:           payload.ChatID,
+		Category:         payload.Category,
+		RuleID:           payload.RuleID,
+		UniqueMatch:      payload.UniqueMatch,
+		From:             payload.From,
+		To:               payload.To,
+		Cursor:           payload.Cursor,
+		Limit:            payload.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// ListRiskResults already enforced auth above; this lookup is safe and
+	// only used to derive the per-org salt for match-fingerprint hashing.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	redacted := make([]*types.RiskResultRedacted, 0, len(base.Results))
+	for _, r := range base.Results {
+		redacted = append(redacted, redactRiskResult(r, authCtx.ActiveOrganizationID))
+	}
+
+	return &gen.ListRiskResultsForAgentResult{
+		Results:    redacted,
+		TotalCount: base.TotalCount,
+		NextCursor: base.NextCursor,
+	}, nil
+}
+
+// redactRiskResult converts a RiskResult into a RiskResultRedacted by
+// replacing raw `match` content with an opaque length+sha256-prefix
+// fingerprint and coarsening position info to a single boolean. Source ==
+// "shadow_mcp" is a deliberate carve-out: its match is a server URL or
+// command identifier (already shown unmasked in the dashboard) and the agent
+// needs to be able to name it to be useful.
+//
+// orgID is mixed into the hash so fingerprints cannot correlate the same
+// secret across organizations even if some future code path widens the
+// surface beyond org-scoped access.
+func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedacted {
+	matchRedacted := redactMatch(r.Source, r.Match, orgID)
+
+	return &types.RiskResultRedacted{
+		ID:            r.ID,
+		PolicyID:      r.PolicyID,
+		PolicyVersion: r.PolicyVersion,
+		ChatMessageID: r.ChatMessageID,
+		ChatID:        r.ChatID,
+		ChatTitle:     r.ChatTitle,
+		UserID:        r.UserID,
+		Source:        r.Source,
+		RuleID:        r.RuleID,
+		Description:   r.Description,
+		MatchRedacted: matchRedacted,
+		PositionKnown: r.StartPos != nil && r.EndPos != nil,
+		Confidence:    r.Confidence,
+		Tags:          r.Tags,
+		CreatedAt:     r.CreatedAt,
+	}
+}
+
+// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>` for
+// non-shadow_mcp sources, or passes it through verbatim for shadow_mcp.
+// A nil/empty match collapses to `<redacted len=0>` without a sha component
+// so the absence of a finding payload is distinguishable from a real hash.
+//
+// The hash is salted by orgID with a NUL separator so two different orgs
+// holding the same secret produce different fingerprints — defense in depth
+// against any future surface that crosses an org boundary. Within an org the
+// fingerprint stays deterministic so agents can still dedupe.
+func redactMatch(source string, match *string, orgID string) string {
+	if match == nil || *match == "" {
+		return "<redacted len=0>"
+	}
+	if source == shadowmcp.SourceShadowMCP {
+		return *match
+	}
+	var buf []byte
+	buf = append(buf, orgID...)
+	buf = append(buf, 0x00)
+	buf = append(buf, *match...)
+	sum := sha256.Sum256(buf)
+	return fmt.Sprintf("<redacted len=%d sha=%s>", len(*match), hex.EncodeToString(sum[:4]))
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
@@ -716,6 +856,189 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	}
 
 	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
+}
+
+func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverviewPayload) (*gen.RiskOverviewResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").Log(ctx, s.logger)
+	}
+
+	window := riskOverviewWindowParams(from, to)
+	counts, err := s.repo.GetRiskOverviewCounts(ctx, repo.GetRiskOverviewCountsParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").Log(ctx, s.logger)
+	}
+
+	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+		// Returns enough rows for the "view all users" page to show the full
+		// long-tail without pagination. The main /risk-overview widget only
+		// renders the top 10 of these.
+		RowLimit: 200,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users").Log(ctx, s.logger)
+	}
+
+	timeSeriesRows, err := s.repo.ListRiskOverviewTimeSeriesFindings(ctx, repo.ListRiskOverviewTimeSeriesFindingsParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series findings").Log(ctx, s.logger)
+	}
+
+	ruleRows, err := s.repo.ListRiskOverviewTopRules(ctx, repo.ListRiskOverviewTopRulesParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+		// Returns enough rows for the "view all rules" page to show the long
+		// tail without pagination. The main /risk-overview widget only renders
+		// the top 10 of these.
+		RowLimit: 200,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top rules").Log(ctx, s.logger)
+	}
+
+	topCategories := riskOverviewTopCategories(timeSeriesRows, 10)
+
+	topRules := make([]*gen.RiskRuleBreakdownEntry, 0, len(ruleRows))
+	for _, row := range ruleRows {
+		topRules = append(topRules, &gen.RiskRuleBreakdownEntry{
+			RuleID:   row.RuleID,
+			Source:   row.Source,
+			Findings: row.Findings,
+		})
+	}
+
+	topUsers := make([]*gen.RiskOverviewUser, 0, len(userRows))
+	for _, row := range userRows {
+		topUsers = append(topUsers, &gen.RiskOverviewUser{
+			Email:          row.Email,
+			ExternalUserID: row.ExternalUserID,
+			Findings:       row.Findings,
+		})
+	}
+
+	timeSeriesFindings := make([]*gen.RiskOverviewTimeSeriesFinding, 0, len(timeSeriesRows))
+	for _, row := range timeSeriesRows {
+		timeSeriesFindings = append(timeSeriesFindings, &gen.RiskOverviewTimeSeriesFinding{
+			BucketStart: row.BucketStart.Time.UTC().Format(time.RFC3339),
+			Category:    row.Category,
+			Findings:    row.Findings,
+		})
+	}
+
+	return &gen.RiskOverviewResult{
+		From:               from.UTC().Format(time.RFC3339),
+		To:                 to.UTC().Format(time.RFC3339),
+		MessagesScanned:    counts.MessagesScanned,
+		Findings:           counts.Findings,
+		FlaggedSessions:    counts.FlaggedSessions,
+		ActivePolicies:     counts.ActivePolicies,
+		TopCategories:      topCategories,
+		TopUsers:           topUsers,
+		TopRules:           topRules,
+		TimeSeriesFindings: timeSeriesFindings,
+	}, nil
+}
+
+type riskOverviewWindow struct {
+	from pgtype.Timestamptz
+	to   pgtype.Timestamptz
+}
+
+const maxRiskOverviewWindow = 31 * 24 * time.Hour
+
+func resolveRiskOverviewWindow(rawFrom, rawTo *string) (time.Time, time.Time, error) {
+	to := time.Now().UTC()
+	if rawTo != nil && strings.TrimSpace(*rawTo) != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(*rawTo))
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("parse to: %w", err)
+		}
+		to = parsed.UTC()
+	}
+
+	toYear, toMonth, toDay := to.Date()
+	from := time.Date(toYear, toMonth, toDay, 0, 0, 0, 0, time.UTC).AddDate(0, 0, -6)
+	if rawFrom != nil && strings.TrimSpace(*rawFrom) != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(*rawFrom))
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("parse from: %w", err)
+		}
+		from = parsed.UTC()
+	}
+
+	if !from.Before(to) {
+		return time.Time{}, time.Time{}, fmt.Errorf("from must be before to")
+	}
+	if to.Sub(from) > maxRiskOverviewWindow {
+		return time.Time{}, time.Time{}, fmt.Errorf("window must be %s or less", maxRiskOverviewWindow)
+	}
+
+	return from, to, nil
+}
+
+func riskOverviewWindowParams(from, to time.Time) riskOverviewWindow {
+	return riskOverviewWindow{
+		from: pgtype.Timestamptz{Time: from, InfinityModifier: pgtype.Finite, Valid: true},
+		to:   pgtype.Timestamptz{Time: to, InfinityModifier: pgtype.Finite, Valid: true},
+	}
+}
+
+func riskOverviewTopCategories(rows []repo.ListRiskOverviewTimeSeriesFindingsRow, limit int) []*gen.RiskOverviewCategory {
+	if limit <= 0 {
+		return nil
+	}
+
+	counts := make(map[string]int64)
+	for _, row := range rows {
+		counts[row.Category] += row.Findings
+	}
+
+	categories := make([]*gen.RiskOverviewCategory, 0, len(counts))
+	for category, findings := range counts {
+		if findings == 0 {
+			continue
+		}
+		categories = append(categories, &gen.RiskOverviewCategory{
+			Category: category,
+			Findings: findings,
+		})
+	}
+
+	slices.SortFunc(categories, func(a, b *gen.RiskOverviewCategory) int {
+		if a.Findings != b.Findings {
+			return cmp.Compare(b.Findings, a.Findings)
+		}
+
+		return cmp.Compare(a.Category, b.Category)
+	})
+
+	if len(categories) > limit {
+		categories = categories[:limit]
+	}
+
+	return categories
 }
 
 // paginateResults trims the over-fetched extra row and, if present, encodes
@@ -787,10 +1110,15 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
+		FromTime:               fromTime,
+		ToTime:                 toTime,
+		Category:               category,
+		RuleID:                 ruleID,
+		UniqueMatch:            uniqueMatch,
 		CursorMessageCreatedAt: cursorCreatedAt,
 		CursorID:               cursorID,
 		PageLimit:              conv.SafeInt32(pageSize + 1),
@@ -808,6 +1136,143 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		}
 	}
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
+}
+
+func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskCategoriesPayload) (*gen.RiskCategoriesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	defs := categories.All()
+	out := make([]*gen.RiskCategoryDefinition, 0, len(defs))
+	for _, def := range defs {
+		ruleIDs := def.RuleIDs
+		if ruleIDs == nil {
+			ruleIDs = []string{}
+		}
+		out = append(out, &gen.RiskCategoryDefinition{
+			Key:          string(def.Category),
+			Label:        def.Label,
+			Description:  def.Description,
+			Icon:         def.Icon,
+			Source:       def.Source,
+			RuleIds:      ruleIDs,
+			RuleIDPrefix: def.RulePrefix,
+		})
+	}
+	return &gen.RiskCategoriesResult{Categories: out}, nil
+}
+
+func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRiskUserBreakdownPayload) (*gen.RiskUserBreakdownResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").Log(ctx, s.logger)
+	}
+	window := riskOverviewWindowParams(from, to)
+
+	categoryRows, err := s.repo.ListRiskUserCategoryBreakdown(ctx, repo.ListRiskUserCategoryBreakdownParams{
+		ProjectID:      *authCtx.ProjectID,
+		FromTime:       window.from,
+		ToTime:         window.to,
+		ExternalUserID: payload.ExternalUserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user category breakdown").Log(ctx, s.logger)
+	}
+
+	ruleRows, err := s.repo.ListRiskUserRuleBreakdown(ctx, repo.ListRiskUserRuleBreakdownParams{
+		ProjectID:      *authCtx.ProjectID,
+		FromTime:       window.from,
+		ToTime:         window.to,
+		ExternalUserID: payload.ExternalUserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user rule breakdown").Log(ctx, s.logger)
+	}
+
+	categories := make([]*gen.RiskOverviewCategory, 0, len(categoryRows))
+	var total int64
+	for _, row := range categoryRows {
+		categories = append(categories, &gen.RiskOverviewCategory{
+			Category: row.Category,
+			Findings: row.Findings,
+		})
+		total += row.Findings
+	}
+
+	rules := make([]*gen.RiskRuleBreakdownEntry, 0, len(ruleRows))
+	for _, row := range ruleRows {
+		rules = append(rules, &gen.RiskRuleBreakdownEntry{
+			RuleID:   row.RuleID,
+			Source:   row.Source,
+			Findings: row.Findings,
+		})
+	}
+
+	return &gen.RiskUserBreakdownResult{
+		From:           from.UTC().Format(time.RFC3339),
+		To:             to.UTC().Format(time.RFC3339),
+		ExternalUserID: payload.ExternalUserID,
+		Findings:       total,
+		Categories:     categories,
+		Rules:          rules,
+	}, nil
+}
+
+func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRiskRuleBreakdownPayload) (*gen.RiskRuleBreakdownResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").Log(ctx, s.logger)
+	}
+
+	window := riskOverviewWindowParams(from, to)
+	rows, err := s.repo.ListRiskRulesByCategory(ctx, repo.ListRiskRulesByCategoryParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+		Category:  payload.Category,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list rule breakdown").Log(ctx, s.logger)
+	}
+
+	rules := make([]*gen.RiskRuleBreakdownEntry, 0, len(rows))
+	var total int64
+	for _, row := range rows {
+		rules = append(rules, &gen.RiskRuleBreakdownEntry{
+			RuleID:   row.RuleID,
+			Source:   row.Source,
+			Findings: row.Findings,
+		})
+		total += row.Findings
+	}
+
+	return &gen.RiskRuleBreakdownResult{
+		From:     from.UTC().Format(time.RFC3339),
+		To:       to.UTC().Format(time.RFC3339),
+		Category: payload.Category,
+		Rules:    rules,
+		Total:    total,
+	}, nil
 }
 
 func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskPolicyStatusPayload) (*types.RiskPolicyStatus, error) {

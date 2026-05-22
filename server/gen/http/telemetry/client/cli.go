@@ -204,7 +204,7 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 	{
 		err = json.Unmarshal([]byte(telemetrySearchUsersBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"group_by\": \"role\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
 		}
 		if body.Filter == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("filter", "body"))
@@ -216,6 +216,9 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 		}
 		if !(body.UserType == "internal" || body.UserType == "external") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_type", body.UserType, []any{"internal", "external"}))
+		}
+		if !(body.GroupBy == "employee" || body.GroupBy == "role") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", body.GroupBy, []any{"employee", "role"}))
 		}
 		if !(body.Sort == "asc" || body.Sort == "desc") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", body.Sort, []any{"asc", "desc"}))
@@ -250,12 +253,19 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 	}
 	v := &telemetry.SearchUsersPayload{
 		UserType: body.UserType,
+		GroupBy:  body.GroupBy,
 		Cursor:   body.Cursor,
 		Sort:     body.Sort,
 		Limit:    body.Limit,
 	}
 	if body.Filter != nil {
 		v.Filter = marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
+	}
+	{
+		var zero string
+		if v.GroupBy == zero {
+			v.GroupBy = "employee"
+		}
 	}
 	{
 		var zero string
@@ -442,10 +452,13 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	{
 		err = json.Unmarshal([]byte(telemetryGetObservabilityOverviewBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.RemoteMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -475,6 +488,7 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 		ExternalUserID:    body.ExternalUserID,
 		APIKeyID:          body.APIKeyID,
 		ToolsetSlug:       body.ToolsetSlug,
+		RemoteMcpServerID: body.RemoteMcpServerID,
 		EventSource:       body.EventSource,
 		HookSource:        body.HookSource,
 		IncludeTimeSeries: body.IncludeTimeSeries,

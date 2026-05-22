@@ -692,7 +692,6 @@ func newStartCommand() *cli.Command {
 				rbacEnabled,
 				challengeLoggingEnabled,
 				roleClient,
-				cache.NewRedisCacheAdapter(redisClient),
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
@@ -944,7 +943,8 @@ func newStartCommand() *cli.Command {
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
-			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleClient, authzEngine, productFeatures, auditLogger))
+			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
+			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
 				logger,
@@ -1007,7 +1007,7 @@ func newStartCommand() *cli.Command {
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger))
 			remotesessions.Attach(mux, remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger))
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
-			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, encryptionClient, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingRepo, billingTracker, mcpService, serverURL), mcpMetadataService)
+			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, encryptionClient, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingRepo, billingTracker, telemLogger, mcpService, serverURL), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, memoryTools))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))

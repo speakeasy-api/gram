@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -30,9 +30,29 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	ctx = GrantsToContext(ctx, grants)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj:123"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
+}
+
+func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_seed_system_roles"
+	seedOrganization(t, ctx, conn, organizationID)
+
+	err := SeedSystemRoleGrants(ctx, testenv.NewLogger(t), conn, organizationID)
+	require.NoError(t, err)
+
+	adminRole, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
+	require.NoError(t, err)
+	require.Equal(t, "Admin", adminRole.WorkosName)
+
+	grants, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, SystemRoleAdmin, "role:global:"+adminRole.ID.String())
+	require.NoError(t, err)
+	require.NotEmpty(t, grants)
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
@@ -93,7 +113,7 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	ctx = GrantsToContext(ctx, grants)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 	projectIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj:123"},
 	})

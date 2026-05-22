@@ -40,8 +40,16 @@ type ListChatsResponseBody struct {
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
-	// The list of messages in the chat
+	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+	// The generation that this response's messages belong to. A generation is an
+	// immutable snapshot of the transcript; a new one is opened on compaction or
+	// message edits, while normal turns append to the current one.
+	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// The highest generation number present for this chat. To load the full
+	// history, walk from `max_generation` down to 0, requesting each generation in
+	// turn.
+	MaxGeneration *int `form:"max_generation,omitempty" json:"max_generation,omitempty" xml:"max_generation,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -69,6 +77,10 @@ type LoadChatResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -1407,6 +1419,10 @@ type ChatOverviewResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1469,6 +1485,10 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // ChatResolutionResponseBody is used to define fields on response body types.
@@ -1676,6 +1696,8 @@ func NewListChatsGatewayError(body *ListChatsGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	v := &chat.Chat{
+		Generation:           *body.Generation,
+		MaxGeneration:        *body.MaxGeneration,
 		ID:                   *body.ID,
 		Title:                *body.Title,
 		UserID:               body.UserID,
@@ -1689,6 +1711,7 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		TotalTokens:          body.TotalTokens,
 		TotalCost:            body.TotalCost,
 		LastMessageTimestamp: *body.LastMessageTimestamp,
+		RiskFindingsCount:    body.RiskFindingsCount,
 	}
 	v.Messages = make([]*chat.ChatMessage, len(body.Messages))
 	for i, val := range body.Messages {
@@ -2667,6 +2690,12 @@ func ValidateListChatsResponseBody(body *ListChatsResponseBody) (err error) {
 func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.Messages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.MaxGeneration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_generation", "body"))
 	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))

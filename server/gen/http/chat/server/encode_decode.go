@@ -256,14 +256,32 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		var payload *chat.LoadChatPayload
 		var (
 			id                string
+			generation        *int
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
 			err               error
 		)
-		id = r.URL.Query().Get("id")
+		qp := r.URL.Query()
+		id = qp.Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		{
+			generationRaw := qp.Get("generation")
+			if generationRaw != "" {
+				v, err2 := strconv.ParseInt(generationRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("generation", generationRaw, "integer"))
+				}
+				pv := int(v)
+				generation = &pv
+			}
+		}
+		if generation != nil {
+			if *generation < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("generation", *generation, 0, true))
+			}
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -280,7 +298,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoadChatPayload(id, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewLoadChatPayload(id, generation, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -913,7 +931,9 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		var (
 			search            *string
 			externalUserID    *string
+			assistantID       *string
 			resolutionStatus  *string
+			hasRisk           *string
 			from              *string
 			to                *string
 			limit             int
@@ -934,9 +954,25 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		if externalUserIDRaw != "" {
 			externalUserID = &externalUserIDRaw
 		}
+		assistantIDRaw := qp.Get("assistant_id")
+		if assistantIDRaw != "" {
+			assistantID = &assistantIDRaw
+		}
+		if assistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
+		}
 		resolutionStatusRaw := qp.Get("resolution_status")
 		if resolutionStatusRaw != "" {
 			resolutionStatus = &resolutionStatusRaw
+		}
+		hasRiskRaw := qp.Get("has_risk")
+		if hasRiskRaw != "" {
+			hasRisk = &hasRiskRaw
+		}
+		if hasRisk != nil {
+			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
 		}
 		fromRaw := qp.Get("from")
 		if fromRaw != "" {
@@ -1016,7 +1052,7 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsWithResolutionsPayload(search, externalUserID, resolutionStatus, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsWithResolutionsPayload(search, externalUserID, assistantID, resolutionStatus, hasRisk, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1664,6 +1700,7 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		TotalTokens:          v.TotalTokens,
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: v.LastMessageTimestamp,
+		RiskFindingsCount:    v.RiskFindingsCount,
 	}
 
 	return res
@@ -1707,6 +1744,7 @@ func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponse
 		TotalTokens:          v.TotalTokens,
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: v.LastMessageTimestamp,
+		RiskFindingsCount:    v.RiskFindingsCount,
 	}
 	if v.Resolutions != nil {
 		res.Resolutions = make([]*ChatResolutionResponseBody, len(v.Resolutions))

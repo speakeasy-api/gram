@@ -1,0 +1,37 @@
+name: Plugin Generate Check
+
+on:
+  pull_request:
+    paths:
+      - "hooks/**"
+
+jobs:
+  check-generate-updated:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check that plugins/generate.go was updated
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD)
+
+          HOOKS_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^hooks/' || true)
+          GENERATE_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^server/internal/plugins/generate\.go$' || true)
+
+          if [ -n "$HOOKS_CHANGED" ] && [ -z "$GENERATE_CHANGED" ]; then
+            echo "❌ Error: hooks/ was modified but server/internal/plugins/generate.go was not updated"
+            echo ""
+            echo "Changed files under hooks/:"
+            echo "$HOOKS_CHANGED"
+            echo ""
+            echo "Please update server/internal/plugins/generate.go to reflect the hook changes."
+            exit 1
+          fi
+
+          echo "✅ server/internal/plugins/generate.go was updated alongside hooks/ changes"

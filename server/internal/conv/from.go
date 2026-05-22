@@ -163,6 +163,16 @@ func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: *t, Valid: true, InfinityModifier: pgtype.Finite}
 }
 
+// FromPGTimestamptz converts a pgtype.Timestamptz to an RFC3339 UTC string. If
+// the value is not valid, it returns an empty string.
+func FromPGTimestamptz(t pgtype.Timestamptz) string {
+	if !t.Valid {
+		return ""
+	}
+
+	return t.Time.UTC().Format(time.RFC3339)
+}
+
 // PtrToPGInterval converts a *time.Duration to a pgtype.Interval. If the
 // pointer is nil, the result has Valid set to false (which becomes SQL NULL).
 func PtrToPGInterval(d *time.Duration) pgtype.Interval {

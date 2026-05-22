@@ -33,7 +33,7 @@ type AccessLevel = "full" | "server" | "tools" | "none";
 
 interface MemberAccess {
   member: AccessMember;
-  role: Role;
+  roles: Role[];
   scopes: {
     read: AccessLevel;
     write: AccessLevel;
@@ -93,6 +93,23 @@ function resolveTools(toolIds: string[], tools: Tool[]): Tool[] {
   return tools.filter(
     (t) => ("id" in t && idSet.has(t.id)) || ("name" in t && idSet.has(t.name)),
   );
+}
+
+const ACCESS_LEVEL_PRIORITY: Record<AccessLevel, number> = {
+  full: 3,
+  server: 2,
+  tools: 1,
+  none: 0,
+};
+
+function bestAccessLevel(levels: AccessLevel[]): AccessLevel {
+  let best: AccessLevel = "none";
+  for (const level of levels) {
+    if (ACCESS_LEVEL_PRIORITY[level] > ACCESS_LEVEL_PRIORITY[best]) {
+      best = level;
+    }
+  }
+  return best;
 }
 
 const METHOD_COLORS: Record<string, string> = {
@@ -198,7 +215,7 @@ function AccessBadge({
 
 interface ToolDetailSheet {
   member: AccessMember;
-  role: Role;
+  roles: Role[];
   scope: string;
   scopeLabel: string;
   // Rich Tool objects resolved against a toolset catalog. Empty for
@@ -238,14 +255,22 @@ export function MCPTeamAccessTab({
     const roleMap = new Map(roles.map((r) => [r.id, r]));
     return members
       .map((member) => {
-        const role = roleMap.get(member.roleId);
-        if (!role) return null;
+        const roles = member.roleIds
+          .map((id) => roleMap.get(id))
+          .filter((r): r is Role => r !== undefined);
+        if (roles.length === 0) return null;
         const scopes = {
-          read: getAccessLevel(role, "mcp:read", resourceId),
-          write: getAccessLevel(role, "mcp:write", resourceId),
-          connect: getAccessLevel(role, "mcp:connect", resourceId),
+          read: bestAccessLevel(
+            roles.map((r) => getAccessLevel(r, "mcp:read", resourceId)),
+          ),
+          write: bestAccessLevel(
+            roles.map((r) => getAccessLevel(r, "mcp:write", resourceId)),
+          ),
+          connect: bestAccessLevel(
+            roles.map((r) => getAccessLevel(r, "mcp:connect", resourceId)),
+          ),
         };
-        return { member, role, scopes };
+        return { member, roles, scopes };
       })
       .filter((m): m is MemberAccess => m !== null)
       .filter(
@@ -262,11 +287,15 @@ export function MCPTeamAccessTab({
     scope: string,
     scopeLabel: string,
   ) => {
-    const toolNames = getToolIdsForScope(row.role, scope, resourceId);
+    const toolNames = [
+      ...new Set(
+        row.roles.flatMap((r) => getToolIdsForScope(r, scope, resourceId)),
+      ),
+    ];
     const matched = tools ? resolveTools(toolNames, tools) : [];
     setSheetData({
       member: row.member,
-      role: row.role,
+      roles: row.roles,
       scope,
       scopeLabel,
       tools: matched,
@@ -312,9 +341,13 @@ export function MCPTeamAccessTab({
       header: "Role",
       width: "1fr",
       render: (row) => (
-        <Type variant="body" className="text-sm">
-          {row.role.name}
-        </Type>
+        <div className="flex flex-wrap gap-1">
+          {row.roles.map((role) => (
+            <Type key={role.id} variant="body" className="text-sm">
+              {role.name}
+            </Type>
+          ))}
+        </div>
       ),
     },
     {
@@ -416,9 +449,9 @@ export function MCPTeamAccessTab({
                   {sheetData.toolNames.length !== 1 ? "s" : ""} on this server
                   via the{" "}
                   <span className="text-foreground font-medium">
-                    {sheetData.role.name}
+                    {sheetData.roles.map((r) => r.name).join(", ")}
                   </span>{" "}
-                  role.
+                  {sheetData.roles.length === 1 ? "role" : "roles"}.
                 </SheetDescription>
               </SheetHeader>
               <div className="flex-1 overflow-y-auto px-4 pb-4">

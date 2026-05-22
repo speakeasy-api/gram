@@ -168,7 +168,7 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 			UserID:         workosUserID,
 			OrganizationID: workosOrgID,
 			Organization:   "Backfill Unknown User",
-			RoleSlug:       roleSlug,
+			RoleSlugs:      []string{roleSlug},
 			Status:         "active",
 			CreatedAt:      "2026-05-07T11:05:00Z",
 			UpdatedAt:      "2026-05-07T11:05:00Z",
@@ -250,7 +250,7 @@ func TestBackfillWorkOSOrganization_MembershipWithNewerEventSkipsRoleSnapshot(t 
 			UserID:         workosUserID,
 			OrganizationID: workosOrgID,
 			Organization:   "Backfill Membership Event Wins",
-			RoleSlug:       "",
+			RoleSlugs:      nil,
 			Status:         "active",
 			CreatedAt:      "2026-05-07T11:00:00Z",
 			UpdatedAt:      "2026-05-07T11:00:00Z",
@@ -394,7 +394,7 @@ func seedOrganizationRoleWithCursor(t *testing.T, ctx context.Context, conn *pgx
 	t.Helper()
 
 	updatedAt := time.Date(2026, 5, 7, 10, 0, 0, 0, time.UTC)
-	err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	_, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    organizationID,
 		WorkosSlug:        slug,
 		WorkosName:        name,

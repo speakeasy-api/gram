@@ -1491,6 +1491,21 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.ChatID != nil {
 			values.Add("chat_id", *p.ChatID)
 		}
+		if p.Category != nil {
+			values.Add("category", *p.Category)
+		}
+		if p.RuleID != nil {
+			values.Add("rule_id", *p.RuleID)
+		}
+		if p.UniqueMatch != nil {
+			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
+		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
@@ -1697,6 +1712,274 @@ func DecodeListRiskResultsResponse(decoder func(*http.Response) goahttp.Decoder,
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("risk", "listRiskResults", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListRiskResultsForAgentRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listRiskResultsForAgent"
+// endpoint
+func (c *Client) BuildListRiskResultsForAgentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRiskResultsForAgentRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "listRiskResultsForAgent", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRiskResultsForAgentRequest returns an encoder for requests sent to
+// the risk listRiskResultsForAgent server.
+func EncodeListRiskResultsForAgentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ListRiskResultsForAgentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "listRiskResultsForAgent", "*risk.ListRiskResultsForAgentPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.PolicyID != nil {
+			values.Add("policy_id", *p.PolicyID)
+		}
+		if p.ChatID != nil {
+			values.Add("chat_id", *p.ChatID)
+		}
+		if p.Category != nil {
+			values.Add("category", *p.Category)
+		}
+		if p.RuleID != nil {
+			values.Add("rule_id", *p.RuleID)
+		}
+		if p.UniqueMatch != nil {
+			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
+		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListRiskResultsForAgentResponse returns a decoder for responses
+// returned by the risk listRiskResultsForAgent endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListRiskResultsForAgentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRiskResultsForAgentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRiskResultsForAgentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			res := NewListRiskResultsForAgentResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRiskResultsForAgentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			return nil, NewListRiskResultsForAgentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRiskResultsForAgentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			return nil, NewListRiskResultsForAgentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRiskResultsForAgentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			return nil, NewListRiskResultsForAgentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRiskResultsForAgentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			return nil, NewListRiskResultsForAgentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRiskResultsForAgentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			return nil, NewListRiskResultsForAgentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRiskResultsForAgentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			return nil, NewListRiskResultsForAgentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRiskResultsForAgentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			return nil, NewListRiskResultsForAgentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRiskResultsForAgentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+				}
+				err = ValidateListRiskResultsForAgentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+				}
+				return nil, NewListRiskResultsForAgentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRiskResultsForAgentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+				}
+				err = ValidateListRiskResultsForAgentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+				}
+				return nil, NewListRiskResultsForAgentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "listRiskResultsForAgent", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRiskResultsForAgentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskResultsForAgent", err)
+			}
+			err = ValidateListRiskResultsForAgentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskResultsForAgent", err)
+			}
+			return nil, NewListRiskResultsForAgentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "listRiskResultsForAgent", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1944,6 +2227,986 @@ func DecodeListRiskResultsByChatResponse(decoder func(*http.Response) goahttp.De
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("risk", "listRiskResultsByChat", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetRiskOverviewRequest instantiates a HTTP request object with method
+// and path set to call the "risk" service "getRiskOverview" endpoint
+func (c *Client) BuildGetRiskOverviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRiskOverviewRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getRiskOverview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRiskOverviewRequest returns an encoder for requests sent to the
+// risk getRiskOverview server.
+func EncodeGetRiskOverviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetRiskOverviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getRiskOverview", "*risk.GetRiskOverviewPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRiskOverviewResponse returns a decoder for responses returned by
+// the risk getRiskOverview endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeGetRiskOverviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRiskOverviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRiskOverviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			res := NewGetRiskOverviewRiskOverviewResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRiskOverviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			return nil, NewGetRiskOverviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRiskOverviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			return nil, NewGetRiskOverviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRiskOverviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			return nil, NewGetRiskOverviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRiskOverviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			return nil, NewGetRiskOverviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRiskOverviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			return nil, NewGetRiskOverviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRiskOverviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			return nil, NewGetRiskOverviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRiskOverviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			return nil, NewGetRiskOverviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRiskOverviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+				}
+				err = ValidateGetRiskOverviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+				}
+				return nil, NewGetRiskOverviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRiskOverviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+				}
+				err = ValidateGetRiskOverviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+				}
+				return nil, NewGetRiskOverviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getRiskOverview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRiskOverviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskOverview", err)
+			}
+			err = ValidateGetRiskOverviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskOverview", err)
+			}
+			return nil, NewGetRiskOverviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getRiskOverview", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListRiskCategoriesRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listRiskCategories" endpoint
+func (c *Client) BuildListRiskCategoriesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRiskCategoriesRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "listRiskCategories", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRiskCategoriesRequest returns an encoder for requests sent to the
+// risk listRiskCategories server.
+func EncodeListRiskCategoriesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ListRiskCategoriesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "listRiskCategories", "*risk.ListRiskCategoriesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListRiskCategoriesResponse returns a decoder for responses returned by
+// the risk listRiskCategories endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListRiskCategoriesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRiskCategoriesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRiskCategoriesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			res := NewListRiskCategoriesRiskCategoriesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRiskCategoriesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRiskCategoriesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRiskCategoriesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRiskCategoriesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRiskCategoriesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRiskCategoriesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRiskCategoriesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRiskCategoriesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+				}
+				err = ValidateListRiskCategoriesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+				}
+				return nil, NewListRiskCategoriesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRiskCategoriesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+				}
+				err = ValidateListRiskCategoriesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+				}
+				return nil, NewListRiskCategoriesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "listRiskCategories", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRiskCategoriesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listRiskCategories", err)
+			}
+			err = ValidateListRiskCategoriesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listRiskCategories", err)
+			}
+			return nil, NewListRiskCategoriesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "listRiskCategories", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetRiskUserBreakdownRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "getRiskUserBreakdown"
+// endpoint
+func (c *Client) BuildGetRiskUserBreakdownRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRiskUserBreakdownRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getRiskUserBreakdown", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRiskUserBreakdownRequest returns an encoder for requests sent to
+// the risk getRiskUserBreakdown server.
+func EncodeGetRiskUserBreakdownRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetRiskUserBreakdownPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getRiskUserBreakdown", "*risk.GetRiskUserBreakdownPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("external_user_id", p.ExternalUserID)
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRiskUserBreakdownResponse returns a decoder for responses returned
+// by the risk getRiskUserBreakdown endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetRiskUserBreakdownResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRiskUserBreakdownResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRiskUserBreakdownResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			res := NewGetRiskUserBreakdownRiskUserBreakdownResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRiskUserBreakdownUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRiskUserBreakdownForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRiskUserBreakdownBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRiskUserBreakdownNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRiskUserBreakdownConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRiskUserBreakdownUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRiskUserBreakdownInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRiskUserBreakdownInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+				}
+				err = ValidateGetRiskUserBreakdownInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+				}
+				return nil, NewGetRiskUserBreakdownInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRiskUserBreakdownUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+				}
+				err = ValidateGetRiskUserBreakdownUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+				}
+				return nil, NewGetRiskUserBreakdownUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getRiskUserBreakdown", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRiskUserBreakdownGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskUserBreakdown", err)
+			}
+			err = ValidateGetRiskUserBreakdownGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskUserBreakdown", err)
+			}
+			return nil, NewGetRiskUserBreakdownGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getRiskUserBreakdown", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetRiskRuleBreakdownRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "getRiskRuleBreakdown"
+// endpoint
+func (c *Client) BuildGetRiskRuleBreakdownRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRiskRuleBreakdownRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getRiskRuleBreakdown", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRiskRuleBreakdownRequest returns an encoder for requests sent to
+// the risk getRiskRuleBreakdown server.
+func EncodeGetRiskRuleBreakdownRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetRiskRuleBreakdownPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getRiskRuleBreakdown", "*risk.GetRiskRuleBreakdownPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("category", p.Category)
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRiskRuleBreakdownResponse returns a decoder for responses returned
+// by the risk getRiskRuleBreakdown endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetRiskRuleBreakdownResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRiskRuleBreakdownResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRiskRuleBreakdownResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			res := NewGetRiskRuleBreakdownRiskRuleBreakdownResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRiskRuleBreakdownUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			return nil, NewGetRiskRuleBreakdownUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRiskRuleBreakdownForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			return nil, NewGetRiskRuleBreakdownForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRiskRuleBreakdownBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			return nil, NewGetRiskRuleBreakdownBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRiskRuleBreakdownNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			return nil, NewGetRiskRuleBreakdownNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRiskRuleBreakdownConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			return nil, NewGetRiskRuleBreakdownConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRiskRuleBreakdownUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			return nil, NewGetRiskRuleBreakdownUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRiskRuleBreakdownInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			return nil, NewGetRiskRuleBreakdownInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRiskRuleBreakdownInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+				}
+				err = ValidateGetRiskRuleBreakdownInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+				}
+				return nil, NewGetRiskRuleBreakdownInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRiskRuleBreakdownUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+				}
+				err = ValidateGetRiskRuleBreakdownUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+				}
+				return nil, NewGetRiskRuleBreakdownUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getRiskRuleBreakdown", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRiskRuleBreakdownGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getRiskRuleBreakdown", err)
+			}
+			err = ValidateGetRiskRuleBreakdownGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getRiskRuleBreakdown", err)
+			}
+			return nil, NewGetRiskRuleBreakdownGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getRiskRuleBreakdown", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -3199,6 +4462,36 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 	return res
 }
 
+// unmarshalRiskResultRedactedResponseBodyToTypesRiskResultRedacted builds a
+// value of type *types.RiskResultRedacted from a value of type
+// *RiskResultRedactedResponseBody.
+func unmarshalRiskResultRedactedResponseBodyToTypesRiskResultRedacted(v *RiskResultRedactedResponseBody) *types.RiskResultRedacted {
+	res := &types.RiskResultRedacted{
+		ID:            *v.ID,
+		PolicyID:      *v.PolicyID,
+		PolicyVersion: *v.PolicyVersion,
+		ChatMessageID: *v.ChatMessageID,
+		ChatID:        v.ChatID,
+		ChatTitle:     v.ChatTitle,
+		UserID:        v.UserID,
+		Source:        *v.Source,
+		RuleID:        v.RuleID,
+		Description:   v.Description,
+		MatchRedacted: *v.MatchRedacted,
+		PositionKnown: *v.PositionKnown,
+		Confidence:    v.Confidence,
+		CreatedAt:     *v.CreatedAt,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
+
+	return res
+}
+
 // unmarshalRiskChatSummaryResponseBodyToTypesRiskChatSummary builds a value of
 // type *types.RiskChatSummary from a value of type
 // *RiskChatSummaryResponseBody.
@@ -3209,6 +4502,77 @@ func unmarshalRiskChatSummaryResponseBodyToTypesRiskChatSummary(v *RiskChatSumma
 		UserID:         v.UserID,
 		FindingsCount:  *v.FindingsCount,
 		LatestDetected: *v.LatestDetected,
+	}
+
+	return res
+}
+
+// unmarshalRiskOverviewCategoryResponseBodyToRiskRiskOverviewCategory builds a
+// value of type *risk.RiskOverviewCategory from a value of type
+// *RiskOverviewCategoryResponseBody.
+func unmarshalRiskOverviewCategoryResponseBodyToRiskRiskOverviewCategory(v *RiskOverviewCategoryResponseBody) *risk.RiskOverviewCategory {
+	res := &risk.RiskOverviewCategory{
+		Category: *v.Category,
+		Findings: *v.Findings,
+	}
+
+	return res
+}
+
+// unmarshalRiskOverviewUserResponseBodyToRiskRiskOverviewUser builds a value
+// of type *risk.RiskOverviewUser from a value of type
+// *RiskOverviewUserResponseBody.
+func unmarshalRiskOverviewUserResponseBodyToRiskRiskOverviewUser(v *RiskOverviewUserResponseBody) *risk.RiskOverviewUser {
+	res := &risk.RiskOverviewUser{
+		Email:          *v.Email,
+		ExternalUserID: *v.ExternalUserID,
+		Findings:       *v.Findings,
+	}
+
+	return res
+}
+
+// unmarshalRiskRuleBreakdownEntryResponseBodyToRiskRiskRuleBreakdownEntry
+// builds a value of type *risk.RiskRuleBreakdownEntry from a value of type
+// *RiskRuleBreakdownEntryResponseBody.
+func unmarshalRiskRuleBreakdownEntryResponseBodyToRiskRiskRuleBreakdownEntry(v *RiskRuleBreakdownEntryResponseBody) *risk.RiskRuleBreakdownEntry {
+	res := &risk.RiskRuleBreakdownEntry{
+		RuleID:   *v.RuleID,
+		Source:   *v.Source,
+		Findings: *v.Findings,
+	}
+
+	return res
+}
+
+// unmarshalRiskOverviewTimeSeriesFindingResponseBodyToRiskRiskOverviewTimeSeriesFinding
+// builds a value of type *risk.RiskOverviewTimeSeriesFinding from a value of
+// type *RiskOverviewTimeSeriesFindingResponseBody.
+func unmarshalRiskOverviewTimeSeriesFindingResponseBodyToRiskRiskOverviewTimeSeriesFinding(v *RiskOverviewTimeSeriesFindingResponseBody) *risk.RiskOverviewTimeSeriesFinding {
+	res := &risk.RiskOverviewTimeSeriesFinding{
+		BucketStart: *v.BucketStart,
+		Category:    *v.Category,
+		Findings:    *v.Findings,
+	}
+
+	return res
+}
+
+// unmarshalRiskCategoryDefinitionResponseBodyToRiskRiskCategoryDefinition
+// builds a value of type *risk.RiskCategoryDefinition from a value of type
+// *RiskCategoryDefinitionResponseBody.
+func unmarshalRiskCategoryDefinitionResponseBodyToRiskRiskCategoryDefinition(v *RiskCategoryDefinitionResponseBody) *risk.RiskCategoryDefinition {
+	res := &risk.RiskCategoryDefinition{
+		Key:          *v.Key,
+		Label:        *v.Label,
+		Description:  *v.Description,
+		Icon:         *v.Icon,
+		Source:       *v.Source,
+		RuleIDPrefix: *v.RuleIDPrefix,
+	}
+	res.RuleIds = make([]string, len(v.RuleIds))
+	for i, val := range v.RuleIds {
+		res.RuleIds[i] = val
 	}
 
 	return res

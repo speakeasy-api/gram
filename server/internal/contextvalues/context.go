@@ -35,6 +35,18 @@ type RequestContext struct {
 	UserAgent   string
 }
 
+// AdminAuthContext carries identity information for an admin member
+// authenticated against Google for the admin service. It is intentionally
+// separate from AuthContext — admin auth is a fully isolated system and does
+// not share session, RBAC, or organization state with Speakeasy IDP auth.
+type AdminAuthContext struct {
+	SessionID   string
+	Email       string
+	OIDCSubject string
+	Name        string
+	HD          string
+}
+
 const (
 	SessionTokenContextKey      contextKey = "sessionTokenKey"
 	SessionValueContextKey      contextKey = "sessionValueKey"
@@ -42,6 +54,8 @@ const (
 	RequestContextKey           contextKey = "requestContextKey"
 	RBACScopeOverrideContextKey contextKey = "rbacScopeOverrideKey"
 	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
+	AdminSessionTokenContextKey contextKey = "adminSessionTokenKey"
+	AdminAuthContextKey         contextKey = "adminAuthKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -106,4 +120,22 @@ func SetAssistantPrincipal(ctx context.Context, value AssistantPrincipal) contex
 func GetAssistantPrincipal(ctx context.Context) (AssistantPrincipal, bool) {
 	value, ok := ctx.Value(AssistantPrincipalKey).(AssistantPrincipal)
 	return value, ok
+}
+
+func SetAdminSessionTokenInContext(ctx context.Context, value string) context.Context {
+	return context.WithValue(ctx, AdminSessionTokenContextKey, value)
+}
+
+func GetAdminSessionTokenFromContext(ctx context.Context) (string, bool) {
+	value, ok := ctx.Value(AdminSessionTokenContextKey).(string)
+	return value, ok
+}
+
+func SetAdminAuthContext(ctx context.Context, value *AdminAuthContext) context.Context {
+	return context.WithValue(ctx, AdminAuthContextKey, value)
+}
+
+func GetAdminAuthContext(ctx context.Context) (*AdminAuthContext, bool) {
+	value, ok := ctx.Value(AdminAuthContextKey).(*AdminAuthContext)
+	return value, ok && value != nil
 }
