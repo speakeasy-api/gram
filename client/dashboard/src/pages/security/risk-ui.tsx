@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { RULE_CATEGORY_META } from "./policy-data";
-import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
+import { getRuleTitleFallback, useFindingClassifier } from "./risk-utils";
 import { Badge } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
@@ -24,7 +24,9 @@ export function CategoryLabel({
   source?: string;
   ruleId?: string;
 }) {
-  const category = getCategoryForFinding(source, ruleId);
+  const classify = useFindingClassifier();
+  if (!classify) return null;
+  const category = classify(source, ruleId);
   const meta = category
     ? RULE_CATEGORY_META[category]
     : RULE_CATEGORY_META.custom;

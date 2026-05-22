@@ -1,52 +1,54 @@
+import { useMemo } from "react";
+import { useRiskCategories } from "@gram/client/react-query/index.js";
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
 import { humanizeRuleId } from "./rule-ids";
 
-const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
-  string,
-  RuleCategory
->([
-  ["destructive_tool", "destructive_tool"],
-  ["shadow_mcp", "shadow_mcp"],
-  ["prompt_injection", "prompt_injection"],
-  ["cli_destructive", "cli_destructive"],
-  // Scanner-source fallbacks: when a rule_id doesn't carry its category
-  // prefix (e.g. gitleaks' bare "generic-api-key"), classify by source so
-  // we never leak the scanner name to the UI. Keep in sync with the Go
-  // classifier in server/internal/risk/categories.
-  ["gitleaks", "secrets"],
-  ["presidio", "pii"],
-]);
-
-const ruleIdToCategory = new Map<string, RuleCategory>();
 const ruleIdToTitle = new Map<string, string>();
-
-for (const [category, rules] of Object.entries(DETECTION_RULES)) {
+for (const rules of Object.values(DETECTION_RULES)) {
   for (const rule of rules) {
-    ruleIdToCategory.set(rule.id, category as RuleCategory);
     ruleIdToTitle.set(rule.id, rule.title);
   }
 }
-
-// DETECTION_RULES.id is the canonical rule_id the backend writes to
-// risk_results, so lookup maps key by it directly.
-const RULE_ID_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = ruleIdToCategory;
 const RULE_ID_TO_TITLE: ReadonlyMap<string, string> = ruleIdToTitle;
 
+// Per-rule human-readable titles aren't returned by /rpc/risk.categories
+// (the API exposes only the canonical classification: source / rule_ids /
+// rule_id_prefix). Keep the static title map for label display.
 export function getRuleTitleFallback(ruleId: string | undefined): string {
   if (!ruleId) return "-";
   return RULE_ID_TO_TITLE.get(ruleId) ?? humanizeRuleId(ruleId);
 }
 
-export function getCategoryForFinding(
+export type FindingClassifier = (
   source?: string,
   ruleId?: string,
-): RuleCategory | null {
-  if (ruleId) {
-    const byRule = RULE_ID_TO_CATEGORY.get(ruleId);
-    if (byRule) return byRule;
-  }
-  if (source) {
-    return SOURCE_TO_CATEGORY.get(source) ?? null;
-  }
-  return null;
+) => RuleCategory | null;
+
+// useFindingClassifier returns a (source, rule_id) -> category lookup
+// backed by the canonical Go classifier served at /rpc/risk.categories.
+// React Query dedupes across the page so calling this per table row is
+// cheap. Returns null while the first fetch is in flight; consumers
+// should treat that as "category unknown yet" and render nothing.
+export function useFindingClassifier(): FindingClassifier | null {
+  const { data } = useRiskCategories(undefined, undefined, {
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  return useMemo<FindingClassifier | null>(() => {
+    const defs = data?.categories;
+    if (!defs) return null;
+    return (source, ruleId) => {
+      for (const def of defs) {
+        if (def.source && def.source === source) {
+          return def.key as RuleCategory;
+        }
+        if (def.ruleIds.length > 0 && ruleId && def.ruleIds.includes(ruleId)) {
+          return def.key as RuleCategory;
+        }
+        if (def.ruleIdPrefix && ruleId && ruleId.startsWith(def.ruleIdPrefix)) {
+          return def.key as RuleCategory;
+        }
+      }
+      return null;
+    };
+  }, [data]);
 }
