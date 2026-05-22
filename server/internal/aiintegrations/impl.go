@@ -258,7 +258,10 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 	if s.usagePollStarter == nil {
 		return nil
 	}
-	return s.usagePollStarter.Poll(ctx, organizationSlug, configID, provider)
+	if err := s.usagePollStarter.Poll(ctx, organizationSlug, configID, provider); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "start ai integration usage poll")
+	}
+	return nil
 }
 
 func emptyView(orgID, provider string) *gen.AIIntegrationConfig {

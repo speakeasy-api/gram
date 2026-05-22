@@ -173,8 +173,12 @@ func (c *Client) FetchUsageEventsPage(ctx context.Context, params FetchUsageEven
 	}
 	if !params.End.After(params.Start) {
 		return &UsageEventsPage{
-			Events:      nil,
-			HasNextPage: false,
+			Events:                nil,
+			TotalUsageEventsCount: 0,
+			CurrentPage:           params.Page,
+			NumPages:              0,
+			PageSize:              c.pageSize,
+			HasNextPage:           false,
 		}, nil
 	}
 

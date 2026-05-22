@@ -321,7 +321,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 
 	// AI integration usage syncing runs on its own worker and task queue.
-	aiUsageWorker.RegisterActivity(activities.SyncAIIntegrationUsage)
+	aiUsageWorker.RegisterActivity(activities.PollAIUsage)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)

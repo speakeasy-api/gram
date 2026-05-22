@@ -16,6 +16,12 @@ WHERE c.organization_id = @organization_id
   AND c.provider = @provider
   AND c.deleted IS FALSE;
 
+-- name: CountConfigsByOrganization :one
+SELECT count(*)
+FROM ai_integration_configs
+WHERE organization_id = @organization_id
+  AND (@include_deleted::bool OR deleted IS FALSE);
+
 -- name: GetFirstProjectByOrganization :one
 SELECT id
 FROM projects

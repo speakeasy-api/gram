@@ -113,7 +113,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			synced = append(synced, configID)
 			return nil
 		},
-		activity.RegisterOptions{Name: "SyncAIIntegrationUsage"},
+		activity.RegisterOptions{Name: "PollAIUsage"},
 	)
 
 	env.ExecuteWorkflow(AIUsagePollerCoordinatorWorkflow)
@@ -186,7 +186,7 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 			synced = append(synced, configID)
 			return nil
 		},
-		activity.RegisterOptions{Name: "SyncAIIntegrationUsage"},
+		activity.RegisterOptions{Name: "PollAIUsage"},
 	)
 
 	env.ExecuteWorkflow(AIUsagePollerCoordinatorWorkflow)

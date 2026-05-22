@@ -12,6 +12,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
+SELECT count(*)
+FROM ai_integration_configs
+WHERE organization_id = $1
+  AND ($2::bool OR deleted IS FALSE)
+`
+
+type CountConfigsByOrganizationParams struct {
+	OrganizationID string
+	IncludeDeleted bool
+}
+
+func (q *Queries) CountConfigsByOrganization(ctx context.Context, arg CountConfigsByOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countConfigsByOrganization, arg.OrganizationID, arg.IncludeDeleted)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const ensureSync = `-- name: EnsureSync :one
 WITH inserted AS (
   INSERT INTO ai_integration_syncs (

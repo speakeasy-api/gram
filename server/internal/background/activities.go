@@ -272,7 +272,7 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 	return candidates, nil
 }
 
-func (a *Activities) SyncAIIntegrationUsage(ctx context.Context, configID string) error {
+func (a *Activities) PollAIUsage(ctx context.Context, configID string) error {
 	return a.pollCursorUsageMetrics.Do(ctx, configID)
 }
 

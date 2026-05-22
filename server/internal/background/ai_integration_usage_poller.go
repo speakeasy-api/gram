@@ -128,7 +128,7 @@ func AIUsagePollerWorkflow(ctx workflow.Context, configID string) error {
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.SyncAIIntegrationUsage, configID).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, a.PollAIUsage, configID).Get(ctx, nil); err != nil {
 		return fmt.Errorf("poll and persist ai integration usage: %w", err)
 	}
 
