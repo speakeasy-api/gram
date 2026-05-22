@@ -43,14 +43,14 @@ func TestService_CreateRole(t *testing.T) {
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "org-custom-builder",
+		RoleSlugs:      []string{"org-custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{"org-custom-builder"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "org-custom-builder",
+		RoleSlugs:      []string{"org-custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 

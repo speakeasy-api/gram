@@ -227,9 +227,6 @@ func (s *StubClient) DeleteRole(_ context.Context, orgID string, roleSlug string
 		}
 	}
 	for membershipID, member := range state.memberships {
-		if member.RoleSlug == roleSlug {
-			member.RoleSlug = "member"
-		}
 		filtered := make([]string, 0, len(member.RoleSlugs))
 		for _, s := range member.RoleSlugs {
 			if s != roleSlug {
@@ -282,9 +279,6 @@ func (s *StubClient) UpdateMemberRoles(_ context.Context, membershipID string, r
 			}
 		}
 		member.RoleSlugs = roleSlugs
-		if len(roleSlugs) > 0 {
-			member.RoleSlug = roleSlugs[0]
-		}
 		state.memberships[membershipID] = member
 		return &member, nil
 	}
@@ -426,7 +420,6 @@ func (s *StubClient) CreateOrganizationMembership(_ context.Context, workosUserI
 		UserID:         workosUserID,
 		OrganizationID: workosOrgID,
 		Organization:   "",
-		RoleSlug:       roleSlug,
 		RoleSlugs:      []string{roleSlug},
 		Status:         "active",
 		CreatedAt:      "",

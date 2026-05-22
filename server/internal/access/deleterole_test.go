@@ -67,14 +67,14 @@ func TestService_DeleteRole_ReassignsMembersToDefault(t *testing.T) {
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       authz.SystemRoleMember,
+		RoleSlugs:      []string{authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{authz.SystemRoleMember}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       authz.SystemRoleMember,
+		RoleSlugs:      []string{authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
@@ -140,7 +140,7 @@ func TestService_DeleteRole_PartialReassignFailureContinuesDelete(t *testing.T) 
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       authz.SystemRoleMember,
+		RoleSlugs:      []string{authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{authz.SystemRoleMember}).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Times(3)

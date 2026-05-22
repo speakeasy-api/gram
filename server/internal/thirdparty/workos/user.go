@@ -8,14 +8,12 @@ import (
 )
 
 // Member represents an active organization membership.
-// RoleSlug is the slug of the member's primary role (from WorkOS Role field).
-// RoleSlugs contains all role slugs assigned to this membership (from WorkOS Roles field).
+// RoleSlugs contains all role slugs assigned to this membership.
 type Member struct {
 	ID             string
 	UserID         string
 	OrganizationID string
 	Organization   string
-	RoleSlug       string
 	RoleSlugs      []string
 	Status         string
 	CreatedAt      string

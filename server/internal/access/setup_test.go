@@ -210,7 +210,7 @@ func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 	replaced, err := accessrepo.New(conn).ReplaceOrganizationRoleAssignment(ctx, accessrepo.ReplaceOrganizationRoleAssignmentParams{
 		OrganizationID:     organizationID,
 		WorkosUserID:       member.UserID,
-		WorkosRoleSlug:     member.RoleSlug,
+		WorkosRoleSlug:     member.RoleSlugs[0],
 		UserID:             conv.ToPGTextEmpty(userID),
 		WorkosMembershipID: conv.ToPGTextEmpty(member.ID),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(updatedAt),

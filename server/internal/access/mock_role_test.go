@@ -108,7 +108,7 @@ func mockMember(orgID, membershipID, userID, roleSlug string) thirdpartyworkos.M
 		ID:             membershipID,
 		UserID:         userID,
 		OrganizationID: orgID,
-		RoleSlug:       roleSlug,
+		RoleSlugs:      []string{roleSlug},
 		CreatedAt:      mockMembershipTimestamp,
 	}
 }

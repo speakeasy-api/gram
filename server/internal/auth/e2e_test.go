@@ -98,9 +98,6 @@ func (m *mockWorkOSFetcher) UpdateMemberRoles(_ context.Context, membershipID st
 		for i := range members {
 			if members[i].ID == membershipID {
 				members[i].RoleSlugs = roleSlugs
-				if len(roleSlugs) > 0 {
-					members[i].RoleSlug = roleSlugs[0]
-				}
 				m.members[userID] = members
 				return &members[i], nil
 			}
@@ -203,7 +200,7 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_01ABC", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlug: "member"},
+				{ID: "om_01ABC", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"member"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -260,7 +257,7 @@ func TestE2E_Callback_NewUserJoiningExistingOrg(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_02DEF", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlug: "admin"},
+				{ID: "om_02DEF", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"admin"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -374,7 +371,7 @@ func TestE2E_Callback_ExistingUserWithDBOrgs(t *testing.T) {
 	// already has org data.
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
-			workosUserID: {{ID: "om_99", UserID: workosUserID, OrganizationID: "org_SHOULD_NOT_APPEAR", Organization: "Ghost", RoleSlug: "admin"}},
+			workosUserID: {{ID: "om_99", UserID: workosUserID, OrganizationID: "org_SHOULD_NOT_APPEAR", Organization: "Ghost", RoleSlugs: []string{"admin"}}},
 		},
 		orgs: map[string]*workos.Organization{
 			"org_SHOULD_NOT_APPEAR": {ID: "org_SHOULD_NOT_APPEAR", Name: "Ghost"},
@@ -433,9 +430,9 @@ func TestE2E_Callback_LinkedOrgsSkipWorkOSReads(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_LA", UserID: workosUserID, OrganizationID: orgID1, Organization: "Linked A", RoleSlug: "admin"},
-				{ID: "om_LB", UserID: workosUserID, OrganizationID: orgID2, Organization: "Linked B", RoleSlug: "member"},
-				{ID: "om_LC", UserID: workosUserID, OrganizationID: orgID3, Organization: "Linked C", RoleSlug: "member"},
+				{ID: "om_LA", UserID: workosUserID, OrganizationID: orgID1, Organization: "Linked A", RoleSlugs: []string{"admin"}},
+				{ID: "om_LB", UserID: workosUserID, OrganizationID: orgID2, Organization: "Linked B", RoleSlugs: []string{"member"}},
+				{ID: "om_LC", UserID: workosUserID, OrganizationID: orgID3, Organization: "Linked C", RoleSlugs: []string{"member"}},
 			},
 		},
 		// Populate orgs so any errant GetOrganization would succeed — we want
@@ -499,8 +496,8 @@ func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *te
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_EXISTING_SPEAKEASY", UserID: workosUserID, OrganizationID: speakeasyWorkosID, Organization: "Speakeasy Team", RoleSlug: "admin"},
-				{ID: "om_EXISTING_WALKER", UserID: workosUserID, OrganizationID: walkerWorkosID, Organization: "Walker Test Org", RoleSlug: "admin"},
+				{ID: "om_EXISTING_SPEAKEASY", UserID: workosUserID, OrganizationID: speakeasyWorkosID, Organization: "Speakeasy Team", RoleSlugs: []string{"admin"}},
+				{ID: "om_EXISTING_WALKER", UserID: workosUserID, OrganizationID: walkerWorkosID, Organization: "Walker Test Org", RoleSlugs: []string{"admin"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -593,7 +590,7 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_03GHI", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlug: "member"},
+				{ID: "om_03GHI", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"member"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -666,8 +663,8 @@ func TestE2E_Callback_MultipleOrgs(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_A", UserID: workosUserID, OrganizationID: orgID1, Organization: "Alpha Inc", RoleSlug: "admin"},
-				{ID: "om_B", UserID: workosUserID, OrganizationID: orgID2, Organization: "Beta LLC", RoleSlug: "member"},
+				{ID: "om_A", UserID: workosUserID, OrganizationID: orgID1, Organization: "Alpha Inc", RoleSlugs: []string{"admin"}},
+				{ID: "om_B", UserID: workosUserID, OrganizationID: orgID2, Organization: "Beta LLC", RoleSlugs: []string{"member"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -719,8 +716,8 @@ func TestE2E_Callback_IDPOrgSelection(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_SA", UserID: workosUserID, OrganizationID: workosOrgA, Organization: "Org A", RoleSlug: "member"},
-				{ID: "om_SB", UserID: workosUserID, OrganizationID: workosOrgB, Organization: "Org B", RoleSlug: "member"},
+				{ID: "om_SA", UserID: workosUserID, OrganizationID: workosOrgA, Organization: "Org A", RoleSlugs: []string{"member"}},
+				{ID: "om_SB", UserID: workosUserID, OrganizationID: workosOrgB, Organization: "Org B", RoleSlugs: []string{"member"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -769,7 +766,7 @@ func TestE2E_Callback_AcceptsPendingInviteAndAppliesRole(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_01INVITE_SSO", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Invite SSO", RoleSlug: "member"},
+				{ID: "om_01INVITE_SSO", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Invite SSO", RoleSlugs: []string{"member"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -813,7 +810,7 @@ func TestE2E_Callback_AcceptsPendingInviteAndAppliesRole(t *testing.T) {
 	member, err := fetcher.GetOrgMembership(ctx, workosUserID, workosOrgID)
 	require.NoError(t, err)
 	require.NotNil(t, member)
-	require.Equal(t, "admin", member.RoleSlug)
+	require.Contains(t, member.RoleSlugs, "admin")
 }
 
 // TestE2E_Callback_ThenInfo exercises the full login→info flow.
@@ -831,7 +828,7 @@ func TestE2E_Callback_ThenInfo(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_INFO", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlug: "admin"},
+				{ID: "om_INFO", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"admin"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -883,8 +880,8 @@ func TestE2E_Callback_ThenSwitchScopes(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_SW_A", UserID: workosUserID, OrganizationID: orgID1, Organization: "Switch Alpha", RoleSlug: "admin"},
-				{ID: "om_SW_B", UserID: workosUserID, OrganizationID: orgID2, Organization: "Switch Beta", RoleSlug: "member"},
+				{ID: "om_SW_A", UserID: workosUserID, OrganizationID: orgID1, Organization: "Switch Alpha", RoleSlugs: []string{"admin"}},
+				{ID: "om_SW_B", UserID: workosUserID, OrganizationID: orgID2, Organization: "Switch Beta", RoleSlugs: []string{"member"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -1002,7 +999,7 @@ func TestE2E_Logout(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_LOGOUT", UserID: workosUserID, OrganizationID: "org_01LOGOUT", Organization: "Logout Corp", RoleSlug: "admin"},
+				{ID: "om_LOGOUT", UserID: workosUserID, OrganizationID: "org_01LOGOUT", Organization: "Logout Corp", RoleSlugs: []string{"admin"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -1152,7 +1149,7 @@ func TestE2E_Register_RejectsWhenOrgAlreadyActive(t *testing.T) {
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_REJ", UserID: workosUserID, OrganizationID: "org_01REJ", Organization: "Existing", RoleSlug: "admin"},
+				{ID: "om_REJ", UserID: workosUserID, OrganizationID: "org_01REJ", Organization: "Existing", RoleSlugs: []string{"admin"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{

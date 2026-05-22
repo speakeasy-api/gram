@@ -559,7 +559,7 @@ func TestRoleClient_ListMembers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, members, 1)
 	require.Equal(t, "user_1", members[0].UserID)
-	require.Equal(t, "admin", members[0].RoleSlug)
+	require.Contains(t, members[0].RoleSlugs, "admin")
 }
 
 func TestRoleClient_ListMembers_Pagination(t *testing.T) {
@@ -674,7 +674,7 @@ func TestRoleClient_GetOrgMembership(t *testing.T) {
 	membership, err := client.GetOrgMembership(context.Background(), "user_1", "org_1")
 	require.NoError(t, err)
 	require.Equal(t, "mem_1", membership.ID)
-	require.Equal(t, "admin", membership.RoleSlug)
+	require.Contains(t, membership.RoleSlugs, "admin")
 }
 
 func TestRoleClient_DeleteOrganizationMembership(t *testing.T) {
@@ -887,7 +887,6 @@ func TestRoleClient_ListMembers_MultiRole(t *testing.T) {
 	members, err := client.ListMembers(context.Background(), "org_1")
 	require.NoError(t, err)
 	require.Len(t, members, 1)
-	require.Equal(t, "admin", members[0].RoleSlug)
 	require.Equal(t, []string{"admin", "builder"}, members[0].RoleSlugs)
 }
 
@@ -908,7 +907,6 @@ func TestRoleClient_ListMembers_FallsBackToSingleRole(t *testing.T) {
 	members, err := client.ListMembers(context.Background(), "org_1")
 	require.NoError(t, err)
 	require.Len(t, members, 1)
-	require.Equal(t, "editor", members[0].RoleSlug)
 	require.Equal(t, []string{"editor"}, members[0].RoleSlugs)
 }
 
@@ -928,7 +926,6 @@ func TestRoleClient_UpdateMemberRoles(t *testing.T) {
 
 	updated, err := client.UpdateMemberRoles(context.Background(), "mem_1", []string{"admin", "builder"})
 	require.NoError(t, err)
-	require.Equal(t, "admin", updated.RoleSlug)
 	require.Equal(t, []string{"admin", "builder"}, updated.RoleSlugs)
 }
 
@@ -950,6 +947,5 @@ func TestRoleClient_GetOrgMembership_MultiRole(t *testing.T) {
 	membership, err := client.GetOrgMembership(context.Background(), "user_1", "org_1")
 	require.NoError(t, err)
 	require.Equal(t, "mem_1", membership.ID)
-	require.Equal(t, "admin", membership.RoleSlug)
 	require.Equal(t, []string{"admin", "builder", "viewer"}, membership.RoleSlugs)
 }

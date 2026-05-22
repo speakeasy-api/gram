@@ -279,10 +279,6 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
 	}
 
-	roleSlugs := member.RoleSlugs
-	if len(roleSlugs) == 0 && member.RoleSlug != "" {
-		roleSlugs = []string{member.RoleSlug}
-	}
 	if err := orgQueries.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
 		OrganizationID:     organizationID,
 		WorkosUserID:       member.UserID,
@@ -290,7 +286,7 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		WorkosMembershipID: conv.ToPGText(member.ID),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
 		WorkosLastEventID:  conv.ToPGText(""),
-		WorkosRoleSlugs:    roleSlugs,
+		WorkosRoleSlugs:    member.RoleSlugs,
 	}); err != nil {
 		return fmt.Errorf("sync organization role assignments for membership %q: %w", member.ID, err)
 	}

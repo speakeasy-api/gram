@@ -230,7 +230,6 @@ func convertMember(m usermanagement.OrganizationMembership) Member {
 		UserID:         m.UserID,
 		OrganizationID: m.OrganizationID,
 		Organization:   m.OrganizationName,
-		RoleSlug:       m.Role.Slug,
 		RoleSlugs:      roleSlugs,
 		Status:         string(m.Status),
 		CreatedAt:      m.CreatedAt,

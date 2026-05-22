@@ -107,12 +107,16 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 
 	result := make([]*gen.AccessMember, 0, len(rows))
 	for _, row := range rows {
+		var roleIds []string
+		if row.RoleID != "" {
+			roleIds = []string{row.RoleID}
+		}
 		result = append(result, &gen.AccessMember{
 			ID:       row.ID,
 			Name:     conv.Default(row.DisplayName, row.Email),
 			Email:    row.Email,
 			PhotoURL: conv.FromPGText[string](row.PhotoUrl),
-			RoleIds:  singleRoleIDSlice(row.RoleID),
+			RoleIds:  roleIds,
 			JoinedAt: conv.FromPGTimestamptz(row.JoinedAt),
 		})
 	}
@@ -564,6 +568,10 @@ func (r *RoleManager) UpdateMemberRole(ctx context.Context, gramOrgID, userID, r
 	}
 
 	memberName := conv.Default(connectedUser.DisplayName, connectedUser.Email)
+	var existingRoleIds []string
+	if existing.RoleID != "" {
+		existingRoleIds = []string{existing.RoleID}
+	}
 	result := memberRoleUpdateContext{
 		RoleSlug:     role.Slug,
 		MembershipID: membershipID,
@@ -574,7 +582,7 @@ func (r *RoleManager) UpdateMemberRole(ctx context.Context, gramOrgID, userID, r
 			Name:     memberName,
 			Email:    connectedUser.Email,
 			PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:  singleRoleIDSlice(existing.RoleID),
+			RoleIds:  existingRoleIds,
 			JoinedAt: conv.FromPGTimestamptz(existing.CreatedAt),
 		},
 		After: &gen.AccessMember{
@@ -947,13 +955,4 @@ func slugify(name string) (string, error) {
 	}
 
 	return slug, nil
-}
-
-// singleRoleIDSlice wraps a potentially empty role ID string into a slice for
-// the generated AccessMember.RoleIds field. Empty strings are omitted.
-func singleRoleIDSlice(roleID string) []string {
-	if roleID == "" {
-		return nil
-	}
-	return []string{roleID}
 }

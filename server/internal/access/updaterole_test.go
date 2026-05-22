@@ -45,14 +45,14 @@ func TestService_UpdateRole(t *testing.T) {
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", []string{"custom-builder"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 
@@ -104,7 +104,7 @@ func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 
@@ -191,7 +191,7 @@ func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 

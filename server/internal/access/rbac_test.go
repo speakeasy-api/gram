@@ -246,7 +246,7 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 
