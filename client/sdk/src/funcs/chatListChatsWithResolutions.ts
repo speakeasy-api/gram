@@ -100,6 +100,7 @@ async function $do(
   const path = pathToFunc("/rpc/chat.listChatsWithResolutions")();
 
   const query = encodeFormQuery({
+    "assistant_id": payload?.assistant_id,
     "external_user_id": payload?.external_user_id,
     "from": payload?.from,
     "has_risk": payload?.has_risk,

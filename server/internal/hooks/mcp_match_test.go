@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // The tool-name prefix Claude Code derives from each entry of `claude mcp
@@ -43,6 +45,7 @@ func TestMatchCachedMCPEntry(t *testing.T) {
 		{Source: "claude.ai", Name: "Linear (Speakeasy)", URL: "https://chat.speakeasy.com/mcp/linear"},
 		{Source: "plugin", PluginName: "slack", Name: "slack", URL: "https://mcp.slack.com/mcp"},
 		{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"},
+		{Source: "claude.ai", Name: "Slack", URL: "https://mcp.example.com/slack", ConnectorUUID: "a1b2c3d4-e5f6-7890-abcd-ef0123456789"},
 	}
 
 	got := matchCachedMCPEntry(entries, "gram")
@@ -56,6 +59,59 @@ func TestMatchCachedMCPEntry(t *testing.T) {
 	if assert.NotNil(t, got) {
 		assert.Equal(t, "https://chat.speakeasy.com/mcp/linear", got.URL)
 	}
+
+	// Cowork inventory: tool names use the connector UUID as the server
+	// prefix, so the matcher resolves the entry by its ConnectorUUID field.
+	got = matchCachedMCPEntry(entries, "a1b2c3d4-e5f6-7890-abcd-ef0123456789")
+	if assert.NotNil(t, got) {
+		assert.Equal(t, "Slack", got.Name)
+		assert.Equal(t, "https://mcp.example.com/slack", got.URL)
+	}
+}
+
+func TestApplyMCPInventoryAttrs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil matched leaves attrs untouched", func(t *testing.T) {
+		t.Parallel()
+		attrs := map[attr.Key]any{attr.ToolCallSourceKey: "some-uuid"}
+		applyMCPInventoryAttrs(attrs, nil)
+		assert.Equal(t, "some-uuid", attrs[attr.ToolCallSourceKey])
+		_, hasURL := attrs[attr.MCPServerURLKey]
+		assert.False(t, hasURL)
+	})
+
+	t.Run("claude.ai entry overrides sanitized source with raw name", func(t *testing.T) {
+		t.Parallel()
+		attrs := map[attr.Key]any{attr.ToolCallSourceKey: "claude_ai_Slack"}
+		applyMCPInventoryAttrs(attrs, &MCPServerEntry{
+			Source: "claude.ai", Name: "Slack", URL: "https://mcp.example.com/slack",
+		})
+		assert.Equal(t, "Slack", attrs[attr.ToolCallSourceKey])
+		assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
+	})
+
+	t.Run("cowork entry overrides uuid source with name", func(t *testing.T) {
+		t.Parallel()
+		attrs := map[attr.Key]any{attr.ToolCallSourceKey: "a1b2c3d4-uuid"}
+		applyMCPInventoryAttrs(attrs, &MCPServerEntry{
+			Source: "claude.ai", Name: "Slack", URL: "https://mcp.example.com/slack",
+			ConnectorUUID: "a1b2c3d4-uuid",
+		})
+		assert.Equal(t, "Slack", attrs[attr.ToolCallSourceKey])
+		assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
+	})
+
+	t.Run("entry without name leaves source intact", func(t *testing.T) {
+		t.Parallel()
+		attrs := map[attr.Key]any{attr.ToolCallSourceKey: "a1b2c3d4-uuid"}
+		applyMCPInventoryAttrs(attrs, &MCPServerEntry{
+			Source: "claude.ai", URL: "https://mcp.example.com/slack",
+			ConnectorUUID: "a1b2c3d4-uuid",
+		})
+		assert.Equal(t, "a1b2c3d4-uuid", attrs[attr.ToolCallSourceKey])
+		assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
+	})
 }
 
 func TestIsGramHostedMCPURL(t *testing.T) {

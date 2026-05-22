@@ -272,6 +272,8 @@ type ListChatsWithResolutionsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
+	// Filter to chats produced by this assistant
+	AssistantID *string
 	// Filter by resolution status
 	ResolutionStatus *string
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no

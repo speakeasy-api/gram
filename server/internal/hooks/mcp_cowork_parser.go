@@ -23,12 +23,17 @@ func ParseCoworkMCPInventory(raw any) []MCPServerEntry {
 			continue
 		}
 		name, _ := m["name"].(string)
-		if name == "" {
-			continue
-		}
 		url, _ := m["url"].(string)
 		uuid, _ := m["connector_uuid"].(string)
 		source, _ := m["source"].(string)
+		// connector_uuid is the only field that lets us re-match this
+		// entry against an incoming `mcp__<uuid>__tool` call, so an
+		// entry with neither name nor uuid is useless and we drop it.
+		// Empty Name is allowed — downstream callers fall back to the
+		// uuid as the source name in that case.
+		if name == "" && uuid == "" {
+			continue
+		}
 		if source == "" {
 			source = "claude.ai"
 		}

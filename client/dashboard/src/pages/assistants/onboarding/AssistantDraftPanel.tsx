@@ -61,27 +61,36 @@ export function AssistantDraftPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-border flex items-center justify-between border-b px-4 py-3">
-        <Type variant="body" className="font-medium">
+      <div className="border-border flex items-center justify-between gap-2 border-b px-4 py-3">
+        <Type variant="body" className="truncate font-medium">
           {a?.name ?? "Loading…"}
         </Type>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            if (!draft.assistantId) return;
-            if (!confirm("Delete this assistant? This cannot be undone."))
-              return;
-            del.mutate({ request: { id: draft.assistantId } });
-          }}
-          disabled={del.isPending}
-        >
-          {del.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Icon name="trash" className="h-3 w-3" />
-          )}
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <routes.logs.agents.Link
+            queryParams={{ assistantId: draft.assistantId }}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs no-underline transition-colors hover:no-underline"
+          >
+            <Icon name="activity" className="h-3 w-3" />
+            Sessions
+          </routes.logs.agents.Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (!draft.assistantId) return;
+              if (!confirm("Delete this assistant? This cannot be undone."))
+                return;
+              del.mutate({ request: { id: draft.assistantId } });
+            }}
+            disabled={del.isPending}
+          >
+            {del.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Icon name="trash" className="h-3 w-3" />
+            )}
+          </Button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
