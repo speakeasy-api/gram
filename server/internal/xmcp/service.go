@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
@@ -56,6 +57,7 @@ type Service struct {
 	serverURL                         *url.URL
 	guardianPolicy                    *guardian.Policy
 	posthog                           *posthog.Posthog
+	telemLogger                       *tm.Logger
 	proxyMetrics                      *proxy.Metrics
 	xmcpMetrics                       *metrics
 	toolsCallUsageLimitsInterceptor   *ToolsCallUsageLimitsInterceptor
@@ -76,6 +78,7 @@ func NewService(
 	posthogClient *posthog.Posthog,
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
+	telemLogger *tm.Logger,
 	mcpService *mcp.Service,
 	serverURL *url.URL,
 ) *Service {
@@ -95,6 +98,7 @@ func NewService(
 		serverURL:                         serverURL,
 		guardianPolicy:                    guardianPolicy,
 		posthog:                           posthogClient,
+		telemLogger:                       telemLogger,
 		proxyMetrics:                      proxy.NewMetrics(meter, logger),
 		xmcpMetrics:                       xmcpMetrics,
 		toolsCallUsageLimitsInterceptor:   NewToolsCallUsageLimitsInterceptor(billingRepo, logger),

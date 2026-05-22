@@ -129,6 +129,8 @@ type GetObservabilityOverviewRequestBody struct {
 	APIKeyID *string `form:"api_key_id,omitempty" json:"api_key_id,omitempty" xml:"api_key_id,omitempty"`
 	// Optional toolset/MCP server slug filter
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	// Optional Remote MCP server ID filter
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
@@ -3527,6 +3529,7 @@ func NewGetObservabilityOverviewRequestBody(p *telemetry.GetObservabilityOvervie
 		ExternalUserID:    p.ExternalUserID,
 		APIKeyID:          p.APIKeyID,
 		ToolsetSlug:       p.ToolsetSlug,
+		RemoteMcpServerID: p.RemoteMcpServerID,
 		EventSource:       p.EventSource,
 		HookSource:        p.HookSource,
 		IncludeTimeSeries: p.IncludeTimeSeries,

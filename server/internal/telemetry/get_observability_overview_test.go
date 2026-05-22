@@ -204,6 +204,50 @@ func TestGetObservabilityOverview_FromAfterTo(t *testing.T) {
 	require.Contains(t, err.Error(), "'from' time must be before 'to' time")
 }
 
+func TestGetObservabilityOverview_RemoteMCPServerIDFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	serverA := uuid.New().String()
+	serverB := uuid.New().String()
+
+	insertRemoteMCPToolCallLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:externalmcp:"+serverA+":listIssues", serverA, 200, 0.4)
+	insertRemoteMCPToolCallLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:externalmcp:"+serverA+":createIssue", serverA, 500, 1.2)
+	insertRemoteMCPToolCallLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:externalmcp:"+serverB+":listIssues", serverB, 200, 0.3)
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Without filter: all three tool calls show up.
+	all, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+		From:              from,
+		To:                to,
+		IncludeTimeSeries: false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), all.Summary.TotalToolCalls)
+
+	// Filter by server A: only its two calls show up.
+	scoped, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+		From:              from,
+		To:                to,
+		RemoteMcpServerID: &serverA,
+		IncludeTimeSeries: false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), scoped.Summary.TotalToolCalls)
+	require.Equal(t, int64(1), scoped.Summary.FailedToolCalls)
+	require.Len(t, scoped.TopToolsByCount, 2)
+}
+
 func TestGetObservabilityOverview_LogsDisabled(t *testing.T) {
 	t.Parallel()
 
@@ -222,6 +266,40 @@ func TestGetObservabilityOverview_LogsDisabled(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "logs are not enabled")
+}
+
+// insertRemoteMCPToolCallLog inserts a tool call log that carries a
+// gram.remote_mcp_server.id attribute so the materialized
+// remote_mcp_server_id column is populated.
+func insertRemoteMCPToolCallLog(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, toolURN, remoteMCPServerID string, statusCode int32, durationSec float64) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.tool.urn":                toolURN,
+		"gram.remote_mcp_server.id":    remoteMCPServerID,
+		"http.server.request.duration": durationSec,
+		"http.response.status_code":    statusCode,
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool call",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, toolURN, "gram-tools")
+	require.NoError(t, err)
 }
 
 // insertResolutionLog inserts a chat resolution event log

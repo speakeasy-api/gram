@@ -577,16 +577,17 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 
 // GetTimeSeriesMetricsParams contains the parameters for getting time series metrics.
 type GetTimeSeriesMetricsParams struct {
-	GramProjectID   string
-	TimeStart       int64
-	TimeEnd         int64
-	IntervalSeconds int64  // Bucket interval in seconds
-	UserID          string // Optional filter
-	ExternalUserID  string // Optional filter
-	APIKeyID        string // Optional filter
-	ToolsetSlug     string // Optional filter - filters by toolset/MCP server slug
-	EventSource     string // Optional filter - filters by event_source
-	HookSource      string // Optional filter - filters by hook_source
+	GramProjectID     string
+	TimeStart         int64
+	TimeEnd           int64
+	IntervalSeconds   int64  // Bucket interval in seconds
+	UserID            string // Optional filter
+	ExternalUserID    string // Optional filter
+	APIKeyID          string // Optional filter
+	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	EventSource       string // Optional filter - filters by event_source
+	HookSource        string // Optional filter - filters by hook_source
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -642,6 +643,9 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
 	}
+	if arg.RemoteMCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
@@ -685,17 +689,18 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 
 // GetToolMetricsBreakdownParams contains the parameters for getting tool metrics breakdown.
 type GetToolMetricsBreakdownParams struct {
-	GramProjectID  string
-	TimeStart      int64
-	TimeEnd        int64
-	UserID         string // Optional filter
-	ExternalUserID string // Optional filter
-	APIKeyID       string // Optional filter
-	ToolsetSlug    string // Optional filter - filters by toolset/MCP server slug
-	EventSource    string // Optional filter - filters by event_source
-	HookSource     string // Optional filter - filters by hook_source
-	Limit          int
-	SortBy         string // "count" or "failure_rate"
+	GramProjectID     string
+	TimeStart         int64
+	TimeEnd           int64
+	UserID            string // Optional filter
+	ExternalUserID    string // Optional filter
+	APIKeyID          string // Optional filter
+	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	EventSource       string // Optional filter - filters by event_source
+	HookSource        string // Optional filter - filters by hook_source
+	Limit             int
+	SortBy            string // "count" or "failure_rate"
 }
 
 // GetToolMetricsBreakdown retrieves per-tool aggregated metrics for top tools tables.
@@ -728,6 +733,9 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+	if arg.RemoteMCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -776,15 +784,16 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 
 // GetOverviewSummaryParams contains the parameters for getting overview summary metrics.
 type GetOverviewSummaryParams struct {
-	GramProjectID  string
-	TimeStart      int64
-	TimeEnd        int64
-	UserID         string // Optional filter
-	ExternalUserID string // Optional filter
-	APIKeyID       string // Optional filter
-	ToolsetSlug    string // Optional filter - filters by toolset/MCP server slug
-	EventSource    string // Optional filter - filters by event_source
-	HookSource     string // Optional filter - filters by hook_source
+	GramProjectID     string
+	TimeStart         int64
+	TimeEnd           int64
+	UserID            string // Optional filter
+	ExternalUserID    string // Optional filter
+	APIKeyID          string // Optional filter
+	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
+	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	EventSource       string // Optional filter - filters by event_source
+	HookSource        string // Optional filter - filters by hook_source
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
@@ -793,7 +802,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.EventSource != "" || arg.HookSource != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -902,6 +911,9 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+	if arg.RemoteMCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
