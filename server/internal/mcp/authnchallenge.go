@@ -182,15 +182,6 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		return ctx, &subject, true
 	}
 
-	// Non-member user subjects (public toolsets admit cross-org users)
-	// take the same path as anonymous: return Subject without stamping
-	// endpoint org metadata into AuthContext.
-	if subject.Kind == urn.SessionSubjectKindUser {
-		if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, endpoint.OrganizationID, subject.ID); !ok {
-			return ctx, &subject, true
-		}
-	}
-
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, endpoint.OrganizationID)
 	if err != nil {
 		return ctx, nil, false
