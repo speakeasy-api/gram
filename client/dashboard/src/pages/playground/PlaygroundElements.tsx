@@ -23,6 +23,7 @@ import {
   useGetMcpMetadata,
   useListEnvironments,
 } from "@gram/client/react-query/index.js";
+import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
@@ -154,6 +155,44 @@ export function PlaygroundElements({
     staleTime: 1000 * 60 * 30,
   });
 
+  // Mint a user-session JWT scoped to the toolset for issuer-gated toolsets.
+  // This is what the elements MCP client will send as `Authorization: Bearer`
+  // on /mcp/{slug} requests, so the runtime gateway resolves the dashboard
+  // user's stored upstream credentials via the same path a real MCP client
+  // would after an OAuth dance — no special-casing in ApplyIssuerGate.
+  const mintUserSessionMutation = useMintUserSessionMutation();
+  const gatewayTokenQuery = useQuery({
+    queryKey: [
+      "playground-gateway-token",
+      project.id,
+      toolset?.id,
+      session.user.id,
+    ],
+    queryFn: async () => {
+      if (!toolset?.id) return null;
+      const result = await mintUserSessionMutation.mutateAsync({
+        request: {
+          gramProject: project.id,
+          mintUserSessionRequestBody: { toolsetId: toolset.id },
+        },
+        security: {
+          sessionHeaderGramSession: session.session,
+          projectSlugHeaderGramProject: project.slug,
+        },
+      });
+      return result;
+    },
+    // Only mint for issuer-gated toolsets — the mint RPC 400s otherwise.
+    enabled: !!toolset?.id && !!toolset?.userSessionIssuerSlug,
+    // The minted JWT is good for ~1h; refetch every 45 minutes so we always
+    // have headroom before expiry.
+    staleTime: 1000 * 60 * 45,
+    refetchInterval: 1000 * 60 * 45,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const gatewayToken = gatewayTokenQuery.data?.accessToken;
+
   const effectiveEnvironmentSlug = playgroundEnvironmentSlug ?? environmentSlug;
 
   const mcpAppHeaders = useMemo(() => {
@@ -197,6 +236,13 @@ export function PlaygroundElements({
           session: getSession,
           headers: {
             "X-Gram-Source": "playground",
+            // Forwarded to /mcp/{slug} so the issuer-gated runtime gate can
+            // resolve the dashboard user's stored upstream credentials.
+            // Requires the elements library to propagate api.headers to MCP
+            // requests (useAuth merges them into the headers it returns).
+            ...(gatewayToken
+              ? { Authorization: `Bearer ${gatewayToken}` }
+              : {}),
           },
         },
         history: {
