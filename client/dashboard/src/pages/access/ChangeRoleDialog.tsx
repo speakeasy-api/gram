@@ -21,6 +21,12 @@ import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  addRoleToSelection,
+  removeRoleFromSelection,
+  getUnselectedRoles,
+  isUpdateDisabled,
+} from "./changeRoleState";
 
 interface ChangeRoleDialogProps {
   member: AccessMember | null;
@@ -54,23 +60,21 @@ export function ChangeRoleDialog({
   }, [member]);
 
   const addRole = (roleId: string) => {
-    if (!selectedRoleIds.includes(roleId)) {
-      setSelectedRoleIds((prev) => [...prev, roleId]);
-    }
+    setSelectedRoleIds((prev) => addRoleToSelection(prev, roleId));
     setSearch("");
   };
 
   const removeRole = (roleId: string) => {
-    if (selectedRoleIds.length <= 1) return;
-    setSelectedRoleIds((prev) => prev.filter((id) => id !== roleId));
+    setSelectedRoleIds((prev) => removeRoleFromSelection(prev, roleId));
   };
 
-  const unselectedRoles = roles.filter((r) => !selectedRoleIds.includes(r.id));
+  const unselectedRoles = getUnselectedRoles(roles, selectedRoleIds);
 
-  const hasChanged =
-    member &&
-    (selectedRoleIds.length !== member.roleIds.length ||
-      selectedRoleIds.some((id) => !member.roleIds.includes(id)));
+  const updateDisabled = isUpdateDisabled({
+    isPending: updateMemberRoles.isPending,
+    selectedIds: selectedRoleIds,
+    originalIds: member?.roleIds ?? [],
+  });
 
   const handleUpdate = () => {
     if (!member || selectedRoleIds.length === 0) return;
@@ -194,14 +198,7 @@ export function ChangeRoleDialog({
               <Button variant="secondary" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button
-                onClick={handleUpdate}
-                disabled={
-                  updateMemberRoles.isPending ||
-                  selectedRoleIds.length === 0 ||
-                  !hasChanged
-                }
-              >
+              <Button onClick={handleUpdate} disabled={updateDisabled}>
                 {updateMemberRoles.isPending && (
                   <Button.LeftIcon>
                     <Loader2 className="h-4 w-4 animate-spin" />

@@ -44,6 +44,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useMemo, useState } from "react";
+import { membersWithRole } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type {
   ActivePanel,
@@ -244,11 +245,7 @@ export function CreateRoleDialog({
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
     setInitialGrantKeys(grantKeysStringFn(roleGrants));
-    const assignedIds = new Set(
-      members
-        .filter((m) => m.roleIds.includes(editingRole.id))
-        .map((m) => m.id),
-    );
+    const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
     setInitialized(true);
