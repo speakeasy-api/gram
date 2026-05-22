@@ -5690,7 +5690,7 @@ paths:
                 type: query
     /rpc/chat.load:
         get:
-            description: Load a chat by its ID
+            description: Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
             operationId: loadChat
             parameters:
                 - allowEmptyValue: true
@@ -5701,6 +5701,15 @@ paths:
                   schema:
                     description: The ID of the chat
                     type: string
+                - allowEmptyValue: true
+                  description: 'Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.'
+                  in: query
+                  name: generation
+                  schema:
+                    description: 'Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.'
+                    format: int64
+                    minimum: 0
+                    type: integer
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -28813,6 +28822,10 @@ components:
                 external_user_id:
                     type: string
                     description: The ID of the external user who created the chat
+                generation:
+                    type: integer
+                    description: The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.
+                    format: int64
                 id:
                     type: string
                     description: The ID of the chat
@@ -28820,11 +28833,15 @@ components:
                     type: string
                     description: When the last message in the chat was created.
                     format: date-time
+                max_generation:
+                    type: integer
+                    description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
+                    format: int64
                 messages:
                     type: array
                     items:
                         $ref: '#/components/schemas/ChatMessage'
-                    description: The list of messages in the chat
+                    description: The list of messages in the chat for the returned generation
                 num_messages:
                     type: integer
                     description: The number of messages in the chat
@@ -28864,6 +28881,8 @@ components:
                     description: The ID of the user who created the chat
             required:
                 - messages
+                - generation
+                - max_generation
                 - id
                 - title
                 - num_messages

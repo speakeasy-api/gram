@@ -19,6 +19,10 @@ export type Chat = {
    */
   externalUserId?: string | undefined;
   /**
+   * The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.
+   */
+  generation: number;
+  /**
    * The ID of the chat
    */
   id: string;
@@ -27,7 +31,11 @@ export type Chat = {
    */
   lastMessageTimestamp: Date;
   /**
-   * The list of messages in the chat
+   * The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
+   */
+  maxGeneration: number;
+  /**
+   * The list of messages in the chat for the returned generation
    */
   messages: Array<ChatMessage>;
   /**
@@ -80,11 +88,13 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     external_user_id: z.optional(z.string()),
+    generation: z.int(),
     id: z.string(),
     last_message_timestamp: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
     risk_findings_count: z.optional(z.int()),
@@ -105,6 +115,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
       "last_message_timestamp": "lastMessageTimestamp",
+      "max_generation": "maxGeneration",
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",
       "total_cost": "totalCost",

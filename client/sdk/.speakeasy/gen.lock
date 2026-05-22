@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: cb1aeee39e30569296044d929a9ea5a9
+  docChecksum: 7284aac595588d6ff5596da9994ff573
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -141,7 +141,7 @@ trackedFiles:
   docs/models/components/challengeresolutionresolutiontype.md:
     last_write_checksum: sha1:16b41a0d2e48e14d61e82ae01899bb393db826c3
   docs/models/components/chat.md:
-    last_write_checksum: sha1:b4c7c0c9f383472a6ef79c82756b3e3d4eb821e3
+    last_write_checksum: sha1:da586b9c73fb89349af1488504d4f1761d100c79
   docs/models/components/chatmessage.md:
     last_write_checksum: sha1:0d8a81d4c4f0d1f45ae7c5ca78a66be74bf7d74d
   docs/models/components/chatoverview.md:
@@ -2221,7 +2221,7 @@ trackedFiles:
   docs/models/operations/listversionssecurityoption2.md:
     last_write_checksum: sha1:fd7633a5b4168ea6431ee69ad5a61f3cfe1ac186
   docs/models/operations/loadchatrequest.md:
-    last_write_checksum: sha1:e46ff2f6aee8e6cd4c67e897871e262284372a40
+    last_write_checksum: sha1:4a8632f9f9be549feeebff574ce5fa8ec32ab553
   docs/models/operations/loadchatsecurity.md:
     last_write_checksum: sha1:7058ca86853f60f59abd5ea4fded21535f0de90d
   docs/models/operations/loadchatsecurityoption1.md:
@@ -2743,7 +2743,7 @@ trackedFiles:
   docs/sdks/categories/README.md:
     last_write_checksum: sha1:1c455de965567c85a0f47659a2ca4913f6c560aa
   docs/sdks/chat/README.md:
-    last_write_checksum: sha1:ba31f10b9d2c97033ce9aa2c0bc5abab9658e474
+    last_write_checksum: sha1:c296e35ff0a7a654d8f8fc065eb25ccde2db9389
   docs/sdks/chatsessions/README.md:
     last_write_checksum: sha1:5931e949f459441faaa30e05840cbaf1fab82836
   docs/sdks/collections/README.md:
@@ -2996,7 +2996,7 @@ trackedFiles:
     last_write_checksum: sha1:7407dc429453e0cc5a7b86add1a899846a718f45
   src/funcs/chatLoad.ts:
     id: 79e579c74f00
-    last_write_checksum: sha1:9f8e1b2b8dbcffa33bbf2a8d46a5acc4a0964512
+    last_write_checksum: sha1:eff31024312e77ccca80b1141a3503343eaab55b
     pristine_git_object: 903fc301583501edffff5e60179eb3a1cb78612b
   src/funcs/chatSessionsCreate.ts:
     id: d181bfb17fc1
@@ -3734,7 +3734,7 @@ trackedFiles:
     last_write_checksum: sha1:3eee5fef5022dacd6465f10a32bc64d2c8a5d42d
   src/models/components/chat.ts:
     id: 9ced5127d17b
-    last_write_checksum: sha1:a5ecd7d554717c3f13081da7cad580cbd2c228b4
+    last_write_checksum: sha1:cc21f026705aacb8ee4d4e7a172a4dc06c53fa7c
     pristine_git_object: d74d2ff627fec7af63710786888c09ce919dbf87
   src/models/components/chatmessage.ts:
     id: 64060926ed56
@@ -5296,7 +5296,7 @@ trackedFiles:
     pristine_git_object: f9cdb5fca18c52a5587427627ee38ca6accd9f21
   src/models/operations/loadchat.ts:
     id: bcc3f8cec9fd
-    last_write_checksum: sha1:3b382ccbfc377073a58469cced0bb6c1ee6a68c4
+    last_write_checksum: sha1:3ff043c8448415f3baf641d1b1f3ecd5883e1ec0
     pristine_git_object: ef9327d3667974acde6af4ffeb0ef2e68b766af9
   src/models/operations/logout.ts:
     id: 248259f02ef6
@@ -6108,11 +6108,11 @@ trackedFiles:
     pristine_git_object: ccd34003f539ad0f4b1465ac6804610e09d833a5
   src/react-query/loadChat.core.ts:
     id: 4d441846048c
-    last_write_checksum: sha1:69547b7e9899534ed2b45affebf795cc633857ed
+    last_write_checksum: sha1:09d7d2c70e071e5f50a7d93d44393d4bd130194d
     pristine_git_object: 24e1f98baa91bc17c5215b30980d061275175b28
   src/react-query/loadChat.ts:
     id: df3a4f59b037
-    last_write_checksum: sha1:3c3565f5ef531c470ae3b892406948a68f3a7238
+    last_write_checksum: sha1:fad1937eeaa467b82b67f86acae33e1077d992c2
     pristine_git_object: da7dcde2fd926315b210ce0efd80e665c5a23644
   src/react-query/logout.ts:
     id: 1cb3cee40e26
@@ -6598,7 +6598,7 @@ trackedFiles:
     last_write_checksum: sha1:59fa481e654b66796749e75ac7c957f288a3e35b
   src/sdk/chat.ts:
     id: c56babc22a20
-    last_write_checksum: sha1:29b8a3c7b5b59220b96a685e18e0eb3ef2402ca5
+    last_write_checksum: sha1:16c111c37d2a47bf6ac0bce6304c229a2bedca4d
     pristine_git_object: cf43d8a78da06d7e74a857165809b0f43d02fadf
   src/sdk/chatsessions.ts:
     id: 35b6de66e2dc
@@ -6922,7 +6922,7 @@ examples:
           id: "<id>"
       responses:
         "200":
-          application/json: {"created_at": "2024-04-09T14:22:10.370Z", "id": "<id>", "last_message_timestamp": "2025-04-09T14:22:10.370Z", "messages": [{"created_at": "2025-11-05T12:22:55.772Z", "generation": 423904, "id": "<id>", "model": "Aventador", "role": "<value>"}], "num_messages": 795032, "title": "<value>", "updated_at": "2024-03-05T16:47:00.180Z"}
+          application/json: {"created_at": "2024-04-09T14:22:10.370Z", "generation": 423904, "id": "<id>", "last_message_timestamp": "2025-04-09T14:22:10.370Z", "max_generation": 828666, "messages": [{"created_at": "2025-11-05T12:22:55.772Z", "generation": 423904, "id": "<id>", "model": "Aventador", "role": "<value>"}], "num_messages": 795032, "title": "<value>", "updated_at": "2024-03-05T16:47:00.180Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9926,15 +9926,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listRiskResultsForAgent:
-    speakeasy-default-list-risk-results-for-agent:
-      responses:
-        "200":
-          application/json: {"results": [{"chat_message_id": "85523fdc-294e-46eb-80ad-c5d3dbfbce6c", "created_at": "2025-02-15T11:28:44.474Z", "id": "7529b6c3-c4e3-404d-b3bf-51c1706f2715", "match_redacted": "<value>", "policy_id": "6391ece6-67aa-48d4-82d4-f168c2cc7ae8", "policy_version": 657869, "position_known": true, "source": "<value>"}], "total_count": 878955}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   checkMcpEndpointSlugAvailability:
     speakeasy-default-check-mcp-endpoint-slug-availability:
       parameters:
@@ -9951,7 +9942,7 @@ examples:
     speakeasy-default-get-risk-overview:
       responses:
         "200":
-          application/json: {"active_policies": 705076, "findings": 312140, "flagged_sessions": 627926, "from": "2024-11-29T21:45:00.489Z", "messages_scanned": 821642, "time_series_findings": [], "to": "2025-12-13T22:42:16.392Z", "top_categories": [], "top_rules": [{"findings": 312140, "rule_id": "<id>", "source": "<value>"}], "top_users": [{"email": "Ocie.Corwin@gmail.com", "external_user_id": "<id>", "findings": 58689}]}
+          application/json: {"active_policies": 705076, "findings": 627926, "flagged_sessions": 304659, "from": "2026-06-19T12:28:06.346Z", "messages_scanned": 370773, "time_series_findings": [{"bucket_start": "2024-12-08T02:32:23.245Z", "category": "<value>", "findings": 627926}], "to": "2025-12-13T22:42:16.392Z", "top_categories": [], "top_rules": [{"findings": 312140, "rule_id": "<id>", "source": "<value>"}], "top_users": [{"email": "Ocie.Corwin@gmail.com", "external_user_id": "<id>", "findings": 58689}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -10009,6 +10000,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listRiskResultsForAgent:
+    speakeasy-default-list-risk-results-for-agent:
+      responses:
+        "200":
+          application/json: {"results": [{"chat_message_id": "85523fdc-294e-46eb-80ad-c5d3dbfbce6c", "created_at": "2025-02-15T11:28:44.474Z", "id": "7529b6c3-c4e3-404d-b3bf-51c1706f2715", "match_redacted": "<value>", "policy_id": "6391ece6-67aa-48d4-82d4-f168c2cc7ae8", "policy_version": 657869, "position_known": true, "source": "<value>"}], "total_count": 878955}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

@@ -293,6 +293,36 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 	return i, err
 }
 
+const getChatMessageStats = `-- name: GetChatMessageStats :one
+SELECT
+  COUNT(*)::bigint AS total,
+  MAX(created_at)::timestamptz AS last_message_at
+FROM chat_messages
+WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
+`
+
+type GetChatMessageStatsParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetChatMessageStatsRow struct {
+	Total         int64
+	LastMessageAt pgtype.Timestamptz
+}
+
+// Chat-wide aggregates (total message count + most recent message timestamp).
+// Used by loadChat so every paginated response can carry the chat's real
+// last_message_timestamp without depending on chats.updated_at, which is bumped
+// by metadata edits (e.g. title changes) and would drift from the actual last
+// message.
+func (q *Queries) GetChatMessageStats(ctx context.Context, arg GetChatMessageStatsParams) (GetChatMessageStatsRow, error) {
+	row := q.db.QueryRow(ctx, getChatMessageStats, arg.ChatID, arg.ProjectID)
+	var i GetChatMessageStatsRow
+	err := row.Scan(&i.Total, &i.LastMessageAt)
+	return i, err
+}
+
 const getChatMetricsSummary = `-- name: GetChatMetricsSummary :one
 WITH chat_stats AS (
   SELECT
