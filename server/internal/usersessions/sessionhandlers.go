@@ -72,6 +72,28 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 	}, nil
 }
 
+// Hand-curated roast served at /rpc/userSessions.roast. Read-only; does not
+// touch session state. Severity is fixed at "medium" until taste improves.
+func (s *Service) RoastUserSession(ctx context.Context, payload *gen.RoastUserSessionPayload) (*gen.RoastUserSessionResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if _, err := uuid.Parse(payload.ID); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid session id").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	return &gen.RoastUserSessionResult{
+		Roast:    "This session has the energy of a 4:55pm Friday hard reload.",
+		Severity: "medium",
+	}, nil
+}
+
 // Soft-deletes the session and pushes its jti into the revocation cache
 // so the access token stops validating before its TTL expires.
 func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUserSessionPayload) error {

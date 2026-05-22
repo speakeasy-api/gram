@@ -213,6 +213,7 @@ export * from "./revokeshadowmcpapproval.js";
 export * from "./revokeusersession.js";
 export * from "./revokeusersessionclient.js";
 export * from "./revokeusersessionconsent.js";
+export * from "./roastusersession.js";
 export * from "./searchchats.js";
 export * from "./searchlogs.js";
 export * from "./searchtoolcalls.js";

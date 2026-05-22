@@ -52,6 +52,35 @@ var _ = Service("userSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessions"}`)
 	})
 
+	Method("roastUserSession", func() {
+		Description("Return a hand-curated roast for the given session. Strictly informational; does not affect session state.")
+
+		Payload(func() {
+			Attribute("id", String, "The user_session id to roast.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RoastUserSessionResult)
+
+		HTTP(func() {
+			GET("/rpc/userSessions.roast")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "roastUserSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "roast")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RoastUserSession"}`)
+	})
+
 	Method("revokeUserSession", func() {
 		Description("Push the session's jti into the revocation cache and soft-delete the row.")
 
@@ -107,6 +136,15 @@ var UserSession = Type("UserSession", func() {
 	})
 
 	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at")
+})
+
+var RoastUserSessionResult = Type("RoastUserSessionResult", func() {
+	Description("Result of roasting a user_session. The roast is hand-curated; do not parse.")
+
+	Attribute("roast", String, "The roast.")
+	Attribute("severity", String, "Roast severity. One of: mild, medium, scorched.")
+
+	Required("roast", "severity")
 })
 
 var ListUserSessionsResult = Type("ListUserSessionsResult", func() {

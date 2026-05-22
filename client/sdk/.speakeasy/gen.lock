@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 7284aac595588d6ff5596da9994ff573
+  docChecksum: 5610d9623c74c1d4aa41f0178de1c9cd
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -766,6 +766,8 @@ trackedFiles:
     last_write_checksum: sha1:c1e2229fa35d47b5a96d056c40f66ea1fdb6d2ff
   docs/models/components/riskuserbreakdownresult.md:
     last_write_checksum: sha1:c2aca44d9079416a4a520e104fe7f7407b877304
+  docs/models/components/roastusersessionresult.md:
+    last_write_checksum: sha1:b0d49690e96a644de0627b58b3e0fa47622f1ace
   docs/models/components/role.md:
     last_write_checksum: sha1:6f03a698bdceb20b54329bc771aac9bbc5beabd6
   docs/models/components/rolegrant.md:
@@ -2378,6 +2380,14 @@ trackedFiles:
     last_write_checksum: sha1:fdc47fc372e7d5391d3ee5ec54c6bb4163ade6ac
   docs/models/operations/revokeusersessionsecurityoption2.md:
     last_write_checksum: sha1:7e1a4e57064a521377d8d7ea130f9f0169affae3
+  docs/models/operations/roastusersessionrequest.md:
+    last_write_checksum: sha1:5f98ff5152fd5a374a391e3ddaeaed5e5ea92232
+  docs/models/operations/roastusersessionsecurity.md:
+    last_write_checksum: sha1:30c010062e0f2d6adbcef6ced42cbeee82887db1
+  docs/models/operations/roastusersessionsecurityoption1.md:
+    last_write_checksum: sha1:9d3499b34c0be9040e2db73366c91157348170ac
+  docs/models/operations/roastusersessionsecurityoption2.md:
+    last_write_checksum: sha1:bcf0f00be20b26a72a383e4481d0b4d2ad301e20
   docs/models/operations/searchchatsrequest.md:
     last_write_checksum: sha1:41b07c102a4dd518b6a031f1421013e6045164a1
   docs/models/operations/searchchatssecurity.md:
@@ -2823,7 +2833,7 @@ trackedFiles:
   docs/sdks/usersessionissuers/README.md:
     last_write_checksum: sha1:415dc3bce3245319c634dd1b69723039174bcacf
   docs/sdks/usersessions/README.md:
-    last_write_checksum: sha1:62b1566833f0e17a53bd5a0a3c9ec67494509ead
+    last_write_checksum: sha1:0a649a1bdb07af597f98be56f96fe184cec96c1d
   docs/sdks/variations/README.md:
     last_write_checksum: sha1:ac7be50470c1a57d2c1553c0594fa665a4d6e1ef
   eslint.config.mjs:
@@ -3568,6 +3578,8 @@ trackedFiles:
     last_write_checksum: sha1:8fce87e9b0a064442addcdbc226813d0407070d2
   src/funcs/userSessionsRevoke.ts:
     last_write_checksum: sha1:251593d7a4218e12463d0159b544ee27007f707b
+  src/funcs/userSessionsRoast.ts:
+    last_write_checksum: sha1:c0ef2f650d7b79f4fd05d43fee3160b84a6983f8
   src/funcs/variationsDeleteGlobal.ts:
     id: 7f912df230f4
     last_write_checksum: sha1:d11b6f08435e54ba8752aecaa440cb1c832c5bf8
@@ -4054,7 +4066,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:36359f55eb59eb0b16203c3d44b7b12c7975a9df
+    last_write_checksum: sha1:1cf5789c97651d9f305fb613882536d15b48abcd
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4474,6 +4486,8 @@ trackedFiles:
     last_write_checksum: sha1:6a9605a763b84d7f6ebc4d1fdc5e786c11ca2de6
   src/models/components/riskuserbreakdownresult.ts:
     last_write_checksum: sha1:8eb12073e8221606906bcbd25abea020551cec87
+  src/models/components/roastusersessionresult.ts:
+    last_write_checksum: sha1:58001e841e913f22f86b83f3c7d9a1f71cc56ca0
   src/models/components/role.ts:
     last_write_checksum: sha1:fb3b36bda8162b32a2a016460bbc212483a38455
   src/models/components/rolegrant.ts:
@@ -5140,7 +5154,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:a44f470fcb0c69f639d0263364cd03aea10cd86b
+    last_write_checksum: sha1:6ab26cfc71dd65b7f8f68288c4ad50cd551977c3
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5364,6 +5378,8 @@ trackedFiles:
     last_write_checksum: sha1:b78f7ced19a58b8db7bb285531736c80642b2f8b
   src/models/operations/revokeusersessionconsent.ts:
     last_write_checksum: sha1:cdd7be6e01eb0012ce6e8168caf8032cca8e0249
+  src/models/operations/roastusersession.ts:
+    last_write_checksum: sha1:b93fb63c0d558ce3653316d83c3f651a057f80f2
   src/models/operations/searchchats.ts:
     last_write_checksum: sha1:a2c7fb671397ec9fc87fce9b0899da3d6ce4aa88
   src/models/operations/searchlogs.ts:
@@ -5920,7 +5936,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:56804c3b0fdae18ddc2a264a10bdfc8f87619365
+    last_write_checksum: sha1:2e516fb7a1392bbc2835a7e5e8794216327d7c22
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6336,6 +6352,10 @@ trackedFiles:
     last_write_checksum: sha1:7c85b66341262c046ec720d4b1d210ff6f8ec836
   src/react-query/riskUserBreakdown.ts:
     last_write_checksum: sha1:383f0b3ce12bc26771b348f23b31e8c6dbb5e542
+  src/react-query/roastUserSession.core.ts:
+    last_write_checksum: sha1:ca0fc4b019bdfcf2ebb5b596b232eb39d21a93f4
+  src/react-query/roastUserSession.ts:
+    last_write_checksum: sha1:68739c064918ae117928bfc351e30e7f7705e96b
   src/react-query/role.core.ts:
     last_write_checksum: sha1:a9274b43865562043787b65fe4607e3a166879a5
   src/react-query/role.ts:
@@ -6727,7 +6747,7 @@ trackedFiles:
   src/sdk/usersessionissuers.ts:
     last_write_checksum: sha1:f2cff50f27ec9cee58fe46928d7b8226124e2dda
   src/sdk/usersessions.ts:
-    last_write_checksum: sha1:d0a79eada739201c6f4a0d523bea0df327451167
+    last_write_checksum: sha1:22ad3b0a8ce08d37fae69187ba6b087dc393825b
   src/sdk/variations.ts:
     id: 88902c6c67ca
     last_write_checksum: sha1:516a4e0655c5ef185089dbad4a70740b203ee596
@@ -10009,6 +10029,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  roastUserSession:
+    speakeasy-default-roast-user-session:
+      parameters:
+        query:
+          id: "5660b646-de42-4fca-89c6-2778f6597ab2"
+      responses:
+        "200":
+          application/json: {"roast": "<value>", "severity": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

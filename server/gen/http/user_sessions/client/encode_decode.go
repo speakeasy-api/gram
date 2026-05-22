@@ -272,6 +272,247 @@ func DecodeListUserSessionsResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildRoastUserSessionRequest instantiates a HTTP request object with method
+// and path set to call the "userSessions" service "roastUserSession" endpoint
+func (c *Client) BuildRoastUserSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RoastUserSessionUserSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessions", "roastUserSession", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRoastUserSessionRequest returns an encoder for requests sent to the
+// userSessions roastUserSession server.
+func EncodeRoastUserSessionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessions.RoastUserSessionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessions", "roastUserSession", "*usersessions.RoastUserSessionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRoastUserSessionResponse returns a decoder for responses returned by
+// the userSessions roastUserSession endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRoastUserSessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRoastUserSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RoastUserSessionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			res := NewRoastUserSessionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RoastUserSessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			return nil, NewRoastUserSessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RoastUserSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			return nil, NewRoastUserSessionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RoastUserSessionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			return nil, NewRoastUserSessionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RoastUserSessionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			return nil, NewRoastUserSessionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RoastUserSessionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			return nil, NewRoastUserSessionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RoastUserSessionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			return nil, NewRoastUserSessionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RoastUserSessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			return nil, NewRoastUserSessionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RoastUserSessionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+				}
+				err = ValidateRoastUserSessionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+				}
+				return nil, NewRoastUserSessionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RoastUserSessionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+				}
+				err = ValidateRoastUserSessionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+				}
+				return nil, NewRoastUserSessionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessions", "roastUserSession", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RoastUserSessionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "roastUserSession", err)
+			}
+			err = ValidateRoastUserSessionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "roastUserSession", err)
+			}
+			return nil, NewRoastUserSessionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessions", "roastUserSession", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRevokeUserSessionRequest instantiates a HTTP request object with method
 // and path set to call the "userSessions" service "revokeUserSession" endpoint
 func (c *Client) BuildRevokeUserSessionRequest(ctx context.Context, v any) (*http.Request, error) {

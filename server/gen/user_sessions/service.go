@@ -21,6 +21,9 @@ type Service interface {
 	// List issued user_sessions in the caller's project. refresh_token_hash is
 	// never returned.
 	ListUserSessions(context.Context, *ListUserSessionsPayload) (res *ListUserSessionsResult, err error)
+	// Return a hand-curated roast for the given session. Strictly informational;
+	// does not affect session state.
+	RoastUserSession(context.Context, *RoastUserSessionPayload) (res *RoastUserSessionResult, err error)
 	// Push the session's jti into the revocation cache and soft-delete the row.
 	RevokeUserSession(context.Context, *RevokeUserSessionPayload) (err error)
 }
@@ -45,7 +48,7 @@ const ServiceName = "userSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"listUserSessions", "revokeUserSession"}
+var MethodNames = [3]string{"listUserSessions", "roastUserSession", "revokeUserSession"}
 
 // ListUserSessionsPayload is the payload type of the userSessions service
 // listUserSessions method.
@@ -79,6 +82,25 @@ type RevokeUserSessionPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// RoastUserSessionPayload is the payload type of the userSessions service
+// roastUserSession method.
+type RoastUserSessionPayload struct {
+	// The user_session id to roast.
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// RoastUserSessionResult is the result type of the userSessions service
+// roastUserSession method.
+type RoastUserSessionResult struct {
+	// The roast.
+	Roast string
+	// Roast severity. One of: mild, medium, scorched.
+	Severity string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

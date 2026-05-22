@@ -21,6 +21,10 @@ type Client struct {
 	// listUserSessions endpoint.
 	ListUserSessionsDoer goahttp.Doer
 
+	// RoastUserSession Doer is the HTTP client used to make requests to the
+	// roastUserSession endpoint.
+	RoastUserSessionDoer goahttp.Doer
+
 	// RevokeUserSession Doer is the HTTP client used to make requests to the
 	// revokeUserSession endpoint.
 	RevokeUserSessionDoer goahttp.Doer
@@ -46,6 +50,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ListUserSessionsDoer:  doer,
+		RoastUserSessionDoer:  doer,
 		RevokeUserSessionDoer: doer,
 		RestoreResponseBody:   restoreBody,
 		scheme:                scheme,
@@ -74,6 +79,30 @@ func (c *Client) ListUserSessions() goa.Endpoint {
 		resp, err := c.ListUserSessionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessions", "listUserSessions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RoastUserSession returns an endpoint that makes HTTP requests to the
+// userSessions service roastUserSession server.
+func (c *Client) RoastUserSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRoastUserSessionRequest(c.encoder)
+		decodeResponse = DecodeRoastUserSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRoastUserSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RoastUserSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessions", "roastUserSession", err)
 		}
 		return decodeResponse(resp)
 	}
