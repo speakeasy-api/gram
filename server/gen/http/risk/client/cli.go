@@ -419,6 +419,135 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	return v, nil
 }
 
+// BuildListRiskResultsForAgentPayload builds the payload for the risk
+// listRiskResultsForAgent endpoint from CLI flags.
+func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
+	var err error
+	var policyID *string
+	{
+		if riskListRiskResultsForAgentPolicyID != "" {
+			policyID = &riskListRiskResultsForAgentPolicyID
+			err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", *policyID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var chatID *string
+	{
+		if riskListRiskResultsForAgentChatID != "" {
+			chatID = &riskListRiskResultsForAgentChatID
+			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var category *string
+	{
+		if riskListRiskResultsForAgentCategory != "" {
+			category = &riskListRiskResultsForAgentCategory
+		}
+	}
+	var ruleID *string
+	{
+		if riskListRiskResultsForAgentRuleID != "" {
+			ruleID = &riskListRiskResultsForAgentRuleID
+		}
+	}
+	var uniqueMatch *bool
+	{
+		if riskListRiskResultsForAgentUniqueMatch != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskListRiskResultsForAgentUniqueMatch)
+			uniqueMatch = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for uniqueMatch, must be BOOL")
+			}
+		}
+	}
+	var from *string
+	{
+		if riskListRiskResultsForAgentFrom != "" {
+			from = &riskListRiskResultsForAgentFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskListRiskResultsForAgentTo != "" {
+			to = &riskListRiskResultsForAgentTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if riskListRiskResultsForAgentCursor != "" {
+			cursor = &riskListRiskResultsForAgentCursor
+		}
+	}
+	var limit *int
+	{
+		if riskListRiskResultsForAgentLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListRiskResultsForAgentLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListRiskResultsForAgentApikeyToken != "" {
+			apikeyToken = &riskListRiskResultsForAgentApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskResultsForAgentSessionToken != "" {
+			sessionToken = &riskListRiskResultsForAgentSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskResultsForAgentProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskResultsForAgentProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskResultsForAgentPayload{}
+	v.PolicyID = policyID
+	v.ChatID = chatID
+	v.Category = category
+	v.RuleID = ruleID
+	v.UniqueMatch = uniqueMatch
+	v.From = from
+	v.To = to
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRiskResultsByChatPayload builds the payload for the risk
 // listRiskResultsByChat endpoint from CLI flags.
 func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, riskListRiskResultsByChatLimit string, riskListRiskResultsByChatApikeyToken string, riskListRiskResultsByChatSessionToken string, riskListRiskResultsByChatProjectSlugInput string) (*risk.ListRiskResultsByChatPayload, error) {
