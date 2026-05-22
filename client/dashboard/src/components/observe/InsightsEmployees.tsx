@@ -599,17 +599,7 @@ function EmployeeTable({
         key: "lastActivity",
         header: "Last Activity",
         sortable: true,
-        sortValue: (item) => item.lastActivityTimestamp ?? 0,
-        sortCompare: (a, b) => {
-          if (
-            a.lastActivityTimestamp == null &&
-            b.lastActivityTimestamp == null
-          )
-            return 0;
-          if (a.lastActivityTimestamp == null) return 1;
-          if (b.lastActivityTimestamp == null) return -1;
-          return a.lastActivityTimestamp - b.lastActivityTimestamp;
-        },
+        sortValue: (item) => item.lastActivityTimestamp,
         width: "1fr",
         render: (item) => (
           <span className="text-muted-foreground">{item.lastActivity}</span>
@@ -638,10 +628,25 @@ function EmployeeTable({
     ],
     [onSelectUser],
   );
-  const sortedEmployees = useMemo(
-    () => sortTableData(filteredEmployees, columns, sort) as Employee[],
-    [columns, filteredEmployees, sort],
-  );
+  const sortedEmployees = useMemo(() => {
+    if (sort?.id === "lastActivity") {
+      return filteredEmployees.slice().sort((a, b) => {
+        if (
+          a.lastActivityTimestamp == null &&
+          b.lastActivityTimestamp == null
+        ) {
+          return 0;
+        }
+        if (a.lastActivityTimestamp == null) return 1;
+        if (b.lastActivityTimestamp == null) return -1;
+
+        const comparison = a.lastActivityTimestamp - b.lastActivityTimestamp;
+        return sort.direction === "asc" ? comparison : -comparison;
+      });
+    }
+
+    return sortTableData(filteredEmployees, columns, sort) as Employee[];
+  }, [columns, filteredEmployees, sort]);
   const totalPages = Math.ceil(sortedEmployees.length / PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
   const pageEmployees = sortedEmployees.slice(
