@@ -207,6 +207,11 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
+		// The cloned client_id is already registered upstream against the
+		// oauth_proxy_servers /oauth/callback URL; the authorize leg has to
+		// keep using that redirect_uri or the upstream's strict-match check
+		// rejects the request.
+		LegacyCallbackUrl: true,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)
