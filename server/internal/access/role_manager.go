@@ -115,6 +115,7 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 				Name:     conv.Default(row.DisplayName, row.Email),
 				Email:    row.Email,
 				PhotoURL: conv.FromPGText[string](row.PhotoUrl),
+				RoleIds:  nil,
 				JoinedAt: conv.FromPGTimestamptz(row.JoinedAt),
 			}
 			memberMap[row.ID] = m

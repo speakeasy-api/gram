@@ -120,7 +120,9 @@ func TestService_UpdateMemberRoles_ReplacesAllExistingRoles(t *testing.T) {
 	// Verify both old IDs are in the before snapshot (order may vary).
 	beforeStrs := make([]string, len(beforeIDs))
 	for i, v := range beforeIDs {
-		beforeStrs[i] = v.(string)
+		s, ok := v.(string)
+		require.True(t, ok)
+		beforeStrs[i] = s
 	}
 	sort.Strings(beforeStrs)
 	wantBefore := []string{adminID, builderID}
