@@ -84,7 +84,7 @@ function StrongName({ children }: { children: ReactNode }) {
   return <strong className="text-foreground font-semibold">{children}</strong>;
 }
 
-function getActorLabel(log: AuditLog) {
+export function getActorLabel(log: AuditLog) {
   return log.actorDisplayName || log.actorSlug || "Someone";
 }
 
@@ -385,7 +385,7 @@ function describeToolsetUpdate(log: AuditLog): string {
   return "updated MCP server";
 }
 
-function renderVerb(log: AuditLog): string {
+export function renderVerb(log: AuditLog): string {
   switch (log.action) {
     case "project:create":
       return "created project";
