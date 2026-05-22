@@ -1348,6 +1348,19 @@ const MCP_LOGS_TOOL_URNS = new Set([
   "tools:http:gram:gram_list_audit_log_facets",
   // Employee directory tools
   "tools:http:gram:gram_list_organization_users",
+  // Risk / policy tools — read-only surface for the AI Insights sidebar.
+  // listRiskResultsForAgent is the redacted variant; the unredacted
+  // listRiskResults endpoint is deliberately excluded so the LLM cannot
+  // pull raw `match` content. Mutators (approveShadowMCP,
+  // revokeShadowMCPApproval, triggerRiskAnalysis, create/update/delete
+  // RiskPolicy) are deliberately excluded.
+  "tools:http:gram:gram_list_risk_results_for_agent",
+  "tools:http:gram:gram_list_risk_results_by_chat",
+  "tools:http:gram:gram_list_risk_policies",
+  "tools:http:gram:gram_get_risk_policy",
+  "tools:http:gram:gram_get_risk_capabilities",
+  "tools:http:gram:gram_get_risk_policy_status",
+  "tools:http:gram:gram_list_shadow_mcp_approvals",
 ]);
 
 async function upsertMcpLogsToolset(init: {
