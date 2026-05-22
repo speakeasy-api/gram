@@ -5,7 +5,6 @@ import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
-import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { SearchBar } from "@/components/ui/search-bar";
 import {
   Tooltip,
@@ -43,7 +42,11 @@ import {
 import {
   ChevronDown,
   ChevronUp,
+  Copy,
+  History,
+  MoreHorizontal,
   Plus,
+  Settings,
   ShieldCheck,
   Star,
   UserPlus,
@@ -458,31 +461,12 @@ function ProjectRowActions({
 }) {
   const { orgSlug } = useSlugs();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const actions: Action[] = [
-    {
-      icon: "star",
-      label: isFavorite ? "Remove from favorites" : "Add to favorites",
-      onClick: onToggleFavorite,
-    },
-    {
-      icon: "settings",
-      label: "Project settings",
-      onClick: () => navigate(`/${orgSlug}/projects/${project.slug}/settings`),
-    },
-    {
-      icon: "history",
-      label: "View audit logs",
-      onClick: () => navigate(`/${orgSlug}/audit-logs?project=${project.slug}`),
-    },
-    {
-      icon: "copy",
-      label: "Copy slug",
-      onClick: () => {
-        void navigator.clipboard?.writeText(project.slug);
-      },
-    },
-  ];
+  const closeAnd = (cb: () => void) => () => {
+    setMenuOpen(false);
+    cb();
+  };
 
   return (
     <div
@@ -512,7 +496,47 @@ function ProjectRowActions({
           strokeWidth={1.5}
         />
       </button>
-      <MoreActions actions={actions} />
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="More actions"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 items-center justify-center rounded-md transition-colors"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem onClick={closeAnd(onToggleFavorite)}>
+            <Star className={cn("size-4", isFavorite && "fill-current")} />
+            {isFavorite ? "Remove from favorites" : "Add to favorites"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={closeAnd(() =>
+              navigate(`/${orgSlug}/projects/${project.slug}/settings`),
+            )}
+          >
+            <Settings className="size-4" />
+            Project settings
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={closeAnd(() =>
+              navigate(`/${orgSlug}/audit-logs?project=${project.slug}`),
+            )}
+          >
+            <History className="size-4" />
+            View audit logs
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={closeAnd(() => {
+              void navigator.clipboard?.writeText(project.slug);
+            })}
+          >
+            <Copy className="size-4" />
+            Copy slug
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
