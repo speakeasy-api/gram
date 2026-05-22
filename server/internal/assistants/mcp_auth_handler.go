@@ -464,6 +464,7 @@ func buildMCPAuthURL(endpoint, clientID, redirectURI, state, codeChallenge strin
 	q.Set("state", state)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
+	q.Set("requireUserIdentity", "1")
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
