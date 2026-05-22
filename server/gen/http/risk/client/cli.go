@@ -421,7 +421,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 
 // BuildListRiskResultsForAgentPayload builds the payload for the risk
 // listRiskResultsForAgent endpoint from CLI flags.
-func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
+func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -438,6 +438,49 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 		if riskListRiskResultsForAgentChatID != "" {
 			chatID = &riskListRiskResultsForAgentChatID
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var category *string
+	{
+		if riskListRiskResultsForAgentCategory != "" {
+			category = &riskListRiskResultsForAgentCategory
+		}
+	}
+	var ruleID *string
+	{
+		if riskListRiskResultsForAgentRuleID != "" {
+			ruleID = &riskListRiskResultsForAgentRuleID
+		}
+	}
+	var uniqueMatch *bool
+	{
+		if riskListRiskResultsForAgentUniqueMatch != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskListRiskResultsForAgentUniqueMatch)
+			uniqueMatch = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for uniqueMatch, must be BOOL")
+			}
+		}
+	}
+	var from *string
+	{
+		if riskListRiskResultsForAgentFrom != "" {
+			from = &riskListRiskResultsForAgentFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskListRiskResultsForAgentTo != "" {
+			to = &riskListRiskResultsForAgentTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 			if err != nil {
 				return nil, err
 			}
@@ -491,6 +534,11 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 	v := &risk.ListRiskResultsForAgentPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
+	v.Category = category
+	v.RuleID = ruleID
+	v.UniqueMatch = uniqueMatch
+	v.From = from
+	v.To = to
 	v.Cursor = cursor
 	v.Limit = limit
 	v.ApikeyToken = apikeyToken

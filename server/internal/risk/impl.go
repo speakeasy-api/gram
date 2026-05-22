@@ -725,6 +725,11 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		ProjectSlugInput: payload.ProjectSlugInput,
 		PolicyID:         payload.PolicyID,
 		ChatID:           payload.ChatID,
+		Category:         payload.Category,
+		RuleID:           payload.RuleID,
+		UniqueMatch:      payload.UniqueMatch,
+		From:             payload.From,
+		To:               payload.To,
 		Cursor:           payload.Cursor,
 		Limit:            payload.Limit,
 	})

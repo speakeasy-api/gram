@@ -1759,6 +1759,21 @@ func EncodeListRiskResultsForAgentRequest(encoder func(*http.Request) goahttp.En
 		if p.ChatID != nil {
 			values.Add("chat_id", *p.ChatID)
 		}
+		if p.Category != nil {
+			values.Add("category", *p.Category)
+		}
+		if p.RuleID != nil {
+			values.Add("rule_id", *p.RuleID)
+		}
+		if p.UniqueMatch != nil {
+			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
+		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}

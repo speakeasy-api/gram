@@ -49,6 +49,11 @@ export function buildRiskListResultsForAgentQuery(
     queryKey: queryKeyRiskListResultsForAgent({
       policyId: request?.policyId,
       chatId: request?.chatId,
+      category: request?.category,
+      ruleId: request?.ruleId,
+      uniqueMatch: request?.uniqueMatch,
+      from: request?.from,
+      to: request?.to,
       cursor: request?.cursor,
       limit: request?.limit,
       gramKey: request?.gramKey,
@@ -83,6 +88,11 @@ export function queryKeyRiskListResultsForAgent(
   parameters: {
     policyId?: string | undefined;
     chatId?: string | undefined;
+    category?: string | undefined;
+    ruleId?: string | undefined;
+    uniqueMatch?: boolean | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramKey?: string | undefined;

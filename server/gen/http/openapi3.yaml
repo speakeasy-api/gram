@@ -20439,6 +20439,43 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: Optional rule category key to filter by (e.g. secrets, pii, financial).
+                  in: query
+                  name: category
+                  schema:
+                    description: Optional rule category key to filter by (e.g. secrets, pii, financial).
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+                  in: query
+                  name: rule_id
+                  schema:
+                    description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+                    type: string
+                - allowEmptyValue: true
+                  description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+                  in: query
+                  name: unique_match
+                  schema:
+                    description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Filter results to messages created at or after this timestamp (ISO 8601).
+                  in: query
+                  name: from
+                  schema:
+                    description: Filter results to messages created at or after this timestamp (ISO 8601).
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter results to messages created strictly before this timestamp (ISO 8601).
+                  in: query
+                  name: to
+                  schema:
+                    description: Filter results to messages created strictly before this timestamp (ISO 8601).
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
                   description: Cursor to fetch the next page of results.
                   in: query
                   name: cursor

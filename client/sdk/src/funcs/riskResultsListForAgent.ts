@@ -100,10 +100,15 @@ async function $do(
   const path = pathToFunc("/rpc/risk.results.listForAgent")();
 
   const query = encodeFormQuery({
+    "category": payload?.category,
     "chat_id": payload?.chat_id,
     "cursor": payload?.cursor,
+    "from": payload?.from,
     "limit": payload?.limit,
     "policy_id": payload?.policy_id,
+    "rule_id": payload?.rule_id,
+    "to": payload?.to,
+    "unique_match": payload?.unique_match,
   });
 
   const headers = new Headers(compactMap({

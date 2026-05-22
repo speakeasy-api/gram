@@ -116,6 +116,11 @@ export function setRiskListResultsForAgentData(
     parameters: {
       policyId?: string | undefined;
       chatId?: string | undefined;
+      category?: string | undefined;
+      ruleId?: string | undefined;
+      uniqueMatch?: boolean | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;
@@ -136,6 +141,11 @@ export function invalidateRiskListResultsForAgent(
     [parameters: {
       policyId?: string | undefined;
       chatId?: string | undefined;
+      category?: string | undefined;
+      ruleId?: string | undefined;
+      uniqueMatch?: boolean | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramKey?: string | undefined;

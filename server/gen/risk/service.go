@@ -270,6 +270,19 @@ type ListRiskResultsForAgentPayload struct {
 	PolicyID *string
 	// Optional chat ID to filter by.
 	ChatID *string
+	// Optional rule category key to filter by (e.g. secrets, pii, financial).
+	Category *string
+	// Optional rule identifier substring to filter by (case-insensitive, e.g.
+	// 'secret' matches all 'secret.*' rules).
+	RuleID *string
+	// If true, collapse results to one row per (policy_id, rule_id, match),
+	// keeping the most recent occurrence. Useful when the same secret is detected
+	// many times within a single message body.
+	UniqueMatch *bool
+	// Filter results to messages created at or after this timestamp (ISO 8601).
+	From *string
+	// Filter results to messages created strictly before this timestamp (ISO 8601).
+	To *string
 	// Cursor to fetch the next page of results.
 	Cursor *string
 	// Maximum number of results to return per page.

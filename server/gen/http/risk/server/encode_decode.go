@@ -1702,6 +1702,11 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		var (
 			policyID         *string
 			chatID           *string
+			category         *string
+			ruleID           *string
+			uniqueMatch      *bool
+			from             *string
+			to               *string
 			cursor           *string
 			limit            *int
 			apikeyToken      *string
@@ -1723,6 +1728,38 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		}
 		if chatID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+		}
+		categoryRaw := qp.Get("category")
+		if categoryRaw != "" {
+			category = &categoryRaw
+		}
+		ruleIDRaw := qp.Get("rule_id")
+		if ruleIDRaw != "" {
+			ruleID = &ruleIDRaw
+		}
+		{
+			uniqueMatchRaw := qp.Get("unique_match")
+			if uniqueMatchRaw != "" {
+				v, err2 := strconv.ParseBool(uniqueMatchRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("unique_match", uniqueMatchRaw, "boolean"))
+				}
+				uniqueMatch = &v
+			}
+		}
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
@@ -1764,7 +1801,7 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsForAgentPayload(policyID, chatID, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsForAgentPayload(policyID, chatID, category, ruleID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
