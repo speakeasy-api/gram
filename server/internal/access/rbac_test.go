@@ -242,6 +242,10 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
+	// Seed a second admin so the last-admin guard allows removing admin from user_1.
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "other@example.com", "Other Admin", "user_2", "membership_2")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember("", "membership_2", "user_2", "admin"))
+
 	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"custom-builder"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
