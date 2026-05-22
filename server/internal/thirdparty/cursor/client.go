@@ -23,6 +23,7 @@ type Client struct {
 	httpClient *guardian.HTTPClient
 	baseURL    string
 	pageSize   int
+	apiKey     string
 }
 
 type Option func(*Client)
@@ -51,6 +52,14 @@ func WithPageSize(pageSize int) Option {
 	}
 }
 
+func WithAPIKey(apiKey string) Option {
+	return func(c *Client) {
+		if apiKey != "" {
+			c.apiKey = apiKey
+		}
+	}
+}
+
 func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 	if guardianPolicy == nil {
 		panic("cursor client requires guardian policy")
@@ -59,6 +68,7 @@ func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 		httpClient: guardianPolicy.PooledClient(),
 		baseURL:    defaultBaseURL,
 		pageSize:   defaultPageSize,
+		apiKey:     "",
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -67,7 +77,7 @@ func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 }
 
 type UsageEvent struct {
-	Timestamp        string     `json:"timestamp"`
+	Timestamp        time.Time  `json:"timestamp"`
 	Model            string     `json:"model"`
 	Kind             string     `json:"kind"`
 	ChargedCents     float64    `json:"chargedCents"`
@@ -76,6 +86,37 @@ type UsageEvent struct {
 	IsTokenBasedCall bool       `json:"isTokenBasedCall"`
 	TokenUsage       TokenUsage `json:"tokenUsage"`
 	UserEmail        string     `json:"userEmail"`
+}
+
+func (e *UsageEvent) UnmarshalJSON(data []byte) error {
+	type usageEvent UsageEvent
+	var raw struct {
+		Timestamp string `json:"timestamp"`
+		usageEvent
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	ms, err := strconv.ParseInt(raw.Timestamp, 10, 64)
+	if err != nil {
+		return fmt.Errorf("parse cursor timestamp %q: %w", raw.Timestamp, err)
+	}
+
+	*e = UsageEvent(raw.usageEvent)
+	e.Timestamp = time.UnixMilli(ms).UTC()
+	return nil
+}
+
+func (e UsageEvent) MarshalJSON() ([]byte, error) {
+	type usageEvent UsageEvent
+	return json.Marshal(struct {
+		Timestamp string `json:"timestamp"`
+		usageEvent
+	}{
+		Timestamp:  strconv.FormatInt(e.Timestamp.UTC().UnixMilli(), 10),
+		usageEvent: usageEvent(e),
+	})
 }
 
 type TokenUsage struct {
@@ -107,48 +148,32 @@ type pagination struct {
 	HasPreviousPage bool `json:"hasPreviousPage"`
 }
 
+type FetchUsageEventsPageParams struct {
+	Start time.Time
+	End   time.Time
+	Page  int
+}
+
 type UsageEventsPage struct {
 	Events      []UsageEvent
 	HasNextPage bool
 }
 
-func (c *Client) FetchUsageEvents(ctx context.Context, apiKey string, start, end time.Time) ([]UsageEvent, error) {
-	var events []UsageEvent
-	page := 1
-	for {
-		resp, err := c.FetchUsageEventsPage(ctx, apiKey, start, end, page)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, resp.Events...)
-
-		if !resp.HasNextPage {
-			break
-		}
-		page++
-	}
-
-	return events, nil
-}
-
-func (c *Client) FetchUsageEventsPage(ctx context.Context, apiKey string, start, end time.Time, page int) (*UsageEventsPage, error) {
-	if apiKey == "" {
-		return nil, fmt.Errorf("cursor api key is required")
-	}
-	if page < 1 {
+func (c *Client) FetchUsageEventsPage(ctx context.Context, params FetchUsageEventsPageParams) (*UsageEventsPage, error) {
+	if params.Page < 1 {
 		return nil, fmt.Errorf("cursor usage page must be positive")
 	}
-	if !end.After(start) {
+	if !params.End.After(params.Start) {
 		return &UsageEventsPage{
 			Events:      nil,
 			HasNextPage: false,
 		}, nil
 	}
 
-	resp, err := c.fetchUsageEventsPage(ctx, apiKey, filteredUsageEventsRequest{
-		StartDate: start.UTC().UnixMilli(),
-		EndDate:   end.UTC().UnixMilli(),
-		Page:      page,
+	resp, err := c.fetchUsageEventsPage(ctx, filteredUsageEventsRequest{
+		StartDate: params.Start.UTC().UnixMilli(),
+		EndDate:   params.End.UTC().UnixMilli(),
+		Page:      params.Page,
 		PageSize:  c.pageSize,
 	})
 	if err != nil {
@@ -161,20 +186,7 @@ func (c *Client) FetchUsageEventsPage(ctx context.Context, apiKey string, start,
 	}, nil
 }
 
-type RateLimitError struct {
-	Status     string
-	RetryAfter time.Duration
-	Page       int
-}
-
-func (e *RateLimitError) Error() string {
-	if e.RetryAfter > 0 {
-		return fmt.Sprintf("cursor usage request rate limited with status %s; retry after %s", e.Status, e.RetryAfter)
-	}
-	return fmt.Sprintf("cursor usage request rate limited with status %s", e.Status)
-}
-
-func (c *Client) fetchUsageEventsPage(ctx context.Context, apiKey string, payload filteredUsageEventsRequest) (*filteredUsageEventsResponse, error) {
+func (c *Client) fetchUsageEventsPage(ctx context.Context, payload filteredUsageEventsRequest) (*filteredUsageEventsResponse, error) {
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse cursor base url: %w", err)
@@ -192,7 +204,7 @@ func (c *Client) fetchUsageEventsPage(ctx context.Context, apiKey string, payloa
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(apiKey, "")
+	req.SetBasicAuth(c.apiKey, "")
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
@@ -210,7 +222,10 @@ func (c *Client) fetchUsageEventsPage(ctx context.Context, apiKey string, payloa
 		}
 	}
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("cursor usage request failed with status %s", res.Status)
+		return nil, &HTTPError{
+			StatusCode: res.StatusCode,
+			Status:     res.Status,
+		}
 	}
 
 	var decoded filteredUsageEventsResponse
@@ -232,12 +247,4 @@ func parseRetryAfter(value string) time.Duration {
 		return max(time.Until(retryAt), 0)
 	}
 	return 0
-}
-
-func (e UsageEvent) TimestampTime() (time.Time, error) {
-	ms, err := strconv.ParseInt(e.Timestamp, 10, 64)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse cursor timestamp %q: %w", e.Timestamp, err)
-	}
-	return time.UnixMilli(ms).UTC(), nil
 }

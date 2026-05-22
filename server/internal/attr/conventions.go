@@ -336,6 +336,9 @@ const (
 	GenAIUsageCacheCreationInputTokensKey = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
 	GenAIUsageCostKey                     = attribute.Key("gen_ai.usage.cost")
 
+	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
+	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
+
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)

@@ -221,9 +221,9 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
-	aiUsageWorker := worker.New(env.Client(), AIIntegrationUsageSyncTaskQueue(env.Queue()), worker.Options{
+	aiUsageWorker := worker.New(env.Client(), AIUsagePollerTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
-		MaxConcurrentActivityExecutionSize: perPodAIIntegrationUsageSyncConcurrency,
+		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
 
 	activities := NewActivities(
@@ -329,8 +329,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
-	temporalWorker.RegisterWorkflow(AIIntegrationUsageSyncWorkflow)
-	temporalWorker.RegisterWorkflow(AIIntegrationUsageSyncConfigWorkflow)
+	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
@@ -374,7 +374,7 @@ func NewTemporalWorker(
 		}
 	}
 
-	if err := AddAIIntegrationUsageSyncSchedule(context.Background(), env); err != nil {
+	if err := AddAIUsagePollerCoordinatorSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
@@ -419,9 +419,9 @@ func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-risk-analysis"
 }
 
-const perPodAIIntegrationUsageSyncConcurrency = 5
+const perPodAIUsagePollerConcurrency = 5
 
-func AIIntegrationUsageSyncTaskQueue(mainQueue tenv.TaskQueueName) string {
+func AIUsagePollerTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-ai-integration-usage"
 }
 

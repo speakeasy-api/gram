@@ -15,29 +15,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 )
 
-func TestBuildUsageSyncConfigWorkflowID(t *testing.T) {
+func TestBuildAIUsagePollerWorkflowID(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "v1:ai-integration-usage-sync-config:cursor:org_123", buildUsageSyncConfigWorkflowID(aiintegrations.ProviderCursor, "org_123"))
+	require.Equal(t, "v1:ai-usage-poller:org_123:cursor", buildAIUsagePollerWorkflowID(aiintegrations.ProviderCursor, "org_123"))
 }
 
-func TestAIIntegrationUsageSyncCadenceAndRetryConfig(t *testing.T) {
+func TestAIUsagePollerCadenceAndRetryConfig(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, 5*time.Minute, aiIntegrationUsageSyncInterval)
-	require.Equal(t, 50*time.Minute, aiIntegrationUsageSyncPollActivityTimeout)
-	require.Equal(t, 5, aiIntegrationUsageSyncChildConcurrency)
-	require.Equal(t, 3, activities.SyncAIIntegrationUsageMaxAttempts)
+	require.Equal(t, 5*time.Minute, aiUsagePollerCoordinatorInterval)
+	require.Equal(t, 50*time.Minute, aiUsagePollerActivityTimeout)
+	require.Equal(t, 5, aiUsagePollerCoordinatorChildConcurrency)
+	require.Equal(t, 3, activities.PollUsageMaxAttempts)
 }
 
-func TestAIIntegrationUsageSyncWorkflowListsCandidatesAndStartsChildren(t *testing.T) {
+func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	start := time.Date(2026, 5, 19, 10, 0, 0, 0, time.UTC)
 	env.SetStartTime(start)
-	env.RegisterWorkflow(AIIntegrationUsageSyncConfigWorkflow)
+	env.RegisterWorkflow(AIUsagePollerWorkflow)
 
 	candidates := []aiintegrations.UsagePollCandidate{
 		{
@@ -82,14 +82,14 @@ func TestAIIntegrationUsageSyncWorkflowListsCandidatesAndStartsChildren(t *testi
 		func(_ context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
 			listCalls++
 			require.Equal(t, aiintegrations.ProviderCursor, input.Provider)
-			require.Equal(t, start, input.PollDueBefore)
-			require.Equal(t, int32(aiIntegrationUsageSyncChildConcurrency), input.Limit)
+			require.False(t, input.PollDueBefore.Before(start))
+			require.Equal(t, int32(aiUsagePollerCoordinatorChildConcurrency), input.Limit)
 
 			switch listCalls {
 			case 1:
-				return candidates[:aiIntegrationUsageSyncChildConcurrency], nil
+				return candidates[:aiUsagePollerCoordinatorChildConcurrency], nil
 			case 2:
-				return candidates[aiIntegrationUsageSyncChildConcurrency:], nil
+				return candidates[aiUsagePollerCoordinatorChildConcurrency:], nil
 			case 3:
 				return nil, nil
 			default:
@@ -102,15 +102,14 @@ func TestAIIntegrationUsageSyncWorkflowListsCandidatesAndStartsChildren(t *testi
 
 	var synced []string
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input activities.SyncAIIntegrationUsageInput) error {
-			require.Equal(t, start, input.EndTime)
-			synced = append(synced, input.ConfigID)
+		func(_ context.Context, configID string) error {
+			synced = append(synced, configID)
 			return nil
 		},
 		activity.RegisterOptions{Name: "SyncAIIntegrationUsage"},
 	)
 
-	env.ExecuteWorkflow(AIIntegrationUsageSyncWorkflow)
+	env.ExecuteWorkflow(AIUsagePollerCoordinatorWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
@@ -118,14 +117,14 @@ func TestAIIntegrationUsageSyncWorkflowListsCandidatesAndStartsChildren(t *testi
 	require.ElementsMatch(t, candidateIDs(candidates), synced)
 }
 
-func TestAIIntegrationUsageSyncWorkflowContinuesAfterChildFailure(t *testing.T) {
+func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	start := time.Date(2026, 5, 19, 10, 0, 0, 0, time.UTC)
 	env.SetStartTime(start)
-	env.RegisterWorkflow(AIIntegrationUsageSyncConfigWorkflow)
+	env.RegisterWorkflow(AIUsagePollerWorkflow)
 
 	failedCandidate := aiintegrations.UsagePollCandidate{
 		ID:             uuid.MustParse("11111111-1111-1111-1111-111111111111"),
@@ -148,8 +147,8 @@ func TestAIIntegrationUsageSyncWorkflowContinuesAfterChildFailure(t *testing.T) 
 		func(_ context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
 			listCalls++
 			require.Equal(t, aiintegrations.ProviderCursor, input.Provider)
-			require.Equal(t, start, input.PollDueBefore)
-			require.Equal(t, int32(aiIntegrationUsageSyncChildConcurrency), input.Limit)
+			require.False(t, input.PollDueBefore.Before(start))
+			require.Equal(t, int32(aiUsagePollerCoordinatorChildConcurrency), input.Limit)
 
 			switch listCalls {
 			case 1:
@@ -169,24 +168,23 @@ func TestAIIntegrationUsageSyncWorkflowContinuesAfterChildFailure(t *testing.T) 
 	attemptsByConfigID := map[string]int{}
 	var synced []string
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input activities.SyncAIIntegrationUsageInput) error {
-			require.Equal(t, start, input.EndTime)
-			attemptsByConfigID[input.ConfigID]++
-			if input.ConfigID == failedCandidate.ID.String() {
+		func(_ context.Context, configID string) error {
+			attemptsByConfigID[configID]++
+			if configID == failedCandidate.ID.String() {
 				return errors.New("cursor API unavailable")
 			}
-			synced = append(synced, input.ConfigID)
+			synced = append(synced, configID)
 			return nil
 		},
 		activity.RegisterOptions{Name: "SyncAIIntegrationUsage"},
 	)
 
-	env.ExecuteWorkflow(AIIntegrationUsageSyncWorkflow)
+	env.ExecuteWorkflow(AIUsagePollerCoordinatorWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 3, listCalls)
-	require.Equal(t, activities.SyncAIIntegrationUsageMaxAttempts, attemptsByConfigID[failedCandidate.ID.String()])
+	require.Equal(t, activities.PollUsageMaxAttempts, attemptsByConfigID[failedCandidate.ID.String()])
 	require.ElementsMatch(t, []string{successCandidate.ID.String(), nextBatchCandidate.ID.String()}, synced)
 }
 
