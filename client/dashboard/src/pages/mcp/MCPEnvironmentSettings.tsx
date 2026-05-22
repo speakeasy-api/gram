@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSession } from "@/contexts/Auth";
+import { useIsAdmin, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
@@ -18,6 +18,7 @@ import {
   invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments,
   invalidateAllToolset,
+  useClearToolsetUserSessionIssuerMutation,
   useCreateEnvironmentMutation,
   useGetMcpMetadata,
   useListEnvironments,
@@ -902,9 +903,22 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   ] = useState(false);
 
   const telemetry = useTelemetry();
+  const isAdmin = useIsAdmin();
+  const queryClient = useQueryClient();
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
+
+  const clearUserSessionIssuerMutation =
+    useClearToolsetUserSessionIssuerMutation({
+      onSuccess: () => {
+        invalidateAllToolset(queryClient);
+        toast.success("Removed user session issuer from toolset");
+      },
+      onError: (err) => {
+        toast.error(`Failed to remove user session issuer: ${err.message}`);
+      },
+    });
 
   const loginSecured = !!toolset.userSessionIssuerSlug;
   const isOAuthConnected = !!(
@@ -972,6 +986,21 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
               </Badge.LeftIcon>
               <Badge.Text>Login Secured</Badge.Text>
             </Badge>
+          )}
+          {userSessionIssuerWired && isAdmin && (
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive hover:border-destructive"
+              disabled={clearUserSessionIssuerMutation.isPending}
+              onClick={() =>
+                clearUserSessionIssuerMutation.mutate({
+                  request: { slug: toolset.slug },
+                })
+              }
+            >
+              <Button.Text>Remove user session issuer</Button.Text>
+            </Button>
           )}
           {showWireUserSessionIssuer && (
             <Button

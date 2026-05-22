@@ -71,3 +71,8 @@ func UpdateOAuthProxyServerToolsetsPath() string {
 func SetUserSessionIssuerToolsetsPath() string {
 	return "/rpc/toolsets.setUserSessionIssuer"
 }
+
+// ClearUserSessionIssuerToolsetsPath returns the URL path to the toolsets service clearUserSessionIssuer HTTP endpoint.
+func ClearUserSessionIssuerToolsetsPath() string {
+	return "/rpc/toolsets.clearUserSessionIssuer"
+}

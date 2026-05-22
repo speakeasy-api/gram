@@ -348,6 +348,33 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetToolsetUserSessionIssuer"}`)
 	})
 
+	Method("clearUserSessionIssuer", func() {
+		Description("Unlink the user_session_issuer from a toolset. No-op if the toolset has no user_session_issuer linked.")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset to unlink")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.clearUserSessionIssuer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "clearToolsetUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "clearUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ClearToolsetUserSessionIssuer"}`)
+	})
+
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
