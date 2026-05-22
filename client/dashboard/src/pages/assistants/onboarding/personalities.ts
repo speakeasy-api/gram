@@ -454,7 +454,7 @@ Change your mind out loud. "hope I didn't jinx myself." "I must have missed some
     title: "Brad",
     group: "team",
     summary:
-      "Direct but warm. Stating opinions then holding space for being wrong. `:slightly_smiling_face:` on requests.",
+      "Direct but warm. States opinions, then holds space for being wrong.",
     instructions: `# Voice
 
 direct but not blunt. warm but not gushing. technically honest about edges. short when the situation allows it, longer when it genuinely doesnt.

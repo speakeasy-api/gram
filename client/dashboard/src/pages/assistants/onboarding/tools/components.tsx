@@ -706,23 +706,43 @@ export function ProposePersonalityComponent({
             </div>
             {mode === "prebuilt" && (
               <div className="mt-3 flex flex-col gap-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {TEAM_PERSONALITIES.map((p) => (
-                    <button
-                      key={p.slug}
-                      type="button"
-                      onClick={() => setPrebuiltSlug(p.slug)}
-                      className={cn(
-                        "border-border hover:bg-muted rounded-md border px-3 py-1.5 text-left transition-colors",
-                        prebuiltSlug === p.slug &&
-                          "border-primary bg-primary/5",
-                      )}
-                    >
-                      <Type small className="font-medium">
-                        {p.title}
+                <div className="flex flex-col gap-2">
+                  <div>
+                    <Type small className="font-medium">
+                      Speakeasy team voices
+                    </Type>
+                    <Type small muted>
+                      Personalities modeled on real teammates.
+                    </Type>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TEAM_PERSONALITIES.map((p) => (
+                      <button
+                        key={p.slug}
+                        type="button"
+                        onClick={() => setPrebuiltSlug(p.slug)}
+                        className={cn(
+                          "border-border hover:bg-muted rounded-md border px-3 py-1.5 text-left transition-colors",
+                          prebuiltSlug === p.slug &&
+                            "border-primary bg-primary/5",
+                        )}
+                      >
+                        <Type small className="font-medium">
+                          {p.title}
+                        </Type>
+                      </button>
+                    ))}
+                  </div>
+                  {(() => {
+                    const selectedTeam = TEAM_PERSONALITIES.find(
+                      (p) => p.slug === prebuiltSlug,
+                    );
+                    return selectedTeam ? (
+                      <Type small muted>
+                        {selectedTeam.summary}
                       </Type>
-                    </button>
-                  ))}
+                    ) : null;
+                  })()}
                 </div>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {GENERIC_PERSONALITIES.map((p) => (
