@@ -5,6 +5,7 @@
 import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAuthServer.js";
 import { toolsetsAddOAuthProxyServer } from "../funcs/toolsetsAddOAuthProxyServer.js";
 import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
+import { toolsetsClearUserSessionIssuer } from "../funcs/toolsetsClearUserSessionIssuer.js";
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
@@ -71,6 +72,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<boolean> {
     return unwrapAsync(toolsetsCheckMCPSlugAvailability(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * clearUserSessionIssuer toolsets
+   *
+   * @remarks
+   * Unlink the user_session_issuer from a toolset. No-op if the toolset has no user_session_issuer linked.
+   */
+  async clearUserSessionIssuer(
+    request: operations.ClearToolsetUserSessionIssuerRequest,
+    security?: operations.ClearToolsetUserSessionIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsClearUserSessionIssuer(
       this,
       request,
       security,
