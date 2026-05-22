@@ -10,19 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type fakeUsagePollStarter struct {
-	calls     []fakeUsagePollStarterCall
+type fakeConfigPoller struct {
+	calls     []fakeConfigPollerCall
 	returnErr error
 }
 
-type fakeUsagePollStarterCall struct {
+type fakeConfigPollerCall struct {
 	organizationSlug string
 	configID         uuid.UUID
 	provider         string
 }
 
-func (f *fakeUsagePollStarter) Poll(_ context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
-	f.calls = append(f.calls, fakeUsagePollStarterCall{
+func (f *fakeConfigPoller) Poll(_ context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
+	f.calls = append(f.calls, fakeConfigPollerCall{
 		organizationSlug: organizationSlug,
 		configID:         configID,
 		provider:         provider,
@@ -42,15 +42,15 @@ func TestStartUsagePollDelegatesToStarter(t *testing.T) {
 	t.Parallel()
 
 	configID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	starter := &fakeUsagePollStarter{}
-	svc := &Service{usagePollStarter: starter}
+	poller := &fakeConfigPoller{}
+	svc := &Service{configPoller: poller}
 
 	require.NoError(t, svc.startUsagePoll(t.Context(), "acme", configID, ProviderCursor))
-	require.Equal(t, []fakeUsagePollStarterCall{{
+	require.Equal(t, []fakeConfigPollerCall{{
 		organizationSlug: "acme",
 		configID:         configID,
 		provider:         ProviderCursor,
-	}}, starter.calls)
+	}}, poller.calls)
 }
 
 func TestStartUsagePollAllowsMissingStarter(t *testing.T) {
@@ -65,7 +65,7 @@ func TestStartUsagePollReturnsStarterError(t *testing.T) {
 	t.Parallel()
 
 	expectedErr := errors.New("temporal unavailable")
-	svc := &Service{usagePollStarter: &fakeUsagePollStarter{returnErr: expectedErr}}
+	svc := &Service{configPoller: &fakeConfigPoller{returnErr: expectedErr}}
 
 	require.ErrorIs(t, svc.startUsagePoll(t.Context(), "acme", uuid.MustParse("11111111-1111-1111-1111-111111111111"), ProviderCursor), expectedErr)
 }

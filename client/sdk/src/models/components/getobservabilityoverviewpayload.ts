@@ -34,6 +34,10 @@ export type GetObservabilityOverviewPayload = {
    */
   includeTimeSeries?: boolean | undefined;
   /**
+   * Optional Remote MCP server ID filter
+   */
+  remoteMcpServerId?: string | undefined;
+  /**
    * End time in ISO 8601 format
    */
   to: Date;
@@ -55,6 +59,7 @@ export type GetObservabilityOverviewPayload$Outbound = {
   from: string;
   hook_source?: string | undefined;
   include_time_series: boolean;
+  remote_mcp_server_id?: string | undefined;
   to: string;
   toolset_slug?: string | undefined;
   user_id?: string | undefined;
@@ -72,6 +77,7 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSource: z.optional(z.string()),
     includeTimeSeries: z._default(z.boolean(), true),
+    remoteMcpServerId: z.optional(z.string()),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     toolsetSlug: z.optional(z.string()),
     userId: z.optional(z.string()),
@@ -83,6 +89,7 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
       externalUserId: "external_user_id",
       hookSource: "hook_source",
       includeTimeSeries: "include_time_series",
+      remoteMcpServerId: "remote_mcp_server_id",
       toolsetSlug: "toolset_slug",
       userId: "user_id",
     });

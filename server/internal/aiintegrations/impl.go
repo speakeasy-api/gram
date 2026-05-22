@@ -28,20 +28,20 @@ import (
 )
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	db               *pgxpool.Pool
-	auth             *auth.Auth
-	authz            *authz.Engine
-	audit            *audit.Logger
-	store            *Store
-	usagePollStarter UsagePollWorkflowStarter
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	authz        *authz.Engine
+	audit        *audit.Logger
+	store        *Store
+	configPoller ConfigPoller
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-type UsagePollWorkflowStarter interface {
+type ConfigPoller interface {
 	Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error
 }
 
@@ -53,18 +53,18 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	encryptionClient *encryption.Client,
-	usagePollStarter UsagePollWorkflowStarter,
+	configPoller ConfigPoller,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("aiintegrations.api"))
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/aiintegrations"),
-		logger:           logger,
-		db:               db,
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		audit:            auditLogger,
-		store:            NewStore(logger, db, encryptionClient),
-		usagePollStarter: usagePollStarter,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/aiintegrations"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessions, authzEngine),
+		authz:        authzEngine,
+		audit:        auditLogger,
+		store:        NewStore(logger, db, encryptionClient),
+		configPoller: configPoller,
 	}
 }
 
@@ -255,10 +255,10 @@ func shouldResetUsagePollWatermark(hasExistingConfig bool, apiKeySupplied bool) 
 }
 
 func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
-	if s.usagePollStarter == nil {
+	if s.configPoller == nil {
 		return nil
 	}
-	if err := s.usagePollStarter.Poll(ctx, organizationSlug, configID, provider); err != nil {
+	if err := s.configPoller.Poll(ctx, organizationSlug, configID, provider); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "start ai integration usage poll")
 	}
 	return nil
