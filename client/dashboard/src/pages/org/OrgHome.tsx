@@ -5,6 +5,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
+import { MoreActions, type Action } from "@/components/ui/more-actions";
 import { SearchBar } from "@/components/ui/search-bar";
 import {
   Tooltip,
@@ -42,7 +43,6 @@ import {
 import {
   ChevronDown,
   ChevronUp,
-  MoreHorizontal,
   Plus,
   ShieldCheck,
   Star,
@@ -438,39 +438,81 @@ function ProjectRow({
 
       <Facepile members={facepile} />
 
-      <div className="relative z-10 flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onToggleFavorite();
-          }}
-          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-          className={cn(
-            "hover:bg-muted flex size-8 items-center justify-center rounded-md transition-colors",
-            isFavorite
-              ? "text-foreground opacity-100"
-              : "text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100",
-          )}
-        >
-          <Star
-            className={cn("size-4", isFavorite && "fill-current")}
-            strokeWidth={1.5}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          aria-label="More actions"
-          className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
-        >
-          <MoreHorizontal className="size-4" />
-        </button>
-      </div>
+      <ProjectRowActions
+        project={project}
+        isFavorite={isFavorite}
+        onToggleFavorite={onToggleFavorite}
+      />
+    </div>
+  );
+}
+
+function ProjectRowActions({
+  project,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  project: OrgProject;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+}) {
+  const { orgSlug } = useSlugs();
+  const navigate = useNavigate();
+
+  const actions: Action[] = [
+    {
+      icon: "star",
+      label: isFavorite ? "Remove from favorites" : "Add to favorites",
+      onClick: onToggleFavorite,
+    },
+    {
+      icon: "settings",
+      label: "Project settings",
+      onClick: () => navigate(`/${orgSlug}/projects/${project.slug}/settings`),
+    },
+    {
+      icon: "history",
+      label: "View audit logs",
+      onClick: () => navigate(`/${orgSlug}/audit-logs?project=${project.slug}`),
+    },
+    {
+      icon: "copy",
+      label: "Copy slug",
+      onClick: () => {
+        void navigator.clipboard?.writeText(project.slug);
+      },
+    },
+  ];
+
+  return (
+    <div
+      className="relative z-10 flex shrink-0 items-center gap-1"
+      onClick={(e) => {
+        // Stop the absolute <Link> overlay from receiving clicks inside this region.
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleFavorite();
+        }}
+        aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+        aria-pressed={isFavorite}
+        className={cn(
+          "hover:bg-muted flex size-8 items-center justify-center rounded-md transition-colors",
+          isFavorite ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        <Star
+          className={cn("size-4", isFavorite && "fill-current")}
+          strokeWidth={1.5}
+        />
+      </button>
+      <MoreActions actions={actions} />
     </div>
   );
 }
