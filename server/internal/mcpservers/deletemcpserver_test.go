@@ -26,14 +26,14 @@ func TestDeleteMcpServer(t *testing.T) {
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "test mcp server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &serverID,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("disabled"),
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
@@ -88,14 +88,14 @@ func TestDeleteMcpServer_CascadesSoftDeleteToSlugs(t *testing.T) {
 	// Create a frontend and two slugs that both point at it.
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	frontend, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "test mcp server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &serverID,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("disabled"),
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
