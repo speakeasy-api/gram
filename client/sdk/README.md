@@ -489,6 +489,7 @@ run();
 * [addExternalOAuthServer](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 * [addOAuthProxyServer](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 * [checkMCPSlugAvailability](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+* [clearUserSessionIssuer](docs/sdks/toolsets/README.md#clearusersessionissuer) - clearUserSessionIssuer toolsets
 * [cloneBySlug](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 * [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 * [deleteBySlug](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
@@ -792,6 +793,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsAddExternalOAuthServer`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`toolsetsAddOAuthProxyServer`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`toolsetsCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+- [`toolsetsClearUserSessionIssuer`](docs/sdks/toolsets/README.md#clearusersessionissuer) - clearUserSessionIssuer toolsets
 - [`toolsetsCloneBySlug`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
@@ -878,6 +880,7 @@ To learn about this feature and how to get started, check
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMcpEndpointSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+- [`useClearToolsetUserSessionIssuerMutation`](docs/sdks/toolsets/README.md#clearusersessionissuer) - clearUserSessionIssuer toolsets
 - [`useCloneClientFromOAuthProxyProviderMutation`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`useCloneEnvironmentMutation`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets

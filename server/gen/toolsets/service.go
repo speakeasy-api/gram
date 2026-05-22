@@ -44,6 +44,9 @@ type Service interface {
 	// Link a toolset to a user_session_issuer (or pass null to unlink). The
 	// user_session_issuer must already exist in the caller's project.
 	SetUserSessionIssuer(context.Context, *SetUserSessionIssuerPayload) (res *types.Toolset, err error)
+	// Unlink the user_session_issuer from a toolset. No-op if the toolset has no
+	// user_session_issuer linked.
+	ClearUserSessionIssuer(context.Context, *ClearUserSessionIssuerPayload) (res *types.Toolset, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -66,7 +69,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer", "setUserSessionIssuer"}
+var MethodNames = [14]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer", "setUserSessionIssuer", "clearUserSessionIssuer"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -96,6 +99,16 @@ type AddOAuthProxyServerPayload struct {
 // checkMCPSlugAvailability method.
 type CheckMCPSlugAvailabilityPayload struct {
 	// The slug to check
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ClearUserSessionIssuerPayload is the payload type of the toolsets service
+// clearUserSessionIssuer method.
+type ClearUserSessionIssuerPayload struct {
+	// The slug of the toolset to unlink
 	Slug             types.Slug
 	SessionToken     *string
 	ApikeyToken      *string

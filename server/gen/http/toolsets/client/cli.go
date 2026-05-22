@@ -694,3 +694,45 @@ func BuildSetUserSessionIssuerPayload(toolsetsSetUserSessionIssuerBody string, t
 
 	return v, nil
 }
+
+// BuildClearUserSessionIssuerPayload builds the payload for the toolsets
+// clearUserSessionIssuer endpoint from CLI flags.
+func BuildClearUserSessionIssuerPayload(toolsetsClearUserSessionIssuerSlug string, toolsetsClearUserSessionIssuerSessionToken string, toolsetsClearUserSessionIssuerApikeyToken string, toolsetsClearUserSessionIssuerProjectSlugInput string) (*toolsets.ClearUserSessionIssuerPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsClearUserSessionIssuerSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsClearUserSessionIssuerSessionToken != "" {
+			sessionToken = &toolsetsClearUserSessionIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsClearUserSessionIssuerApikeyToken != "" {
+			apikeyToken = &toolsetsClearUserSessionIssuerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsClearUserSessionIssuerProjectSlugInput != "" {
+			projectSlugInput = &toolsetsClearUserSessionIssuerProjectSlugInput
+		}
+	}
+	v := &toolsets.ClearUserSessionIssuerPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

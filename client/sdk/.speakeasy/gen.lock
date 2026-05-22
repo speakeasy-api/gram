@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b76b00a185bb8b0931a37cc62df1f491
+  docChecksum: 35334228851dabb009e9da3617ff31ef
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1120,6 +1120,14 @@ trackedFiles:
     last_write_checksum: sha1:df0ade5b1bee55ad3029d5e609fe67d8dbfbc2b5
   docs/models/operations/clearmcpregistrycachesecurityoption2.md:
     last_write_checksum: sha1:4b9e06e065173677603f86f6b62ddf0c843a356e
+  docs/models/operations/cleartoolsetusersessionissuerrequest.md:
+    last_write_checksum: sha1:e3d01acd2c2a7600832ce392ff4668dbb0358e93
+  docs/models/operations/cleartoolsetusersessionissuersecurity.md:
+    last_write_checksum: sha1:4f2903b7ebada1b6295f0790707943cd774ed738
+  docs/models/operations/cleartoolsetusersessionissuersecurityoption1.md:
+    last_write_checksum: sha1:98dbc05511ef5d0fe405b29cfbeb5184be7c5b12
+  docs/models/operations/cleartoolsetusersessionissuersecurityoption2.md:
+    last_write_checksum: sha1:e54d17f2a65e0ebb4ce6a61be875636fdca28e13
   docs/models/operations/cloneclientfromoauthproxyproviderrequest.md:
     last_write_checksum: sha1:19a1462a5597dda30576271ce85240f7d77fce6a
   docs/models/operations/cloneclientfromoauthproxyprovidersecurity.md:
@@ -2799,7 +2807,7 @@ trackedFiles:
   docs/sdks/tools/README.md:
     last_write_checksum: sha1:73c0e5a99b2d5a2bfa29e1937f9255e5228d1a86
   docs/sdks/toolsets/README.md:
-    last_write_checksum: sha1:e275ad4acd5090e39054535a665f4371d13dcfc0
+    last_write_checksum: sha1:09145c8e445e7cc7d558a99a8ac87f24ed2125ef
   docs/sdks/triggers/README.md:
     last_write_checksum: sha1:83cba427bf9553fb5cd63ce59def4d855d272e77
   docs/sdks/usage/README.md:
@@ -3462,6 +3470,8 @@ trackedFiles:
     id: 24ba8f5fed64
     last_write_checksum: sha1:e8465e65bc58504664a89d91f608adfbccac4acd
     pristine_git_object: cc46d5476ef44f10514c2e644b4967efb9ede66e
+  src/funcs/toolsetsClearUserSessionIssuer.ts:
+    last_write_checksum: sha1:22f6d2807f588f25e3efb1017a8860680c5bb1e1
   src/funcs/toolsetsCloneBySlug.ts:
     id: 25dc003123e2
     last_write_checksum: sha1:ed6ba15046a04efa4c6c52cb769b4967b9f7d00a
@@ -4812,6 +4822,8 @@ trackedFiles:
     pristine_git_object: 0e1b5a154af078c04c6e289ed4796e1379b1460f
   src/models/operations/clearmcpregistrycache.ts:
     last_write_checksum: sha1:d6fd706c54c7f486d9cf289ea3ebe4b848e4a92d
+  src/models/operations/cleartoolsetusersessionissuer.ts:
+    last_write_checksum: sha1:976158116af70f25bdc0ccff73c10cb453983b68
   src/models/operations/cloneclientfromoauthproxyprovider.ts:
     last_write_checksum: sha1:0703bd13fe6c4285a5d8769ec4d316b7e5b2e025
   src/models/operations/cloneenvironment.ts:
@@ -5122,7 +5134,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:48e37627522f692191fe701261b1560069d91fa2
+    last_write_checksum: sha1:fda82850b51b9dcc9fd4430645efb548bf33e116
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5586,6 +5598,8 @@ trackedFiles:
     last_write_checksum: sha1:190264ef0cadd979e482f39ae67726aafe790764
   src/react-query/checkMcpEndpointSlugAvailability.ts:
     last_write_checksum: sha1:d946709fb6eae6ff66c4d8e33a6bee4b42d44f52
+  src/react-query/clearToolsetUserSessionIssuer.ts:
+    last_write_checksum: sha1:532d14c0d63c2b8444a646bfff14739be8f57a36
   src/react-query/cloneClientFromOAuthProxyProvider.ts:
     last_write_checksum: sha1:12a74af12efb5958952336758d916295f5a14e42
   src/react-query/cloneEnvironment.ts:
@@ -5900,7 +5914,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:f22d651f6227b76062a073ced67732363d9d6049
+    last_write_checksum: sha1:1bcd75b30fa23220686d20b3429e241cc9f4fe9a
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6688,7 +6702,7 @@ trackedFiles:
     pristine_git_object: 4c7e184e2d9dee5ccd82b2ef46f3236d7ec30efb
   src/sdk/toolsets.ts:
     id: 0715c1588060
-    last_write_checksum: sha1:d9f289d398d07943c3102177270c44fb46478de3
+    last_write_checksum: sha1:6b47fb8801a8155573efd60c20d3a89835d68492
     pristine_git_object: 499da61dc8ecf32ab1637b84167ecef2052c32b2
   src/sdk/triggers.ts:
     last_write_checksum: sha1:e38ef614f5ad5706d131c34193150531a46af67b
@@ -9942,6 +9956,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  clearToolsetUserSessionIssuer:
+    speakeasy-default-clear-toolset-user-session-issuer:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2025-09-27T22:50:49.250Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 495054}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": [], "tools": [{}], "toolset_version": 84889, "updated_at": "2026-12-29T12:43:36.395Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
