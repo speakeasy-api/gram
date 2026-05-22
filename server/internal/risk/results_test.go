@@ -367,7 +367,7 @@ func TestListRiskResultsForAgent_ShadowMCPPassthrough(t *testing.T) {
 	require.Equal(t, shadowMatch, result.Results[0].MatchRedacted, "shadow_mcp match should pass through verbatim")
 }
 
-func TestListRiskResultsForAgent_DeterministicFingerprint(t *testing.T) {
+func TestListRiskResultsForAgent_DeterministicFingerprintWithinOrg(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -392,7 +392,7 @@ func TestListRiskResultsForAgent_DeterministicFingerprint(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Results, 2)
 	require.Equal(t, result.Results[0].MatchRedacted, result.Results[1].MatchRedacted,
-		"identical secrets must produce identical fingerprints so the agent can dedupe")
+		"identical secrets within the same org must produce identical fingerprints so the agent can dedupe")
 }
 
 func TestListRiskResultsForAgent_Unauthorized(t *testing.T) {

@@ -732,9 +732,16 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		return nil, err
 	}
 
+	// ListRiskResults already enforced auth above; this lookup is safe and
+	// only used to derive the per-org salt for match-fingerprint hashing.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
 	redacted := make([]*types.RiskResultRedacted, 0, len(base.Results))
 	for _, r := range base.Results {
-		redacted = append(redacted, redactRiskResult(r))
+		redacted = append(redacted, redactRiskResult(r, authCtx.ActiveOrganizationID))
 	}
 
 	return &gen.ListRiskResultsForAgentResult{
@@ -750,8 +757,12 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 // "shadow_mcp" is a deliberate carve-out: its match is a server URL or
 // command identifier (already shown unmasked in the dashboard) and the agent
 // needs to be able to name it to be useful.
-func redactRiskResult(r *types.RiskResult) *types.RiskResultRedacted {
-	matchRedacted := redactMatch(r.Source, r.Match)
+//
+// orgID is mixed into the hash so fingerprints cannot correlate the same
+// secret across organizations even if some future code path widens the
+// surface beyond org-scoped access.
+func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedacted {
+	matchRedacted := redactMatch(r.Source, r.Match, orgID)
 
 	return &types.RiskResultRedacted{
 		ID:            r.ID,
@@ -776,14 +787,23 @@ func redactRiskResult(r *types.RiskResult) *types.RiskResultRedacted {
 // non-shadow_mcp sources, or passes it through verbatim for shadow_mcp.
 // A nil/empty match collapses to `<redacted len=0>` without a sha component
 // so the absence of a finding payload is distinguishable from a real hash.
-func redactMatch(source string, match *string) string {
+//
+// The hash is salted by orgID with a NUL separator so two different orgs
+// holding the same secret produce different fingerprints — defense in depth
+// against any future surface that crosses an org boundary. Within an org the
+// fingerprint stays deterministic so agents can still dedupe.
+func redactMatch(source string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
 	}
 	if source == shadowmcp.SourceShadowMCP {
 		return *match
 	}
-	sum := sha256.Sum256([]byte(*match))
+	var buf []byte
+	buf = append(buf, orgID...)
+	buf = append(buf, 0x00)
+	buf = append(buf, *match...)
+	sum := sha256.Sum256(buf)
 	return fmt.Sprintf("<redacted len=%d sha=%s>", len(*match), hex.EncodeToString(sum[:4]))
 }
 
