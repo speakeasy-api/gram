@@ -27011,6 +27011,102 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: UserSessions
+  /rpc/userSessions.mint:
+    post:
+      description: Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.
+      operationId: mintUserSession
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MintUserSessionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MintUserSessionResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: mintUserSession userSessions
+      tags:
+        - userSessions
+      x-speakeasy-name-override: mint
+      x-speakeasy-react-hook:
+        name: MintUserSession
   /rpc/userSessions.revoke:
     post:
       description: Push the session's jti into the revocation cache and soft-delete the row.
@@ -33575,6 +33671,28 @@ components:
         - visibility
         - created_at
         - updated_at
+    MintUserSessionRequestBody:
+      type: object
+      properties:
+        toolset_id:
+          type: string
+          description: The toolset to bind the minted JWT to. Must be issuer-gated and live in the caller's project.
+          format: uuid
+      required:
+        - toolset_id
+    MintUserSessionResponseBody:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the toolset''s /mcp/{slug} surface.'
+        expires_in:
+          type: integer
+          description: Lifetime of the access token in seconds.
+          format: int64
+      required:
+        - access_token
+        - expires_in
     ModelUsage:
       type: object
       properties:

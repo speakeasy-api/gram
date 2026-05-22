@@ -8,6 +8,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -82,6 +83,42 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildMintUserSessionPayload builds the payload for the userSessions
+// mintUserSession endpoint from CLI flags.
+func BuildMintUserSessionPayload(userSessionsMintUserSessionBody string, userSessionsMintUserSessionSessionToken string, userSessionsMintUserSessionProjectSlugInput string) (*usersessions.MintUserSessionPayload, error) {
+	var err error
+	var body MintUserSessionRequestBody
+	{
+		err = json.Unmarshal([]byte(userSessionsMintUserSessionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionsMintUserSessionSessionToken != "" {
+			sessionToken = &userSessionsMintUserSessionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionsMintUserSessionProjectSlugInput != "" {
+			projectSlugInput = &userSessionsMintUserSessionProjectSlugInput
+		}
+	}
+	v := &usersessions.MintUserSessionPayload{
+		ToolsetID: body.ToolsetID,
+	}
+	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil

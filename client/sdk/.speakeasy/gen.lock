@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5eb2f2f238fef9b8b5bef2cdf4491edb
+  docChecksum: 25b914a67ffb4f0efda06b6ae5f34ad5
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -568,6 +568,10 @@ trackedFiles:
     last_write_checksum: sha1:5b92f014430fc0fd3cc9d90c3f5e007e0edc5e10
   docs/models/components/metricsmode.md:
     last_write_checksum: sha1:ed17c3e43855f27a77dccc82c9e39a2c093f4a3a
+  docs/models/components/mintusersessionrequestbody.md:
+    last_write_checksum: sha1:8b53450b9a389ed451bb0fa7839319ffaada87b9
+  docs/models/components/mintusersessionresponsebody.md:
+    last_write_checksum: sha1:261bf8974244e297feeceee2efa02128676aeace
   docs/models/components/modelusage.md:
     last_write_checksum: sha1:09f2b180ebfd3f1440502f2113a1edba982e8e0a
   docs/models/components/notmodified.md:
@@ -2250,6 +2254,10 @@ trackedFiles:
     last_write_checksum: sha1:ebe0a88710568bef5d9528a7b3342d15a802626f
   docs/models/operations/logoutsecurity.md:
     last_write_checksum: sha1:82795394ef763c56925a3db543cfe616e9e10dea
+  docs/models/operations/mintusersessionrequest.md:
+    last_write_checksum: sha1:29b29ceb0d44cfff3b0f72d493ee158017976eca
+  docs/models/operations/mintusersessionsecurity.md:
+    last_write_checksum: sha1:abfcf7eaa93c885147359e0420da36766e093161
   docs/models/operations/outcome.md:
     last_write_checksum: sha1:b693f32b5e6473f8c914e1bdd616b8b89671e697
   docs/models/operations/pausetriggerinstancerequest.md:
@@ -2845,7 +2853,7 @@ trackedFiles:
   docs/sdks/usersessionissuers/README.md:
     last_write_checksum: sha1:415dc3bce3245319c634dd1b69723039174bcacf
   docs/sdks/usersessions/README.md:
-    last_write_checksum: sha1:62b1566833f0e17a53bd5a0a3c9ec67494509ead
+    last_write_checksum: sha1:f93064398cc47eea90d8b01bd83af0195602770d
   docs/sdks/variations/README.md:
     last_write_checksum: sha1:ac7be50470c1a57d2c1553c0594fa665a4d6e1ef
   eslint.config.mjs:
@@ -3594,6 +3602,8 @@ trackedFiles:
     last_write_checksum: sha1:3b223b6df19baa1ccaca50289db66d7b50183b50
   src/funcs/userSessionsList.ts:
     last_write_checksum: sha1:8fce87e9b0a064442addcdbc226813d0407070d2
+  src/funcs/userSessionsMint.ts:
+    last_write_checksum: sha1:037099aa7c368395ae044158a21b95cc495ac800
   src/funcs/userSessionsRevoke.ts:
     last_write_checksum: sha1:251593d7a4218e12463d0159b544ee27007f707b
   src/funcs/variationsDeleteGlobal.ts:
@@ -4086,7 +4096,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:d2a97c1029b2b0505494320f281c1eb5f821f809
+    last_write_checksum: sha1:b8bfa0daafd76109fd149a10e26b0f6b1de0bf9c
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4290,6 +4300,10 @@ trackedFiles:
     last_write_checksum: sha1:78224741968880f86a10b5ed9aeecac079504722
   src/models/components/mcpserver.ts:
     last_write_checksum: sha1:207b40280f81eb19adf260cfa883bb52896d4d6c
+  src/models/components/mintusersessionrequestbody.ts:
+    last_write_checksum: sha1:f71c7117fac7cb7aea1164ccad92126cae26edc8
+  src/models/components/mintusersessionresponsebody.ts:
+    last_write_checksum: sha1:6e50762cecfe5a1c131d2f9276246fb8e34bf82b
   src/models/components/modelusage.ts:
     last_write_checksum: sha1:7b01fb688a987bbb0683cf595f3e7ab1d25ce9cb
   src/models/components/notmodified.ts:
@@ -5178,7 +5192,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:40cd725df20ee8cc1d930d392a0e478dabb30522
+    last_write_checksum: sha1:d06fe265a78c32283994102c6c04820b06576565
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5340,6 +5354,8 @@ trackedFiles:
     id: 248259f02ef6
     last_write_checksum: sha1:e7a8a55498652b4bb691e5cfb28825baeeac3a40
     pristine_git_object: 54458469feb8487108d538a0eb88257ce6b150e0
+  src/models/operations/mintusersession.ts:
+    last_write_checksum: sha1:8c8219143d24617958fe1612ba2042bef61af7af
   src/models/operations/pausetriggerinstance.ts:
     last_write_checksum: sha1:7ced39081d886f83c538c45cfa55d031d4f5edaa
   src/models/operations/publish.ts:
@@ -5966,7 +5982,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:61caed166a6a39aec444481247fa77f2d941b754
+    last_write_checksum: sha1:88a5114a03d4b2568505da125c52b7fac63de497
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6186,6 +6202,8 @@ trackedFiles:
     last_write_checksum: sha1:61911a4acd50a4d7c6f1cda61717090e083d64f2
   src/react-query/members.ts:
     last_write_checksum: sha1:c12a6dc5ce5c89856d0ff50ecdd4a1ff0200eb9f
+  src/react-query/mintUserSession.ts:
+    last_write_checksum: sha1:18b6c3c8a8f0d7f1b7e7510e02dca16d9dd83208
   src/react-query/organization.core.ts:
     last_write_checksum: sha1:85abee26e4654854ce98c76fbc2700035e48e094
   src/react-query/organization.ts:
@@ -6777,7 +6795,7 @@ trackedFiles:
   src/sdk/usersessionissuers.ts:
     last_write_checksum: sha1:f2cff50f27ec9cee58fe46928d7b8226124e2dda
   src/sdk/usersessions.ts:
-    last_write_checksum: sha1:d0a79eada739201c6f4a0d523bea0df327451167
+    last_write_checksum: sha1:40bffd76b1ca97896ab350158dd6dfcb0a282521
   src/sdk/variations.ts:
     id: 88902c6c67ca
     last_write_checksum: sha1:516a4e0655c5ef185089dbad4a70740b203ee596
@@ -10091,6 +10109,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  mintUserSession:
+    speakeasy-default-mint-user-session:
+      requestBody:
+        application/json: {"toolset_id": "0a4ec22f-dfe1-43ce-bcc9-553b85255c3d"}
+      responses:
+        "200":
+          application/json: {"access_token": "<value>", "expires_in": 758064}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
