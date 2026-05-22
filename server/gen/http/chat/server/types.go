@@ -40,8 +40,16 @@ type ListChatsResponseBody struct {
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
-	// The list of messages in the chat
+	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
+	// The generation that this response's messages belong to. A generation is an
+	// immutable snapshot of the transcript; a new one is opened on compaction or
+	// message edits, while normal turns append to the current one.
+	Generation int `form:"generation" json:"generation" xml:"generation"`
+	// The highest generation number present for this chat. To load the full
+	// history, walk from `max_generation` down to 0, requesting each generation in
+	// turn.
+	MaxGeneration int `form:"max_generation" json:"max_generation" xml:"max_generation"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -69,6 +77,10 @@ type LoadChatResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -1407,6 +1419,10 @@ type ChatOverviewResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1469,6 +1485,10 @@ type ChatOverviewWithResolutionsResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // ChatResolutionResponseBody is used to define fields on response body types.
@@ -1512,6 +1532,8 @@ func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody 
 // "loadChat" endpoint of the "chat" service.
 func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	body := &LoadChatResponseBody{
+		Generation:           res.Generation,
+		MaxGeneration:        res.MaxGeneration,
 		ID:                   res.ID,
 		Title:                res.Title,
 		UserID:               res.UserID,
@@ -1525,6 +1547,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		TotalTokens:          res.TotalTokens,
 		TotalCost:            res.TotalCost,
 		LastMessageTimestamp: res.LastMessageTimestamp,
+		RiskFindingsCount:    res.RiskFindingsCount,
 	}
 	if res.Messages != nil {
 		body.Messages = make([]*ChatMessageResponseBody, len(res.Messages))
@@ -2591,9 +2614,10 @@ func NewListChatsPayload(sessionToken *string, projectSlugInput *string, chatSes
 }
 
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, generation *int, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
+	v.Generation = generation
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -2623,11 +2647,13 @@ func NewCreditUsagePayload(sessionToken *string) *chat.CreditUsagePayload {
 
 // NewListChatsWithResolutionsPayload builds a chat service
 // listChatsWithResolutions endpoint payload.
-func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, resolutionStatus *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
+func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, assistantID *string, resolutionStatus *string, hasRisk *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
 	v := &chat.ListChatsWithResolutionsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
+	v.AssistantID = assistantID
 	v.ResolutionStatus = resolutionStatus
+	v.HasRisk = hasRisk
 	v.From = from
 	v.To = to
 	v.Limit = limit

@@ -99,8 +99,16 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate consent csrf token").Log(ctx, logger)
 	}
+	// Ambient cookies / Bearer tokens MUST NOT identify the caller on
+	// this endpoint — /authorize is reachable cross-site, so honouring
+	// them turns it into a CSRF primitive against the resulting
+	// remote_sessions row. Public callers that want a user-bound
+	// session opt in via requireUserIdentity; HandleIDPCallback then
+	// stamps Subject from authoritative IDP claims.
+	forceIDP := !endpoint.IsPublic || req.RequireUserIdentity
+
 	var subject *urn.SessionSubject
-	if endpoint.IsPublic {
+	if !forceIDP {
 		sub := urn.NewAnonymousSubject(uuid.NewString())
 		subject = &sub
 	}
@@ -124,7 +132,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").Log(ctx, logger)
 	}
 
-	if !endpoint.IsPublic {
+	if forceIDP {
 		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").Log(ctx, logger)
@@ -142,7 +150,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return nil
 	}
 
-	// Public endpoint: skip IDP and route straight to consent.
 	consentURL, err := endpoint.ConsentURL(baseURL, challengeID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)

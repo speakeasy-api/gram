@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -144,7 +143,7 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, db, chConn, rbacDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, db, chConn, rbacDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return &Service{
 		tracer:      tp.Tracer("test"),
@@ -204,7 +203,7 @@ func TestGetPeriodUsage_CacheHit(t *testing.T) {
 	cached := sampleUsage(42, 2, 10)
 
 	billingMock := &mockBillingRepo{}
-	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(cached, nil)
+	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(cached)
 	// GetPeriodUsage should NOT be called
 	svc := newTestService(t, billingMock, orgID, 5)
 
@@ -226,7 +225,7 @@ func TestGetPeriodUsage_CacheMissFallback(t *testing.T) {
 
 	billingMock := &mockBillingRepo{}
 	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(nil, fmt.Errorf("cache miss"))
-	billingMock.On("GetPeriodUsage", mock.Anything, orgID).Return(fresh, nil)
+	billingMock.On("GetPeriodUsage", mock.Anything, orgID).Return(fresh)
 	svc := newTestService(t, billingMock, orgID, 3)
 
 	ctx := testAuthContext(orgID)
@@ -280,7 +279,7 @@ func TestGetPeriodUsage_ActualServerCountFromDB(t *testing.T) {
 	cached.ActualEnabledServerCount = 999 // cached value should be overridden
 
 	billingMock := &mockBillingRepo{}
-	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(cached, nil)
+	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(cached)
 	svc := newTestService(t, billingMock, orgID, 7) // DB says 7
 
 	ctx := testAuthContext(orgID)

@@ -6,6 +6,7 @@ import "github.com/speakeasy-api/gram/server/internal/outbox"
 
 // All is the complete list of registered webhook event types.
 var All = []outbox.EventRegistration{
+	AIIntegrationV1,
 	APIKeyV1,
 	AccessChallengeV1,
 	AccessMemberV1,

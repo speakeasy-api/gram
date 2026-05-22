@@ -120,7 +120,7 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 //     `decision: "block"` + free-text `reason`. The reason is surfaced to
 //     the user (UserPromptSubmit) or to Claude (PostToolUse / Stop).
 //   - PreToolUse: nested `hookSpecificOutput.permissionDecision: "deny"`
-//     + `permissionDecisionReason`. Top-level `decision` is rejected.
+//   - `permissionDecisionReason`. Top-level `decision` is rejected.
 //
 // Other events (SessionStart, SessionEnd, Notification, PostToolUseFailure)
 // cannot block at all and must not be passed in.

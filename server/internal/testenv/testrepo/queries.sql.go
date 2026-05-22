@@ -45,6 +45,77 @@ func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType s
 	return count, err
 }
 
+const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    gram_account_type,
+    workos_id,
+    whitelisted,
+    free_trial_started_at,
+    free_trial_ends_at,
+    disabled_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5::text,
+    $6,
+    $7,
+    $8,
+    $9::timestamptz
+)
+`
+
+type CreateOrganizationMetadataFixtureParams struct {
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+// Test-only fixture that lets seeders populate every column on
+// organization_metadata. Prefer this over CreateOrganizationMetadata when a
+// test needs to exercise filters that depend on account type, workos linkage,
+// disabled state, whitelist flag, or trial window.
+func (q *Queries) CreateOrganizationMetadataFixture(ctx context.Context, arg CreateOrganizationMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, createOrganizationMetadataFixture,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.GramAccountType,
+		arg.WorkosID,
+		arg.Whitelisted,
+		arg.FreeTrialStartedAt,
+		arg.FreeTrialEndsAt,
+		arg.DisabledAt,
+	)
+	return err
+}
+
+const createOrganizationUserRelationshipFixture = `-- name: CreateOrganizationUserRelationshipFixture :exec
+INSERT INTO organization_user_relationships (organization_id, user_id)
+VALUES ($1, $2::text)
+`
+
+type CreateOrganizationUserRelationshipFixtureParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+// Test-only fixture for seeding membership counts.
+func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context, arg CreateOrganizationUserRelationshipFixtureParams) error {
+	_, err := q.db.Exec(ctx, createOrganizationUserRelationshipFixture, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const getOutboxEntry = `-- name: GetOutboxEntry :one
 SELECT id FROM outbox WHERE id = $1
 `
@@ -165,7 +236,7 @@ func (q *Queries) ListDeploymentFunctionsResources(ctx context.Context, deployme
 }
 
 const listDeploymentFunctionsTools = `-- name: ListDeploymentFunctionsTools :many
-SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, tags, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions
 WHERE deployment_id = $1
 `
@@ -188,6 +259,7 @@ func (q *Queries) ListDeploymentFunctionsTools(ctx context.Context, deploymentID
 			&i.Runtime,
 			&i.Name,
 			&i.Description,
+			&i.Tags,
 			&i.InputSchema,
 			&i.Variables,
 			&i.AuthInput,
@@ -357,5 +429,37 @@ type SetOrgWebhookConfigParams struct {
 // Sets the Svix app ID and webhooks_enabled flag on an organization.
 func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
+	return err
+}
+
+const updateChatMessageCreatedAt = `-- name: UpdateChatMessageCreatedAt :exec
+UPDATE chat_messages
+SET created_at = $1
+WHERE id = $2
+`
+
+type UpdateChatMessageCreatedAtParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+func (q *Queries) UpdateChatMessageCreatedAt(ctx context.Context, arg UpdateChatMessageCreatedAtParams) error {
+	_, err := q.db.Exec(ctx, updateChatMessageCreatedAt, arg.CreatedAt, arg.ID)
+	return err
+}
+
+const updateRiskResultCreatedAt = `-- name: UpdateRiskResultCreatedAt :exec
+UPDATE risk_results
+SET created_at = $1
+WHERE id = $2
+`
+
+type UpdateRiskResultCreatedAtParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+func (q *Queries) UpdateRiskResultCreatedAt(ctx context.Context, arg UpdateRiskResultCreatedAtParams) error {
+	_, err := q.db.Exec(ctx, updateRiskResultCreatedAt, arg.CreatedAt, arg.ID)
 	return err
 }

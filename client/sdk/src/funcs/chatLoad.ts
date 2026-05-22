@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * loadChat chat
  *
  * @remarks
- * Load a chat by its ID
+ * Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
  */
 export function chatLoad(
   client: GramCore,
@@ -96,6 +96,7 @@ async function $do(
   const path = pathToFunc("/rpc/chat.load")();
 
   const query = encodeFormQuery({
+    "generation": payload.generation,
     "id": payload.id,
   });
 

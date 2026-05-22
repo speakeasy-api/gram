@@ -80,7 +80,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), auditLogger)
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -140,14 +140,14 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                    mcpServerID,
-		ProjectID:             projectID,
-		Name:                  conv.ToPGText("test mcp server"),
-		Slug:                  conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            "disabled",
+		ID:                mcpServerID,
+		ProjectID:         projectID,
+		Name:              conv.ToPGText("test mcp server"),
+		Slug:              conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:        "disabled",
 	})
 	require.NoError(t, err)
 
@@ -177,14 +177,14 @@ func seedOtherProjectMcpFrontend(t *testing.T, ctx context.Context, conn *pgxpoo
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                    mcpServerID,
-		ProjectID:             otherProject.ID,
-		Name:                  conv.ToPGText("test mcp server"),
-		Slug:                  conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            "disabled",
+		ID:                mcpServerID,
+		ProjectID:         otherProject.ID,
+		Name:              conv.ToPGText("test mcp server"),
+		Slug:              conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:        "disabled",
 	})
 	require.NoError(t, err)
 

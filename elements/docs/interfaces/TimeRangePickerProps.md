@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.33.0**](../README.md)
+[**@gram-ai/elements v1.33.1**](../README.md)
 
 ***
 
@@ -119,6 +119,14 @@ Called when LIVE mode changes
 #### Returns
 
 `void`
+
+***
+
+### availablePresets?
+
+> `optional` **availablePresets**: readonly [`DateRangePreset`](../type-aliases/DateRangePreset.md)[]
+
+Presets to show in the dropdown
 
 ***
 

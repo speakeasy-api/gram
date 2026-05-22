@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 )
 
 // AuthorizationRequest is the RFC 6749 §4.1.1 authorization request, parsed
@@ -23,11 +24,16 @@ type AuthorizationRequest struct {
 	State               string
 	CodeChallenge       string
 	CodeChallengeMethod string
+	// RequireUserIdentity routes public-toolset callers through the IDP
+	// so Subject is stamped from authoritative claims. No-op on private
+	// toolsets, which always route through the IDP.
+	RequireUserIdentity bool
 }
 
 // AuthorizationRequestFromQuery decodes an AuthorizationRequest from
 // url.Values (typically r.URL.Query()).
 func AuthorizationRequestFromQuery(q url.Values) *AuthorizationRequest {
+	requireUserIdentity, _ := strconv.ParseBool(q.Get("requireUserIdentity"))
 	return &AuthorizationRequest{
 		ClientID:            q.Get("client_id"),
 		RedirectURI:         q.Get("redirect_uri"),
@@ -35,6 +41,7 @@ func AuthorizationRequestFromQuery(q url.Values) *AuthorizationRequest {
 		State:               q.Get("state"),
 		CodeChallenge:       q.Get("code_challenge"),
 		CodeChallengeMethod: q.Get("code_challenge_method"),
+		RequireUserIdentity: requireUserIdentity,
 	}
 }
 

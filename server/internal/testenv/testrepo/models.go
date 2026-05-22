@@ -40,6 +40,7 @@ type FunctionToolDefinition struct {
 	Runtime         string
 	Name            string
 	Description     string
+	Tags            []string
 	InputSchema     []byte
 	Variables       []byte
 	AuthInput       []byte

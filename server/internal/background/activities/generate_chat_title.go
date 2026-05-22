@@ -41,12 +41,12 @@ type GenerateChatTitleArgs struct {
 }
 
 const (
-	defaultChatTitle        = "New Chat"
-	DefaultClaudeChatTitle  = "Claude Code Session"
-	DefaultCoworkChatTitle  = "Cowork Session"
-	DefaultClaudeAmbiguous  = "Claude Session"
-	DefaultCursorChatTitle  = "Cursor Session"
-	DefaultCodexChatTitle   = "Codex Session"
+	defaultChatTitle       = "New Chat"
+	DefaultClaudeChatTitle = "Claude Code Session"
+	DefaultCoworkChatTitle = "Cowork Session"
+	DefaultClaudeAmbiguous = "Claude Session"
+	DefaultCursorChatTitle = "Cursor Session"
+	DefaultCodexChatTitle  = "Codex Session"
 )
 
 func isDefaultChatTitle(title string) bool {

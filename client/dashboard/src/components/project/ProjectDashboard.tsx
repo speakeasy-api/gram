@@ -10,9 +10,11 @@ import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   useAuditLogs,
   useGramContext,
+  useMembers,
   useProductFeatures,
 } from "@gram/client/react-query";
 import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
+import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -77,6 +79,56 @@ export function ProjectDashboard() {
     enabled: logsEnabled,
     placeholderData: keepPreviousData,
   });
+
+  const { data: membersData, isPending: isMembersPending } = useMembers();
+  const members = useMemo(() => membersData?.members ?? [], [membersData]);
+
+  const { data: topUsersSearchData, isPending: isTopUsersPending } = useQuery({
+    queryKey: ["project", "topUsers", from.toISOString(), to.toISOString()],
+    queryFn: async () => {
+      const users = [];
+      let cursor: string | undefined;
+      do {
+        const result = await unwrapAsync(
+          telemetrySearchUsers(client, {
+            searchUsersPayload: {
+              cursor,
+              filter: { from, to, eventSource: "hook" },
+              limit: 1000,
+              sort: "desc",
+              userType: "internal",
+            },
+          }),
+        );
+        users.push(...result.users);
+        cursor = result.nextCursor;
+      } while (cursor);
+      return users;
+    },
+    enabled: logsEnabled,
+    placeholderData: keepPreviousData,
+  });
+
+  const topUsersByTokens = useMemo(() => {
+    if (!topUsersSearchData) return [];
+    const memberById = new Map(members.map((m) => [m.id, m]));
+    return [...topUsersSearchData]
+      .sort(
+        (a, b) =>
+          b.totalInputTokens +
+          b.totalOutputTokens -
+          (a.totalInputTokens + a.totalOutputTokens),
+      )
+      .slice(0, 5)
+      .map((u) => ({
+        key: u.userId,
+        label: memberById.get(u.userId)?.name ?? u.userId,
+        value: u.totalInputTokens + u.totalOutputTokens,
+      }));
+  }, [topUsersSearchData, members]);
+
+  const isTopUsersLoading =
+    logsEnabled && (isTopUsersPending || isMembersPending);
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
@@ -222,7 +274,7 @@ export function ProjectDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
                   title="Top Users"
-                  tooltip="End users ranked by activity in the selected period. Activity is measured in tool calls, skill invocations or in chat messages when agent sessions exist."
+                  tooltip="Employees ranked by total token consumption (input + output tokens) in the selected period."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -242,24 +294,16 @@ export function ProjectDashboard() {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.tools.href()} />
+                      <ViewAllLink to={routes.insights.employees.href()} />
                     </CardActions>
                   }
                 >
-                  {isOverviewPending ? (
+                  {isTopUsersLoading ? (
                     <SkeletonList />
-                  ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
+                  ) : topUsersByTokens.length === 0 ? (
                     <EmptyState message="No user activity recorded" />
                   ) : (
-                    <RankedBarList
-                      items={(overview?.summary.topUsers ?? [])
-                        .slice(0, 5)
-                        .map((u) => ({
-                          key: u.userId,
-                          label: u.userId,
-                          value: u.activityCount,
-                        }))}
-                    />
+                    <RankedBarList items={topUsersByTokens} />
                   )}
                 </DashboardCard>
 

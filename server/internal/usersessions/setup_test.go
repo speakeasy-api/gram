@@ -88,8 +88,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		conn,
 		sessionManager,
 		chatSessionsManager,
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache),
+		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		audit.NewLogger(),
+		usersessions.NewSigner("test-jwt-secret"),
+		"http://0.0.0.0",
 	)
 
 	return ctx, &testInstance{

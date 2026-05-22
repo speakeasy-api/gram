@@ -47,10 +47,29 @@ func BuildListChatsPayload(chatListChatsSessionToken string, chatListChatsProjec
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+	var err error
 	var id string
 	{
 		id = chatLoadChatID
+	}
+	var generation *int
+	{
+		if chatLoadChatGeneration != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatLoadChatGeneration, 10, strconv.IntSize)
+			val := int(v)
+			generation = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for generation, must be INT")
+			}
+			if *generation < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("generation", *generation, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	var sessionToken *string
 	{
@@ -72,6 +91,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string
 	}
 	v := &chat.LoadChatPayload{}
 	v.ID = id
+	v.Generation = generation
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -135,7 +155,7 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string) (*chat.CreditUs
 
 // BuildListChatsWithResolutionsPayload builds the payload for the chat
 // listChatsWithResolutions endpoint from CLI flags.
-func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSortBy string, chatListChatsWithResolutionsSortOrder string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
+func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsAssistantID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsHasRisk string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSortBy string, chatListChatsWithResolutionsSortOrder string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -149,10 +169,32 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 			externalUserID = &chatListChatsWithResolutionsExternalUserID
 		}
 	}
+	var assistantID *string
+	{
+		if chatListChatsWithResolutionsAssistantID != "" {
+			assistantID = &chatListChatsWithResolutionsAssistantID
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var resolutionStatus *string
 	{
 		if chatListChatsWithResolutionsResolutionStatus != "" {
 			resolutionStatus = &chatListChatsWithResolutionsResolutionStatus
+		}
+	}
+	var hasRisk *string
+	{
+		if chatListChatsWithResolutionsHasRisk != "" {
+			hasRisk = &chatListChatsWithResolutionsHasRisk
+			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var from *string
@@ -257,7 +299,9 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 	v := &chat.ListChatsWithResolutionsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
+	v.AssistantID = assistantID
 	v.ResolutionStatus = resolutionStatus
+	v.HasRisk = hasRisk
 	v.From = from
 	v.To = to
 	v.Limit = limit

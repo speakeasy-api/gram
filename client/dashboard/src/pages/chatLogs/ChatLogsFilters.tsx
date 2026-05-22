@@ -8,47 +8,37 @@ import {
 } from "@/components/ui/select";
 import { useState, useEffect } from "react";
 
-const resolutionStatusOptions = [
+const hasRiskOptions = [
   {
     value: "all",
-    label: "All Statuses",
-    description: "Show all agent sessions regardless of outcome",
+    label: "Any Risk",
+    description: "Show sessions regardless of risk findings",
   },
   {
-    value: "success",
-    label: "Success",
-    description: "AI analysis confirmed the user completed their task",
+    value: "true",
+    label: "With Risk",
+    description: "Only sessions where a policy flagged at least one finding",
   },
   {
-    value: "failure",
-    label: "Failure",
-    description: "AI analysis found the user did not complete their task",
-  },
-  {
-    value: "partial",
-    label: "Partial",
-    description: "User completed some but not all of their intended goals",
-  },
-  {
-    value: "unresolved",
-    label: "Unresolved",
-    description: "Chat not yet analyzed or outcome could not be determined",
+    value: "false",
+    label: "No Risk",
+    description: "Only sessions with zero policy findings",
   },
 ];
 
 interface ChatLogsFiltersProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
-  resolutionStatus: string;
-  onResolutionStatusChange: (value: string) => void;
+  hasRisk: string;
+  onHasRiskChange: (value: string) => void;
   disabled?: boolean;
 }
 
 export function ChatLogsFilters({
   searchQuery,
   onSearchQueryChange,
-  resolutionStatus,
-  onResolutionStatusChange,
+  hasRisk,
+  onHasRiskChange,
   disabled,
 }: ChatLogsFiltersProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -60,7 +50,6 @@ export function ChatLogsFilters({
 
   // Debounced auto-submit
   useEffect(() => {
-    // Skip if already in sync to avoid unnecessary updates
     if (localSearch === searchQuery) return;
 
     const timer = setTimeout(() => {
@@ -70,9 +59,8 @@ export function ChatLogsFilters({
     return () => clearTimeout(timer);
   }, [localSearch, searchQuery, onSearchQueryChange]);
 
-  const handleStatusChange = (value: string) => {
-    // Convert "all" back to empty string for the API
-    onResolutionStatusChange(value === "all" ? "" : value);
+  const handleHasRiskChange = (value: string) => {
+    onHasRiskChange(value === "all" ? "" : value);
   };
 
   return (
@@ -86,18 +74,18 @@ export function ChatLogsFilters({
       />
 
       <Select
-        value={resolutionStatus || "all"}
-        onValueChange={handleStatusChange}
+        value={hasRisk || "all"}
+        onValueChange={handleHasRiskChange}
         disabled={disabled}
       >
         <SelectTrigger
-          className="border-border !h-10 w-[150px]"
+          className="border-border !h-10 w-[140px]"
           disabled={disabled}
         >
-          <SelectValue placeholder="All Statuses" />
+          <SelectValue placeholder="Any Risk" />
         </SelectTrigger>
         <SelectContent className="w-[280px]">
-          {resolutionStatusOptions.map((option) => (
+          {hasRiskOptions.map((option) => (
             <SelectItem
               key={option.value}
               value={option.value}

@@ -21,6 +21,19 @@ export type ListChatsWithResolutionsSecurity = {
 };
 
 /**
+ * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
+ */
+export const HasRisk = {
+  Unknown: "",
+  True: "true",
+  False: "false",
+} as const;
+/**
+ * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
+ */
+export type HasRisk = ClosedEnum<typeof HasRisk>;
+
+/**
  * Field to sort by
  */
 export const SortBy = {
@@ -55,9 +68,17 @@ export type ListChatsWithResolutionsRequest = {
    */
   externalUserId?: string | undefined;
   /**
+   * Filter to chats produced by this assistant
+   */
+  assistantId?: string | undefined;
+  /**
    * Filter by resolution status
    */
   resolutionStatus?: string | undefined;
+  /**
+   * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
+   */
+  hasRisk?: HasRisk | undefined;
   /**
    * Filter chats created after this timestamp (ISO 8601)
    */
@@ -202,6 +223,11 @@ export function listChatsWithResolutionsSecurityToJSON(
 }
 
 /** @internal */
+export const HasRisk$outboundSchema: z.ZodMiniEnum<typeof HasRisk> = z.enum(
+  HasRisk,
+);
+
+/** @internal */
 export const SortBy$outboundSchema: z.ZodMiniEnum<typeof SortBy> = z.enum(
   SortBy,
 );
@@ -215,7 +241,9 @@ export const SortOrder$outboundSchema: z.ZodMiniEnum<typeof SortOrder> = z.enum(
 export type ListChatsWithResolutionsRequest$Outbound = {
   search?: string | undefined;
   external_user_id?: string | undefined;
+  assistant_id?: string | undefined;
   resolution_status?: string | undefined;
+  has_risk?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
   limit: number;
@@ -235,7 +263,9 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     search: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
+    assistantId: z.optional(z.string()),
     resolutionStatus: z.optional(z.string()),
+    hasRisk: z.optional(HasRisk$outboundSchema),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     limit: z._default(z.int(), 50),
@@ -249,7 +279,9 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       externalUserId: "external_user_id",
+      assistantId: "assistant_id",
       resolutionStatus: "resolution_status",
+      hasRisk: "has_risk",
       sortBy: "sort_by",
       sortOrder: "sort_order",
       gramSession: "Gram-Session",

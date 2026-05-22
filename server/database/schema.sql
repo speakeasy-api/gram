@@ -424,6 +424,7 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
   name TEXT NOT NULL,
   description TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
   input_schema JSONB,
   -- Record<string, { description?: string }>
   variables JSONB,
@@ -866,6 +867,16 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   token_endpoint_auth_method TEXT,
   scope TEXT[],
   audience TEXT,
+
+  -- TRUE when this client was registered upstream with the legacy
+  -- /oauth/callback redirect_uri (e.g. cloned from oauth_proxy_providers).
+  -- The authorize leg sends the legacy URL + a JSON state carrying
+  -- remote_sessions=true so /oauth/callback can forward the response to
+  -- /mcp/remote_login_callback. Once oauth_proxy_servers are dropped, the
+  -- /oauth/callback handler degrades to only the forwarding dance; this
+  -- column then exists only to keep legacy-registered clients alive until
+  -- traffic on /oauth/callback drops to zero and they can be re-issued.
+  legacy_callback_url boolean NOT NULL DEFAULT FALSE,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2234,13 +2245,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
   ON ai_integration_configs (organization_id, provider)
   WHERE deleted IS FALSE;
 
--- AI integration syncs: provider-specific high-water marks and future sync
--- metadata. Cursor usage polling uses last_polled_at as its watermark.
+-- AI integration syncs: provider-specific query cursors, scheduler state,
+-- and failure metadata.
 CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
-  last_polled_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_poll_error TEXT,
+  last_poll_failed_at timestamptz,
+  last_poll_success_at timestamptz,
+  consecutive_failures integer NOT NULL DEFAULT 0,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
 
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE

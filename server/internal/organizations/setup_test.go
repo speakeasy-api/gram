@@ -107,7 +107,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 
@@ -163,7 +163,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 
@@ -217,7 +217,7 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 

@@ -330,6 +330,13 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 
 	serverID := server.ID.String()
 
+	// Per-request instance: the interceptor holds a single nilable start
+	// timestamp set by the request side and consumed by the response side.
+	// A fresh instance per buildProxy makes that field's lifetime match the
+	// proxy's, so a stale timestamp from a failure path (request fires,
+	// response doesn't) is reclaimed when the proxy is dropped.
+	clickHouseLogInterceptor := NewToolsCallClickHouseLogInterceptor(s.telemLogger, serverID, logger)
+
 	// Counter records every attempted tools/call, including those later
 	// rejected by limits or per-tool authz. This mirrors /mcp, where
 	// RecordMCPToolCall fires before the per-tool RBAC check in
@@ -356,6 +363,7 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		NewToolsCallOTELCounterInterceptor(s.xmcpMetrics, serverID, logger),
 		s.toolsCallUsageLimitsInterceptor,
 		NewToolsCallShadowMCPValidateAndStripInterceptor(s.shadowmcpClient, serverID, projectID, logger),
+		clickHouseLogInterceptor,
 	}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
@@ -378,6 +386,11 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		NewToolsListShadowMCPInjectInterceptor(s.shadowmcpClient, serverID, projectID, logger),
 	)
 
+	// Resources request chain: free-tier ToolCalls usage limits apply to
+	// resources/read invocations alongside tools/call. Per-resource RBAC
+	// and the resources/list RBAC filter are deferred to a follow-up —
+	// the proxy interceptor surface is in place so they can attach later
+	// without touching the proxy package again.
 	return &proxy.Proxy{
 		GuardianPolicy:          s.guardianPolicy,
 		Logger:                  logger,
@@ -398,10 +411,19 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		ToolsCallRequestInterceptors: toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors: []proxy.ToolsCallResponseInterceptor{
 			s.toolsCallUsageTrackingInterceptor,
+			clickHouseLogInterceptor,
 		},
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(s.posthog, serverID, logger),
 		},
 		ToolsListResponseInterceptors: toolsListRespInterceptors,
+		ResourcesReadRequestInterceptors: []proxy.ResourcesReadRequestInterceptor{
+			s.resourcesReadUsageLimitsInterceptor,
+		},
+		ResourcesReadResponseInterceptors: []proxy.ResourcesReadResponseInterceptor{
+			s.resourcesReadUsageTrackingInterceptor,
+		},
+		ResourcesListRequestInterceptors:  nil,
+		ResourcesListResponseInterceptors: nil,
 	}
 }

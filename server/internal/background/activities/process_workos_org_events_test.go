@@ -1027,7 +1027,7 @@ func seedOrganizationRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	t.Helper()
 
 	eventTime := time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC)
-	err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	_, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    organizationID,
 		WorkosSlug:        slug,
 		WorkosName:        slug,
@@ -1278,6 +1278,104 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *t
 	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZMEMUNKORG", cursor)
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipMultipleRolesCreatesMultipleAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_multi_role")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_multi_role"
+	const workosOrgID = "org_01HZMULTIROLE"
+	const userID = "user_multi_role"
+	const workosUserID = "user_01HZMULTIROLE"
+
+	updatedAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	adminRole := seedOrganizationRole(t, ctx, conn, organizationID, "admin")
+	builderRole := seedOrganizationRole(t, ctx, conn, organizationID, "builder")
+	viewerRole := seedOrganizationRole(t, ctx, conn, organizationID, "viewer")
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMULTI1", "mem_01HZMULTI", workosOrgID, workosUserID, updatedAt, "admin", "builder", "viewer"),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZMULTI1", res.LastEventID)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 3)
+
+	assignedURNs := make([]string, len(assignments))
+	for i, a := range assignments {
+		assignedURNs[i] = a.RoleUrn
+		require.True(t, a.UserID.Valid, "user_id should be populated for known user")
+		require.Equal(t, userID, a.UserID.String)
+	}
+
+	expectedURNs := []string{
+		fmt.Sprintf("role:organization:%s", adminRole.ID.String()),
+		fmt.Sprintf("role:organization:%s", builderRole.ID.String()),
+		fmt.Sprintf("role:organization:%s", viewerRole.ID.String()),
+	}
+	require.ElementsMatch(t, expectedURNs, assignedURNs)
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipMultipleRolesUnknownUserOptimistic(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_multi_role_unknown")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_multi_role_unk"
+	const workosOrgID = "org_01HZMULTIROLEUNK"
+	const workosUserID = "user_01HZMULTIROLEUNK"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	editorRole := seedOrganizationRole(t, ctx, conn, organizationID, "editor")
+	reviewerRole := seedOrganizationRole(t, ctx, conn, organizationID, "reviewer")
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMULTIUNK", "mem_01HZMULTIUNK", workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "editor", "reviewer"),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZMULTIUNK", res.LastEventID)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 2)
+
+	assignedURNs := make([]string, len(assignments))
+	for i, a := range assignments {
+		assignedURNs[i] = a.RoleUrn
+		require.False(t, a.UserID.Valid, "user_id should be empty for unknown user")
+	}
+
+	expectedURNs := []string{
+		fmt.Sprintf("role:organization:%s", editorRole.ID.String()),
+		fmt.Sprintf("role:organization:%s", reviewerRole.ID.String()),
+	}
+	require.ElementsMatch(t, expectedURNs, assignedURNs)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationRoleSkippedForUnknownOrg(t *testing.T) {

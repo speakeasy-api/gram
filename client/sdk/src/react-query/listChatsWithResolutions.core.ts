@@ -49,7 +49,9 @@ export function buildListChatsWithResolutionsQuery(
     queryKey: queryKeyListChatsWithResolutions({
       search: request?.search,
       externalUserId: request?.externalUserId,
+      assistantId: request?.assistantId,
       resolutionStatus: request?.resolutionStatus,
+      hasRisk: request?.hasRisk,
       from: request?.from,
       to: request?.to,
       limit: request?.limit,
@@ -88,7 +90,9 @@ export function queryKeyListChatsWithResolutions(
   parameters: {
     search?: string | undefined;
     externalUserId?: string | undefined;
+    assistantId?: string | undefined;
     resolutionStatus?: string | undefined;
+    hasRisk?: operations.HasRisk | undefined;
     from?: Date | undefined;
     to?: Date | undefined;
     limit?: number | undefined;

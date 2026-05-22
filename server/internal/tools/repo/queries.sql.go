@@ -260,7 +260,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  ftd.id, ftd.tool_urn, ftd.project_id, ftd.deployment_id, ftd.function_id, ftd.runtime, ftd.name, ftd.description, ftd.input_schema, ftd.variables, ftd.auth_input, ftd.meta, ftd.read_only_hint, ftd.destructive_hint, ftd.idempotent_hint, ftd.open_world_hint, ftd.created_at, ftd.updated_at, ftd.deleted_at, ftd.deleted,
+  ftd.id, ftd.tool_urn, ftd.project_id, ftd.deployment_id, ftd.function_id, ftd.runtime, ftd.name, ftd.description, ftd.tags, ftd.input_schema, ftd.variables, ftd.auth_input, ftd.meta, ftd.read_only_hint, ftd.destructive_hint, ftd.idempotent_hint, ftd.open_world_hint, ftd.created_at, ftd.updated_at, ftd.deleted_at, ftd.deleted,
   (select id from deployment) as owning_deployment_id,
   df.asset_id
 FROM function_tool_definitions ftd
@@ -301,6 +301,7 @@ func (q *Queries) FindFunctionToolsByUrn(ctx context.Context, arg FindFunctionTo
 			&i.FunctionToolDefinition.Runtime,
 			&i.FunctionToolDefinition.Name,
 			&i.FunctionToolDefinition.Description,
+			&i.FunctionToolDefinition.Tags,
 			&i.FunctionToolDefinition.InputSchema,
 			&i.FunctionToolDefinition.Variables,
 			&i.FunctionToolDefinition.AuthInput,

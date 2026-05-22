@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
@@ -46,21 +47,24 @@ const RuntimePath = "/x/mcp/{slug}"
 
 // Service owns dependencies for the experimental MCP runtime endpoint.
 type Service struct {
-	logger                            *slog.Logger
-	tracer                            trace.Tracer
-	db                                *pgxpool.Pool
-	enc                               *encryption.Client
-	authz                             *authz.Engine
-	shadowmcpClient                   *shadowmcp.Client
-	mcpService                        *mcp.Service
-	serverURL                         *url.URL
-	guardianPolicy                    *guardian.Policy
-	posthog                           *posthog.Posthog
-	proxyMetrics                      *proxy.Metrics
-	xmcpMetrics                       *metrics
-	toolsCallUsageLimitsInterceptor   *ToolsCallUsageLimitsInterceptor
-	toolsCallUsageTrackingInterceptor *ToolsCallUsageTrackingInterceptor
-	initializePostHogEventInterceptor *InitializePostHogEventInterceptor
+	logger                                *slog.Logger
+	tracer                                trace.Tracer
+	db                                    *pgxpool.Pool
+	enc                                   *encryption.Client
+	authz                                 *authz.Engine
+	shadowmcpClient                       *shadowmcp.Client
+	mcpService                            *mcp.Service
+	serverURL                             *url.URL
+	guardianPolicy                        *guardian.Policy
+	posthog                               *posthog.Posthog
+	telemLogger                           *tm.Logger
+	proxyMetrics                          *proxy.Metrics
+	xmcpMetrics                           *metrics
+	toolsCallUsageLimitsInterceptor       *ToolsCallUsageLimitsInterceptor
+	toolsCallUsageTrackingInterceptor     *ToolsCallUsageTrackingInterceptor
+	resourcesReadUsageLimitsInterceptor   *ResourcesReadUsageLimitsInterceptor
+	resourcesReadUsageTrackingInterceptor *ResourcesReadUsageTrackingInterceptor
+	initializePostHogEventInterceptor     *InitializePostHogEventInterceptor
 }
 
 // NewService constructs a Service with its full dependency graph wired up.
@@ -76,6 +80,7 @@ func NewService(
 	posthogClient *posthog.Posthog,
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
+	telemLogger *tm.Logger,
 	mcpService *mcp.Service,
 	serverURL *url.URL,
 ) *Service {
@@ -85,21 +90,24 @@ func NewService(
 	xmcpMetrics := newMetrics(meter, logger)
 
 	return &Service{
-		logger:                            logger,
-		tracer:                            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/xmcp"),
-		db:                                db,
-		enc:                               enc,
-		authz:                             authzEngine,
-		shadowmcpClient:                   shadowmcpClient,
-		mcpService:                        mcpService,
-		serverURL:                         serverURL,
-		guardianPolicy:                    guardianPolicy,
-		posthog:                           posthogClient,
-		proxyMetrics:                      proxy.NewMetrics(meter, logger),
-		xmcpMetrics:                       xmcpMetrics,
-		toolsCallUsageLimitsInterceptor:   NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
-		toolsCallUsageTrackingInterceptor: NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
-		initializePostHogEventInterceptor: NewInitializePostHogEventInterceptor(posthogClient, logger),
+		logger:                                logger,
+		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/xmcp"),
+		db:                                    db,
+		enc:                                   enc,
+		authz:                                 authzEngine,
+		shadowmcpClient:                       shadowmcpClient,
+		mcpService:                            mcpService,
+		serverURL:                             serverURL,
+		guardianPolicy:                        guardianPolicy,
+		posthog:                               posthogClient,
+		telemLogger:                           telemLogger,
+		proxyMetrics:                          proxy.NewMetrics(meter, logger),
+		xmcpMetrics:                           xmcpMetrics,
+		toolsCallUsageLimitsInterceptor:       NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
+		toolsCallUsageTrackingInterceptor:     NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
+		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
+		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
+		initializePostHogEventInterceptor:     NewInitializePostHogEventInterceptor(posthogClient, logger),
 	}
 }
 

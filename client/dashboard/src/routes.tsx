@@ -76,7 +76,14 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
-import SecurityOverview from "./pages/security/SecurityOverview";
+import SecurityOverview, {
+  RiskOverviewRoot,
+} from "./pages/security/SecurityOverview";
+import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
+import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
+import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
+import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
+import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -461,7 +468,35 @@ const ROUTE_STRUCTURE = {
     url: "risk-overview",
     icon: "shield",
     stage: "beta",
-    component: SecurityOverview,
+    component: RiskOverviewRoot,
+    indexComponent: SecurityOverview,
+    subPages: {
+      usersIndex: {
+        title: "Users",
+        url: "users",
+        component: RiskOverviewUsersIndex,
+      },
+      userDetail: {
+        title: "User",
+        url: "users/:externalUserId",
+        component: RiskOverviewUserDetail,
+      },
+      categoriesIndex: {
+        title: "Categories",
+        url: "categories",
+        component: RiskOverviewCategoriesIndex,
+      },
+      rulesIndex: {
+        title: "Rules",
+        url: "rules",
+        component: RiskOverviewRulesIndex,
+      },
+      categoryDetail: {
+        title: "Category",
+        url: "categories/:category",
+        component: RiskOverviewCategoryDetail,
+      },
+    },
   },
   policyCenter: {
     title: "Risk Policies",

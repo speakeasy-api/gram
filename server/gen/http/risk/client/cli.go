@@ -292,7 +292,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUniqueMatch string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -309,6 +309,49 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 		if riskListRiskResultsChatID != "" {
 			chatID = &riskListRiskResultsChatID
 			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var category *string
+	{
+		if riskListRiskResultsCategory != "" {
+			category = &riskListRiskResultsCategory
+		}
+	}
+	var ruleID *string
+	{
+		if riskListRiskResultsRuleID != "" {
+			ruleID = &riskListRiskResultsRuleID
+		}
+	}
+	var uniqueMatch *bool
+	{
+		if riskListRiskResultsUniqueMatch != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskListRiskResultsUniqueMatch)
+			uniqueMatch = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for uniqueMatch, must be BOOL")
+			}
+		}
+	}
+	var from *string
+	{
+		if riskListRiskResultsFrom != "" {
+			from = &riskListRiskResultsFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskListRiskResultsTo != "" {
+			to = &riskListRiskResultsTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 			if err != nil {
 				return nil, err
 			}
@@ -362,6 +405,140 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
+	v.Category = category
+	v.RuleID = ruleID
+	v.UniqueMatch = uniqueMatch
+	v.From = from
+	v.To = to
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListRiskResultsForAgentPayload builds the payload for the risk
+// listRiskResultsForAgent endpoint from CLI flags.
+func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
+	var err error
+	var policyID *string
+	{
+		if riskListRiskResultsForAgentPolicyID != "" {
+			policyID = &riskListRiskResultsForAgentPolicyID
+			err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", *policyID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var chatID *string
+	{
+		if riskListRiskResultsForAgentChatID != "" {
+			chatID = &riskListRiskResultsForAgentChatID
+			err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", *chatID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var category *string
+	{
+		if riskListRiskResultsForAgentCategory != "" {
+			category = &riskListRiskResultsForAgentCategory
+		}
+	}
+	var ruleID *string
+	{
+		if riskListRiskResultsForAgentRuleID != "" {
+			ruleID = &riskListRiskResultsForAgentRuleID
+		}
+	}
+	var uniqueMatch *bool
+	{
+		if riskListRiskResultsForAgentUniqueMatch != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskListRiskResultsForAgentUniqueMatch)
+			uniqueMatch = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for uniqueMatch, must be BOOL")
+			}
+		}
+	}
+	var from *string
+	{
+		if riskListRiskResultsForAgentFrom != "" {
+			from = &riskListRiskResultsForAgentFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskListRiskResultsForAgentTo != "" {
+			to = &riskListRiskResultsForAgentTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if riskListRiskResultsForAgentCursor != "" {
+			cursor = &riskListRiskResultsForAgentCursor
+		}
+	}
+	var limit *int
+	{
+		if riskListRiskResultsForAgentLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListRiskResultsForAgentLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListRiskResultsForAgentApikeyToken != "" {
+			apikeyToken = &riskListRiskResultsForAgentApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskResultsForAgentSessionToken != "" {
+			sessionToken = &riskListRiskResultsForAgentSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskResultsForAgentProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskResultsForAgentProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskResultsForAgentPayload{}
+	v.PolicyID = policyID
+	v.ChatID = chatID
+	v.Category = category
+	v.RuleID = ruleID
+	v.UniqueMatch = uniqueMatch
+	v.From = from
+	v.To = to
 	v.Cursor = cursor
 	v.Limit = limit
 	v.ApikeyToken = apikeyToken
@@ -423,6 +600,201 @@ func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, r
 	v := &risk.ListRiskResultsByChatPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetRiskOverviewPayload builds the payload for the risk getRiskOverview
+// endpoint from CLI flags.
+func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOverviewTo string, riskGetRiskOverviewApikeyToken string, riskGetRiskOverviewSessionToken string, riskGetRiskOverviewProjectSlugInput string) (*risk.GetRiskOverviewPayload, error) {
+	var err error
+	var from *string
+	{
+		if riskGetRiskOverviewFrom != "" {
+			from = &riskGetRiskOverviewFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskGetRiskOverviewTo != "" {
+			to = &riskGetRiskOverviewTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskOverviewApikeyToken != "" {
+			apikeyToken = &riskGetRiskOverviewApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskOverviewSessionToken != "" {
+			sessionToken = &riskGetRiskOverviewSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskOverviewProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskOverviewProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskOverviewPayload{}
+	v.From = from
+	v.To = to
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListRiskCategoriesPayload builds the payload for the risk
+// listRiskCategories endpoint from CLI flags.
+func BuildListRiskCategoriesPayload(riskListRiskCategoriesApikeyToken string, riskListRiskCategoriesSessionToken string, riskListRiskCategoriesProjectSlugInput string) (*risk.ListRiskCategoriesPayload, error) {
+	var apikeyToken *string
+	{
+		if riskListRiskCategoriesApikeyToken != "" {
+			apikeyToken = &riskListRiskCategoriesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskCategoriesSessionToken != "" {
+			sessionToken = &riskListRiskCategoriesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskCategoriesProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskCategoriesProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskCategoriesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetRiskUserBreakdownPayload builds the payload for the risk
+// getRiskUserBreakdown endpoint from CLI flags.
+func BuildGetRiskUserBreakdownPayload(riskGetRiskUserBreakdownExternalUserID string, riskGetRiskUserBreakdownFrom string, riskGetRiskUserBreakdownTo string, riskGetRiskUserBreakdownApikeyToken string, riskGetRiskUserBreakdownSessionToken string, riskGetRiskUserBreakdownProjectSlugInput string) (*risk.GetRiskUserBreakdownPayload, error) {
+	var err error
+	var externalUserID string
+	{
+		externalUserID = riskGetRiskUserBreakdownExternalUserID
+	}
+	var from *string
+	{
+		if riskGetRiskUserBreakdownFrom != "" {
+			from = &riskGetRiskUserBreakdownFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskGetRiskUserBreakdownTo != "" {
+			to = &riskGetRiskUserBreakdownTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskUserBreakdownApikeyToken != "" {
+			apikeyToken = &riskGetRiskUserBreakdownApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskUserBreakdownSessionToken != "" {
+			sessionToken = &riskGetRiskUserBreakdownSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskUserBreakdownProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskUserBreakdownProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskUserBreakdownPayload{}
+	v.ExternalUserID = externalUserID
+	v.From = from
+	v.To = to
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetRiskRuleBreakdownPayload builds the payload for the risk
+// getRiskRuleBreakdown endpoint from CLI flags.
+func BuildGetRiskRuleBreakdownPayload(riskGetRiskRuleBreakdownCategory string, riskGetRiskRuleBreakdownFrom string, riskGetRiskRuleBreakdownTo string, riskGetRiskRuleBreakdownApikeyToken string, riskGetRiskRuleBreakdownSessionToken string, riskGetRiskRuleBreakdownProjectSlugInput string) (*risk.GetRiskRuleBreakdownPayload, error) {
+	var err error
+	var category string
+	{
+		category = riskGetRiskRuleBreakdownCategory
+	}
+	var from *string
+	{
+		if riskGetRiskRuleBreakdownFrom != "" {
+			from = &riskGetRiskRuleBreakdownFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskGetRiskRuleBreakdownTo != "" {
+			to = &riskGetRiskRuleBreakdownTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskRuleBreakdownApikeyToken != "" {
+			apikeyToken = &riskGetRiskRuleBreakdownApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskRuleBreakdownSessionToken != "" {
+			sessionToken = &riskGetRiskRuleBreakdownSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskRuleBreakdownProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskRuleBreakdownProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskRuleBreakdownPayload{}
+	v.Category = category
+	v.From = from
+	v.To = to
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
