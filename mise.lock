@@ -541,15 +541,7 @@ backend = "aqua:jdx/hk"
 checksum = "sha256:c012fea4a0cd9659088c10601c3ae085c5ac4407eeeaa442ced1913a5f26f8a7"
 url = "https://github.com/jdx/hk/releases/download/v1.38.0/hk-aarch64-unknown-linux-gnu.tar.gz"
 
-[tools.hk."platforms.linux-arm64-musl"]
-checksum = "sha256:c012fea4a0cd9659088c10601c3ae085c5ac4407eeeaa442ced1913a5f26f8a7"
-url = "https://github.com/jdx/hk/releases/download/v1.38.0/hk-aarch64-unknown-linux-gnu.tar.gz"
-
 [tools.hk."platforms.linux-x64"]
-checksum = "sha256:cb34efc1829a1d59c0cd526be494a9f01b36d1c9965087cff09a09f32d129431"
-url = "https://github.com/jdx/hk/releases/download/v1.38.0/hk-x86_64-unknown-linux-gnu.tar.gz"
-
-[tools.hk."platforms.linux-x64-musl"]
 checksum = "sha256:cb34efc1829a1d59c0cd526be494a9f01b36d1c9965087cff09a09f32d129431"
 url = "https://github.com/jdx/hk/releases/download/v1.38.0/hk-x86_64-unknown-linux-gnu.tar.gz"
 
@@ -637,16 +629,16 @@ checksum = "sha256:4873459d7c9b28feaa1f0fade9bb9c81cb702670991ff80a51d805325c5e3
 url = "https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-arm64.tar.gz"
 
 [tools.node."platforms.linux-arm64-musl"]
-checksum = "sha256:4873459d7c9b28feaa1f0fade9bb9c81cb702670991ff80a51d805325c5e3456"
-url = "https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-arm64.tar.gz"
+checksum = "sha256:1bdda4de300e789d4112f38e5cc87311d4283e27798b2d73095f33fbb2598be6"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.13.1/node-v24.13.1-linux-arm64-musl.tar.gz"
 
 [tools.node."platforms.linux-x64"]
 checksum = "sha256:7ad28fb172a9ab0593f86c1a39e5c268d0d8fc3d6cb0167f455b5655a7a6e2fd"
 url = "https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.gz"
 
 [tools.node."platforms.linux-x64-musl"]
-checksum = "sha256:7ad28fb172a9ab0593f86c1a39e5c268d0d8fc3d6cb0167f455b5655a7a6e2fd"
-url = "https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.gz"
+checksum = "sha256:2d8b79977b672e83a94f645c8d437748ddef4d12c2ec719f75b5d48d00b6e8e2"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.13.1/node-v24.13.1-linux-x64-musl.tar.gz"
 
 [tools.node."platforms.macos-arm64"]
 checksum = "sha256:8c039d59f2fec6195e4281ad5b0d02b9a940897b4df7b849c6fb48be6787bba6"
