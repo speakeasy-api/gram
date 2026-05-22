@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -85,7 +86,7 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 			for _, event := range page.Events {
 				select {
 				case <-gctx.Done():
-					return gctx.Err()
+					return fmt.Errorf("queue cursor usage event: %w", gctx.Err())
 				case rawEvents <- event:
 				}
 			}
@@ -147,7 +148,10 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 		return nil
 	})
 
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		return fmt.Errorf("sync cursor usage: %w", err)
+	}
+	return nil
 }
 
 func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
@@ -201,7 +205,7 @@ func (s *UsagePollService) sleep(ctx context.Context, d time.Duration, page int)
 		s.heartbeat(ctx, page)
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("cursor usage sleep canceled: %w", ctx.Err())
 		case <-time.After(min(remaining, cursorHeartbeatInterval)):
 		}
 	}

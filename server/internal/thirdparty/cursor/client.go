@@ -95,7 +95,7 @@ func (e *UsageEvent) UnmarshalJSON(data []byte) error {
 		usageEvent
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return fmt.Errorf("unmarshal cursor usage event: %w", err)
 	}
 
 	ms, err := strconv.ParseInt(raw.Timestamp, 10, 64)
@@ -110,13 +110,17 @@ func (e *UsageEvent) UnmarshalJSON(data []byte) error {
 
 func (e UsageEvent) MarshalJSON() ([]byte, error) {
 	type usageEvent UsageEvent
-	return json.Marshal(struct {
+	data, err := json.Marshal(struct {
 		Timestamp string `json:"timestamp"`
 		usageEvent
 	}{
 		Timestamp:  strconv.FormatInt(e.Timestamp.UTC().UnixMilli(), 10),
 		usageEvent: usageEvent(e),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal cursor usage event: %w", err)
+	}
+	return data, nil
 }
 
 type TokenUsage struct {

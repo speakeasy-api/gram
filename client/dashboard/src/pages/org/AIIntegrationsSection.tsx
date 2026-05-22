@@ -68,7 +68,7 @@ export function AIIntegrationsSection() {
   const handleSave = () => {
     upsert({
       request: {
-        upsertConfigRequestBody: {
+        upsertAIIntegrationConfigRequest: {
           provider: CURSOR_PROVIDER,
           apiKey: apiKey.trim(),
           enabled,
@@ -82,7 +82,7 @@ export function AIIntegrationsSection() {
     if (!window.confirm("Delete the Cursor AI integration?")) return;
     deleteConfig({
       request: {
-        deleteConfigRequestBody: {
+        deleteAIIntegrationConfigRequest: {
           provider: CURSOR_PROVIDER,
         },
       },

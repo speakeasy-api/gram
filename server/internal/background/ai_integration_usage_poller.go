@@ -154,7 +154,9 @@ func AddAIUsagePollerCoordinatorSchedule(ctx context.Context, temporalEnv *tenv.
 			schedule.Action = options.Action
 			if schedule.Policy == nil {
 				schedule.Policy = &client.SchedulePolicies{
-					Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+					CatchupWindow:  0,
+					PauseOnFailure: false,
 				}
 			}
 			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil

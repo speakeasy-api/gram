@@ -15,23 +15,21 @@ Cursor setup is organization-level. Today each integration attaches to the organ
 
 ## Cursor Usage Polling
 
-Cursor usage metrics come from Cursor's Admin API, not from hooks or OTEL. The background pipeline polls Cursor's hourly usage event endpoint, transforms each event into the shared `telemetry_logs` schema, and writes token/cost data with `gram.hook.source = "cursor"`, `gram.event.source = "api"`, and `gram.resource.urn = "cursor:usage:metrics"`.
+Cursor usage metrics come from Cursor's Admin API, not from hooks or OTEL. The background pipeline polls Cursor's usage event endpoint, transforms each event into the shared `telemetry_logs` schema, and writes token/cost data with `gram.event.source = "api"` and `gram.resource.urn = "cursor:usage:metrics"`. Cursor-specific metadata is stored under `cursor.*` attributes.
 
-The polling workflow is implemented in `internal/background/ai_integration_usage_polling.go`; the Cursor-specific API, mapping, dedupe, and persistence logic lives in `internal/background/activities/poll_cursor_usage_metrics.go`.
+The polling workflows are implemented in `internal/background/ai_integration_usage_poller.go`. The background activity entrypoint lives in `internal/background/activities/poll_cursor_usage_metrics.go`, while Cursor API paging, event mapping, user hydration, and telemetry writes live in this package.
 
 ```text
 Five-minute Temporal Schedule
         |
         v
 +-----------------------------------+
-| AIIntegrationUsageSyncWorkflow    |
-| coordinator                       |
+| AIUsagePollerCoordinatorWorkflow  |
 +-----------------------------------+
         |
-        | shared endTime = workflow.Now()
-        | candidate cutoff = endTime
+        | candidate cutoff = workflow.Now()
         | bounded child capacity
-        | stable child workflow ID per provider + org
+        | stable child workflow ID per org + provider
         v
 +-----------------------------------------------+
 | GetAIIntegrationsCandidates activity          |
@@ -50,8 +48,7 @@ Coordinator starts one bounded batch, waits for it to complete, then fetches mor
            |                            |                            |
            v                            v                            v
 +----------------------+     +----------------------+     +----------------------+
-| AIIntegrationUsage   |     | AIIntegrationUsage   |     | AIIntegrationUsage   |
-| SyncConfigWorkflow   |     | SyncConfigWorkflow   |     | SyncConfigWorkflow   |
+| AIUsagePollerWorkflow|     | AIUsagePollerWorkflow|     | AIUsagePollerWorkflow|
 +----------+-----------+     +----------+-----------+     +----------+-----------+
            |                            |                            |
            v                            v                            v
@@ -59,9 +56,9 @@ Coordinator starts one bounded batch, waits for it to complete, then fetches mor
 | SyncAIIntegration    |     | SyncAIIntegration    |     | SyncAIIntegration    |
 | Usage activity       |     | Usage activity       |     | Usage activity       |
 |                      |     |                      |     |                      |
+| per-activity endTime |     | per-activity endTime |     | per-activity endTime |
 | Cursor pages         |     | Cursor pages         |     | Cursor pages         |
 | 429 sleep + heartbeat|     | 429 sleep + heartbeat|     | 429 sleep + heartbeat|
-| in-memory dedupe     |     | in-memory dedupe     |     | in-memory dedupe     |
 | bulk ClickHouse write|     | bulk ClickHouse write|     | bulk ClickHouse write|
 | record poll state    |     | record poll state    |     | record poll state    |
 +----------+-----------+     +----------+-----------+     +----------+-----------+
@@ -83,7 +80,7 @@ Coordinator starts one bounded batch, waits for it to complete, then fetches mor
 
 ## Important Invariants
 
-Temporal workflow IDs are the per-org/provider mutex. Each child workflow uses `v1:ai-integration-usage-sync-config:{provider}:{organizationID}`. If another coordinator tries to start the same provider/org while a child is already open, Temporal rejects the duplicate start and the coordinator skips that config for the run.
+Temporal workflow IDs are the per-org/provider mutex. Each child workflow uses `v1:ai-usage-poller:{organizationID}:{provider}`. If another coordinator tries to start the same provider/org while a child is already open, Temporal rejects the duplicate start and the coordinator skips that config for the run.
 
 The coordinator runs every five minutes, while each config is due when `next_poll_after <= runTime`. It starts a bounded batch of child workflows, waits for that batch to complete, then fetches the next due `LIMIT` batch. The stable workflow ID prevents another poll for the same provider/org from starting if a previous child workflow is still open.
 
@@ -91,13 +88,13 @@ Candidate listing is read-only. `ListUsagePollCandidates` returns enabled, non-d
 
 Polling concurrency is primarily enforced by the coordinator's bounded child batch size. `SyncAIIntegrationUsage` is still routed to the dedicated AI integration usage task queue, whose worker sets `MaxConcurrentActivityExecutionSize` as an additional guardrail.
 
-Cursor windows are non-overlapping on success. Cursor includes both request bounds, so each request starts at `poll_watermark_at + 1ms` and ends at the coordinator's shared `endTime`. On success, `poll_watermark_at` advances to `endTime`, `next_poll_after` advances to `endTime + 1h`, and failure metadata is cleared. On the third failed `SyncAIIntegrationUsage` activity attempt, `poll_watermark_at` is left unchanged, `next_poll_after` advances to `endTime + 1h`, and the final error is recorded. A child workflow can wait behind the dedicated activity task queue; while it is still open, later coordinators skip the same provider/org via the stable workflow ID.
+Cursor windows are non-overlapping on success. Cursor includes both request bounds, so each request starts at `poll_watermark_at + 1ms` and ends at the activity's `endTime`. On success, `poll_watermark_at` advances to `endTime`, `next_poll_after` advances to `endTime + 1h`, and failure metadata is cleared. On the third failed `SyncAIIntegrationUsage` activity attempt, `poll_watermark_at` is left unchanged, `next_poll_after` advances to that attempt's `endTime + 1h`, and the final error is recorded. A child workflow can wait behind the dedicated activity task queue; while it is still open, later coordinators skip the same provider/org via the stable workflow ID.
 
-Child workflow failures are isolated. The coordinator logs a failed child and continues draining sibling and later candidates instead of failing the whole coordinator run.
+Child workflow failures are isolated. The coordinator waits for the current child batch to finish and continues fetching later candidates instead of failing the whole coordinator run.
 
-ClickHouse and Postgres are not updated atomically. If ClickHouse insert succeeds but the success sync-state update fails before a later retry advances `poll_watermark_at`, the same window can be re-inserted. Each row includes `cursor.event_hash`; dashboard queries that sum polled Cursor rows should dedupe by `(gram_project_id, cursor.event_hash)` first. If the final activity attempt fails before inserting, the failure is logged and only `next_poll_after` advances so that provider/org does not block later work.
+ClickHouse and Postgres are not updated atomically. If ClickHouse insert succeeds but the success sync-state update fails before a retry advances `poll_watermark_at`, the same window can be re-inserted. Ingestion does not enforce uniqueness; each row includes `cursor.event_hash` so consumers that need exact-once sums can dedupe by `(gram_project_id, cursor.event_hash)`. If the final activity attempt fails before inserting, the failure is recorded and only `next_poll_after` advances so that provider/org does not block later work.
 
-Cost fields are intentionally separate. `gen_ai.usage.cost` currently uses `tokenUsage.totalCents / 100`. Cursor's charged amount is also stored as `cursor.charged_cents` and `cursor.charged_usd` so billing semantics can be adjusted later without losing data.
+Cost fields are intentionally separate. `gen_ai.usage.cost` currently uses `tokenUsage.totalCents / 100`. Cursor's charged amount is also stored as `cursor.charged_cents` so billing semantics can be adjusted later without losing data.
 
 ## Adding Providers
 
