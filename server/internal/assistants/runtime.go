@@ -75,8 +75,9 @@ type runtimeToolCall struct {
 }
 
 type runtimeTurnRequest struct {
-	Input     string `json:"input"`
-	AuthToken string `json:"auth_token,omitempty"`
+	Input      string             `json:"input"`
+	AuthToken  string             `json:"auth_token,omitempty"`
+	MCPServers []runtimeMCPServer `json:"mcp_servers,omitempty"`
 }
 
 type runtimeHTTPRequest struct {

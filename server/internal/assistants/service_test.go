@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -843,7 +844,9 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, tokens, nil, telemetry.NewStub(logger), nil)
+	runTurnMCP := &atomic.Pointer[[]runtimeMCPServer]{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil, runTurnMCPServers: runTurnMCP}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, tokens, nil, telemetry.NewStub(logger), nil)
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -863,6 +866,16 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 	runtime, err := assistantsrepo.New(conn).GetActiveAssistantRuntimeByThreadID(t.Context(), assistantsrepo.GetActiveAssistantRuntimeByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, runtimeStateActive, runtime.State)
+
+	// Resolved MCP set must flow through processEventTurn → RunTurn each
+	// turn — that is the channel through which assistant toolset edits
+	// reach a live runner without recycling the VM. The bare fixture has
+	// no user toolsets, so we assert on the always-present implicit
+	// platform entry.
+	captured := runTurnMCP.Load()
+	require.NotNil(t, captured, "RunTurn must receive mcp_servers")
+	require.NotEmpty(t, *captured)
+	require.Equal(t, "_platform-"+platformtools.AssistantsPlatformToolsetSlug, (*captured)[0].ID)
 }
 
 func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
@@ -1295,16 +1308,17 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsStaleRowsRegardlessOfState
 }
 
 type testRuntimeBackend struct {
-	backend      string
-	ensureResult RuntimeBackendEnsureResult
-	ensureErr    error
-	runTurnErr   error
-	statusResult RuntimeBackendStatus
-	statusErr    error
-	stopErr      error
-	stopCalls    *atomic.Int64
-	reapCalls    *atomic.Int64
-	reapErr      error
+	backend           string
+	ensureResult      RuntimeBackendEnsureResult
+	ensureErr         error
+	runTurnErr        error
+	runTurnMCPServers *atomic.Pointer[[]runtimeMCPServer]
+	statusResult      RuntimeBackendStatus
+	statusErr         error
+	stopErr           error
+	stopCalls         *atomic.Int64
+	reapCalls         *atomic.Int64
+	reapErr           error
 }
 
 func (t testRuntimeBackend) Backend() string {
@@ -1326,7 +1340,11 @@ func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (Run
 	return t.ensureResult, nil
 }
 
-func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, uuid.UUID, string, string, string) error {
+func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, _ string, mcpServers []runtimeMCPServer) error {
+	if t.runTurnMCPServers != nil {
+		captured := append([]runtimeMCPServer(nil), mcpServers...)
+		t.runTurnMCPServers.Store(&captured)
+	}
 	return t.runTurnErr
 }
 

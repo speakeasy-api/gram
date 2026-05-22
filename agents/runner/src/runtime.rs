@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -88,6 +89,11 @@ pub enum McpCmd {
         server_id: McpServerId,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    /// Sent by `/threads/{id}/turn` when the server-side toolset has
+    /// drifted from the snapshot the runner bootstrapped with. The actor
+    /// diffs `desired` against currently-registered servers, connects
+    /// any new ones, and disconnects ones that no longer apply.
+    Reconcile { desired: Vec<McpServer> },
 }
 
 impl ConfiguredThread {
@@ -278,8 +284,16 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    let (mcp_cmd_tx, mcp_catalog, mcp_auth_notices) =
-        build_thread_mcp(host, &thread_id, &bootstrap.mcp_servers, &tokens).await?;
+    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
+
+    let (mcp_cmd_tx, mcp_catalog, mcp_auth_notices) = build_thread_mcp(
+        host,
+        &thread_id,
+        &bootstrap.mcp_servers,
+        &tokens,
+        inbox_tx.clone(),
+    )
+    .await?;
 
     let chat_id = bootstrap.chat_id.clone();
 
@@ -360,9 +374,8 @@ async fn spawn_thread(
     let fs_resources = FileSystemToolResources::new()
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
-    let mcp_server_ids: Vec<String> = bootstrap.mcp_servers.iter().map(|s| s.id.clone()).collect();
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host), mcp_server_ids),
+        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host)),
     );
 
     let mcp_source = ClippedToolSource::new(mcp_catalog, host.spill_root.clone());
@@ -392,7 +405,6 @@ async fn spawn_thread(
         .map_err(|e| RunnerError::AgentStart(e.to_string()))?;
 
     let idle_since = Arc::new(Mutex::new(Some(Instant::now())));
-    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
     let loop_idle = Arc::clone(&idle_since);
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
@@ -440,41 +452,133 @@ async fn build_thread_mcp(
     thread_id: &str,
     servers: &[McpServer],
     tokens: &TokenRegistry,
+    inbox_tx: UnboundedSender<String>,
 ) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, Vec<String>), RunnerError> {
     let mut manager = McpServerManager::new();
     let catalog = manager.source();
     let mut auth_notices = Vec::new();
+    let mut known = BTreeSet::new();
 
     for server in servers {
         let config = build_mcp_server_config(server, &host.http_client, tokens)?;
         let server_id = McpServerId::new(server.id.clone());
         manager.register_server(config);
+        known.insert(server.id.clone());
         if let Err(err) = connect_and_log(&mut manager, &server_id, "register").await
             && err.auth_required
+            && let Some(notice) =
+                create_auth_notice(host, thread_id, &server.id, &server.url, tokens).await
         {
-            match host
-                .gram_client
-                .create_mcp_auth_flow(thread_id, &server.id, &server.url, tokens)
-                .await
-            {
-                Ok(flow) => auth_notices.push(format!(
-                    "<message-context>\nEventType: assistant_mcp_auth_required\nMCPServerID: {server_id}\nMCPSlug: {mcp_slug}\nAuthURL: {auth_url}\n</message-context>",
-                    server_id = flow.server_id,
-                    mcp_slug = flow.mcp_slug,
-                    auth_url = flow.auth_url,
-                )),
-                Err(flow_err) => tracing::warn!(
-                    server_id = %server_id,
-                    error = %flow_err,
-                    "failed to create assistant mcp auth flow"
-                ),
-            }
+            auth_notices.push(notice);
         }
     }
 
     let (cmd_tx, cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
-    tokio::spawn(run_mcp_actor(manager, cmd_rx));
+    let actor_ctx = McpActorContext {
+        host: Arc::clone(host),
+        thread_id: thread_id.to_string(),
+        tokens: tokens.clone(),
+        inbox_tx,
+        known,
+    };
+    tokio::spawn(run_mcp_actor(manager, cmd_rx, actor_ctx));
     Ok((cmd_tx, catalog, auth_notices))
+}
+
+struct McpActorContext {
+    host: Arc<RuntimeHost>,
+    thread_id: String,
+    tokens: TokenRegistry,
+    inbox_tx: UnboundedSender<String>,
+    known: BTreeSet<String>,
+}
+
+async fn create_auth_notice(
+    host: &Arc<RuntimeHost>,
+    thread_id: &str,
+    server_id: &str,
+    server_url: &str,
+    tokens: &TokenRegistry,
+) -> Option<String> {
+    match host
+        .gram_client
+        .create_mcp_auth_flow(thread_id, server_id, server_url, tokens)
+        .await
+    {
+        Ok(flow) => Some(format!(
+            "<message-context>\nEventType: assistant_mcp_auth_required\nMCPServerID: {server_id}\nMCPSlug: {mcp_slug}\nAuthURL: {auth_url}\n</message-context>",
+            server_id = flow.server_id,
+            mcp_slug = flow.mcp_slug,
+            auth_url = flow.auth_url,
+        )),
+        Err(flow_err) => {
+            tracing::warn!(
+                server_id,
+                error = %flow_err,
+                "failed to create assistant mcp auth flow"
+            );
+            None
+        }
+    }
+}
+
+async fn reconcile_servers(
+    manager: &mut McpServerManager,
+    ctx: &mut McpActorContext,
+    desired: Vec<McpServer>,
+) {
+    let desired_ids: BTreeSet<String> = desired.iter().map(|s| s.id.clone()).collect();
+
+    for server in &desired {
+        if ctx.known.contains(&server.id) {
+            continue;
+        }
+        let config = match build_mcp_server_config(server, &ctx.host.http_client, &ctx.tokens) {
+            Ok(cfg) => cfg,
+            Err(err) => {
+                tracing::warn!(
+                    server_id = %server.id,
+                    error = %err,
+                    "skip reconcile-added mcp server: config build failed"
+                );
+                continue;
+            }
+        };
+        manager.register_server(config);
+        ctx.known.insert(server.id.clone());
+        let server_uid = McpServerId::new(server.id.clone());
+        if let Err(err) = connect_and_log(manager, &server_uid, "reconcile_add").await
+            && err.auth_required
+            && let Some(notice) = create_auth_notice(
+                &ctx.host,
+                &ctx.thread_id,
+                &server.id,
+                &server.url,
+                &ctx.tokens,
+            )
+            .await
+            && ctx.inbox_tx.send(notice).is_err()
+        {
+            tracing::warn!(
+                server_id = %server.id,
+                "drop reconcile auth notice: thread inbox closed"
+            );
+        }
+    }
+
+    let removed: Vec<String> = ctx
+        .known
+        .iter()
+        .filter(|id| !desired_ids.contains(*id))
+        .cloned()
+        .collect();
+    for id in removed {
+        let server_uid = McpServerId::new(id.clone());
+        if let Err(err) = manager.disconnect_server(&server_uid).await {
+            tracing::debug!(server_id = %id, error = %err, "reconcile disconnect (ignored)");
+        }
+        ctx.known.remove(&id);
+    }
 }
 
 struct McpConnectFailure {
@@ -542,7 +646,11 @@ fn build_mcp_server_config(
     ))
 }
 
-async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
+async fn run_mcp_actor(
+    mut manager: McpServerManager,
+    mut cmd_rx: mpsc::Receiver<McpCmd>,
+    mut ctx: McpActorContext,
+) {
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
             McpCmd::ForceReconnect { server_id, reply } => {
@@ -553,6 +661,9 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
                     .await
                     .map_err(|err| err.message);
                 let _ = reply.send(result);
+            }
+            McpCmd::Reconcile { desired } => {
+                reconcile_servers(&mut manager, &mut ctx, desired).await;
             }
         }
     }

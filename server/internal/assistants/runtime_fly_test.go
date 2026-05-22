@@ -791,6 +791,7 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 	admittingThreadID := uuid.New()
 	turnThreadID := uuid.New()
 	var observedPath string
+	var observedBody runtimeTurnRequest
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -798,6 +799,7 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 	})
 	mux.HandleFunc(fmt.Sprintf("/threads/%s/turn", turnThreadID), func(w http.ResponseWriter, r *http.Request) {
 		observedPath = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&observedBody)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"finish_reason":"accepted"}`))
 	})
@@ -820,8 +822,14 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 		BackendMetadataJSON: rawMetadata,
 	}
 
-	require.NoError(t, backend.RunTurn(context.Background(), rec, turnThreadID, "idem-1", "tok", "hi"))
+	servers := []runtimeMCPServer{
+		{ID: "github", URL: "https://example/mcp/github", Headers: map[string]string{"Gram-Environment": "prod"}},
+	}
+	require.NoError(t, backend.RunTurn(context.Background(), rec, turnThreadID, "idem-1", "tok", "hi", servers))
 	require.Equal(t, fmt.Sprintf("/threads/%s/turn", turnThreadID), observedPath)
+	require.Equal(t, "hi", observedBody.Input)
+	require.Equal(t, "tok", observedBody.AuthToken)
+	require.Equal(t, servers, observedBody.MCPServers)
 }
 
 func TestFlyRuntimeConfigValidateRequiresServerURL(t *testing.T) {

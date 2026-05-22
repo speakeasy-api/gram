@@ -1625,12 +1625,14 @@ func (s *ServiceCore) processEventTurn(
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
 ) error {
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant.Toolsets)
+
 	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID)
 		if err != nil {
 			return err
 		}
-		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
+		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
 			return fmt.Errorf("run assistant turn: %w", err)
 		}
 		return nil
@@ -1648,10 +1650,25 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
 		return fmt.Errorf("run assistant turn: %w", err)
 	}
 	return nil
+}
+
+// currentRuntimeMCPServers builds the MCP server set the runner should be
+// running with right now. The runner reconciles its live thread state
+// against this list on every turn, so toolset edits (added/removed MCP
+// servers) take effect on the next event without recycling the VM. Falls
+// back to nil when the runtime server URL is not configured — the runner
+// already has the bootstrap-time set and we'd rather skip reconcile than
+// dispatch a turn with bogus URLs.
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, toolsets []assistantToolsetRow) []runtimeMCPServer {
+	serverURL := s.runtime.ServerURL()
+	if serverURL == nil {
+		return nil
+	}
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, toolsets)
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(

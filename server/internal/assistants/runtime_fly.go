@@ -759,7 +759,7 @@ func (f *FlyRuntimeBackend) tracedWaitHealth(ctx context.Context, target flyRunt
 	return f.waitForRuntimeHealth(ctx, target)
 }
 
-func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error {
+func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
 	}
@@ -772,8 +772,9 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		Input:     prompt,
-		AuthToken: authToken,
+		Input:      prompt,
+		AuthToken:  authToken,
+		MCPServers: mcpServers,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal assistant fly runtime turn request: %w", err)
