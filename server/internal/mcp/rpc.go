@@ -107,12 +107,12 @@ func (m *msgID) UnmarshalJSON(data []byte) error {
 type resultEnvelope[T any] struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      msgID  `json:"id"`
-	Result  T      `json:"result,omitempty,omitzero"`
+	Result  T      `json:"result"`
 }
 
 type result[T any] struct {
 	ID     msgID `json:"id"`
-	Result T     `json:"result,omitempty,omitzero"`
+	Result T     `json:"result"`
 }
 
 func (m result[T]) MarshalJSON() ([]byte, error) {
