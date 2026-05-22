@@ -463,13 +463,23 @@ async fn build_thread_mcp(
         let config = build_mcp_server_config(server, &host.http_client, tokens)?;
         let server_id = McpServerId::new(server.id.clone());
         manager.register_server(config);
-        known.insert(server.id.clone());
-        if let Err(err) = connect_and_log(&mut manager, &server_id, "register").await
-            && err.auth_required
-            && let Some(notice) =
-                create_auth_notice(host, thread_id, &server.id, &server.url, tokens).await
-        {
-            auth_notices.push(notice);
+        match connect_and_log(&mut manager, &server_id, "register").await {
+            Ok(()) => {
+                known.insert(server.id.clone());
+            }
+            Err(err) if err.auth_required => {
+                known.insert(server.id.clone());
+                if let Some(notice) =
+                    create_auth_notice(host, thread_id, &server.id, &server.url, tokens).await
+                {
+                    auth_notices.push(notice);
+                }
+            }
+            Err(_) => {
+                // Transient transport failure: leave out of `known` so the
+                // next /turn reconcile retries instead of silently dropping
+                // the integration for the rest of the thread.
+            }
         }
     }
 
@@ -545,24 +555,36 @@ async fn reconcile_servers(
             }
         };
         manager.register_server(config);
-        ctx.known.insert(server.id.clone());
         let server_uid = McpServerId::new(server.id.clone());
-        if let Err(err) = connect_and_log(manager, &server_uid, "reconcile_add").await
-            && err.auth_required
-            && let Some(notice) = create_auth_notice(
-                &ctx.host,
-                &ctx.thread_id,
-                &server.id,
-                &server.url,
-                &ctx.tokens,
-            )
-            .await
-            && ctx.inbox_tx.send(notice).is_err()
-        {
-            tracing::warn!(
-                server_id = %server.id,
-                "drop reconcile auth notice: thread inbox closed"
-            );
+        match connect_and_log(manager, &server_uid, "reconcile_add").await {
+            Ok(()) => {
+                ctx.known.insert(server.id.clone());
+            }
+            Err(err) if err.auth_required => {
+                ctx.known.insert(server.id.clone());
+                if let Some(notice) = create_auth_notice(
+                    &ctx.host,
+                    &ctx.thread_id,
+                    &server.id,
+                    &server.url,
+                    &ctx.tokens,
+                )
+                .await
+                    && ctx.inbox_tx.send(notice).is_err()
+                {
+                    tracing::warn!(
+                        server_id = %server.id,
+                        "drop reconcile auth notice: thread inbox closed"
+                    );
+                }
+            }
+            Err(_) => {
+                // Transient transport failure on connect: leave out of
+                // `known` so a later reconcile re-attempts the connect.
+                // The config is still registered, which means a manual
+                // `mcp_force_reconnect` will not bypass this path — see
+                // the `known` guard in the ForceReconnect arm.
+            }
         }
     }
 
@@ -654,6 +676,18 @@ async fn run_mcp_actor(
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
             McpCmd::ForceReconnect { server_id, reply } => {
+                // Reject ids that aren't part of the assistant's current
+                // catalog. `disconnect_server` only clears `connections`;
+                // the underlying config lingers in the manager for the
+                // thread's lifetime (agentkit-mcp exposes no unregister
+                // path). Without this guard a detached integration could
+                // be resurrected via force_reconnect.
+                if !ctx.known.contains(server_id.0.as_str()) {
+                    let _ = reply.send(Err(format!(
+                        "mcp server {server_id} is not part of this assistant's current configuration"
+                    )));
+                    continue;
+                }
                 if let Err(e) = manager.disconnect_server(&server_id).await {
                     tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
                 }
