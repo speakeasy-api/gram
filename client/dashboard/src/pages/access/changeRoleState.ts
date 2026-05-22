@@ -74,3 +74,29 @@ export function membersWithRole(
 ): string[] {
   return members.filter((m) => m.roleIds.includes(roleId)).map((m) => m.id);
 }
+
+/**
+ * True when a member is locked to the role being edited — they're already
+ * assigned and cannot be deselected from the member list.
+ */
+export function isMemberLockedToRole(
+  isEditing: boolean,
+  editingRoleId: string | undefined,
+  memberRoleIds: string[],
+): boolean {
+  return isEditing && !!editingRoleId && memberRoleIds.includes(editingRoleId);
+}
+
+/**
+ * Returns members that can be toggled on/off in the Create/Edit role dialog.
+ * Members already assigned to the editing role are excluded (they're locked).
+ */
+export function getSelectableMembers<M extends { roleIds: string[] }>(
+  members: M[],
+  isEditing: boolean,
+  editingRoleId: string | undefined,
+): M[] {
+  return members.filter(
+    (m) => !isMemberLockedToRole(isEditing, editingRoleId, m.roleIds),
+  );
+}

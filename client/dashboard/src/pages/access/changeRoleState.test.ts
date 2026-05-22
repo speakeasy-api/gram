@@ -6,6 +6,8 @@ import {
   hasRolesChanged,
   isUpdateDisabled,
   membersWithRole,
+  isMemberLockedToRole,
+  getSelectableMembers,
 } from "./changeRoleState";
 
 // --- addRoleToSelection ---
@@ -172,5 +174,61 @@ describe("membersWithRole", () => {
 
   it("handles members with multiple roles", () => {
     expect(membersWithRole(members, "admin")).toEqual(["m1"]);
+  });
+});
+
+// --- isMemberLockedToRole ---
+
+describe("isMemberLockedToRole", () => {
+  it("true when editing and member has the role", () => {
+    expect(isMemberLockedToRole(true, "admin", ["admin", "builder"])).toBe(
+      true,
+    );
+  });
+
+  it("false when not editing", () => {
+    expect(isMemberLockedToRole(false, "admin", ["admin"])).toBe(false);
+  });
+
+  it("false when editingRoleId is undefined", () => {
+    expect(isMemberLockedToRole(true, undefined, ["admin"])).toBe(false);
+  });
+
+  it("false when editingRoleId is empty string", () => {
+    expect(isMemberLockedToRole(true, "", ["admin"])).toBe(false);
+  });
+
+  it("false when member does not have the role", () => {
+    expect(isMemberLockedToRole(true, "admin", ["builder"])).toBe(false);
+  });
+});
+
+// --- getSelectableMembers ---
+
+describe("getSelectableMembers", () => {
+  const members = [
+    { id: "m1", roleIds: ["admin", "builder"] },
+    { id: "m2", roleIds: ["builder"] },
+    { id: "m3", roleIds: ["viewer"] },
+  ];
+
+  it("excludes members with the editing role", () => {
+    const result = getSelectableMembers(members, true, "builder");
+    expect(result.map((m) => m.id)).toEqual(["m3"]);
+  });
+
+  it("returns all when not editing", () => {
+    const result = getSelectableMembers(members, false, "builder");
+    expect(result.map((m) => m.id)).toEqual(["m1", "m2", "m3"]);
+  });
+
+  it("returns all when editingRoleId is undefined", () => {
+    const result = getSelectableMembers(members, true, undefined);
+    expect(result.map((m) => m.id)).toEqual(["m1", "m2", "m3"]);
+  });
+
+  it("returns all when no members have the editing role", () => {
+    const result = getSelectableMembers(members, true, "nonexistent");
+    expect(result.map((m) => m.id)).toEqual(["m1", "m2", "m3"]);
   });
 });

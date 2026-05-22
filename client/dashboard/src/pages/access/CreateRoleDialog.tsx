@@ -44,7 +44,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useMemo, useState } from "react";
-import { membersWithRole } from "./changeRoleState";
+import {
+  getSelectableMembers,
+  isMemberLockedToRole,
+  membersWithRole,
+} from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type {
   ActivePanel,
@@ -456,9 +460,10 @@ export function CreateRoleDialog({
   };
 
   const toggleAllMembers = () => {
-    const selectableMembers = members.filter(
-      (m) =>
-        !(isEditing && editingRole?.id && m.roleIds.includes(editingRole.id)),
+    const selectableMembers = getSelectableMembers(
+      members,
+      isEditing,
+      editingRole?.id,
     );
     setSelectedMembers((prev) => {
       const allSelected = selectableMembers.every((m) => prev.has(m.id));
@@ -930,13 +935,10 @@ export function CreateRoleDialog({
                   <div className="border-border divide-border mt-3 divide-y rounded-md border">
                     {/* Select-all header */}
                     {(() => {
-                      const selectableMembers = members.filter(
-                        (m) =>
-                          !(
-                            isEditing &&
-                            editingRole?.id &&
-                            m.roleIds.includes(editingRole.id)
-                          ),
+                      const selectableMembers = getSelectableMembers(
+                        members,
+                        isEditing,
+                        editingRole?.id,
                       );
                       const allSelected =
                         selectableMembers.length > 0 &&
@@ -970,10 +972,11 @@ export function CreateRoleDialog({
                       );
                     })()}
                     {members.map((member) => {
-                      const alreadyHasRole =
-                        isEditing &&
-                        !!editingRole?.id &&
-                        member.roleIds.includes(editingRole.id);
+                      const alreadyHasRole = isMemberLockedToRole(
+                        isEditing,
+                        editingRole?.id,
+                        member.roleIds,
+                      );
                       return (
                         <label
                           key={member.id}
