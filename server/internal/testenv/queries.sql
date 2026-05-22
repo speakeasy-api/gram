@@ -77,3 +77,35 @@ SET svix_app_id = @svix_app_id,
     webhooks_enabled = @webhooks_enabled,
     updated_at = clock_timestamp()
 WHERE id = @organization_id;
+
+-- name: CreateOrganizationMetadataFixture :exec
+-- Test-only fixture that lets seeders populate every column on
+-- organization_metadata. Prefer this over CreateOrganizationMetadata when a
+-- test needs to exercise filters that depend on account type, workos linkage,
+-- disabled state, whitelist flag, or trial window.
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    gram_account_type,
+    workos_id,
+    whitelisted,
+    free_trial_started_at,
+    free_trial_ends_at,
+    disabled_at
+) VALUES (
+    @id,
+    @name,
+    @slug,
+    @gram_account_type,
+    sqlc.narg('workos_id')::text,
+    @whitelisted,
+    @free_trial_started_at,
+    @free_trial_ends_at,
+    sqlc.narg('disabled_at')::timestamptz
+);
+
+-- name: CreateOrganizationUserRelationshipFixture :exec
+-- Test-only fixture for seeding membership counts.
+INSERT INTO organization_user_relationships (organization_id, user_id)
+VALUES (@organization_id, sqlc.narg('user_id')::text);
