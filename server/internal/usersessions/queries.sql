@@ -160,6 +160,17 @@ FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 WHERE s.id = @id AND iss.project_id = @project_id AND s.deleted IS FALSE;
 
+-- name: CountActiveUserSessionsByIssuerID :one
+-- Count of non-deleted user_sessions for an issuer, project-scoped through the
+-- join on user_session_issuers. Used by the roast endpoint to scale severity.
+SELECT COUNT(*) AS active_count
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = @user_session_issuer_id
+  AND iss.project_id = @project_id
+  AND s.deleted IS FALSE
+  AND iss.deleted IS FALSE;
+
 -- name: ListUserSessionsByProjectID :many
 -- refresh_token_hash is excluded from the projection so the management API
 -- surface cannot accidentally return it.
