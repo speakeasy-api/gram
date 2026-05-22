@@ -248,6 +248,60 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResults"}`)
 	})
 
+	Method("listRiskResultsForAgent", func() {
+		Description("List risk analysis results with the `match` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `match` value — a non-sensitive server URL or command identifier — is passed through verbatim.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "Optional policy ID to filter by.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
+			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
+			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
+			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Filter results to messages created strictly before this timestamp (ISO 8601).", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+		})
+
+		Result(ListRiskResultsForAgentResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.results.listForAgent")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Param("chat_id")
+			Param("category")
+			Param("rule_id")
+			Param("unique_match")
+			Param("from")
+			Param("to")
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskResultsForAgent")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForAgent")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsForAgent"}`)
+	})
+
 	Method("listRiskResultsByChat", func() {
 		Description("List risk results grouped by chat session for the current project.")
 
@@ -572,6 +626,13 @@ var RiskCapabilitiesResult = Type("RiskCapabilitiesResult", func() {
 
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
+	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+	Required("results", "total_count")
+})
+
+var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {
+	Attribute("results", ArrayOf(shared.RiskResultRedacted), "The list of risk results with match content redacted to opaque fingerprints.")
 	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")

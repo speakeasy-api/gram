@@ -198,6 +198,52 @@ func TestHandleAuthorize_PublicToolset_RedirectsToConsent(t *testing.T) {
 	require.Equal(t, urn.SessionSubjectKindAnonymous, stored.Subject.Kind)
 }
 
+func TestHandleAuthorize_PublicToolset_RequireUserIdentity_RedirectsToIDP(t *testing.T) {
+	t.Parallel()
+
+	idpURL, _ := url.Parse("https://idp.example.com/authorize?state=challenge123")
+	mock := &mockIdentityResolver{
+		buildAuthURLResult: idpURL,
+	}
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	mcpSlug := toolset.McpSlug.String
+	q := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {client.ClientID},
+		"redirect_uri":          {client.RedirectUris[0]},
+		"code_challenge":        {"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"},
+		"code_challenge_method": {"S256"},
+		"requireUserIdentity":   {"1"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/authorize?"+q.Encode(), nil)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, req))
+
+	require.Equal(t, http.StatusFound, w.Code)
+	require.Contains(t, w.Header().Get("Location"), "idp.example.com/authorize",
+		"requireUserIdentity should divert public toolset through IDP")
+}
+
 func TestHandleAuthorize_InvalidClientID_ReturnsError(t *testing.T) {
 	t.Parallel()
 

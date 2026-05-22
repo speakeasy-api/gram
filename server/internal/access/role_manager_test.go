@@ -191,8 +191,32 @@ func TestRoleManager_ReplaceRoleAssignmentSoftDeletesPreviousRole(t *testing.T) 
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", "member"))
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Can build"))
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "u1@example.com", "User 1", "user_1", "membership_1")
-	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"))
-	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"))
+
+	// Use ReplaceOrganizationRoleAssignment directly to test its upsert-one + soft-delete-others behavior.
+	now := time.Now().UTC()
+	replaced, err := accessrepo.New(ti.conn).ReplaceOrganizationRoleAssignment(ctx, accessrepo.ReplaceOrganizationRoleAssignmentParams{
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		WorkosUserID:       "user_1",
+		WorkosRoleSlug:     "member",
+		UserID:             conv.ToPGTextEmpty("local_user_1"),
+		WorkosMembershipID: conv.ToPGTextEmpty("membership_1"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(now),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), replaced)
+
+	replaced, err = accessrepo.New(ti.conn).ReplaceOrganizationRoleAssignment(ctx, accessrepo.ReplaceOrganizationRoleAssignmentParams{
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		WorkosUserID:       "user_1",
+		WorkosRoleSlug:     "custom-builder",
+		UserID:             conv.ToPGTextEmpty("local_user_1"),
+		WorkosMembershipID: conv.ToPGTextEmpty("membership_1"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(now),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), replaced)
 
 	assignments, err := accessrepo.New(ti.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessrepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
 		OrganizationID: authCtx.ActiveOrganizationID,

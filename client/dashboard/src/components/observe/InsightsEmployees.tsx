@@ -799,12 +799,17 @@ function buildEmployees(
       (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
     const status: EmployeeStatus =
       summary != null ? "enrolled" : "not_enrolled";
+    const role =
+      member.roleIds
+        .map((id) => roleNameById.get(id))
+        .filter(Boolean)
+        .join(", ") || "Unknown";
 
     return {
       id: member.id,
       name: member.name,
       email: member.email,
-      role: roleNameById.get(member.roleId) ?? member.roleId,
+      role,
       status,
       tokenCount,
       photoUrl: member.photoUrl,

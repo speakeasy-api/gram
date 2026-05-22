@@ -1,6 +1,5 @@
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { resolutionBgColors } from "@/lib/resolution-colors";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
@@ -19,19 +18,6 @@ interface ChatLogsTableProps {
 
 function getTraceId(chatId: string): string {
   return chatId.slice(0, 8);
-}
-
-function getOverallResolutionStatus(
-  resolutions: ChatOverviewWithResolutions["resolutions"],
-): "success" | "failure" | "partial" | "unresolved" {
-  if (resolutions.length === 0) return "unresolved";
-
-  const hasFailure = resolutions.some((r) => r.resolution === "failure");
-  const hasSuccess = resolutions.some((r) => r.resolution === "success");
-
-  if (hasFailure) return "failure";
-  if (hasSuccess) return "success";
-  return "partial";
 }
 
 function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
@@ -130,24 +116,6 @@ function CopyButton({
   );
 }
 
-// Status indicator dot
-function StatusDot({
-  status,
-}: {
-  status: "success" | "failure" | "partial" | "unresolved";
-}) {
-  const colorMap = {
-    ...resolutionBgColors,
-    unresolved: "bg-muted-foreground/40",
-  };
-
-  return (
-    <span
-      className={cn("inline-flex h-2 w-2 rounded-full", colorMap[status])}
-    />
-  );
-}
-
 export function ChatLogsTable({
   chats,
   selectedChatId,
@@ -214,7 +182,6 @@ export function ChatLogsTable({
     <>
       <div className="divide-border/50 divide-y">
         {chats.map((chat) => {
-          const status = getOverallResolutionStatus(chat.resolutions);
           const isSelected = selectedChatId === chat.id;
           const source = chat.source;
           const riskCount = chat.riskFindingsCount ?? 0;
@@ -240,7 +207,6 @@ export function ChatLogsTable({
                 <div className="min-w-0 flex-1">
                   {/* Header row */}
                   <div className="mb-1.5 flex items-center gap-2">
-                    <StatusDot status={status} />
                     <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                       {getTraceId(chat.id)}
                     </span>

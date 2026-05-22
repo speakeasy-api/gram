@@ -214,12 +214,23 @@ func (wc *Client) EnsureUserExternalID(ctx context.Context, workosUserID, gramUs
 }
 
 func convertMember(m usermanagement.OrganizationMembership) Member {
+	roleSlugs := make([]string, 0, len(m.Roles))
+	for _, r := range m.Roles {
+		if r.Slug != "" {
+			roleSlugs = append(roleSlugs, r.Slug)
+		}
+	}
+	// Fall back to the single Role field when Roles is empty (pre-multi-role WorkOS environments).
+	if len(roleSlugs) == 0 && m.Role.Slug != "" {
+		roleSlugs = []string{m.Role.Slug}
+	}
+
 	return Member{
 		ID:             m.ID,
 		UserID:         m.UserID,
 		OrganizationID: m.OrganizationID,
 		Organization:   m.OrganizationName,
-		RoleSlug:       m.Role.Slug,
+		RoleSlugs:      roleSlugs,
 		Status:         string(m.Status),
 		CreatedAt:      m.CreatedAt,
 		UpdatedAt:      m.UpdatedAt,

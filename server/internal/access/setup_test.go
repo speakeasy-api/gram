@@ -207,17 +207,19 @@ func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 		updatedAt = parsed
 	}
 
-	replaced, err := accessrepo.New(conn).ReplaceOrganizationRoleAssignment(ctx, accessrepo.ReplaceOrganizationRoleAssignmentParams{
-		OrganizationID:     organizationID,
-		WorkosUserID:       member.UserID,
-		WorkosRoleSlug:     member.RoleSlug,
-		UserID:             conv.ToPGTextEmpty(userID),
-		WorkosMembershipID: conv.ToPGTextEmpty(member.ID),
-		WorkosUpdatedAt:    conv.ToPGTimestamptz(updatedAt),
-		WorkosLastEventID:  conv.ToPGTextEmpty(""),
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), replaced)
+	for _, slug := range member.RoleSlugs {
+		inserted, err := accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+			OrganizationID:     organizationID,
+			WorkosUserID:       member.UserID,
+			WorkosRoleSlug:     slug,
+			UserID:             conv.ToPGTextEmpty(userID),
+			WorkosMembershipID: conv.ToPGTextEmpty(member.ID),
+			WorkosUpdatedAt:    conv.ToPGTimestamptz(updatedAt),
+			WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), inserted)
+	}
 }
 
 // seedDisconnectedUser creates a user in the users table with a workos_id but

@@ -225,7 +225,7 @@ func TestService_UpdateMemberRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ctx = withRBACGrants(t, ctx)
 
-	_, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "user_1", RoleID: "role_builder"})
+	_, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "user_1", RoleIds: []string{"role_builder"}})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -242,17 +242,21 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "custom-builder").Return(&thirdpartyworkos.Member{
+	// Seed a second admin so the last-admin guard allows removing admin from user_1.
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "other@example.com", "Other Admin", "user_2", "membership_2")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember("", "membership_2", "user_2", "admin"))
+
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"custom-builder"}).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder"},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 
-	member, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: builderID})
+	member, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "local_user_1", RoleIds: []string{builderID}})
 	require.NoError(t, err)
-	require.Equal(t, builderID, member.RoleID)
+	require.Equal(t, []string{builderID}, member.RoleIds)
 }
 
 func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {

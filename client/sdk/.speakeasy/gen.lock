@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 953dd337b12dc3c1f351ed1eb515e4f5
+  docChecksum: 8c7584f32a3e9b4b71224173a8325fdd
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -73,7 +73,7 @@ trackedFiles:
   docs/lib/utils/retryconfig.md:
     last_write_checksum: sha1:bc4454e196fcd219f5a78da690375a884f5ed07b
   docs/models/components/accessmember.md:
-    last_write_checksum: sha1:3054da106d66228a7be03e78be7f69086768e701
+    last_write_checksum: sha1:389e259ed7a37da6fd946b3af5721ded752e604b
   docs/models/components/action.md:
     last_write_checksum: sha1:66ce1fb4ea555bc6494786b035454529d311d883
   docs/models/components/adddeploymentpackageform.md:
@@ -463,7 +463,7 @@ trackedFiles:
   docs/models/components/listmcpserversresult.md:
     last_write_checksum: sha1:b405b0f206e6a0c9e0d4b8a1a0e7415de7bb5f2a
   docs/models/components/listmembersresult.md:
-    last_write_checksum: sha1:3ff50166211f061c4785fad224dc518f644e3309
+    last_write_checksum: sha1:8d30ed2359baaa8ddda4ca408b22a52d33cfc1f2
   docs/models/components/listpackagesresult.md:
     last_write_checksum: sha1:cb359e2921071954d7b35a3897ae94db823311c4
   docs/models/components/listpluginsresult.md:
@@ -488,6 +488,8 @@ trackedFiles:
     last_write_checksum: sha1:7d0ebd88587b3852f51dc78fb971b65dddde91c2
   docs/models/components/listriskresultsbychatresult.md:
     last_write_checksum: sha1:f3d8404f946b30ece4d46342ceeb458a8f744b99
+  docs/models/components/listriskresultsforagentresult.md:
+    last_write_checksum: sha1:38f18edf33de2d1f157542df3bb6f35839f1aeb8
   docs/models/components/listriskresultsresult.md:
     last_write_checksum: sha1:b9598d5d1bcbb33c95b7f7b15e7e2c4310bdb3b3
   docs/models/components/listrolegrant.md:
@@ -760,6 +762,8 @@ trackedFiles:
     last_write_checksum: sha1:516633e7ddae4a15c8060c4cbcccbab4f9485352
   docs/models/components/riskresult.md:
     last_write_checksum: sha1:1511f98efefb09c1e0e2101714341c63c20af4b3
+  docs/models/components/riskresultredacted.md:
+    last_write_checksum: sha1:cfdb770f782f1f2087f16d84428334931e22502a
   docs/models/components/riskrulebreakdownentry.md:
     last_write_checksum: sha1:aef2c541f251a072a6dc773df40baadfb8041be7
   docs/models/components/riskrulebreakdownresult.md:
@@ -944,8 +948,8 @@ trackedFiles:
     last_write_checksum: sha1:6ee81fcb0d2881ca3e9d848097797d283b25f130
   docs/models/components/updatemcpserverformvisibility.md:
     last_write_checksum: sha1:c533d738ab4fc273f9930d0c2c696a622af7ad79
-  docs/models/components/updatememberroleform.md:
-    last_write_checksum: sha1:fc16ab2515659459bd0f6249777a6b685b3f78d3
+  docs/models/components/updatememberrolesform.md:
+    last_write_checksum: sha1:b7ee730cab0f74bb791dea5a981866c94aa74727
   docs/models/components/updateoauthproxyserverrequestbody.md:
     last_write_checksum: sha1:38f9762fad603cb7142e8443eea343204faf4b88
   docs/models/components/updatepackageform.md:
@@ -2106,6 +2110,14 @@ trackedFiles:
     last_write_checksum: sha1:0c9140cefdac2cdf3de713dd4c722c4418ec5f1d
   docs/models/operations/listriskresultsbychatsecurityoption2.md:
     last_write_checksum: sha1:e4671f7de0aa651f138730fc56273cf87c2eca30
+  docs/models/operations/listriskresultsforagentrequest.md:
+    last_write_checksum: sha1:fcdd1b56e5a3e73a90784593db99527b6fe5bc66
+  docs/models/operations/listriskresultsforagentsecurity.md:
+    last_write_checksum: sha1:55857ae3d042ea9b728454789fcaf3a08c7a274b
+  docs/models/operations/listriskresultsforagentsecurityoption1.md:
+    last_write_checksum: sha1:1734bd089542779be23f4cc39db32ee0cb8712ca
+  docs/models/operations/listriskresultsforagentsecurityoption2.md:
+    last_write_checksum: sha1:172155ce71713ba6e56d2df88e17d924899325ba
   docs/models/operations/listriskresultsrequest.md:
     last_write_checksum: sha1:ea77bd1e744d66dff0abbd8f4ce571a835e2f1af
   docs/models/operations/listriskresultssecurity.md:
@@ -2554,10 +2566,10 @@ trackedFiles:
     last_write_checksum: sha1:9e7aa6c1dde83c6f0986060d31babb129717c8d6
   docs/models/operations/updatemcpserversecurityoption2.md:
     last_write_checksum: sha1:d8475411d43db4aa46b60a88063b6595cb555ef1
-  docs/models/operations/updatememberrolerequest.md:
-    last_write_checksum: sha1:4990de52bd7e6c2091b9a4180b6580db70aafaba
-  docs/models/operations/updatememberrolesecurity.md:
-    last_write_checksum: sha1:b8c1a631b77e111380bda55e33cb31ff0f6fa4b7
+  docs/models/operations/updatememberrolesrequest.md:
+    last_write_checksum: sha1:2655ccdaa09a935c7c9d8e98e5736c5218b414fe
+  docs/models/operations/updatememberrolessecurity.md:
+    last_write_checksum: sha1:0d3bbed60571b2053f5f2c2c5d303a9139c503f3
   docs/models/operations/updateoauthproxyserverrequest.md:
     last_write_checksum: sha1:275e690e26084dfcb020d87dacf35cf07a2c796b
   docs/models/operations/updateoauthproxyserversecurity.md:
@@ -2731,7 +2743,7 @@ trackedFiles:
   docs/models/operations/verifyremotemcpurlsecurityoption2.md:
     last_write_checksum: sha1:d7327bb7bc7d90ea3fb3593531e041e6c9fc4f9e
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:c50ea3f9ce0e29ef04c31c8a4e4ef695d0c2fa30
+    last_write_checksum: sha1:f0d4f30b830de51eb669ba521b8854c94dd822af
   docs/sdks/aiintegrations/README.md:
     last_write_checksum: sha1:6ef8202846ce72d507a3589e4f983caef978b809
   docs/sdks/approvals/README.md:
@@ -2809,7 +2821,7 @@ trackedFiles:
   docs/sdks/resources/README.md:
     last_write_checksum: sha1:a69ba6f2f7a90c991953a89759a60ae8ae42a932
   docs/sdks/results/README.md:
-    last_write_checksum: sha1:b28203f915e5dcac27dfe9723a63ca78ea1d77eb
+    last_write_checksum: sha1:d655f3c492446c49d8377d0de6b62fca20498747
   docs/sdks/slack/README.md:
     last_write_checksum: sha1:6b45aed94ea43bd45ec8d54f844bb070d1b8829f
   docs/sdks/telemetry/README.md:
@@ -2890,8 +2902,8 @@ trackedFiles:
     last_write_checksum: sha1:1ad64e3abc6903cae51f27d132504002ba9c94e9
   src/funcs/accessResolveChallenge.ts:
     last_write_checksum: sha1:f371bbe148c7c16e2735b2726bf5a75488623249
-  src/funcs/accessUpdateMemberRole.ts:
-    last_write_checksum: sha1:76240cb7550931e33b9dc1fc7c4cc911fd45baf4
+  src/funcs/accessUpdateMemberRoles.ts:
+    last_write_checksum: sha1:3e1390d03064f971f9eaa44f8403ea94eac297d6
   src/funcs/accessUpdateRole.ts:
     last_write_checksum: sha1:193098018d2aeb87f22b9fc4df35fa5465244b29
   src/funcs/aiIntegrationsDeleteConfig.ts:
@@ -3400,6 +3412,8 @@ trackedFiles:
     last_write_checksum: sha1:f7d08096a2f620fa96470b83b8a47d483c202da7
   src/funcs/riskResultsList.ts:
     last_write_checksum: sha1:916d0c362f42196c6b9c6df262275743384317db
+  src/funcs/riskResultsListForAgent.ts:
+    last_write_checksum: sha1:e917d47c44fd53547d37c74eebc9147ca9660fcd
   src/funcs/slackConfigureSlackApp.ts:
     last_write_checksum: sha1:8bc4423e8eee9029d10416d94f39ce19518eeeba
   src/funcs/slackCreateSlackApp.ts:
@@ -3673,7 +3687,7 @@ trackedFiles:
     last_write_checksum: sha1:3bceadd74bf0b31adf13eb06b7531077c3e07d65
     pristine_git_object: 0605023172a29aae5811f93c479bed942d98dcb4
   src/models/components/accessmember.ts:
-    last_write_checksum: sha1:8688f34f45c5de02b049a8c31c69f43398e1c7ae
+    last_write_checksum: sha1:ae8a79e74e61fa90905ee5b64109b5eed104ace4
   src/models/components/adddeploymentpackageform.ts:
     id: 73a7fe3afa81
     last_write_checksum: sha1:a11950f515b9e570296047d57457fb3a6ac27360
@@ -4070,7 +4084,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:d1d135458de708c2a184276517484c5c4dfc9086
+    last_write_checksum: sha1:d2a97c1029b2b0505494320f281c1eb5f821f809
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4194,6 +4208,8 @@ trackedFiles:
     last_write_checksum: sha1:454822cda93daddd74354effc25a10a5faa0dfb9
   src/models/components/listriskresultsbychatresult.ts:
     last_write_checksum: sha1:bd6a8adf22bc977272bbc13a870d2bb70923ef79
+  src/models/components/listriskresultsforagentresult.ts:
+    last_write_checksum: sha1:d7bd863c5c0d41b6921ac98b450f5bf2c51484a4
   src/models/components/listriskresultsresult.ts:
     last_write_checksum: sha1:d16223e7b7bc4d6f6ee25b9876b4746553baff8c
   src/models/components/listrolegrant.ts:
@@ -4480,6 +4496,8 @@ trackedFiles:
     last_write_checksum: sha1:478a39101a4d8c9d51b31417839ef68b5b727e77
   src/models/components/riskresult.ts:
     last_write_checksum: sha1:dfe419b7eedf5875524a1786534e0d783ddabb5d
+  src/models/components/riskresultredacted.ts:
+    last_write_checksum: sha1:6f3ffbc41d82e98e3f1b358306e15a2d2aaab5a9
   src/models/components/riskrulebreakdownentry.ts:
     last_write_checksum: sha1:1a504cb8dc34c5139ea90058a885a339f581a2c9
   src/models/components/riskrulebreakdownresult.ts:
@@ -4668,8 +4686,8 @@ trackedFiles:
     last_write_checksum: sha1:2051b085948e4af650466d7dedc524979979e7d1
   src/models/components/updatemcpserverform.ts:
     last_write_checksum: sha1:b62874997065998668a43cf016e273a5dc835e00
-  src/models/components/updatememberroleform.ts:
-    last_write_checksum: sha1:51b48e1eae3b41468a844cd4bc9c761d42afa0db
+  src/models/components/updatememberrolesform.ts:
+    last_write_checksum: sha1:dcf4e8903327e320122c5fb0379e7b673bb86ba3
   src/models/components/updateoauthproxyserverrequestbody.ts:
     last_write_checksum: sha1:81954061fa03a0e0e86804d9ea2903ebeb3f2d7b
   src/models/components/updatepackageform.ts:
@@ -5158,7 +5176,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:ada7b6eb84f5a855f89cb95a01e815eefa841e98
+    last_write_checksum: sha1:40cd725df20ee8cc1d930d392a0e478dabb30522
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5270,6 +5288,8 @@ trackedFiles:
     last_write_checksum: sha1:d186b7145b6ce94a484fbd082a616acce819a2e6
   src/models/operations/listriskresultsbychat.ts:
     last_write_checksum: sha1:e9e67cfb8e43e5a443a937d067267d2df381ab4e
+  src/models/operations/listriskresultsforagent.ts:
+    last_write_checksum: sha1:13f782f1a2fb9e4368b484cccbc53f09fece107a
   src/models/operations/listroles.ts:
     last_write_checksum: sha1:fbc4e5b077897e28a45f72084c64191615d4d5dd
   src/models/operations/listscopes.ts:
@@ -5466,8 +5486,8 @@ trackedFiles:
     last_write_checksum: sha1:1e0a5be4ef8752d5b5c1e632fe4f57fb74d0b174
   src/models/operations/updatemcpserver.ts:
     last_write_checksum: sha1:a8ba4fcaef9ad779b9d733ee9621ecbd26d303a3
-  src/models/operations/updatememberrole.ts:
-    last_write_checksum: sha1:7999cd1903d9ba673475602ca5e278165508f434
+  src/models/operations/updatememberroles.ts:
+    last_write_checksum: sha1:ab5f24931c0e3697d9b8cccf448f1caea475efb3
   src/models/operations/updateoauthproxyserver.ts:
     last_write_checksum: sha1:b0c6f4291a2ae2b179824448464fa0414c54a68c
   src/models/operations/updatepackage.ts:
@@ -5944,7 +5964,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:4e69988acbfa7500dda451da25892fb37518bf69
+    last_write_checksum: sha1:61caed166a6a39aec444481247fa77f2d941b754
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6326,6 +6346,10 @@ trackedFiles:
     last_write_checksum: sha1:3c4a55aef7a2f5c43dbd5b2a7ca607b19f73b009
   src/react-query/riskListResultsByChat.ts:
     last_write_checksum: sha1:47dced4daf98fbce57c9d493f3b6d51676fb033f
+  src/react-query/riskListResultsForAgent.core.ts:
+    last_write_checksum: sha1:74c479d67e75031ca4a8c285dfe304ff9619af4c
+  src/react-query/riskListResultsForAgent.ts:
+    last_write_checksum: sha1:7ac5d58777897d595f1746ee39e3551c9e4e8735
   src/react-query/riskListShadowMCPApprovals.core.ts:
     last_write_checksum: sha1:6eb945acdc2cf91199aadf0272c87e8e2857741d
   src/react-query/riskListShadowMCPApprovals.ts:
@@ -6500,8 +6524,8 @@ trackedFiles:
     last_write_checksum: sha1:a76a7bdb241bc50dcb08db286be135e6e64436ec
   src/react-query/updateMcpServer.ts:
     last_write_checksum: sha1:55eb608cb2acf6809f9c467455d246d080092b2a
-  src/react-query/updateMemberRole.ts:
-    last_write_checksum: sha1:77757f9e2c0f7a2ba89cbf34eb08435146bfd663
+  src/react-query/updateMemberRoles.ts:
+    last_write_checksum: sha1:f751891033e18f4f3beafc8e8004e999f56d1fba
   src/react-query/updateOAuthProxyServer.ts:
     last_write_checksum: sha1:1bbcc7d5b8dedbb70cc54fe0140696b9209e8459
   src/react-query/updatePackage.ts:
@@ -6597,7 +6621,7 @@ trackedFiles:
   src/react-query/verifyRemoteMcpURL.ts:
     last_write_checksum: sha1:7a8b3ee3d721701d3b98ec26f6b6f3b1b1a27bd9
   src/sdk/access.ts:
-    last_write_checksum: sha1:37c912101f3dc622efcec2d90e0c48035f557057
+    last_write_checksum: sha1:77bfd863736f3e16159ae78bf748a6b284eb19ff
   src/sdk/aiintegrations.ts:
     last_write_checksum: sha1:3e48a983553920eb58c08bb83e89f01b28d95e1a
   src/sdk/approvals.ts:
@@ -6711,7 +6735,7 @@ trackedFiles:
     last_write_checksum: sha1:46929c6a72db43c1f2a5ee85b862b961f62cf687
     pristine_git_object: 35d99232a58259bee5d74ed936ddbd70301bf0ee
   src/sdk/results.ts:
-    last_write_checksum: sha1:be760b1372c39c54199a707adf6a854c6a8d1ae6
+    last_write_checksum: sha1:220552d21499d1871f15ca050009d2ec7646bbad
   src/sdk/risk.ts:
     last_write_checksum: sha1:261c2399dbdbbfacc8239736204b918637ca99dc
   src/sdk/sdk.ts:
@@ -10018,6 +10042,26 @@ examples:
       responses:
         "200":
           application/json: {"enabled": true, "has_api_key": false, "organization_id": "<id>", "provider": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateMemberRoles:
+    speakeasy-default-update-member-roles:
+      requestBody:
+        application/json: {"role_ids": ["<value 1>", "<value 2>"], "user_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"email": "Burley10@yahoo.com", "id": "<id>", "joined_at": "2025-07-12T09:13:01.198Z", "name": "<value>", "role_ids": ["<value 1>"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listRiskResultsForAgent:
+    speakeasy-default-list-risk-results-for-agent:
+      responses:
+        "200":
+          application/json: {"results": [{"chat_message_id": "85523fdc-294e-46eb-80ad-c5d3dbfbce6c", "created_at": "2025-02-15T11:28:44.474Z", "id": "7529b6c3-c4e3-404d-b3bf-51c1706f2715", "match_redacted": "<value>", "policy_id": "6391ece6-67aa-48d4-82d4-f168c2cc7ae8", "policy_version": 657869, "position_known": true, "source": "<value>"}], "total_count": 878955}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

@@ -11,7 +11,6 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
 import type {
   ChatMessage,
-  ChatResolution,
   TelemetryLogRecord,
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
@@ -30,7 +29,6 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
-import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { MessageContent } from "@gram-ai/elements";
 import { useIsAdmin } from "@/contexts/Auth";
@@ -52,7 +50,6 @@ import {
 
 interface ChatDetailPanelProps {
   chatId: string;
-  resolutions: ChatResolution[];
   onClose: () => void;
   onDelete: (chatId: string) => void;
   /** When true, messages without risk findings are collapsed to a single line. */
@@ -128,34 +125,6 @@ function exportTraceDataAsJson({
   }
 }
 
-function getOverallResolutionStatus(
-  resolutions: ChatResolution[],
-): "success" | "failure" | "partial" | "unresolved" {
-  if (resolutions.length === 0) return "unresolved";
-
-  const hasFailure = resolutions.some((r) => r.resolution === "failure");
-  const hasSuccess = resolutions.some((r) => r.resolution === "success");
-
-  if (hasFailure) return "failure";
-  if (hasSuccess) return "success";
-  return "partial";
-}
-
-function getAverageScore(resolutions: ChatResolution[]): number {
-  if (resolutions.length === 0) return 0;
-  const sum = resolutions.reduce((acc, r) => acc + r.score, 0);
-  return Math.round(sum / resolutions.length);
-}
-
-function getContextQuality(score: number): {
-  label: string;
-  variant: "success" | "warning" | "destructive";
-} {
-  if (score >= 80) return { label: "Good Context", variant: "success" };
-  if (score >= 50) return { label: "Fair Context", variant: "warning" };
-  return { label: "Poor Context", variant: "destructive" };
-}
-
 function getSeverityBadgeVariant(
   severity?: string,
 ): "destructive" | "warning" | "neutral" {
@@ -172,13 +141,11 @@ function getSeverityBadgeVariant(
 
 function ChatMessagesList({
   messages,
-  messageResolutionMap,
   riskResultsByMessage,
   collapseNonRisk,
   enabledEntryTypes,
 }: {
   messages: ChatMessage[];
-  messageResolutionMap: Map<string, ChatResolution>;
   riskResultsByMessage: Map<string, RiskResult[]>;
   collapseNonRisk?: boolean;
   enabledEntryTypes: FilterableTraceEntryType[];
@@ -224,7 +191,6 @@ function ChatMessagesList({
           <MessageItem
             key={message.id}
             message={message}
-            resolution={messageResolutionMap.get(message.id)}
             riskResults={riskResultsByMessage.get(message.id)}
             collapseNonRisk={collapseNonRisk}
           />
@@ -252,7 +218,6 @@ function ChatMessagesList({
                 <MessageItem
                   key={message.id}
                   message={message}
-                  resolution={messageResolutionMap.get(message.id)}
                   riskResults={riskResultsByMessage.get(message.id)}
                   collapseNonRisk={collapseNonRisk}
                 />
@@ -267,12 +232,10 @@ function ChatMessagesList({
 
 function MessageItem({
   message,
-  resolution,
   riskResults,
   collapseNonRisk,
 }: {
   message: ChatMessage;
-  resolution: ChatResolution | undefined;
   riskResults: RiskResult[] | undefined;
   collapseNonRisk?: boolean;
 }) {
@@ -315,14 +278,6 @@ function MessageItem({
 
       {isCollapsed ? null : (
         <div className="pt-0 pr-3 pb-3 pl-12">
-          {resolution && (
-            <div className="bg-primary/10 border-primary mb-3 rounded-lg border-l-4 p-3">
-              <div className="text-xs font-semibold">
-                Resolution Point: {resolution.resolution}
-              </div>
-            </div>
-          )}
-
           <TraceEntryBody
             contentRevealed={contentRevealed}
             entryType={entryType}
@@ -984,7 +939,6 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
 
 export function ChatDetailPanel({
   chatId,
-  resolutions,
   onClose,
   onDelete,
   collapseNonRisk,
@@ -1070,9 +1024,6 @@ export function ChatDetailPanel({
     );
   }
 
-  const status = getOverallResolutionStatus(resolutions);
-  const averageScore = getAverageScore(resolutions);
-  const contextQuality = getContextQuality(averageScore);
   // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
@@ -1083,14 +1034,6 @@ export function ChatDetailPanel({
     chat.messages,
     enabledEntryTypes,
   );
-
-  // Create a map of message IDs to resolution info for showing breakpoints
-  const messageResolutionMap = new Map<string, ChatResolution>();
-  resolutions.forEach((res) => {
-    res.messageIds.forEach((msgId) => {
-      messageResolutionMap.set(msgId, res);
-    });
-  });
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -1295,57 +1238,8 @@ export function ChatDetailPanel({
                   </div>
                 </div>
               )}
-              {resolutions.length > 0 && (
-                <>
-                  <div>
-                    <div className="text-muted-foreground mb-1 text-xs">
-                      Resolution Score:
-                    </div>
-                    <div className="text-lg font-medium">{averageScore}%</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground mb-1 text-xs">
-                      Context Quality:
-                    </div>
-                    <Badge variant={contextQuality.variant}>
-                      <Icon name="circle-check" className="size-3" />
-                      {contextQuality.label}
-                    </Badge>
-                  </div>
-                </>
-              )}
             </div>
           </div>
-
-          {/* Resolutions Summary */}
-          {resolutions.length > 0 && (
-            <div className="border-b p-6">
-              <Stack direction="vertical" gap={3}>
-                {resolutions.map((resolution) => (
-                  <div key={resolution.id} className="flex items-start gap-4">
-                    <CircularProgress
-                      score={resolution.score}
-                      status={
-                        resolution.resolution as
-                          | "success"
-                          | "failure"
-                          | "partial"
-                      }
-                      size="sm"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1 text-sm font-medium">
-                        {resolution.userGoal}
-                      </div>
-                      <div className="text-muted-foreground text-xs">
-                        {resolution.resolutionNotes}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </Stack>
-            </div>
-          )}
 
           <EntryTypeFilterBar
             value={enabledEntryTypes}
@@ -1358,7 +1252,6 @@ export function ChatDetailPanel({
           {/* Chat Messages */}
           <ChatMessagesList
             messages={chat.messages}
-            messageResolutionMap={messageResolutionMap}
             riskResultsByMessage={riskResultsByMessage}
             collapseNonRisk={collapseNonRisk}
             enabledEntryTypes={enabledEntryTypes}

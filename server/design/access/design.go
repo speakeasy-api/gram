@@ -226,15 +226,15 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Grants"}`)
 	})
 
-	Method("updateMemberRole", func() {
-		Description("Change a team member's role assignment.")
+	Method("updateMemberRoles", func() {
+		Description("Update a team member's role assignments.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(UpdateMemberRoleForm)
+			Extend(UpdateMemberRolesForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -242,15 +242,15 @@ var _ = Service("access", func() {
 		Result(MemberModel)
 
 		HTTP(func() {
-			PUT("/rpc/access.updateMemberRole")
+			PUT("/rpc/access.updateMemberRoles")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "updateMemberRole")
-		Meta("openapi:extension:x-speakeasy-name-override", "updateMemberRole")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRole"}`)
+		Meta("openapi:operationId", "updateMemberRoles")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateMemberRoles")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRoles"}`)
 	})
 
 	Method("getRBACStatus", func() {
@@ -578,13 +578,13 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "name", "email", "role_id", "joined_at")
+	Required("id", "name", "email", "role_ids", "joined_at")
 
 	Attribute("id", String, "User ID.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")
-	Attribute("role_id", String, "Currently assigned role ID.")
+	Attribute("role_ids", ArrayOf(String), "All role IDs assigned to this member.")
 	Attribute("joined_at", String, func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
@@ -601,11 +601,11 @@ var ListUserGrantsResult = Type("ListUserGrantsResult", func() {
 	Attribute("grants", ArrayOf(ListRoleGrantModel), "The user's effective grants in this organization.")
 })
 
-var UpdateMemberRoleForm = Type("UpdateMemberRoleForm", func() {
-	Required("user_id", "role_id")
+var UpdateMemberRolesForm = Type("UpdateMemberRolesForm", func() {
+	Required("user_id", "role_ids")
 
 	Attribute("user_id", String, "The user ID to update.")
-	Attribute("role_id", String, "The new role ID to assign.")
+	Attribute("role_ids", ArrayOf(String), "The role IDs to assign. Replaces all existing role assignments.")
 })
 
 var RBACStatus = Type("RBACStatus", func() {

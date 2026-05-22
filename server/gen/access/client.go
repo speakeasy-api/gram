@@ -23,7 +23,7 @@ type Client struct {
 	ListScopesEndpoint           goa.Endpoint
 	ListMembersEndpoint          goa.Endpoint
 	ListGrantsEndpoint           goa.Endpoint
-	UpdateMemberRoleEndpoint     goa.Endpoint
+	UpdateMemberRolesEndpoint    goa.Endpoint
 	GetRBACStatusEndpoint        goa.Endpoint
 	EnableRBACEndpoint           goa.Endpoint
 	DisableRBACEndpoint          goa.Endpoint
@@ -33,7 +33,7 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRole, getRBACStatus, enableRBAC, disableRBAC, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, getRBACStatus, enableRBAC, disableRBAC, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:            listRoles,
 		GetRoleEndpoint:              getRole,
@@ -43,7 +43,7 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		ListScopesEndpoint:           listScopes,
 		ListMembersEndpoint:          listMembers,
 		ListGrantsEndpoint:           listGrants,
-		UpdateMemberRoleEndpoint:     updateMemberRole,
+		UpdateMemberRolesEndpoint:    updateMemberRoles,
 		GetRBACStatusEndpoint:        getRBACStatus,
 		EnableRBACEndpoint:           enableRBAC,
 		DisableRBACEndpoint:          disableRBAC,
@@ -225,9 +225,9 @@ func (c *Client) ListGrants(ctx context.Context, p *ListGrantsPayload) (res *Lis
 	return ires.(*ListUserGrantsResult), nil
 }
 
-// UpdateMemberRole calls the "updateMemberRole" endpoint of the "access"
+// UpdateMemberRoles calls the "updateMemberRoles" endpoint of the "access"
 // service.
-// UpdateMemberRole may return the following errors:
+// UpdateMemberRoles may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -239,9 +239,9 @@ func (c *Client) ListGrants(ctx context.Context, p *ListGrantsPayload) (res *Lis
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpdateMemberRole(ctx context.Context, p *UpdateMemberRolePayload) (res *AccessMember, err error) {
+func (c *Client) UpdateMemberRoles(ctx context.Context, p *UpdateMemberRolesPayload) (res *AccessMember, err error) {
 	var ires any
-	ires, err = c.UpdateMemberRoleEndpoint(ctx, p)
+	ires, err = c.UpdateMemberRolesEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

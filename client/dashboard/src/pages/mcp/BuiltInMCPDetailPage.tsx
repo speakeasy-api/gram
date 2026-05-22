@@ -47,10 +47,6 @@ const BUILT_IN_TOOLS = [
     description: "Fetch the metadata that powers the MCP install page.",
   },
   {
-    name: "gram_list_chats_with_resolutions",
-    description: "List all chats for a project with their resolutions",
-  },
-  {
     name: "gram_get_deployment_logs",
     description: "Get logs for a deployment.",
   },

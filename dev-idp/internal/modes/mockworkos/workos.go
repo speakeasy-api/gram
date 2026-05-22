@@ -609,26 +609,44 @@ func (h *Handler) handleWorkosCreateMembership(w http.ResponseWriter, r *http.Re
 
 func (h *Handler) handleWorkosUpdateMembership(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	h.logger.InfoContext(ctx, "workos update membership: request received")
+
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
+		h.logger.WarnContext(ctx, "workos update membership: invalid id", slog.String("raw_id", r.PathValue("id")))
 		writeWorkosError(w, http.StatusBadRequest, "invalid membership id")
 		return
 	}
 	var body struct {
-		RoleSlug string `json:"role_slug"`
+		RoleSlug  string   `json:"role_slug"`
+		RoleSlugs []string `json:"role_slugs"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.logger.WarnContext(ctx, "workos update membership: invalid body", slog.Any("error", err))
 		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.RoleSlug == "" {
-		writeWorkosError(w, http.StatusBadRequest, "role_slug is required")
+	h.logger.InfoContext(ctx, "workos update membership: parsed body",
+		slog.String("membership_id", id.String()),
+		slog.String("role_slug", body.RoleSlug),
+		slog.Any("role_slugs", body.RoleSlugs),
+	)
+
+	// role_slugs (multi-role) takes precedence over role_slug (single).
+	roleCSV := body.RoleSlug
+	if len(body.RoleSlugs) > 0 {
+		roleCSV = strings.Join(body.RoleSlugs, ",")
+	}
+	if roleCSV == "" {
+		h.logger.WarnContext(ctx, "workos update membership: no role provided")
+		writeWorkosError(w, http.StatusBadRequest, "role_slug or role_slugs is required")
 		return
 	}
 
 	queries := repo.New(h.db)
-	if _, err := queries.UpdateMembership(ctx, repo.UpdateMembershipParams{ID: id, Role: body.RoleSlug, Ts: time.Now()}); err != nil {
+	if _, err := queries.UpdateMembership(ctx, repo.UpdateMembershipParams{ID: id, Role: roleCSV, Ts: time.Now()}); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			h.logger.WarnContext(ctx, "workos update membership: not found", slog.String("membership_id", id.String()))
 			writeWorkosError(w, http.StatusNotFound, "membership not found")
 			return
 		}
@@ -642,6 +660,10 @@ func (h *Handler) handleWorkosUpdateMembership(w http.ResponseWriter, r *http.Re
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load membership")
 		return
 	}
+	h.logger.InfoContext(ctx, "workos update membership: success",
+		slog.String("membership_id", id.String()),
+		slog.String("roles", roleCSV),
+	)
 	writeJSON(w, http.StatusOK, workosMembershipView(repo.ListMembershipsWithOrgNameRow(row)))
 }
 
@@ -1112,12 +1134,21 @@ func workosMembershipView(m repo.ListMembershipsWithOrgNameRow) workosOrganizati
 	if m.OrgWorkosID.Valid && m.OrgWorkosID.String != "" {
 		orgID = m.OrgWorkosID.String
 	}
+	// The role column may contain comma-separated slugs for multi-role support.
+	slugs := strings.Split(m.Role, ",")
+	roles := make([]workosRoleSlug, 0, len(slugs))
+	for _, s := range slugs {
+		if s != "" {
+			roles = append(roles, workosRoleSlug{Slug: s})
+		}
+	}
 	return workosOrganizationMembership{
 		ID:               m.ID.String(),
 		UserID:           workosUserID(m.UserID),
 		OrganizationID:   orgID,
 		OrganizationName: m.OrganizationName,
-		Role:             workosRoleSlug{Slug: m.Role},
+		Role:             workosRoleSlug{Slug: slugs[0]},
+		Roles:            roles,
 		Status:           "active",
 		CreatedAt:        m.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:        m.UpdatedAt.UTC().Format(time.RFC3339),

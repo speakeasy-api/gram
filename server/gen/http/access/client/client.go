@@ -49,9 +49,9 @@ type Client struct {
 	// endpoint.
 	ListGrantsDoer goahttp.Doer
 
-	// UpdateMemberRole Doer is the HTTP client used to make requests to the
-	// updateMemberRole endpoint.
-	UpdateMemberRoleDoer goahttp.Doer
+	// UpdateMemberRoles Doer is the HTTP client used to make requests to the
+	// updateMemberRoles endpoint.
+	UpdateMemberRolesDoer goahttp.Doer
 
 	// GetRBACStatus Doer is the HTTP client used to make requests to the
 	// getRBACStatus endpoint.
@@ -105,7 +105,7 @@ func NewClient(
 		ListScopesDoer:           doer,
 		ListMembersDoer:          doer,
 		ListGrantsDoer:           doer,
-		UpdateMemberRoleDoer:     doer,
+		UpdateMemberRolesDoer:    doer,
 		GetRBACStatusDoer:        doer,
 		EnableRBACDoer:           doer,
 		DisableRBACDoer:          doer,
@@ -312,15 +312,15 @@ func (c *Client) ListGrants() goa.Endpoint {
 	}
 }
 
-// UpdateMemberRole returns an endpoint that makes HTTP requests to the access
-// service updateMemberRole server.
-func (c *Client) UpdateMemberRole() goa.Endpoint {
+// UpdateMemberRoles returns an endpoint that makes HTTP requests to the access
+// service updateMemberRoles server.
+func (c *Client) UpdateMemberRoles() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeUpdateMemberRoleRequest(c.encoder)
-		decodeResponse = DecodeUpdateMemberRoleResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeUpdateMemberRolesRequest(c.encoder)
+		decodeResponse = DecodeUpdateMemberRolesResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpdateMemberRoleRequest(ctx, v)
+		req, err := c.BuildUpdateMemberRolesRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -328,9 +328,9 @@ func (c *Client) UpdateMemberRole() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.UpdateMemberRoleDoer.Do(req)
+		resp, err := c.UpdateMemberRolesDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("access", "updateMemberRole", err)
+			return nil, goahttp.ErrRequestError("access", "updateMemberRoles", err)
 		}
 		return decodeResponse(resp)
 	}

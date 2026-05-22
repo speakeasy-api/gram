@@ -3,6 +3,8 @@ package risk
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -709,6 +711,105 @@ func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
 		return empty, fmt.Errorf("parse timestamp: %w", err)
 	}
 	return pgtype.Timestamptz{Time: parsed.UTC(), InfinityModifier: pgtype.Finite, Valid: true}, nil
+}
+
+// ListRiskResultsForAgent serves the same data as ListRiskResults but strips
+// raw `match` content from non-shadow_mcp findings before returning, so the
+// agent / MCP surface never holds secret values in model context. Shadow-MCP
+// findings pass `match` through verbatim because the value is a server URL
+// or stdio command identifier the dashboard already exposes unmasked.
+func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.ListRiskResultsForAgentPayload) (*gen.ListRiskResultsForAgentResult, error) {
+	base, err := s.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		ApikeyToken:      payload.ApikeyToken,
+		SessionToken:     payload.SessionToken,
+		ProjectSlugInput: payload.ProjectSlugInput,
+		PolicyID:         payload.PolicyID,
+		ChatID:           payload.ChatID,
+		Category:         payload.Category,
+		RuleID:           payload.RuleID,
+		UniqueMatch:      payload.UniqueMatch,
+		From:             payload.From,
+		To:               payload.To,
+		Cursor:           payload.Cursor,
+		Limit:            payload.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// ListRiskResults already enforced auth above; this lookup is safe and
+	// only used to derive the per-org salt for match-fingerprint hashing.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	redacted := make([]*types.RiskResultRedacted, 0, len(base.Results))
+	for _, r := range base.Results {
+		redacted = append(redacted, redactRiskResult(r, authCtx.ActiveOrganizationID))
+	}
+
+	return &gen.ListRiskResultsForAgentResult{
+		Results:    redacted,
+		TotalCount: base.TotalCount,
+		NextCursor: base.NextCursor,
+	}, nil
+}
+
+// redactRiskResult converts a RiskResult into a RiskResultRedacted by
+// replacing raw `match` content with an opaque length+sha256-prefix
+// fingerprint and coarsening position info to a single boolean. Source ==
+// "shadow_mcp" is a deliberate carve-out: its match is a server URL or
+// command identifier (already shown unmasked in the dashboard) and the agent
+// needs to be able to name it to be useful.
+//
+// orgID is mixed into the hash so fingerprints cannot correlate the same
+// secret across organizations even if some future code path widens the
+// surface beyond org-scoped access.
+func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedacted {
+	matchRedacted := redactMatch(r.Source, r.Match, orgID)
+
+	return &types.RiskResultRedacted{
+		ID:            r.ID,
+		PolicyID:      r.PolicyID,
+		PolicyVersion: r.PolicyVersion,
+		ChatMessageID: r.ChatMessageID,
+		ChatID:        r.ChatID,
+		ChatTitle:     r.ChatTitle,
+		UserID:        r.UserID,
+		Source:        r.Source,
+		RuleID:        r.RuleID,
+		Description:   r.Description,
+		MatchRedacted: matchRedacted,
+		PositionKnown: r.StartPos != nil && r.EndPos != nil,
+		Confidence:    r.Confidence,
+		Tags:          r.Tags,
+		CreatedAt:     r.CreatedAt,
+	}
+}
+
+// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>` for
+// non-shadow_mcp sources, or passes it through verbatim for shadow_mcp.
+// A nil/empty match collapses to `<redacted len=0>` without a sha component
+// so the absence of a finding payload is distinguishable from a real hash.
+//
+// The hash is salted by orgID with a NUL separator so two different orgs
+// holding the same secret produce different fingerprints — defense in depth
+// against any future surface that crosses an org boundary. Within an org the
+// fingerprint stays deterministic so agents can still dedupe.
+func redactMatch(source string, match *string, orgID string) string {
+	if match == nil || *match == "" {
+		return "<redacted len=0>"
+	}
+	if source == shadowmcp.SourceShadowMCP {
+		return *match
+	}
+	var buf []byte
+	buf = append(buf, orgID...)
+	buf = append(buf, 0x00)
+	buf = append(buf, *match...)
+	sum := sha256.Sum256(buf)
+	return fmt.Sprintf("<redacted len=%d sha=%s>", len(*match), hex.EncodeToString(sum[:4]))
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
