@@ -1145,6 +1145,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
 	Audience                pgtype.Text
+	LegacyCallbackUrl       bool
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz
