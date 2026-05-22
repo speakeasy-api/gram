@@ -22,14 +22,6 @@ import {
 import { SearchBar } from "@/components/ui/search-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
@@ -58,7 +50,13 @@ import { Link, useNavigate } from "react-router";
 import { useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
-import { Badge } from "@speakeasy-api/moonshine";
+import {
+  Badge,
+  type Column,
+  type SortDescriptor,
+  Table,
+  sortTableData,
+} from "@speakeasy-api/moonshine";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeFilterDimension = "all" | "user" | "role";
@@ -230,6 +228,7 @@ type Employee = {
   status: EmployeeStatus;
   tokenCount: number;
   lastActivity: string;
+  lastActivityTimestamp: number | null;
   photoUrl?: string | null;
 };
 
@@ -525,6 +524,7 @@ function EmployeeTable({
 }) {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortDescriptor | null>(null);
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return employees;
@@ -534,9 +534,117 @@ function EmployeeTable({
         item.email.toLowerCase().includes(query),
     );
   }, [employees, search]);
-  const totalPages = Math.ceil(filteredEmployees.length / PAGE_SIZE);
+  const columns = useMemo<Column<Employee>[]>(
+    () => [
+      {
+        key: "name",
+        id: "employee",
+        header: (
+          <span className="flex items-center gap-1">
+            Employee
+            <SimpleTooltip tooltip="Enrollment is inferred by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as enrolled until they sign up or directory sync is configured.">
+              <Info className="text-muted-foreground size-3 shrink-0" />
+            </SimpleTooltip>
+          </span>
+        ),
+        sortable: true,
+        sortLabel: "Employee",
+        sortValue: (item) => item.name.toLowerCase(),
+        width: "2fr",
+        render: (item) => (
+          <div className="flex items-center gap-3">
+            <Avatar className="size-9">
+              {item.photoUrl && (
+                <AvatarImage src={item.photoUrl} alt={item.name} />
+              )}
+              <AvatarFallback className="text-sm font-semibold">
+                {getInitials(item.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="font-medium">{item.name}</p>
+              <p className="text-muted-foreground text-xs">{item.email}</p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "role",
+        header: "Role",
+        sortable: true,
+        sortValue: (item) => item.role.toLowerCase(),
+        width: "1fr",
+        render: (item) => <span>{item.role}</span>,
+      },
+      {
+        key: "status",
+        header: "Enrollment",
+        sortable: true,
+        sortLabel: "Enrollment",
+        sortValue: (item) => statusMeta[item.status].label,
+        width: "1fr",
+        render: (item) => <StatusPill status={item.status} />,
+      },
+      {
+        key: "tokenCount",
+        header: "Token Count",
+        sortable: true,
+        sortValue: (item) => item.tokenCount,
+        width: "1fr",
+        render: (item) => (
+          <span className="font-mono">{item.tokenCount.toLocaleString()}</span>
+        ),
+      },
+      {
+        key: "lastActivity",
+        header: "Last Activity",
+        sortable: true,
+        sortValue: (item) => item.lastActivityTimestamp ?? 0,
+        sortCompare: (a, b) => {
+          if (
+            a.lastActivityTimestamp == null &&
+            b.lastActivityTimestamp == null
+          )
+            return 0;
+          if (a.lastActivityTimestamp == null) return 1;
+          if (b.lastActivityTimestamp == null) return -1;
+          return a.lastActivityTimestamp - b.lastActivityTimestamp;
+        },
+        width: "1fr",
+        render: (item) => (
+          <span className="text-muted-foreground">{item.lastActivity}</span>
+        ),
+      },
+      {
+        key: "action",
+        header: <span className="block text-right">Action</span>,
+        width: "auto",
+        render: (item) => (
+          <div className="text-right">
+            <button
+              type="button"
+              className="text-primary hover:text-primary/80 text-sm font-medium underline underline-offset-4"
+              aria-label={`View ${item.name}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectUser(item);
+              }}
+            >
+              View
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [onSelectUser],
+  );
+  const sortedEmployees = useMemo(
+    () => sortTableData(filteredEmployees, columns, sort) as Employee[],
+    [columns, filteredEmployees, sort],
+  );
+  const totalPages = Math.ceil(sortedEmployees.length / PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
-  const pageEmployees = filteredEmployees.slice(
+  const pageEmployees = sortedEmployees.slice(
     safePage * PAGE_SIZE,
     (safePage + 1) * PAGE_SIZE,
   );
@@ -545,129 +653,64 @@ function EmployeeTable({
     setPage(0);
   };
 
+  const NoResultsMessage = () => {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-muted-foreground text-sm">
+          {search
+            ? `No employees matching "${search}".`
+            : "No organization members found."}
+        </p>
+      </div>
+    );
+  };
+
   return (
-    <section className="bg-card flex flex-col gap-4 rounded-xl border p-4">
+    <section className="bg-card flex flex-col gap-4">
       <SearchBar
         value={search}
         onChange={handleSearchChange}
         placeholder="Search by name or email..."
       />
-      <div className="overflow-hidden rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">
-                <span className="flex items-center gap-1">
-                  Employee
-                  <SimpleTooltip tooltip="Enrollment is inferred by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as enrolled until they sign up or directory sync is configured.">
-                    <Info className="text-muted-foreground size-3 shrink-0" />
-                  </SimpleTooltip>
-                </span>
-              </TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Enrollment</TableHead>
-              <TableHead>Token Count</TableHead>
-              <TableHead>Last Activity</TableHead>
-              <TableHead className="pr-6 text-right">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {pageEmployees.length > 0 ? (
-              pageEmployees.map((item) => (
-                <TableRow
-                  key={item.id}
-                  className="cursor-pointer"
-                  onClick={() => onSelectUser(item)}
-                >
-                  <TableCell className="pl-6">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="size-9">
-                        {item.photoUrl && (
-                          <AvatarImage src={item.photoUrl} alt={item.name} />
-                        )}
-                        <AvatarFallback className="text-sm font-semibold">
-                          {getInitials(item.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{item.name}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {item.email}
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <p className="text-sm">{item.role}</p>
-                  </TableCell>
-                  <TableCell>
-                    <StatusPill status={item.status} />
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-mono text-sm">
-                      {item.tokenCount.toLocaleString()}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {item.lastActivity}
-                  </TableCell>
-                  <TableCell className="pr-6 text-right">
-                    <button
-                      type="button"
-                      className="text-primary hover:text-primary/80 text-sm font-medium underline underline-offset-4"
-                      aria-label={`View ${item.name}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSelectUser(item);
-                      }}
-                    >
-                      View
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="text-muted-foreground py-10 text-center text-sm"
-                >
-                  {search
-                    ? `No employees matching "${search}".`
-                    : "No organization members found."}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t px-4 py-3">
-            <p className="text-muted-foreground text-sm">
-              {safePage * PAGE_SIZE + 1}–
-              {Math.min((safePage + 1) * PAGE_SIZE, filteredEmployees.length)}{" "}
-              of {filteredEmployees.length}
-            </p>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPage((p) => p - 1)}
-                disabled={safePage === 0}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={safePage >= totalPages - 1}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
+      <Table
+        columns={columns}
+        data={pageEmployees}
+        rowKey={(item) => item.id}
+        onRowClick={(item) => onSelectUser(item)}
+        sort={sort}
+        onSortChange={(nextSort) => {
+          setSort(nextSort);
+          setPage(0);
+        }}
+        noResultsMessage={<NoResultsMessage />}
+      />
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <p className="text-muted-foreground text-sm">
+            {safePage * PAGE_SIZE + 1}–
+            {Math.min((safePage + 1) * PAGE_SIZE, sortedEmployees.length)} of{" "}
+            {sortedEmployees.length}
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPage((p) => p - 1)}
+              disabled={safePage === 0}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={safePage >= totalPages - 1}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -813,6 +856,9 @@ function buildEmployees(
       status,
       tokenCount,
       photoUrl: member.photoUrl,
+      lastActivityTimestamp: summary
+        ? Number(BigInt(summary.lastSeenUnixNano) / 1_000_000n)
+        : null,
       lastActivity: summary
         ? formatUnixNano(summary.lastSeenUnixNano)
         : "No activity found",
@@ -830,6 +876,10 @@ function buildEmployees(
         role: "-",
         status: "enrolled" as const,
         tokenCount,
+        photoUrl: null,
+        lastActivityTimestamp: Number(
+          BigInt(summary.lastSeenUnixNano) / 1_000_000n,
+        ),
         lastActivity: formatUnixNano(summary.lastSeenUnixNano),
       };
     });
