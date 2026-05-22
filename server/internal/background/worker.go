@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -67,6 +68,7 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	ClickhouseConn      clickhouse.Conn
+	TelemetryRepo       *telemetryrepo.Queries
 	TriggersApp         *bgtriggers.App
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
@@ -110,6 +112,7 @@ func ForDeploymentProcessing(
 		RedisClient:         nil,
 		PosthogClient:       nil,
 		TelemetryLogger:     nil,
+		TelemetryRepo:       nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
 		AssistantsCore:      nil,
@@ -151,6 +154,7 @@ func NewTemporalWorker(
 		RagService:          nil,
 		MCPRegistryClient:   nil,
 		TelemetryLogger:     nil,
+		TelemetryRepo:       nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
 		AssistantsCore:      nil,
@@ -186,6 +190,7 @@ func NewTemporalWorker(
 			RagService:          conv.Default(o.RagService, opts.RagService),
 			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			TelemetryRepo:       conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -216,6 +221,11 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
+	aiUsageWorker := worker.New(env.Client(), AIUsagePollerTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
+	})
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -240,6 +250,7 @@ func NewTemporalWorker(
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.ClickhouseConn,
+		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
 		opts.AssistantsCore,
@@ -268,6 +279,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
+	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -308,6 +320,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 
+	// AI integration usage syncing runs on its own worker and task queue.
+	aiUsageWorker.RegisterActivity(activities.PollAIUsage)
+
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
@@ -316,6 +331,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
+	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
@@ -359,6 +376,12 @@ func NewTemporalWorker(
 		}
 	}
 
+	if err := AddAIUsagePollerCoordinatorSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
+		}
+	}
+
 	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
@@ -387,7 +410,7 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -398,19 +421,31 @@ func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-risk-analysis"
 }
 
-// Workers bundles the main and risk-analysis Temporal workers.
+const perPodAIUsagePollerConcurrency = 5
+
+func AIUsagePollerTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-ai-integration-usage"
+}
+
+// Workers bundles the main and dedicated Temporal workers.
 type Workers struct {
 	main         worker.Worker
 	riskAnalysis worker.Worker
+	aiUsage      worker.Worker
 }
 
-// Run starts the risk-analysis worker, then blocks running the main worker
-// until interruptCh receives.
+// Run starts dedicated workers, then blocks running the main worker until
+// interruptCh receives.
 func (w *Workers) Run(interruptCh <-chan any) error {
 	if err := w.riskAnalysis.Start(); err != nil {
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
 	defer w.riskAnalysis.Stop()
+
+	if err := w.aiUsage.Start(); err != nil {
+		return fmt.Errorf("start ai integration usage worker: %w", err)
+	}
+	defer w.aiUsage.Stop()
 
 	if err := w.main.Run(interruptCh); err != nil {
 		return fmt.Errorf("run main worker: %w", err)
@@ -418,7 +453,7 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 	return nil
 }
 
-// Start starts both workers without blocking. Pair with Stop (used by tests).
+// Start starts all workers without blocking. Pair with Stop (used by tests).
 func (w *Workers) Start() error {
 	if err := w.main.Start(); err != nil {
 		return fmt.Errorf("start main worker: %w", err)
@@ -427,10 +462,16 @@ func (w *Workers) Start() error {
 		w.main.Stop()
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
+	if err := w.aiUsage.Start(); err != nil {
+		w.riskAnalysis.Stop()
+		w.main.Stop()
+		return fmt.Errorf("start ai integration usage worker: %w", err)
+	}
 	return nil
 }
 
 func (w *Workers) Stop() {
+	w.aiUsage.Stop()
 	w.riskAnalysis.Stop()
 	w.main.Stop()
 }
