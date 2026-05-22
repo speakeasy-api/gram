@@ -155,6 +155,7 @@ export * from "./mcpRegistriesClearCache.js";
 export * from "./mcpRegistriesGetServerDetails.js";
 export * from "./mcpServers.js";
 export * from "./members.js";
+export * from "./mintUserSession.js";
 export * from "./organization.js";
 export * from "./otelForwardingConfig.js";
 export * from "./pauseTrigger.js";

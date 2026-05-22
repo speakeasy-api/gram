@@ -21,6 +21,11 @@ type Service interface {
 	// List issued user_sessions in the caller's project. refresh_token_hash is
 	// never returned.
 	ListUserSessions(context.Context, *ListUserSessionsPayload) (res *ListUserSessionsResult, err error)
+	// Mint a user_session for an issuer-gated toolset on behalf of the
+	// authenticated dashboard user. The minted JWT matches the shape of the one
+	// /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime
+	// MCP gateway validates it through the same path as a real MCP client's bearer.
+	MintUserSession(context.Context, *MintUserSessionPayload) (res *MintUserSessionResult, err error)
 	// Push the session's jti into the revocation cache and soft-delete the row.
 	RevokeUserSession(context.Context, *RevokeUserSessionPayload) (err error)
 }
@@ -45,7 +50,7 @@ const ServiceName = "userSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"listUserSessions", "revokeUserSession"}
+var MethodNames = [3]string{"listUserSessions", "mintUserSession", "revokeUserSession"}
 
 // ListUserSessionsPayload is the payload type of the userSessions service
 // listUserSessions method.
@@ -69,6 +74,26 @@ type ListUserSessionsResult struct {
 	Items []*types.UserSession
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// MintUserSessionPayload is the payload type of the userSessions service
+// mintUserSession method.
+type MintUserSessionPayload struct {
+	// The toolset to bind the minted JWT to. Must be issuer-gated and live in the
+	// caller's project.
+	ToolsetID        string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// MintUserSessionResult is the result type of the userSessions service
+// mintUserSession method.
+type MintUserSessionResult struct {
+	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
+	// to the toolset's /mcp/{slug} surface.
+	AccessToken string
+	// Lifetime of the access token in seconds.
+	ExpiresIn int
 }
 
 // RevokeUserSessionPayload is the payload type of the userSessions service

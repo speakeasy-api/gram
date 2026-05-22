@@ -272,6 +272,244 @@ func DecodeListUserSessionsResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildMintUserSessionRequest instantiates a HTTP request object with method
+// and path set to call the "userSessions" service "mintUserSession" endpoint
+func (c *Client) BuildMintUserSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MintUserSessionUserSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessions", "mintUserSession", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMintUserSessionRequest returns an encoder for requests sent to the
+// userSessions mintUserSession server.
+func EncodeMintUserSessionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessions.MintUserSessionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessions", "mintUserSession", "*usersessions.MintUserSessionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewMintUserSessionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("userSessions", "mintUserSession", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMintUserSessionResponse returns a decoder for responses returned by
+// the userSessions mintUserSession endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeMintUserSessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMintUserSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MintUserSessionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			res := NewMintUserSessionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MintUserSessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			return nil, NewMintUserSessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MintUserSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			return nil, NewMintUserSessionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MintUserSessionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			return nil, NewMintUserSessionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MintUserSessionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			return nil, NewMintUserSessionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MintUserSessionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			return nil, NewMintUserSessionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MintUserSessionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			return nil, NewMintUserSessionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MintUserSessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			return nil, NewMintUserSessionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MintUserSessionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+				}
+				err = ValidateMintUserSessionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+				}
+				return nil, NewMintUserSessionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MintUserSessionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+				}
+				err = ValidateMintUserSessionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+				}
+				return nil, NewMintUserSessionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessions", "mintUserSession", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MintUserSessionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintUserSession", err)
+			}
+			err = ValidateMintUserSessionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintUserSession", err)
+			}
+			return nil, NewMintUserSessionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessions", "mintUserSession", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRevokeUserSessionRequest instantiates a HTTP request object with method
 // and path set to call the "userSessions" service "revokeUserSession" endpoint
 func (c *Client) BuildRevokeUserSessionRequest(ctx context.Context, v any) (*http.Request, error) {

@@ -213,6 +213,8 @@ export * from "./mcpexporttool.js";
 export * from "./mcpmetadata.js";
 export * from "./mcpregistry.js";
 export * from "./mcpserver.js";
+export * from "./mintusersessionrequestbody.js";
+export * from "./mintusersessionresponsebody.js";
 export * from "./modelusage.js";
 export * from "./notmodified.js";
 export * from "./oauthenablementmetadata.js";

@@ -193,6 +193,7 @@ export * from "./listusersessions.js";
 export * from "./listversions.js";
 export * from "./loadchat.js";
 export * from "./logout.js";
+export * from "./mintusersession.js";
 export * from "./pausetriggerinstance.js";
 export * from "./publish.js";
 export * from "./publishplugins.js";
