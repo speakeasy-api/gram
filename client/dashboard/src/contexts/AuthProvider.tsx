@@ -10,7 +10,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
-import { Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsAdminRef } from "@/contexts/Sdk";
