@@ -57,7 +57,12 @@ import {
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { getActorLabel, renderVerb } from "./OrgAuditLogs";
+import {
+  ActionBadge,
+  ActionDot,
+  getActorLabel,
+  renderVerb,
+} from "./OrgAuditLogs";
 
 const PROJECT_LIMIT = 6;
 const AUDIT_PREVIEW_LIMIT = 8;
@@ -260,9 +265,7 @@ export function OrgHomeInner() {
           </aside>
 
           <main className="flex min-w-0 flex-col gap-3">
-            <Type small muted className="px-1">
-              Projects
-            </Type>
+            <Heading variant="h4">Projects</Heading>
 
             {filteredProjects.length === 0 && isSearching ? (
               <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
@@ -381,7 +384,7 @@ function AddNewMenu({
       <DropdownMenuTrigger asChild>
         <Button className="h-[42px] shrink-0 px-4">
           <Plus className="size-4" />
-          Add new
+          Add New
           <ChevronDown className="size-3.5 opacity-70" />
         </Button>
       </DropdownMenuTrigger>
@@ -830,24 +833,32 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
           {preview.map((log) => (
             <li
               key={log.id}
-              className="flex flex-col gap-1 px-3 py-2.5 text-xs"
+              className="flex items-start gap-2 px-3 py-2 text-xs"
             >
-              <Type small className="leading-snug">
-                <span className="text-foreground font-medium">
-                  {getActorLabel(log)}
-                </span>{" "}
-                <span className="text-muted-foreground">{renderVerb(log)}</span>
-              </Type>
-              <Type
-                muted
-                small
-                className="text-muted-foreground/80 text-[11px]"
-              >
-                {log.projectSlug ? `${log.projectSlug} · ` : ""}
-                {dateTimeFormatters.humanize(log.createdAt, {
-                  includeTime: false,
-                })}
-              </Type>
+              <ActionDot action={log.action} />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <ActionBadge action={log.action} />
+                  <Type small className="truncate leading-snug">
+                    <span className="text-foreground font-medium">
+                      {getActorLabel(log)}
+                    </span>{" "}
+                    <span className="text-muted-foreground">
+                      {renderVerb(log)}
+                    </span>
+                  </Type>
+                </div>
+                <Type
+                  muted
+                  small
+                  className="text-muted-foreground/80 text-[11px]"
+                >
+                  {log.projectSlug ? `${log.projectSlug} · ` : ""}
+                  {dateTimeFormatters.humanize(log.createdAt, {
+                    includeTime: false,
+                  })}
+                </Type>
+              </div>
             </li>
           ))}
         </ol>

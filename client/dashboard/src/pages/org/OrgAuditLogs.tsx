@@ -189,7 +189,7 @@ function getResourceLabel(resource: string) {
   }
 }
 
-function formatAuditAction(action: string) {
+export function formatAuditAction(action: string) {
   const [resource, verb] = action.split(":");
   if (!resource || !verb) {
     return action;
@@ -485,7 +485,7 @@ function hasDiff(log: AuditLog): boolean {
   return log.beforeSnapshot != null || log.afterSnapshot != null;
 }
 
-function ActionBadge({ action }: { action: string }) {
+export function ActionBadge({ action }: { action: string }) {
   const category = getActionCategory(action);
   const colors = getActionColorConfig(category);
   return (
@@ -501,7 +501,7 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
-function ActionDot({ action }: { action: string }) {
+export function ActionDot({ action }: { action: string }) {
   const category = getActionCategory(action);
   const colors = getActionColorConfig(category);
   return (
