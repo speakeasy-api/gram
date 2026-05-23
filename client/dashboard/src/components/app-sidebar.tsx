@@ -8,9 +8,12 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { SidebarBrand } from "@/components/sidebar-brand";
+import { SidebarUserMenu } from "@/components/sidebar-user-menu";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@/hooks/useRBAC";
@@ -131,7 +134,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarContent className="pt-5">
+      <SidebarHeader>
+        <SidebarBrand />
+      </SidebarHeader>
+      <SidebarContent className="pt-2">
         <NavGroupProvider
           activeGroup={activeGroup}
           defaultOpenGroups={!activeGroup ? ["Connect", "Build"] : undefined}
@@ -239,8 +245,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </Link>
         </div>
       </SidebarContent>
-      <SidebarFooter className="group-data-[collapsible=icon]:hidden">
-        <FreeTierExceededNotification />
+      <SidebarFooter className="gap-1">
+        <div className="group-data-[collapsible=icon]:hidden">
+          <FreeTierExceededNotification />
+        </div>
+        <SidebarUserMenu />
       </SidebarFooter>
       <FeatureRequestModal
         isOpen={isUpgradeModalOpen}

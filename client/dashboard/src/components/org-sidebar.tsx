@@ -8,9 +8,13 @@ import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { SidebarBrand } from "@/components/sidebar-brand";
+import { SidebarUserMenu } from "@/components/sidebar-user-menu";
 import { useIsAdmin } from "@/contexts/Auth";
 import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { AppRoute, useOrgRoutes } from "@/routes";
@@ -97,7 +101,10 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarContent className="pt-5">
+      <SidebarHeader>
+        <SidebarBrand />
+      </SidebarHeader>
+      <SidebarContent className="pt-2">
         <NavGroupProvider
           activeGroup={activeGroup}
           defaultOpenGroups={["Settings", "Secure"]}
@@ -172,6 +179,9 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenu>
         </NavGroupProvider>
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarUserMenu />
+      </SidebarFooter>
     </Sidebar>
   );
 }
