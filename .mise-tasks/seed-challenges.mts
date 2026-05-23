@@ -129,12 +129,16 @@ type Scenario = {
   userEmail?: string;
   apiKeyId?: string;
   operation: "require" | "require_any" | "filter";
+  outcome: "deny" | "allow";
   reason: string;
   scope: string;
   resourceKind: string;
   resourceId: string;
   selector: string;
   expandedScopes: string[];
+  // Role principal URN that granted access; only used for allow outcomes.
+  grantedByRoleUrn?: string;
+  grantedByRoleSlug?: string;
   copies: number;
 };
 
@@ -146,12 +150,14 @@ function buildScenarios(args: {
 }): Scenario[] {
   const { projectId } = args;
   return [
+    // Deny scenarios — what the Recent challenges box surfaces.
     {
       principalUrn: `user:${args.userId}`,
       principalType: "user",
       userId: args.userId,
       userEmail: args.userEmail,
       operation: "require",
+      outcome: "deny",
       reason: "scope_unsatisfied",
       scope: "toolset:admin",
       resourceKind: "toolset",
@@ -166,6 +172,7 @@ function buildScenarios(args: {
       userId: args.userId,
       userEmail: args.userEmail,
       operation: "require",
+      outcome: "deny",
       reason: "no_grants",
       scope: "project:admin",
       resourceKind: "project",
@@ -179,6 +186,7 @@ function buildScenarios(args: {
       principalType: "api_key",
       apiKeyId: `akey_${hex(12)}`,
       operation: "require",
+      outcome: "deny",
       reason: "scope_unsatisfied",
       scope: "mcp:invoke",
       resourceKind: "mcp",
@@ -193,6 +201,7 @@ function buildScenarios(args: {
       userId: args.userId,
       userEmail: args.userEmail,
       operation: "require",
+      outcome: "deny",
       reason: "deny_grant",
       scope: "environment:write",
       resourceKind: "environment",
@@ -200,6 +209,75 @@ function buildScenarios(args: {
       selector: JSON.stringify({ project: projectId, name: "production" }),
       expandedScopes: ["environment:write", "environment:read"],
       copies: 1,
+    },
+    // Allow scenarios — for the full /access/challenges page when filtering
+    // to "approvals". Each has a matched grant so the bucket is interpretable.
+    {
+      principalUrn: `user:${args.userId}`,
+      principalType: "user",
+      userId: args.userId,
+      userEmail: args.userEmail,
+      operation: "require",
+      outcome: "allow",
+      reason: "grant_matched",
+      scope: "toolset:read",
+      resourceKind: "toolset",
+      resourceId: `tst_${hex(16)}`,
+      selector: JSON.stringify({ project: projectId }),
+      expandedScopes: ["toolset:read"],
+      grantedByRoleUrn: "role:organization:admin",
+      grantedByRoleSlug: "admin",
+      copies: 12,
+    },
+    {
+      principalUrn: `user:${args.userId}`,
+      principalType: "user",
+      userId: args.userId,
+      userEmail: args.userEmail,
+      operation: "require",
+      outcome: "allow",
+      reason: "grant_matched",
+      scope: "project:read",
+      resourceKind: "project",
+      resourceId: projectId,
+      selector: JSON.stringify({ id: projectId }),
+      expandedScopes: ["project:read"],
+      grantedByRoleUrn: "role:organization:admin",
+      grantedByRoleSlug: "admin",
+      copies: 9,
+    },
+    {
+      principalUrn: `api_key:akey_${hex(12)}`,
+      principalType: "api_key",
+      apiKeyId: `akey_${hex(12)}`,
+      operation: "require",
+      outcome: "allow",
+      reason: "grant_matched",
+      scope: "mcp:read",
+      resourceKind: "mcp",
+      resourceId: `mcp_${hex(16)}`,
+      selector: JSON.stringify({ project: projectId }),
+      expandedScopes: ["mcp:read"],
+      grantedByRoleUrn: "role:organization:viewer",
+      grantedByRoleSlug: "viewer",
+      copies: 18,
+    },
+    {
+      principalUrn: `user:${args.userId}`,
+      principalType: "user",
+      userId: args.userId,
+      userEmail: args.userEmail,
+      operation: "require",
+      outcome: "allow",
+      reason: "grant_matched",
+      scope: "environment:read",
+      resourceKind: "environment",
+      resourceId: `env_${hex(16)}`,
+      selector: JSON.stringify({ project: projectId, name: "staging" }),
+      expandedScopes: ["environment:read"],
+      grantedByRoleUrn: "role:organization:editor",
+      grantedByRoleSlug: "editor",
+      copies: 5,
     },
   ];
 }
@@ -211,6 +289,16 @@ function scenarioToRows(
 ): ChallengeRow[] {
   const rows: ChallengeRow[] = [];
   const now = Date.now();
+  const isAllow = s.outcome === "allow";
+  // Allow rows must carry a non-empty matched_grants entry — that's the
+  // signal the bucket query uses to compute matched_grant_count.
+  const matchedPrincipal =
+    isAllow && s.grantedByRoleUrn ? [s.grantedByRoleUrn] : [];
+  const matchedScope = isAllow ? [s.scope] : [];
+  const matchedSelector = isAllow ? [s.selector] : [];
+  const matchedVia = isAllow ? [s.scope] : [];
+  const roleSlugs = isAllow && s.grantedByRoleSlug ? [s.grantedByRoleSlug] : [];
+
   for (let i = 0; i < s.copies; i++) {
     // Spread challenges over the last 6 hours so timestamps look real.
     const ts = new Date(now - Math.floor(Math.random() * 6 * 60 * 60 * 1000));
@@ -228,9 +316,9 @@ function scenarioToRows(
       user_email: s.userEmail ?? null,
       api_key_id: s.apiKeyId ?? null,
       session_id: null,
-      role_slugs: [],
+      role_slugs: roleSlugs,
       operation: s.operation,
-      outcome: "deny",
+      outcome: s.outcome,
       reason: s.reason,
       scope: s.scope,
       resource_kind: s.resourceKind,
@@ -241,11 +329,11 @@ function scenarioToRows(
       "requested_checks.resource_kind": [s.resourceKind],
       "requested_checks.resource_id": [s.resourceId],
       "requested_checks.selector": [s.selector],
-      "matched_grants.principal_urn": [],
-      "matched_grants.scope": [],
-      "matched_grants.selector": [],
-      "matched_grants.matched_via_check_scope": [],
-      evaluated_grant_count: 0,
+      "matched_grants.principal_urn": matchedPrincipal,
+      "matched_grants.scope": matchedScope,
+      "matched_grants.selector": matchedSelector,
+      "matched_grants.matched_via_check_scope": matchedVia,
+      evaluated_grant_count: isAllow ? 3 : 0,
       filter_candidate_count: 0,
       filter_allowed_count: 0,
     });
@@ -254,7 +342,7 @@ function scenarioToRows(
 }
 
 async function main(): Promise<void> {
-  intro("Seeding synthetic authz deny challenges into ClickHouse...");
+  intro("Seeding synthetic authz challenges (deny + allow) into ClickHouse...");
   let success = false;
   using _ = {
     [Symbol.dispose]() {
@@ -306,8 +394,10 @@ async function main(): Promise<void> {
   });
   const rows = scenarios.flatMap((s) => scenarioToRows(s, orgId, project.id));
 
+  const denyBuckets = scenarios.filter((s) => s.outcome === "deny").length;
+  const allowBuckets = scenarios.filter((s) => s.outcome === "allow").length;
   log.info(
-    `Inserting ${rows.length} challenge rows across ${scenarios.length} buckets`,
+    `Inserting ${rows.length} challenge rows across ${scenarios.length} buckets (${denyBuckets} deny, ${allowBuckets} allow)`,
   );
   await clickhouseInsert(rows);
 
