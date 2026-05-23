@@ -73,7 +73,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 }
 
 // Hand-curated roast served at /rpc/userSessions.roast. Read-only; does not
-// touch session state. Severity is fixed at "medium" until taste improves.
+// touch session state. Caller picks intensity; defaults to medium.
 func (s *Service) RoastUserSession(ctx context.Context, payload *gen.RoastUserSessionPayload) (*gen.RoastUserSessionResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -88,9 +88,24 @@ func (s *Service) RoastUserSession(ctx context.Context, payload *gen.RoastUserSe
 		return nil, err
 	}
 
+	intensity := "medium"
+	if payload.Intensity != nil {
+		intensity = *payload.Intensity
+	}
+
+	var roast string
+	switch intensity {
+	case "mild":
+		roast = "This session has been around long enough to remember the staging cluster."
+	case "scorched":
+		roast = "This session has the energy of a 4:55pm Friday hard reload, on a holiday, during an incident, while the on-call is on a plane."
+	default:
+		roast = "This session has the energy of a 4:55pm Friday hard reload."
+	}
+
 	return &gen.RoastUserSessionResult{
-		Roast:    "This session has the energy of a 4:55pm Friday hard reload.",
-		Severity: "medium",
+		Roast:    roast,
+		Severity: intensity,
 	}, nil
 }
 

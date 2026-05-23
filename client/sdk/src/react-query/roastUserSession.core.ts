@@ -47,6 +47,7 @@ export function buildRoastUserSessionQuery(
   return {
     queryKey: queryKeyRoastUserSession({
       id: request.id,
+      intensity: request.intensity,
       gramSession: request.gramSession,
       gramKey: request.gramKey,
       gramProject: request.gramProject,
@@ -78,6 +79,7 @@ export function buildRoastUserSessionQuery(
 export function queryKeyRoastUserSession(
   parameters: {
     id: string;
+    intensity?: operations.Intensity | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

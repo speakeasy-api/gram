@@ -88,7 +88,9 @@ type RevokeUserSessionPayload struct {
 // roastUserSession method.
 type RoastUserSessionPayload struct {
 	// The user_session id to roast.
-	ID               string
+	ID string
+	// Roast intensity. One of: mild, medium, scorched. Defaults to medium.
+	Intensity        *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

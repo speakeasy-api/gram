@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5610d9623c74c1d4aa41f0178de1c9cd
+  docChecksum: f2aadd473a576c3c7241a6f03e91ca01
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -46,10 +46,6 @@ trackedFiles:
     id: 5f1dfbfeb8eb
     last_write_checksum: sha1:f24217ccc99054ee0283dfed141f2a7e35239ade
     pristine_git_object: c8c51252b91678164a3c750aba8dfac9f6d556ef
-  .gitattributes:
-    id: 24139dae6567
-    last_write_checksum: sha1:26d16d8297b104945139da8c25bd38feeaad3e25
-    pristine_git_object: 113eead5093c17d43a46159132885318f281a68a
   .npmignore:
     id: aa70c1f807c3
     last_write_checksum: sha1:6572da81f2e7a978ec29c22c2210bf461c5897b2
@@ -1844,6 +1840,8 @@ trackedFiles:
     last_write_checksum: sha1:de50d4e9156da656b78521f23055725545f45bf5
   docs/models/operations/integrationsnumbergetsecurity.md:
     last_write_checksum: sha1:d92062024245589855c682146ef62d6e991eddaf
+  docs/models/operations/intensity.md:
+    last_write_checksum: sha1:9541bea63123b45cc3500e5c6238e2f910ffa562
   docs/models/operations/listallowedoriginsrequest.md:
     last_write_checksum: sha1:598af101059e598e59eba5e913a395d7f82209b3
   docs/models/operations/listallowedoriginssecurity.md:
@@ -2381,7 +2379,7 @@ trackedFiles:
   docs/models/operations/revokeusersessionsecurityoption2.md:
     last_write_checksum: sha1:7e1a4e57064a521377d8d7ea130f9f0169affae3
   docs/models/operations/roastusersessionrequest.md:
-    last_write_checksum: sha1:5f98ff5152fd5a374a391e3ddaeaed5e5ea92232
+    last_write_checksum: sha1:590dfb3660e1a56f1a40ad96c90a0696f229b63a
   docs/models/operations/roastusersessionsecurity.md:
     last_write_checksum: sha1:30c010062e0f2d6adbcef6ced42cbeee82887db1
   docs/models/operations/roastusersessionsecurityoption1.md:
@@ -3579,7 +3577,7 @@ trackedFiles:
   src/funcs/userSessionsRevoke.ts:
     last_write_checksum: sha1:251593d7a4218e12463d0159b544ee27007f707b
   src/funcs/userSessionsRoast.ts:
-    last_write_checksum: sha1:c0ef2f650d7b79f4fd05d43fee3160b84a6983f8
+    last_write_checksum: sha1:65a74751bf94c95ca27d86875f6ac24300bc5a11
   src/funcs/variationsDeleteGlobal.ts:
     id: 7f912df230f4
     last_write_checksum: sha1:d11b6f08435e54ba8752aecaa440cb1c832c5bf8
@@ -5379,7 +5377,7 @@ trackedFiles:
   src/models/operations/revokeusersessionconsent.ts:
     last_write_checksum: sha1:cdd7be6e01eb0012ce6e8168caf8032cca8e0249
   src/models/operations/roastusersession.ts:
-    last_write_checksum: sha1:b93fb63c0d558ce3653316d83c3f651a057f80f2
+    last_write_checksum: sha1:b509fb477c1470d9bea4d4cb4af5a4395ea9e9c7
   src/models/operations/searchchats.ts:
     last_write_checksum: sha1:a2c7fb671397ec9fc87fce9b0899da3d6ce4aa88
   src/models/operations/searchlogs.ts:
@@ -6353,9 +6351,9 @@ trackedFiles:
   src/react-query/riskUserBreakdown.ts:
     last_write_checksum: sha1:383f0b3ce12bc26771b348f23b31e8c6dbb5e542
   src/react-query/roastUserSession.core.ts:
-    last_write_checksum: sha1:ca0fc4b019bdfcf2ebb5b596b232eb39d21a93f4
+    last_write_checksum: sha1:4608a268254ac8d4ee0a4da58fa5dbe2ee7f1fa8
   src/react-query/roastUserSession.ts:
-    last_write_checksum: sha1:68739c064918ae117928bfc351e30e7f7705e96b
+    last_write_checksum: sha1:decbbc47adc640e42accfdeaa2a53a334a4d281c
   src/react-query/role.core.ts:
     last_write_checksum: sha1:a9274b43865562043787b65fe4607e3a166879a5
   src/react-query/role.ts:

@@ -98,6 +98,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "id": payload.id,
+    "intensity": payload.intensity,
   });
 
   const headers = new Headers(compactMap({

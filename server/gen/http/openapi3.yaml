@@ -27346,6 +27346,17 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: 'Roast intensity. One of: mild, medium, scorched. Defaults to medium.'
+                  in: query
+                  name: intensity
+                  schema:
+                    description: 'Roast intensity. One of: mild, medium, scorched. Defaults to medium.'
+                    enum:
+                        - mild
+                        - medium
+                        - scorched
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session

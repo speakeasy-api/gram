@@ -309,6 +309,9 @@ func EncodeRoastUserSessionRequest(encoder func(*http.Request) goahttp.Encoder) 
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
+		if p.Intensity != nil {
+			values.Add("intensity", *p.Intensity)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

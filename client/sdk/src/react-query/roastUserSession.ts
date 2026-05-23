@@ -112,6 +112,7 @@ export function setRoastUserSessionData(
   queryKeyBase: [
     parameters: {
       id: string;
+      intensity?: operations.Intensity | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -129,6 +130,7 @@ export function invalidateRoastUserSession(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       id: string;
+      intensity?: operations.Intensity | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

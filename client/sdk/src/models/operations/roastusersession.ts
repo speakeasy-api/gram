@@ -4,6 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 export type RoastUserSessionSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -20,11 +21,28 @@ export type RoastUserSessionSecurity = {
   option2?: RoastUserSessionSecurityOption2 | undefined;
 };
 
+/**
+ * Roast intensity. One of: mild, medium, scorched. Defaults to medium.
+ */
+export const Intensity = {
+  Mild: "mild",
+  Medium: "medium",
+  Scorched: "scorched",
+} as const;
+/**
+ * Roast intensity. One of: mild, medium, scorched. Defaults to medium.
+ */
+export type Intensity = ClosedEnum<typeof Intensity>;
+
 export type RoastUserSessionRequest = {
   /**
    * The user_session id to roast.
    */
   id: string;
+  /**
+   * Roast intensity. One of: mild, medium, scorched. Defaults to medium.
+   */
+  intensity?: Intensity | undefined;
   /**
    * Session header
    */
@@ -141,8 +159,14 @@ export function roastUserSessionSecurityToJSON(
 }
 
 /** @internal */
+export const Intensity$outboundSchema: z.ZodMiniEnum<typeof Intensity> = z.enum(
+  Intensity,
+);
+
+/** @internal */
 export type RoastUserSessionRequest$Outbound = {
   id: string;
+  intensity?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -155,6 +179,7 @@ export const RoastUserSessionRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
+    intensity: z.optional(Intensity$outboundSchema),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),

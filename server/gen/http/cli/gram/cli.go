@@ -1753,6 +1753,7 @@ func ParseEndpoint(
 
 		userSessionsRoastUserSessionFlags                = flag.NewFlagSet("roast-user-session", flag.ExitOnError)
 		userSessionsRoastUserSessionIDFlag               = userSessionsRoastUserSessionFlags.String("id", "REQUIRED", "")
+		userSessionsRoastUserSessionIntensityFlag        = userSessionsRoastUserSessionFlags.String("intensity", "", "")
 		userSessionsRoastUserSessionSessionTokenFlag     = userSessionsRoastUserSessionFlags.String("session-token", "", "")
 		userSessionsRoastUserSessionApikeyTokenFlag      = userSessionsRoastUserSessionFlags.String("apikey-token", "", "")
 		userSessionsRoastUserSessionProjectSlugInputFlag = userSessionsRoastUserSessionFlags.String("project-slug-input", "", "")
@@ -4354,7 +4355,7 @@ func ParseEndpoint(
 				data, err = usersessionsc.BuildListUserSessionsPayload(*userSessionsListUserSessionsSubjectUrnFlag, *userSessionsListUserSessionsUserSessionIssuerIDFlag, *userSessionsListUserSessionsCursorFlag, *userSessionsListUserSessionsLimitFlag, *userSessionsListUserSessionsSessionTokenFlag, *userSessionsListUserSessionsApikeyTokenFlag, *userSessionsListUserSessionsProjectSlugInputFlag)
 			case "roast-user-session":
 				endpoint = c.RoastUserSession()
-				data, err = usersessionsc.BuildRoastUserSessionPayload(*userSessionsRoastUserSessionIDFlag, *userSessionsRoastUserSessionSessionTokenFlag, *userSessionsRoastUserSessionApikeyTokenFlag, *userSessionsRoastUserSessionProjectSlugInputFlag)
+				data, err = usersessionsc.BuildRoastUserSessionPayload(*userSessionsRoastUserSessionIDFlag, *userSessionsRoastUserSessionIntensityFlag, *userSessionsRoastUserSessionSessionTokenFlag, *userSessionsRoastUserSessionApikeyTokenFlag, *userSessionsRoastUserSessionProjectSlugInputFlag)
 			case "revoke-user-session":
 				endpoint = c.RevokeUserSession()
 				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionIDFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
@@ -11407,6 +11408,7 @@ func userSessionsRoastUserSessionUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions roast-user-session", os.Args[0])
 	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -intensity STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -11418,13 +11420,14 @@ func userSessionsRoastUserSessionUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -intensity STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions roast-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions roast-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --intensity \"medium\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsRevokeUserSessionUsage() {

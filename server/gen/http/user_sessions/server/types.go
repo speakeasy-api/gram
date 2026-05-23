@@ -1100,9 +1100,10 @@ func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string,
 
 // NewRoastUserSessionPayload builds a userSessions service roastUserSession
 // endpoint payload.
-func NewRoastUserSessionPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.RoastUserSessionPayload {
+func NewRoastUserSessionPayload(id string, intensity *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.RoastUserSessionPayload {
 	v := &usersessions.RoastUserSessionPayload{}
 	v.ID = id
+	v.Intensity = intensity
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

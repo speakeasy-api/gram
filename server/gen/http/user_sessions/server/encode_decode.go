@@ -294,16 +294,27 @@ func DecodeRoastUserSessionRequest(mux goahttp.Muxer, decoder func(*http.Request
 		var payload *usersessions.RoastUserSessionPayload
 		var (
 			id               string
+			intensity        *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
 			err              error
 		)
-		id = r.URL.Query().Get("id")
+		qp := r.URL.Query()
+		id = qp.Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		intensityRaw := qp.Get("intensity")
+		if intensityRaw != "" {
+			intensity = &intensityRaw
+		}
+		if intensity != nil {
+			if !(*intensity == "mild" || *intensity == "medium" || *intensity == "scorched") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("intensity", *intensity, []any{"mild", "medium", "scorched"}))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -319,7 +330,7 @@ func DecodeRoastUserSessionRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewRoastUserSessionPayload(id, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewRoastUserSessionPayload(id, intensity, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
