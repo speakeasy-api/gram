@@ -286,17 +286,31 @@ export function OrgHomeInner() {
             ) : (
               <>
                 {favoriteProjects.length > 0 && (
-                  <section className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                      <Star className="text-foreground size-3.5 fill-current" />
-                      <Type small className="text-foreground font-medium">
-                        Your favorites
-                      </Type>
-                    </div>
-                    {renderProjectContainer(
-                      favoriteProjects.map(renderProjectItem),
+                  <>
+                    <section className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Star className="text-foreground size-3.5 fill-current" />
+                        <Type small className="text-foreground font-medium">
+                          Your favorites
+                        </Type>
+                      </div>
+                      {renderProjectContainer(
+                        favoriteProjects.map(renderProjectItem),
+                      )}
+                    </section>
+                    {visibleOtherProjects.length > 0 && (
+                      <div
+                        className="flex items-center gap-3"
+                        aria-hidden="true"
+                      >
+                        <div className="bg-border h-px flex-1" />
+                        <Type muted small className="text-muted-foreground/80">
+                          All projects
+                        </Type>
+                        <div className="bg-border h-px flex-1" />
+                      </div>
                     )}
-                  </section>
+                  </>
                 )}
 
                 {renderProjectContainer(
