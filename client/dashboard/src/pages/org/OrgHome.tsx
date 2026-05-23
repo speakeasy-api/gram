@@ -235,111 +235,109 @@ export function OrgHomeInner() {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[320px_1fr]">
-        <aside className="flex flex-col gap-8 lg:sticky lg:top-4 lg:self-start">
-          {isRbacEnabled && <RecentChallengesCompact />}
-          <RecentActivityCompact logs={auditLogs} />
-        </aside>
-
-        <main className="flex min-w-0 flex-col gap-4">
-          <div>
-            <Heading variant="h4" className="mb-1">
-              Projects
-            </Heading>
-            <Type small muted>
-              Projects organize your MCP servers, skills, assistants, and other
-              tools into separate workspaces. Use them to permission and scope
-              access to different products, teams or environments within your
-              organization.
-            </Type>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              placeholder="Search projects..."
-              className="flex-1"
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center gap-2">
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="Search projects..."
+            className="flex-1"
+          />
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          {canAdmin && (
+            <AddNewMenu
+              onCreateProject={() => setCreateDialogOpen(true)}
+              onInviteMember={() => orgRoutes.team.goTo()}
+              onManageRoles={() => orgRoutes.access.roles.goTo()}
             />
-            <ViewModeToggle value={viewMode} onChange={setViewMode} />
-            {canAdmin && (
-              <AddNewMenu
-                onCreateProject={() => setCreateDialogOpen(true)}
-                onInviteMember={() => orgRoutes.team.goTo()}
-                onManageRoles={() => orgRoutes.access.roles.goTo()}
-              />
-            )}
-          </div>
-
-          {filteredProjects.length === 0 && isSearching ? (
-            <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-              <Type muted>No projects matching &ldquo;{search}&rdquo;</Type>
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setNewProjectName(search);
-                    setCreateDialogOpen(true);
-                  }}
-                >
-                  <Plus className="size-4" />
-                  Create &ldquo;{search}&rdquo;
-                </Button>
-              </RequireScope>
-            </div>
-          ) : (
-            <>
-              {favoriteProjects.length > 0 && (
-                <section className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <Star className="text-foreground size-3.5 fill-current" />
-                    <Type small className="text-foreground font-medium">
-                      Your favorites
-                    </Type>
-                  </div>
-                  {renderProjectContainer(
-                    favoriteProjects.map(renderProjectItem),
-                  )}
-                </section>
-              )}
-
-              {renderProjectContainer(
-                visibleOtherProjects.map(renderProjectItem),
-              )}
-              {hasMore && (
-                <button
-                  type="button"
-                  onClick={() => setExpanded((prev) => !prev)}
-                  className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 rounded-lg border border-dashed py-3 text-sm font-medium transition-colors"
-                >
-                  {expanded ? (
-                    <>
-                      Show less
-                      <ChevronUp className="size-4" />
-                    </>
-                  ) : (
-                    <>
-                      Show all {otherProjects.length} projects
-                      <ChevronDown className="size-4" />
-                    </>
-                  )}
-                </button>
-              )}
-
-              {otherProjects.length === 0 && favoriteProjects.length === 0 && (
-                <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
-                  <Type muted>No projects yet</Type>
-                  <RequireScope scope="org:admin" level="component">
-                    <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
-                      <Plus className="size-4" />
-                      Create your first project
-                    </Button>
-                  </RequireScope>
-                </div>
-              )}
-            </>
           )}
-        </main>
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[320px_1fr]">
+          <aside className="flex flex-col gap-8 lg:sticky lg:top-4 lg:self-start">
+            {isRbacEnabled && <RecentChallengesCompact />}
+            <RecentActivityCompact logs={auditLogs} />
+          </aside>
+
+          <main className="flex min-w-0 flex-col gap-3">
+            <Type small muted className="px-1">
+              Projects
+            </Type>
+
+            {filteredProjects.length === 0 && isSearching ? (
+              <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
+                <Type muted>No projects matching &ldquo;{search}&rdquo;</Type>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setNewProjectName(search);
+                      setCreateDialogOpen(true);
+                    }}
+                  >
+                    <Plus className="size-4" />
+                    Create &ldquo;{search}&rdquo;
+                  </Button>
+                </RequireScope>
+              </div>
+            ) : (
+              <>
+                {favoriteProjects.length > 0 && (
+                  <section className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <Star className="text-foreground size-3.5 fill-current" />
+                      <Type small className="text-foreground font-medium">
+                        Your favorites
+                      </Type>
+                    </div>
+                    {renderProjectContainer(
+                      favoriteProjects.map(renderProjectItem),
+                    )}
+                  </section>
+                )}
+
+                {renderProjectContainer(
+                  visibleOtherProjects.map(renderProjectItem),
+                )}
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((prev) => !prev)}
+                    className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/40 flex items-center justify-center gap-1.5 rounded-lg border border-dashed py-3 text-sm font-medium transition-colors"
+                  >
+                    {expanded ? (
+                      <>
+                        Show less
+                        <ChevronUp className="size-4" />
+                      </>
+                    ) : (
+                      <>
+                        Show all {otherProjects.length} projects
+                        <ChevronDown className="size-4" />
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {otherProjects.length === 0 &&
+                  favoriteProjects.length === 0 && (
+                    <div className="border-border bg-card flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
+                      <Type muted>No projects yet</Type>
+                      <RequireScope scope="org:admin" level="component">
+                        <Button
+                          size="sm"
+                          onClick={() => setCreateDialogOpen(true)}
+                        >
+                          <Plus className="size-4" />
+                          Create your first project
+                        </Button>
+                      </RequireScope>
+                    </div>
+                  )}
+              </>
+            )}
+          </main>
+        </div>
       </div>
 
       {createDialogOpen && (
