@@ -89,10 +89,17 @@ function isTriggerTargetKind(value: string): value is TriggerTargetKindValue {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "active") {
-    return <Badge variant="default">Active</Badge>;
+  switch (status) {
+    case "active":
+      return <Badge variant="default">Active</Badge>;
+    case "fired":
+      return <Badge variant="secondary">Fired</Badge>;
+    case "cancelled":
+      return <Badge variant="secondary">Cancelled</Badge>;
+    case "paused":
+    default:
+      return <Badge variant="secondary">Paused</Badge>;
   }
-  return <Badge variant="secondary">Paused</Badge>;
 }
 
 function KindBadge({ kind }: { kind: string }) {

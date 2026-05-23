@@ -15,6 +15,8 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const TriggerInstanceStatus = {
   Active: "active",
   Paused: "paused",
+  Fired: "fired",
+  Cancelled: "cancelled",
 } as const;
 /**
  * The trigger instance status.
