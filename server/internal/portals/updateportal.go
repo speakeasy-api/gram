@@ -3,6 +3,7 @@ package portals
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -103,7 +104,7 @@ func mergeLogoAssetID(payload *string, existing uuid.NullUUID) (uuid.NullUUID, e
 	}
 	parsed, err := uuid.Parse(*payload)
 	if err != nil {
-		return uuid.NullUUID{}, err
+		return uuid.NullUUID{}, fmt.Errorf("parse logo asset id: %w", err)
 	}
 	return uuid.NullUUID{UUID: parsed, Valid: true}, nil
 }
