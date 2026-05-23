@@ -25,10 +25,12 @@ import {
   getInitials,
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
-import { useChallengeRowColumns } from "@/pages/access/useChallengeRowColumns";
-import { useGrantFlow } from "@/pages/access/useGrantFlow";
 import { useOrgRoutes } from "@/routes";
-import type { AccessMember, AuditLog } from "@gram/client/models/components";
+import type {
+  AccessMember,
+  AuditLog,
+  ChallengeBucket,
+} from "@gram/client/models/components";
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useAuditLogs } from "@gram/client/react-query";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
@@ -38,13 +40,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Table,
 } from "@speakeasy-api/moonshine";
 import {
   ChevronDown,
   ChevronUp,
   Copy,
   History,
+  KeyRound,
   LayoutGrid,
   List,
   MoreHorizontal,
@@ -883,9 +885,6 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
 
 function RecentChallengesCompact() {
   const orgRoutes = useOrgRoutes();
-  const { hasScope } = useRBAC();
-  const canAdmin = hasScope("org:admin");
-  const { actionsColumn, grantFlowPortals } = useGrantFlow();
   const { data, isLoading } = useChallengeBuckets({
     outcome: Outcome.Deny,
     resolved: false,
@@ -898,13 +897,6 @@ function RecentChallengesCompact() {
         .filter(isDisplayableBucket)
         .slice(0, CHALLENGE_PREVIEW_LIMIT),
     [data?.buckets],
-  );
-
-  const challengeRowColumns = useChallengeRowColumns();
-  const columns = useMemo(
-    () =>
-      canAdmin ? [...challengeRowColumns, actionsColumn] : challengeRowColumns,
-    [canAdmin, challengeRowColumns, actionsColumn],
   );
 
   if (isLoading) return null;
@@ -920,11 +912,71 @@ function RecentChallengesCompact() {
       {buckets.length === 0 ? (
         <ChallengesEmptyState outcomeFilter="deny" />
       ) : (
-        <div className="border-border bg-card overflow-hidden rounded-lg border">
-          <Table columns={columns} data={buckets} rowKey={(row) => row.id} />
-        </div>
+        <ol className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+          {buckets.map((bucket) => (
+            <li key={bucket.id}>
+              <CompactChallengeRow bucket={bucket} />
+            </li>
+          ))}
+        </ol>
       )}
-      {grantFlowPortals}
     </section>
+  );
+}
+
+function shortenPrincipal(bucket: ChallengeBucket): string {
+  if (bucket.userEmail) return bucket.userEmail;
+  if (bucket.principalType === "api_key") {
+    // "api_key:akey_6a0dcca03eb1abcd" → "akey_6a0d…"
+    const id = bucket.principalUrn.replace(/^api_key:/, "");
+    return id.length > 14 ? `${id.slice(0, 10)}…` : id;
+  }
+  return bucket.principalUrn;
+}
+
+function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
+  const orgRoutes = useOrgRoutes();
+  const label = shortenPrincipal(bucket);
+  const isApiKey = bucket.principalType === "api_key";
+  const lastSeen = new Date(bucket.lastSeen);
+  const count = Number(bucket.challengeCount);
+
+  return (
+    <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-2 px-3 py-2 text-xs no-underline transition-colors">
+      <div className="bg-muted text-muted-foreground flex size-6 shrink-0 items-center justify-center rounded-full">
+        {isApiKey || !bucket.userEmail ? (
+          <KeyRound className="size-3" />
+        ) : (
+          <Avatar className="size-6">
+            {bucket.photoUrl ? (
+              <AvatarImage src={bucket.photoUrl} alt={label} />
+            ) : null}
+            <AvatarFallback className="bg-muted text-muted-foreground text-[10px] font-medium">
+              {getInitials(bucket.userEmail)}
+            </AvatarFallback>
+          </Avatar>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-1.5">
+          <span className="bg-destructive/10 text-destructive shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium uppercase">
+            deny
+          </span>
+          <Type
+            small
+            className="text-foreground truncate text-xs leading-snug font-medium"
+          >
+            {label}
+          </Type>
+        </div>
+        <Type muted small className="truncate text-[11px]">
+          <span className="font-mono">{bucket.scope}</span>
+          <span className="mx-1 opacity-60">·</span>
+          {count} attempt{count === 1 ? "" : "s"}
+          <span className="mx-1 opacity-60">·</span>
+          {dateTimeFormatters.humanize(lastSeen, { includeTime: false })}
+        </Type>
+      </div>
+    </orgRoutes.access.challenges.Link>
   );
 }
