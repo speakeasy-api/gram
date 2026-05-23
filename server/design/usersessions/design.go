@@ -59,6 +59,9 @@ var _ = Service("userSessions", func() {
 			Attribute("id", String, "The user_session id to roast.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("intensity", String, "Roast intensity. One of: mild, medium, scorched. Defaults to medium.", func() {
+				Enum("mild", "medium", "scorched")
+			})
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -70,6 +73,7 @@ var _ = Service("userSessions", func() {
 		HTTP(func() {
 			GET("/rpc/userSessions.roast")
 			Param("id")
+			Param("intensity")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
