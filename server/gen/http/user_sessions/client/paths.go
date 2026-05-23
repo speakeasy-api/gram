@@ -12,6 +12,11 @@ func ListUserSessionsUserSessionsPath() string {
 	return "/rpc/userSessions.list"
 }
 
+// RoastUserSessionUserSessionsPath returns the URL path to the userSessions service roastUserSession HTTP endpoint.
+func RoastUserSessionUserSessionsPath() string {
+	return "/rpc/userSessions.roast"
+}
+
 // RevokeUserSessionUserSessionsPath returns the URL path to the userSessions service revokeUserSession HTTP endpoint.
 func RevokeUserSessionUserSessionsPath() string {
 	return "/rpc/userSessions.revoke"

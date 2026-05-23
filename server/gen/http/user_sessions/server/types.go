@@ -20,6 +20,15 @@ type ListUserSessionsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// RoastUserSessionResponseBody is the type of the "userSessions" service
+// "roastUserSession" endpoint HTTP response body.
+type RoastUserSessionResponseBody struct {
+	// The roast.
+	Roast string `form:"roast" json:"roast" xml:"roast"`
+	// Roast severity. One of: mild, medium, scorched.
+	Severity string `form:"severity" json:"severity" xml:"severity"`
+}
+
 // ListUserSessionsUnauthorizedResponseBody is the type of the "userSessions"
 // service "listUserSessions" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -195,6 +204,196 @@ type ListUserSessionsUnexpectedResponseBody struct {
 // service "listUserSessions" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListUserSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionUnauthorizedResponseBody is the type of the "userSessions"
+// service "roastUserSession" endpoint HTTP response body for the
+// "unauthorized" error.
+type RoastUserSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionForbiddenResponseBody is the type of the "userSessions"
+// service "roastUserSession" endpoint HTTP response body for the "forbidden"
+// error.
+type RoastUserSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionBadRequestResponseBody is the type of the "userSessions"
+// service "roastUserSession" endpoint HTTP response body for the "bad_request"
+// error.
+type RoastUserSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionNotFoundResponseBody is the type of the "userSessions"
+// service "roastUserSession" endpoint HTTP response body for the "not_found"
+// error.
+type RoastUserSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionConflictResponseBody is the type of the "userSessions"
+// service "roastUserSession" endpoint HTTP response body for the "conflict"
+// error.
+type RoastUserSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionUnsupportedMediaResponseBody is the type of the
+// "userSessions" service "roastUserSession" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RoastUserSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionInvalidResponseBody is the type of the "userSessions"
+// service "roastUserSession" endpoint HTTP response body for the "invalid"
+// error.
+type RoastUserSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionInvariantViolationResponseBody is the type of the
+// "userSessions" service "roastUserSession" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RoastUserSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionUnexpectedResponseBody is the type of the "userSessions"
+// service "roastUserSession" endpoint HTTP response body for the "unexpected"
+// error.
+type RoastUserSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RoastUserSessionGatewayErrorResponseBody is the type of the "userSessions"
+// service "roastUserSession" endpoint HTTP response body for the
+// "gateway_error" error.
+type RoastUserSessionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -440,6 +639,16 @@ func NewListUserSessionsResponseBody(res *usersessions.ListUserSessionsResult) *
 	return body
 }
 
+// NewRoastUserSessionResponseBody builds the HTTP response body from the
+// result of the "roastUserSession" endpoint of the "userSessions" service.
+func NewRoastUserSessionResponseBody(res *usersessions.RoastUserSessionResult) *RoastUserSessionResponseBody {
+	body := &RoastUserSessionResponseBody{
+		Roast:    res.Roast,
+		Severity: res.Severity,
+	}
+	return body
+}
+
 // NewListUserSessionsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listUserSessions" endpoint of the "userSessions"
 // service.
@@ -574,6 +783,150 @@ func NewListUserSessionsUnexpectedResponseBody(res *goa.ServiceError) *ListUserS
 // service.
 func NewListUserSessionsGatewayErrorResponseBody(res *goa.ServiceError) *ListUserSessionsGatewayErrorResponseBody {
 	body := &ListUserSessionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "roastUserSession" endpoint of the "userSessions"
+// service.
+func NewRoastUserSessionUnauthorizedResponseBody(res *goa.ServiceError) *RoastUserSessionUnauthorizedResponseBody {
+	body := &RoastUserSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionForbiddenResponseBody builds the HTTP response body from
+// the result of the "roastUserSession" endpoint of the "userSessions" service.
+func NewRoastUserSessionForbiddenResponseBody(res *goa.ServiceError) *RoastUserSessionForbiddenResponseBody {
+	body := &RoastUserSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionBadRequestResponseBody builds the HTTP response body from
+// the result of the "roastUserSession" endpoint of the "userSessions" service.
+func NewRoastUserSessionBadRequestResponseBody(res *goa.ServiceError) *RoastUserSessionBadRequestResponseBody {
+	body := &RoastUserSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionNotFoundResponseBody builds the HTTP response body from
+// the result of the "roastUserSession" endpoint of the "userSessions" service.
+func NewRoastUserSessionNotFoundResponseBody(res *goa.ServiceError) *RoastUserSessionNotFoundResponseBody {
+	body := &RoastUserSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionConflictResponseBody builds the HTTP response body from
+// the result of the "roastUserSession" endpoint of the "userSessions" service.
+func NewRoastUserSessionConflictResponseBody(res *goa.ServiceError) *RoastUserSessionConflictResponseBody {
+	body := &RoastUserSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "roastUserSession" endpoint of the
+// "userSessions" service.
+func NewRoastUserSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *RoastUserSessionUnsupportedMediaResponseBody {
+	body := &RoastUserSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionInvalidResponseBody builds the HTTP response body from
+// the result of the "roastUserSession" endpoint of the "userSessions" service.
+func NewRoastUserSessionInvalidResponseBody(res *goa.ServiceError) *RoastUserSessionInvalidResponseBody {
+	body := &RoastUserSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "roastUserSession" endpoint of the
+// "userSessions" service.
+func NewRoastUserSessionInvariantViolationResponseBody(res *goa.ServiceError) *RoastUserSessionInvariantViolationResponseBody {
+	body := &RoastUserSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "roastUserSession" endpoint of the "userSessions" service.
+func NewRoastUserSessionUnexpectedResponseBody(res *goa.ServiceError) *RoastUserSessionUnexpectedResponseBody {
+	body := &RoastUserSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRoastUserSessionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "roastUserSession" endpoint of the "userSessions"
+// service.
+func NewRoastUserSessionGatewayErrorResponseBody(res *goa.ServiceError) *RoastUserSessionGatewayErrorResponseBody {
+	body := &RoastUserSessionGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -738,6 +1091,19 @@ func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string,
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRoastUserSessionPayload builds a userSessions service roastUserSession
+// endpoint payload.
+func NewRoastUserSessionPayload(id string, intensity *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.RoastUserSessionPayload {
+	v := &usersessions.RoastUserSessionPayload{}
+	v.ID = id
+	v.Intensity = intensity
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

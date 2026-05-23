@@ -4,7 +4,9 @@
 
 import { userSessionsList } from "../funcs/userSessionsList.js";
 import { userSessionsRevoke } from "../funcs/userSessionsRevoke.js";
+import { userSessionsRoast } from "../funcs/userSessionsRoast.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -43,6 +45,25 @@ export class UserSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionsRevoke(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * roastUserSession userSessions
+   *
+   * @remarks
+   * Return a hand-curated roast for the given session. Strictly informational; does not affect session state.
+   */
+  async roast(
+    request: operations.RoastUserSessionRequest,
+    security?: operations.RoastUserSessionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RoastUserSessionResult> {
+    return unwrapAsync(userSessionsRoast(
       this,
       request,
       security,

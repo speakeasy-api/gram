@@ -294,6 +294,7 @@ export * from "./riskresultredacted.js";
 export * from "./riskrulebreakdownentry.js";
 export * from "./riskrulebreakdownresult.js";
 export * from "./riskuserbreakdownresult.js";
+export * from "./roastusersessionresult.js";
 export * from "./role.js";
 export * from "./rolegrant.js";
 export * from "./rolesummary.js";

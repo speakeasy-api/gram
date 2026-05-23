@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts            []*MountPoint
 	ListUserSessions  http.Handler
+	RoastUserSession  http.Handler
 	RevokeUserSession http.Handler
 }
 
@@ -51,9 +52,11 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"ListUserSessions", "GET", "/rpc/userSessions.list"},
+			{"RoastUserSession", "GET", "/rpc/userSessions.roast"},
 			{"RevokeUserSession", "POST", "/rpc/userSessions.revoke"},
 		},
 		ListUserSessions:  NewListUserSessionsHandler(e.ListUserSessions, mux, decoder, encoder, errhandler, formatter),
+		RoastUserSession:  NewRoastUserSessionHandler(e.RoastUserSession, mux, decoder, encoder, errhandler, formatter),
 		RevokeUserSession: NewRevokeUserSessionHandler(e.RevokeUserSession, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -64,6 +67,7 @@ func (s *Server) Service() string { return "userSessions" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListUserSessions = m(s.ListUserSessions)
+	s.RoastUserSession = m(s.RoastUserSession)
 	s.RevokeUserSession = m(s.RevokeUserSession)
 }
 
@@ -73,6 +77,7 @@ func (s *Server) MethodNames() []string { return usersessions.MethodNames[:] }
 // Mount configures the mux to serve the userSessions endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListUserSessionsHandler(mux, h.ListUserSessions)
+	MountRoastUserSessionHandler(mux, h.RoastUserSession)
 	MountRevokeUserSessionHandler(mux, h.RevokeUserSession)
 }
 
@@ -111,6 +116,59 @@ func NewListUserSessionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listUserSessions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRoastUserSessionHandler configures the mux to serve the "userSessions"
+// service "roastUserSession" endpoint.
+func MountRoastUserSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/userSessions.roast", f)
+}
+
+// NewRoastUserSessionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "userSessions" service "roastUserSession" endpoint.
+func NewRoastUserSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRoastUserSessionRequest(mux, decoder)
+		encodeResponse = EncodeRoastUserSessionResponse(encoder)
+		encodeError    = EncodeRoastUserSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "roastUserSession")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {

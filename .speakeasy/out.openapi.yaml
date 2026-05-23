@@ -26829,6 +26829,125 @@ paths:
       x-speakeasy-name-override: revoke
       x-speakeasy-react-hook:
         name: RevokeUserSession
+  /rpc/userSessions.roast:
+    get:
+      description: Return a hand-curated roast for the given session. Strictly informational; does not affect session state.
+      operationId: roastUserSession
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session id to roast.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session id to roast.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: 'Roast intensity. One of: mild, medium, scorched. Defaults to medium.'
+          in: query
+          name: intensity
+          schema:
+            description: 'Roast intensity. One of: mild, medium, scorched. Defaults to medium.'
+            enum:
+              - mild
+              - medium
+              - scorched
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoastUserSessionResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: roastUserSession userSessions
+      tags:
+        - userSessions
+      x-speakeasy-name-override: roast
+      x-speakeasy-react-hook:
+        name: RoastUserSession
   /rpc/variations.deleteGlobal:
     delete:
       description: Create or update a globally defined tool variation.
@@ -35701,6 +35820,19 @@ components:
         - findings
         - categories
         - rules
+    RoastUserSessionResult:
+      type: object
+      properties:
+        roast:
+          type: string
+          description: The roast.
+        severity:
+          type: string
+          description: 'Roast severity. One of: mild, medium, scorched.'
+      description: Result of roasting a user_session. The roast is hand-curated; do not parse.
+      required:
+        - roast
+        - severity
     Role:
       type: object
       properties:

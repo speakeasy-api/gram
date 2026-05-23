@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "userSessions" service endpoints.
 type Endpoints struct {
 	ListUserSessions  goa.Endpoint
+	RoastUserSession  goa.Endpoint
 	RevokeUserSession goa.Endpoint
 }
 
@@ -26,6 +27,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		ListUserSessions:  NewListUserSessionsEndpoint(s, a.APIKeyAuth),
+		RoastUserSession:  NewRoastUserSessionEndpoint(s, a.APIKeyAuth),
 		RevokeUserSession: NewRevokeUserSessionEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -33,6 +35,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "userSessions" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListUserSessions = m(e.ListUserSessions)
+	e.RoastUserSession = m(e.RoastUserSession)
 	e.RevokeUserSession = m(e.RevokeUserSession)
 }
 
@@ -92,6 +95,65 @@ func NewListUserSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.ListUserSessions(ctx, p)
+	}
+}
+
+// NewRoastUserSessionEndpoint returns an endpoint function that calls the
+// method "roastUserSession" of service "userSessions".
+func NewRoastUserSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RoastUserSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RoastUserSession(ctx, p)
 	}
 }
 

@@ -87,6 +87,58 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 	return v, nil
 }
 
+// BuildRoastUserSessionPayload builds the payload for the userSessions
+// roastUserSession endpoint from CLI flags.
+func BuildRoastUserSessionPayload(userSessionsRoastUserSessionID string, userSessionsRoastUserSessionIntensity string, userSessionsRoastUserSessionSessionToken string, userSessionsRoastUserSessionApikeyToken string, userSessionsRoastUserSessionProjectSlugInput string) (*usersessions.RoastUserSessionPayload, error) {
+	var err error
+	var id string
+	{
+		id = userSessionsRoastUserSessionID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var intensity *string
+	{
+		if userSessionsRoastUserSessionIntensity != "" {
+			intensity = &userSessionsRoastUserSessionIntensity
+			if !(*intensity == "mild" || *intensity == "medium" || *intensity == "scorched") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("intensity", *intensity, []any{"mild", "medium", "scorched"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionsRoastUserSessionSessionToken != "" {
+			sessionToken = &userSessionsRoastUserSessionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionsRoastUserSessionApikeyToken != "" {
+			apikeyToken = &userSessionsRoastUserSessionApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionsRoastUserSessionProjectSlugInput != "" {
+			projectSlugInput = &userSessionsRoastUserSessionProjectSlugInput
+		}
+	}
+	v := &usersessions.RoastUserSessionPayload{}
+	v.ID = id
+	v.Intensity = intensity
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRevokeUserSessionPayload builds the payload for the userSessions
 // revokeUserSession endpoint from CLI flags.
 func BuildRevokeUserSessionPayload(userSessionsRevokeUserSessionID string, userSessionsRevokeUserSessionSessionToken string, userSessionsRevokeUserSessionApikeyToken string, userSessionsRevokeUserSessionProjectSlugInput string) (*usersessions.RevokeUserSessionPayload, error) {
