@@ -72,6 +72,7 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
+import { PortalPage } from "./pages/portal/PortalPage";
 import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
@@ -544,6 +545,13 @@ const ROUTE_STRUCTURE = {
     url: "settings",
     icon: "settings",
     component: Settings,
+  },
+  portal: {
+    title: "MCP Portal",
+    url: "portal",
+    icon: "globe",
+    component: PortalPage,
+    outsideMainLayout: true,
   },
   docs: {
     title: "Docs",

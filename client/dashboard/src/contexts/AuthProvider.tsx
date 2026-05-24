@@ -43,7 +43,7 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 
 const UNAUTHENTICATED_PATHS = ["/login", "/register", "/book-demo"];
 
-const SLUG_EXEMPT_PATHS = ["/slack/register", "/portal/"];
+const SLUG_EXEMPT_PATHS = ["/slack/register"];
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (

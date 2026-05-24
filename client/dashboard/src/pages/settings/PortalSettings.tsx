@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { ImageUpload } from "@/components/upload";
-import { useProject } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
 import { PortalPreview } from "@/pages/portal/PortalPreview";
 import { usePortal } from "@gram/client/react-query/portal";
 import { useUpdatePortalMutation } from "@gram/client/react-query/updatePortal";
@@ -16,6 +16,8 @@ import { toast } from "sonner";
 
 export function PortalSettings() {
   const project = useProject();
+  const session = useSession();
+  const orgSlug = session.organization.slug;
   const queryClient = useQueryClient();
 
   const { data: portal } = usePortal(
@@ -77,7 +79,7 @@ export function PortalSettings() {
     });
   };
 
-  const portalUrl = `${window.location.origin}/portal/${project.slug}`;
+  const portalUrl = `${window.location.origin}/${orgSlug}/projects/${project.slug}/portal`;
 
   const handleCopyPortalUrl = async () => {
     try {
@@ -199,6 +201,7 @@ export function PortalSettings() {
           </Type>
           <PortalPreview
             key={saveCount}
+            orgSlug={orgSlug}
             projectSlug={project.slug}
             className="h-[600px] w-full rounded-lg border"
           />

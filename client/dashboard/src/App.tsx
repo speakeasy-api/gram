@@ -32,8 +32,6 @@ import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
-import { PortalPage } from "./pages/portal/PortalPage";
-
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
@@ -248,8 +246,6 @@ const RouteProvider = () => {
           <Route index element={<SlackRegister />} />
         </Route>
         <Route path="/" element={<LoginCheck />}>
-          {/* /portal/:projectSlug — LoginCheck enforces session presence only; org-membership is enforced server-side by getPortal returning 404 for cross-org reads. */}
-          <Route path="portal/:projectSlug" element={<PortalPage />} />
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
