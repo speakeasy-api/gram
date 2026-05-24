@@ -19,7 +19,13 @@ export function PortalPage() {
   } = usePortal(
     { gramProject: projectSlug, preview: preview || undefined },
     undefined,
-    { enabled: !!projectSlug },
+    {
+      enabled: !!projectSlug,
+      // A 404 here is expected (portal disabled, project not found, cross-org).
+      // The default QueryClient throws everything except 403 to the global
+      // error boundary; opt out so PortalPage's own "Portal not found" UI shows.
+      throwOnError: false,
+    },
   );
 
   if (isLoading) {
