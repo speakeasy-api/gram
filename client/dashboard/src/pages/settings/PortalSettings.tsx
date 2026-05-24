@@ -148,7 +148,6 @@ export function PortalSettings() {
                 }
               }}
               existingAssetId={logoAssetId || undefined}
-              className="h-16 w-16"
             />
           )}
         </Stack>

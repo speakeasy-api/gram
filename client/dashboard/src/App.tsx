@@ -9,7 +9,7 @@ import {
   MoonshineConfigProvider,
   TooltipProvider,
 } from "@speakeasy-api/moonshine";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -32,9 +32,7 @@ import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
-const PortalPage = lazy(() =>
-  import("./pages/portal/PortalPage").then((m) => ({ default: m.PortalPage })),
-);
+import { PortalPage } from "./pages/portal/PortalPage";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -251,14 +249,7 @@ const RouteProvider = () => {
         </Route>
         <Route path="/" element={<LoginCheck />}>
           {/* /portal/:projectSlug — LoginCheck enforces session presence only; org-membership is enforced server-side by getPortal returning 404 for cross-org reads. */}
-          <Route
-            path="portal/:projectSlug"
-            element={
-              <Suspense fallback={null}>
-                <PortalPage />
-              </Suspense>
-            }
-          />
+          <Route path="portal/:projectSlug" element={<PortalPage />} />
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
