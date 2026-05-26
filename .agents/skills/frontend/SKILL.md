@@ -45,6 +45,42 @@ If you find yourself copy-pasting a JSX structure — even with minor variations
 
 Never use immediately-invoked function expressions inside JSX (`{(() => { ... })()} `). Extract to a named sub-component or a variable above the return statement.
 
+#### No multi-line or nested ternaries
+
+A ternary that wraps onto multiple lines, or chains a second `?:` inside a branch, is unreadable. Reach for one of these instead:
+
+- A `switch` statement when mapping a discriminator (e.g. a `kind` / `type` string) to one of several values.
+- A small **named helper function**, hoisted to module scope when the mapping is pure (e.g. converting a frontend enum to a backend constant). The helper labels the intent at the call site and the JSX stays flat.
+- An object lookup when the keys are statically known and the values are simple constants.
+
+```tsx
+// ❌ wrong — nested multi-line ternary
+attachmentType={
+  sourceKind === "function"
+    ? "functions"
+    : sourceKind === "externalmcp" || sourceKind === "remotemcp"
+      ? "external_mcp"
+      : "openapi"
+}
+
+// ✅ right — hoisted helper with a switch
+function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
+  switch (sourceKind) {
+    case "function":
+      return "functions";
+    case "externalmcp":
+    case "remotemcp":
+      return "external_mcp";
+    default:
+      return "openapi";
+  }
+}
+
+attachmentType={attachmentTypeForSourceKind(sourceKind)}
+```
+
+Single-line, single-branch ternaries (`isOpen ? "x" : "y"`) are fine.
+
 #### Keep components focused
 
 A component that has grown past ~150 lines of JSX is doing too much. Break it up. If a page has multiple tabs, each tab's content is its own component.
