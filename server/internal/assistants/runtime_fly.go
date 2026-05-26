@@ -31,6 +31,10 @@ const (
 	defaultFlyRuntimeHealthTimeout  = 45 * time.Second
 	defaultFlyRuntimeRequestTimeout = 2 * time.Minute
 
+	// flyRuntimeReapCallTimeout caps a single Destroy/List call during reap
+	// so one wedged row cannot consume the parent activity's deadline.
+	flyRuntimeReapCallTimeout = 30 * time.Second
+
 	flyMachineMetadataAssistantID   = "gram_assistant_id"
 	flyMachineMetadataProjectID     = "gram_assistant_project_id"
 	flyMachineMetadataRole          = "gram_role"
@@ -866,15 +870,20 @@ func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRe
 	}
 
 	if metadata.MachineID != "" {
-		if err := flapsClient.Destroy(ctx, metadata.AppName, fly.RemoveMachineInput{
+		destroyCtx, cancel := context.WithTimeout(ctx, flyRuntimeReapCallTimeout)
+		err := flapsClient.Destroy(destroyCtx, metadata.AppName, fly.RemoveMachineInput{
 			ID:   metadata.MachineID,
 			Kill: true,
-		}, ""); err != nil && !isFlyNotFound(err) {
+		}, "")
+		cancel()
+		if err != nil && !isFlyNotFound(err) {
 			return fmt.Errorf("destroy assistant fly runtime machine: %w", err)
 		}
 	}
 
-	machines, err := flapsClient.List(ctx, metadata.AppName, "")
+	listCtx, cancel := context.WithTimeout(ctx, flyRuntimeReapCallTimeout)
+	machines, err := flapsClient.List(listCtx, metadata.AppName, "")
+	cancel()
 	switch {
 	case err == nil:
 		for _, m := range machines {

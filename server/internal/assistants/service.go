@@ -1012,6 +1012,9 @@ type ReapInactiveAssistantRuntimesParams struct {
 	// BatchSize caps how many runtime rows one sweep will reap. Keeps the
 	// activity duration bounded under Temporal's StartToCloseTimeout.
 	BatchSize int32
+	// OnRowProcessed, if set, fires once per row after the reap attempt
+	// (success or failure).
+	OnRowProcessed func()
 }
 
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
@@ -1048,6 +1051,9 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 			result.Reaped++
 		} else {
 			result.Errors++
+		}
+		if params.OnRowProcessed != nil {
+			params.OnRowProcessed()
 		}
 	}
 	return result, nil
