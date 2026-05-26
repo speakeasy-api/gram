@@ -1,12 +1,11 @@
 import { useCallback, useMemo } from "react";
 
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
-
-const STORAGE_PREFIX = "gram:org-favorites:";
+import { PROJECT_FAVORITES_STORAGE_PREFIX } from "@/lib/local-storage-keys";
 
 export function useProjectFavorites(orgId: string) {
   const [favoriteIds, setFavoriteIds] = useLocalStorageState<string[]>(
-    `${STORAGE_PREFIX}${orgId}`,
+    `${PROJECT_FAVORITES_STORAGE_PREFIX}${orgId}`,
     [],
   );
 
