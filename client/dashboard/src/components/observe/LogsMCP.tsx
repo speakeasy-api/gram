@@ -40,6 +40,7 @@ import { LogFilterBar } from "@/pages/logs/LogFilterBar";
 import { TraceRow } from "@/pages/logs/TraceRow";
 import { TriggerLogRow } from "@/pages/logs/TriggerLogRow";
 import {
+  mergeTraceSummariesByTraceId,
   useAttributeLogsQuery,
   type TraceSummary,
 } from "@/pages/logs/use-attribute-logs-query";
@@ -263,24 +264,7 @@ export function LogsMCPContent() {
   const allTraces = useMemo(() => {
     const raw = data?.pages.flatMap((page) => page.toolCalls) ?? [];
     if (!hasStructuredFilters) return raw;
-
-    const merged = new Map<string, ToolCallSummary>();
-    for (const trace of raw) {
-      const existing = merged.get(trace.traceId);
-      if (existing) {
-        existing.logCount += trace.logCount;
-        if (
-          BigInt(trace.startTimeUnixNano) < BigInt(existing.startTimeUnixNano)
-        ) {
-          existing.startTimeUnixNano = trace.startTimeUnixNano;
-        }
-      } else {
-        merged.set(trace.traceId, { ...trace });
-      }
-    }
-    return Array.from(merged.values()).sort((a, b) =>
-      a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
-    );
+    return mergeTraceSummariesByTraceId(raw);
   }, [data?.pages, hasStructuredFilters]);
 
   const handleServerChange = useCallback(
