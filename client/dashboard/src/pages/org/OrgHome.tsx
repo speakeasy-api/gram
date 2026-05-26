@@ -260,12 +260,7 @@ export function OrgHomeInner() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[320px_1fr]">
-          <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
-            {isRbacEnabled && <RecentChallengesCompact />}
-            <RecentActivityCompact logs={auditLogs} />
-          </aside>
-
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_320px]">
           <main className="flex min-w-0 flex-col gap-3">
             <Heading variant="h4">Projects</Heading>
 
@@ -356,6 +351,11 @@ export function OrgHomeInner() {
               </>
             )}
           </main>
+
+          <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
+            {isRbacEnabled && <RecentChallengesCompact />}
+            <RecentActivityCompact logs={auditLogs} />
+          </aside>
         </div>
       </div>
 
