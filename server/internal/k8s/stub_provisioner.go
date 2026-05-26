@@ -3,6 +3,8 @@ package k8s
 import (
 	"context"
 	"log/slog"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // StubProvisioner is a no-op CustomDomainProvisioner for local environments
@@ -29,21 +31,21 @@ type StubCall struct {
 func (p *StubProvisioner) Kind() ProvisionerKind { return p.kind }
 
 func (p *StubProvisioner) Setup(ctx context.Context, domain string) (SetupResult, error) {
-	p.calls = append(p.calls, StubCall{Method: "Setup", Domain: domain})
-	p.logger.InfoContext(ctx, "stub provisioner: setup (no-op)", slog.String("domain", domain))
+	p.calls = append(p.calls, StubCall{Method: "Setup", Domain: domain, ResourceName: "", SecretName: ""})
+	p.logger.InfoContext(ctx, "stub provisioner: setup (no-op)", attr.SlogURLDomain(domain))
 	name, _ := SanitizeDomainForK8sName(domain)
 	return SetupResult{ResourceName: name, SecretName: ""}, nil
 }
 
 func (p *StubProvisioner) Get(ctx context.Context, resourceName string) error {
-	p.calls = append(p.calls, StubCall{Method: "Get", ResourceName: resourceName})
-	p.logger.InfoContext(ctx, "stub provisioner: get (no-op)", slog.String("resource", resourceName))
+	p.calls = append(p.calls, StubCall{Method: "Get", Domain: "", ResourceName: resourceName, SecretName: ""})
+	p.logger.InfoContext(ctx, "stub provisioner: get (no-op)", attr.SlogResourceName(resourceName))
 	return nil
 }
 
 func (p *StubProvisioner) Delete(ctx context.Context, resourceName, secretName string) error {
-	p.calls = append(p.calls, StubCall{Method: "Delete", ResourceName: resourceName, SecretName: secretName})
-	p.logger.InfoContext(ctx, "stub provisioner: delete (no-op)", slog.String("resource", resourceName))
+	p.calls = append(p.calls, StubCall{Method: "Delete", Domain: "", ResourceName: resourceName, SecretName: secretName})
+	p.logger.InfoContext(ctx, "stub provisioner: delete (no-op)", attr.SlogResourceName(resourceName))
 	return nil
 }
 

@@ -1,19 +1,19 @@
 package k8s_test
 
 import (
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestStubProvisioner_KindMatchesRequest(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	clients, err := k8s.InitializeK8sClient(ctx, slog.New(slog.DiscardHandler), "local")
+	clients, err := k8s.InitializeK8sClient(ctx, testenv.NewLogger(t), "local")
 	require.NoError(t, err)
 
 	require.Equal(t, k8s.ProvisionerKindIngress, clients.Provisioner(k8s.ProvisionerKindIngress).Kind())
@@ -24,7 +24,7 @@ func TestStubProvisioner_IsNoOp(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, slog.New(slog.DiscardHandler))
+	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
 
 	result, err := p.Setup(ctx, "test.example.com")
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestStubProvisioner_RecordsCalls(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, slog.New(slog.DiscardHandler))
+	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
 
 	result, err := p.Setup(ctx, "my.example.com")
 	require.NoError(t, err)
@@ -64,7 +64,7 @@ func TestStubProvisioner_ResourceNameHasNoDots(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, slog.New(slog.DiscardHandler))
+	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
 
 	result, err := p.Setup(ctx, "my-domain.example.com")
 	require.NoError(t, err)

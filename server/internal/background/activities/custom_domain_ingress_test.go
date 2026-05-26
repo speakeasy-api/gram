@@ -1,7 +1,6 @@
 package activities_test
 
 import (
-	"log/slog"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -264,7 +263,7 @@ func TestCustomDomainIngress_Setup_WrongOrg_Errors(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, slog.New(slog.DiscardHandler))
+	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
 	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
 	act.SetSetupSleep(0)
 
