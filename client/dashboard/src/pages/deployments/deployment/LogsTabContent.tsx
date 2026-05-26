@@ -262,15 +262,23 @@ export const LogsTabContent = ({
       }));
   }, [deploymentLogs.events, assetNameMap]);
 
-  const activeSourceFilter =
-    attachmentType ?? (selectedSource !== "all" ? selectedSource : undefined);
+  const activeAttachmentIdFilter =
+    selectedSource !== "all" ? selectedSource : undefined;
 
   const visibleEvents = useMemo(() => {
-    if (!activeSourceFilter) return deploymentLogs.events;
-    return deploymentLogs.events.filter(
-      (event) => event.attachmentId === activeSourceFilter,
-    );
-  }, [deploymentLogs.events, activeSourceFilter]);
+    let events = deploymentLogs.events;
+    if (attachmentType) {
+      events = events.filter(
+        (event) => event.attachmentType === attachmentType,
+      );
+    }
+    if (activeAttachmentIdFilter) {
+      events = events.filter(
+        (event) => event.attachmentId === activeAttachmentIdFilter,
+      );
+    }
+    return events;
+  }, [deploymentLogs.events, attachmentType, activeAttachmentIdFilter]);
 
   const parsedLogs = useMemo(
     () =>

@@ -346,7 +346,11 @@ export default function SourceDetails() {
               <SourceDeploymentsPanel
                 sourceKind={sourceKind}
                 attachmentType={
-                  sourceKind === "function" ? "function" : "openapi"
+                  sourceKind === "function"
+                    ? "functions"
+                    : sourceKind === "externalmcp" || sourceKind === "remotemcp"
+                      ? "external_mcp"
+                      : "openapi"
                 }
               />
             </Suspense>
