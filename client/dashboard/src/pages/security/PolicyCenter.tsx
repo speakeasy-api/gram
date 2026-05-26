@@ -74,6 +74,7 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "cli_destructive",
   "prompt_injection",
 ]);
 
@@ -83,9 +84,18 @@ const ALL_CATEGORIES: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "cli_destructive",
   "prompt_injection",
   "off_policy",
 ];
+
+/** Categories whose source the server rejects with action=block; the form
+ * must force flag when any of these are selected. Mirrors validateSourceAction
+ * in server/internal/risk/impl.go. */
+const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
+  "destructive_tool",
+  "cli_destructive",
+]);
 
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
@@ -100,6 +110,7 @@ function policyToCategories(
   if (sources.includes("gitleaks")) cats.add("secrets");
   if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
+  if (sources.includes("cli_destructive")) cats.add("cli_destructive");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     const wireEntities = DETECTION_RULES[cat].map((r) =>
@@ -126,6 +137,7 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
+  if (cats.has("cli_destructive")) sources.push("cli_destructive");
   if (cats.has("prompt_injection")) sources.push("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
@@ -226,10 +238,10 @@ function PolicyCenterContent() {
   const handleSave = () => {
     const { sources, presidioEntities, promptInjectionRules } =
       categoriesToPayload(selectedCategories);
-    const action =
-      sources.includes("destructive_tool") && formAction === "block"
-        ? "flag"
-        : formAction;
+    const flagOnly = [...FLAG_ONLY_CATEGORIES].some((c) =>
+      selectedCategories.has(c),
+    );
+    const action = flagOnly && formAction === "block" ? "flag" : formAction;
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -625,9 +637,11 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
   );
-  const destructiveToolsSelected = selectedCategories.has("destructive_tool");
+  const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
+    selectedCategories.has(c),
+  );
   const actionValue =
-    destructiveToolsSelected && formAction === "block" ? "flag" : formAction;
+    flagOnlySelected && formAction === "block" ? "flag" : formAction;
 
   return (
     <div className="space-y-6 py-4">
@@ -726,7 +740,7 @@ function PolicySheetBody({
                       setSelectedCategories(next);
                       if (
                         checked &&
-                        cat === "destructive_tool" &&
+                        FLAG_ONLY_CATEGORIES.has(cat) &&
                         formAction === "block"
                       ) {
                         setFormAction("flag");
@@ -774,7 +788,7 @@ function PolicySheetBody({
         <RadioGroup
           value={actionValue}
           onValueChange={(v) => {
-            if (destructiveToolsSelected && v === "block") {
+            if (flagOnlySelected && v === "block") {
               return;
             }
             setFormAction(v as PolicyAction);
@@ -782,8 +796,7 @@ function PolicySheetBody({
         >
           <div className="border-border divide-border divide-y rounded-lg border">
             {ACTION_OPTIONS.map((opt) => {
-              const disabled =
-                destructiveToolsSelected && opt.value === "block";
+              const disabled = flagOnlySelected && opt.value === "block";
 
               return (
                 <label
@@ -811,7 +824,8 @@ function PolicySheetBody({
                     </div>
                     {disabled && (
                       <div className="text-destructive mt-1 text-xs font-medium">
-                        Destructive Tools supports flagging only.
+                        Destructive Tools and Destructive CLI Commands support
+                        flagging only.
                       </div>
                     )}
                   </div>
