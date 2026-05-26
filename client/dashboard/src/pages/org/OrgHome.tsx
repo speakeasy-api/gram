@@ -59,12 +59,9 @@ import {
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import {
-  ActionBadge,
-  ActionDot,
-  getActorLabel,
-  renderVerb,
-} from "./OrgAuditLogs";
+import { getActorLabel, renderVerb } from "@/lib/audit-log-format";
+
+import { ActionBadge, ActionDot } from "./OrgAuditLogs";
 
 const PROJECT_LIMIT = 6;
 const AUDIT_PREVIEW_LIMIT = 8;
