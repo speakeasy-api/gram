@@ -25,7 +25,7 @@ Combine the original raw telemetry logs concept with the new chat-centric resolu
 ### Available Tools
 
 - `searchChats` - Search chat session summaries
-- `listChatsWithResolutions` - Chat sessions with resolution data
+- `listChats` - Chat sessions with token and cost metrics
 - `searchLogs` - Search raw telemetry logs (trace ID, severity, HTTP info, etc.)
 - `searchToolCalls` - Search tool call summaries
 - `getObservabilityOverview` - Dashboard metrics

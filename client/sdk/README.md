@@ -111,7 +111,7 @@ async function run() {
       description: "swerve hm receptor how",
       grants: [
         {
-          scope: "mcp:connect",
+          scope: "environment:write",
         },
       ],
       name: "<value>",
@@ -205,7 +205,6 @@ run();
 * [delete](docs/sdks/chat/README.md#delete) - deleteChat chat
 * [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
-* [listChatsWithResolutions](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 * [submitFeedback](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 
@@ -627,7 +626,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatDelete`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
-- [`chatListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
@@ -998,7 +996,6 @@ To learn about this feature and how to get started, check
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
-- [`useListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
@@ -1230,7 +1227,7 @@ async function run() {
         description: "swerve hm receptor how",
         grants: [
           {
-            scope: "mcp:connect",
+            scope: "environment:write",
           },
         ],
         name: "<value>",
@@ -1281,7 +1278,7 @@ async function run() {
       description: "swerve hm receptor how",
       grants: [
         {
-          scope: "mcp:connect",
+          scope: "environment:write",
         },
       ],
       name: "<value>",
@@ -1324,7 +1321,7 @@ async function run() {
         description: "swerve hm receptor how",
         grants: [
           {
-            scope: "mcp:connect",
+            scope: "environment:write",
           },
         ],
         name: "<value>",
@@ -1400,7 +1397,7 @@ async function run() {
       description: "swerve hm receptor how",
       grants: [
         {
-          scope: "mcp:connect",
+          scope: "environment:write",
         },
       ],
       name: "<value>",

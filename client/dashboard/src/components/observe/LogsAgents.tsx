@@ -3,17 +3,17 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components";
 import {
   HasRisk,
   SortBy,
   SortOrder as ApiSortOrder,
-} from "@gram/client/models/operations/listchatswithresolutions";
+} from "@gram/client/models/operations/listchats";
 import {
-  useListChatsWithResolutions,
   useChatDeleteMutation,
-  invalidateAllListChatsWithResolutions,
+  invalidateAllListChats,
   useAssistantsGet,
+  useListChats,
 } from "@gram/client/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button, Icon } from "@speakeasy-api/moonshine";
@@ -75,8 +75,7 @@ export function LogsAgentsContent() {
   const [offset, setOffset] = useState(0);
   const limit = 50;
 
-  const [cachedChat, setCachedChat] =
-    useState<ChatOverviewWithResolutions | null>(null);
+  const [cachedChat, setCachedChat] = useState<ChatOverview | null>(null);
 
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: [
@@ -106,7 +105,7 @@ export function LogsAgentsContent() {
             setCachedChat((current) =>
               current?.id === chatId ? null : current,
             );
-            invalidateAllListChatsWithResolutions(queryClient);
+            invalidateAllListChats(queryClient);
           },
         },
       );
@@ -241,7 +240,7 @@ export function LogsAgentsContent() {
 
   const { data, isLoading, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
-      useListChatsWithResolutions(
+      useListChats(
         {
           search: searchQuery || undefined,
           hasRisk: toApiHasRisk(hasRisk),
@@ -267,7 +266,7 @@ export function LogsAgentsContent() {
   const hasMore =
     total > 0 ? offset + chats.length < total : chats.length === limit;
 
-  const selectedChat = useMemo<ChatOverviewWithResolutions | null>(() => {
+  const selectedChat = useMemo<ChatOverview | null>(() => {
     if (!urlChatId) return null;
     const fromList = chats.find((c) => c.id === urlChatId);
     if (fromList) return fromList;
@@ -287,7 +286,7 @@ export function LogsAgentsContent() {
   }, [urlChatId, chats, cachedChat]);
 
   const setSelectedChat = useCallback(
-    (chat: ChatOverviewWithResolutions | null) => {
+    (chat: ChatOverview | null) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         if (chat) {
@@ -429,9 +428,9 @@ function AgentSessionsPageContent({
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
   toggleSortOrder: () => void;
-  chats: ChatOverviewWithResolutions[];
-  selectedChat: ChatOverviewWithResolutions | null;
-  setSelectedChat: (chat: ChatOverviewWithResolutions | null) => void;
+  chats: ChatOverview[];
+  selectedChat: ChatOverview | null;
+  setSelectedChat: (chat: ChatOverview | null) => void;
   isLoading: boolean;
   error: Error | null;
   isLogsDisabled: boolean;

@@ -44,6 +44,16 @@ export function buildListChatsQuery(
 } {
   return {
     queryKey: queryKeyListChats({
+      search: request?.search,
+      externalUserId: request?.externalUserId,
+      assistantId: request?.assistantId,
+      hasRisk: request?.hasRisk,
+      from: request?.from,
+      to: request?.to,
+      limit: request?.limit,
+      offset: request?.offset,
+      sortBy: request?.sortBy,
+      sortOrder: request?.sortOrder,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
       gramChatSession: request?.gramChatSession,
@@ -72,6 +82,16 @@ export function buildListChatsQuery(
 
 export function queryKeyListChats(
   parameters: {
+    search?: string | undefined;
+    externalUserId?: string | undefined;
+    assistantId?: string | undefined;
+    hasRisk?: operations.HasRisk | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
+    sortBy?: operations.SortBy | undefined;
+    sortOrder?: operations.SortOrder | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;

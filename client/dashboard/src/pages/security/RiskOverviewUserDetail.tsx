@@ -9,7 +9,7 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import {
-  useListChatsWithResolutions,
+  useListChats,
   useRiskOverview,
   useRiskUserBreakdown,
 } from "@gram/client/react-query/index.js";
@@ -95,7 +95,7 @@ function RiskOverviewUserDetailContent() {
     [overviewQuery.data?.topUsers, externalUserId],
   );
 
-  const chatsQuery = useListChatsWithResolutions(
+  const chatsQuery = useListChats(
     {
       externalUserId,
       from,
