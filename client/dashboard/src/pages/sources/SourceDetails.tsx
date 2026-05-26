@@ -39,6 +39,20 @@ import { SourceToolsTab } from "./SourceToolsTab";
 import { SourceMCPServersTab } from "./SourceMCPServersTab";
 import { SourceSettingsTab } from "./SourceSettingsTab";
 
+// Map dashboard source kinds to backend deployment_logs.attachment_type values.
+// See server/internal/deployments/events/log.go.
+function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
+  switch (sourceKind) {
+    case "function":
+      return "functions";
+    case "externalmcp":
+    case "remotemcp":
+      return "external_mcp";
+    default:
+      return "openapi";
+  }
+}
+
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
     sourceKind: string;
@@ -345,13 +359,7 @@ export default function SourceDetails() {
             >
               <SourceDeploymentsPanel
                 sourceKind={sourceKind}
-                attachmentType={
-                  sourceKind === "function"
-                    ? "functions"
-                    : sourceKind === "externalmcp" || sourceKind === "remotemcp"
-                      ? "external_mcp"
-                      : "openapi"
-                }
+                attachmentType={attachmentTypeForSourceKind(sourceKind)}
               />
             </Suspense>
           </TabsContent>
