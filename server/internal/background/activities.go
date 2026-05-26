@@ -49,6 +49,7 @@ type Activities struct {
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollCursorUsageMetrics          *activities.PollCursorUsageMetrics
 	customDomainIngress             *activities.CustomDomainIngress
+	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
@@ -109,6 +110,7 @@ func NewActivities(
 	openrouterProvisioner openrouter.Provisioner,
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
+	defaultCustomDomainProvisioner k8s.ProvisionerKind,
 	expectedTargetCNAME string,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
@@ -139,7 +141,8 @@ func NewActivities(
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger, guardianPolicy),
-		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
+		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
+		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),

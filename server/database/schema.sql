@@ -604,14 +604,18 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   domain TEXT NOT NULL,
   verified BOOLEAN NOT NULL DEFAULT FALSE,
   activated BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Generic resource identifier: Ingress name (provisioner_kind='ingress') or HTTPRoute name (provisioner_kind='gateway').
   ingress_name TEXT,
   cert_secret_name TEXT,
+  -- Discriminates which K8s API provisioned this domain. Gateway rows write NULL cert_secret_name.
+  provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT custom_domains_pkey PRIMARY KEY (id)
+  CONSTRAINT custom_domains_pkey PRIMARY KEY (id),
+  CONSTRAINT custom_domains_provisioner_kind_check CHECK (provisioner_kind IN ('ingress', 'gateway'))
 
 );
 
