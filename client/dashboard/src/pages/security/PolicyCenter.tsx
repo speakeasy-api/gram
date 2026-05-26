@@ -2,7 +2,6 @@ import { InsightsConfig } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,21 +16,16 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Type } from "@/components/ui/type";
 import {
+  Button,
+  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
+  Table,
 } from "@speakeasy-api/moonshine";
 import type { IconName } from "@speakeasy-api/moonshine";
 import {
@@ -345,14 +339,16 @@ function PolicyCenterContent() {
               }}
               disabled={createMutation.isPending}
             >
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Get Started"
-              )}
+              <Button.Text>
+                {createMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Get Started"
+                )}
+              </Button.Text>
             </Button>
           </div>
         </Page.Body>
@@ -396,6 +392,93 @@ function PolicyCenterContent() {
     },
   ];
 
+  const policyColumns: Column<RiskPolicy>[] = [
+    {
+      key: "name",
+      header: "Name",
+      width: "1fr",
+      render: (policy) => <span className="font-medium">{policy.name}</span>,
+    },
+    {
+      key: "action",
+      header: "Action",
+      width: "0.5fr",
+      render: (policy) => (
+        <ActionBadge action={(policy.action as PolicyAction) ?? "flag"} />
+      ),
+    },
+    {
+      key: "sources",
+      header: "Categories",
+      width: "3fr",
+      render: (policy) => {
+        const categories = sourcesToCategories(
+          policy.sources,
+          policy.presidioEntities,
+        );
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            {categories.map((cat) => (
+              <Badge key={cat} variant="secondary">
+                {RULE_CATEGORY_META[cat].label}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: "enabled",
+      header: "Status",
+      width: "0.5fr",
+      render: (policy) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Switch
+            checked={policy.enabled}
+            onCheckedChange={(checked) => handleToggle(policy, checked)}
+          />
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "0.3fr",
+      render: (policy) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Button.Icon>
+                  <Ellipsis className="h-4 w-4" />
+                </Button.Icon>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() => setTimeout(() => setRunPanelPolicy(policy), 0)}
+              >
+                View Progress
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive cursor-pointer"
+                onSelect={() => handleDelete(policy.id)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <Page>
       <Page.Header>
@@ -417,90 +500,19 @@ function PolicyCenterContent() {
             </p>
           </div>
           <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Policy
+            <Button.LeftIcon>
+              <Plus className="mr-2 h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New Policy</Button.Text>
           </Button>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Categories</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-[60px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {policies.map((policy) => {
-              const categories = sourcesToCategories(
-                policy.sources,
-                policy.presidioEntities,
-              );
-              return (
-                <TableRow
-                  key={policy.id}
-                  className="cursor-pointer"
-                  onClick={() => handleEdit(policy)}
-                >
-                  <TableCell className="font-medium">{policy.name}</TableCell>
-                  <TableCell>
-                    <ActionBadge
-                      action={(policy.action as PolicyAction) ?? "flag"}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {categories.map((cat) => (
-                        <Badge key={cat} variant="secondary">
-                          {RULE_CATEGORY_META[cat].label}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      checked={policy.enabled}
-                      onCheckedChange={(checked) =>
-                        handleToggle(policy, checked)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Ellipsis className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="cursor-pointer"
-                          onSelect={() =>
-                            setTimeout(() => setRunPanelPolicy(policy), 0)
-                          }
-                        >
-                          View Progress
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive cursor-pointer"
-                          onSelect={() => handleDelete(policy.id)}
-                        >
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <Table
+          columns={policyColumns}
+          data={policies}
+          rowKey={(policy) => policy.id}
+          onRowClick={handleEdit}
+        />
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -540,16 +552,18 @@ function PolicyCenterContent() {
                   updateMutation.isPending
                 }
               >
-                {createMutation.isPending || updateMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : editingPolicy ? (
-                  "Update"
-                ) : (
-                  "Create"
+                {(createMutation.isPending || updateMutation.isPending) && (
+                  <Button.LeftIcon>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </Button.LeftIcon>
                 )}
+                <Button.Text>
+                  {createMutation.isPending || updateMutation.isPending
+                    ? "Saving..."
+                    : editingPolicy
+                      ? "Update"
+                      : "Create"}
+                </Button.Text>
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -922,16 +936,16 @@ function RunPanel({
                 <p className="text-sm font-medium">Analysis Progress</p>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="tertiary"
                     onClick={() => refetch()}
                     disabled={isFetching}
-                    tooltip="Refresh"
                     className="h-6 w-6"
                   >
-                    <RefreshCw
-                      className={cn("h-3 w-3", isFetching && "animate-spin")}
-                    />
+                    <Button.Icon>
+                      <RefreshCw
+                        className={cn("h-3 w-3", isFetching && "animate-spin")}
+                      />
+                    </Button.Icon>
                   </Button>
                   <span className="text-muted-foreground text-xs font-medium">
                     {pct}%
@@ -979,9 +993,11 @@ function RunPanel({
           className="w-full"
         >
           {isTriggerPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Button.LeftIcon>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            </Button.LeftIcon>
           )}
-          Trigger Analysis
+          <Button.Text>Trigger Analysis</Button.Text>
         </Button>
       </SheetFooter>
     </>

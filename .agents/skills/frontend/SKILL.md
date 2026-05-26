@@ -72,7 +72,7 @@ Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller
 
 ### Tables
 
-Use Moonshine's `Table` from `@speakeasy-api/moonshine` for dashboard tables. Do **not** add new imports from `@/components/ui/table`, do not create new shadcn table wrappers, and do not hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. Existing shadcn table usages should be migrated to Moonshine when touched.
+Use Moonshine's `Table` from `@speakeasy-api/moonshine` for dashboard tables. The legacy `@/components/ui/table` wrapper has been removed; do **not** recreate it, add new shadcn table wrappers, or hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. If you find a lingering legacy table pattern, migrate it to Moonshine when touched.
 
 ```tsx
 import { Column, Table } from "@speakeasy-api/moonshine";
