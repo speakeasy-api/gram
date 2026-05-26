@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord";
-import { logsToTraceSummaries } from "./use-attribute-logs-query";
+import type { ToolCallSummary } from "@gram/client/models/components/toolcallsummary";
+import {
+  logsToTraceSummaries,
+  mergeTraceSummariesByTraceId,
+} from "./use-attribute-logs-query";
 
 function makeLog({
   id,
@@ -124,5 +128,59 @@ describe("logsToTraceSummaries", () => {
         httpStatusCode: 500,
       }),
     ]);
+  });
+});
+
+describe("mergeTraceSummariesByTraceId", () => {
+  it("surfaces the error code across paginated trace summaries", () => {
+    // Simulates a single trace whose 200 handshake and 500 tool call land on
+    // separate pages of the infinite query. The merge must keep the 500.
+    const pageOne: ToolCallSummary = {
+      traceId: "trace-paginated",
+      gramUrn: "urn:tool:paginated",
+      startTimeUnixNano: "2",
+      logCount: 1,
+      httpStatusCode: 200,
+    };
+    const pageTwo: ToolCallSummary = {
+      traceId: "trace-paginated",
+      gramUrn: "urn:tool:paginated",
+      startTimeUnixNano: "1",
+      logCount: 1,
+      httpStatusCode: 500,
+    };
+
+    const merged = mergeTraceSummariesByTraceId([pageOne, pageTwo]);
+
+    expect(merged).toEqual([
+      expect.objectContaining({
+        traceId: "trace-paginated",
+        httpStatusCode: 500,
+        logCount: 2,
+        startTimeUnixNano: "1",
+      }),
+    ]);
+  });
+
+  it("retains a defined status when a later page has no code", () => {
+    const merged = mergeTraceSummariesByTraceId([
+      {
+        traceId: "trace-no-status-on-second",
+        gramUrn: "urn:tool:x",
+        startTimeUnixNano: "2",
+        logCount: 1,
+        httpStatusCode: 500,
+      },
+      {
+        traceId: "trace-no-status-on-second",
+        gramUrn: "urn:tool:x",
+        startTimeUnixNano: "1",
+        logCount: 1,
+      },
+    ]);
+
+    expect(merged[0]).toEqual(
+      expect.objectContaining({ httpStatusCode: 500, logCount: 2 }),
+    );
   });
 });

@@ -146,6 +146,44 @@ export function logsToTraceSummaries(
   return summaries;
 }
 
+/**
+ * Merges per-page trace summaries by traceId. Used by the filtered logs view,
+ * which paginates the raw log stream and may receive the same trace split
+ * across pages. Mirrors the within-page rule in logsToTraceSummaries: a
+ * trace's status is the highest code seen across all its logs.
+ */
+export function mergeTraceSummariesByTraceId(
+  raw: ToolCallSummary[],
+): ToolCallSummary[] {
+  const merged = new Map<string, ToolCallSummary>();
+  for (const trace of raw) {
+    const existing = merged.get(trace.traceId);
+
+    if (!existing) {
+      merged.set(trace.traceId, { ...trace });
+      continue;
+    }
+
+    existing.logCount += trace.logCount;
+    if (BigInt(trace.startTimeUnixNano) < BigInt(existing.startTimeUnixNano)) {
+      existing.startTimeUnixNano = trace.startTimeUnixNano;
+    }
+
+    if (trace.httpStatusCode === undefined) continue;
+
+    if (
+      existing.httpStatusCode === undefined ||
+      trace.httpStatusCode > existing.httpStatusCode
+    ) {
+      existing.httpStatusCode = trace.httpStatusCode;
+    }
+  }
+
+  return Array.from(merged.values()).sort((a, b) =>
+    a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
+  );
+}
+
 function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
   return filters.map((f) => {
     let values: string[] | undefined;
