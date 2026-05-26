@@ -1,5 +1,23 @@
 # dashboard
 
+## 0.60.0
+
+### Minor Changes
+
+- b58bf0f: Adds an org-level AI Integrations product surface with Cursor as the first provider. Organization admins can connect a Cursor Admin API key from org settings, and an hourly Temporal workflow polls Cursor for token and cost usage events and writes them into ClickHouse `telemetry_logs` so the dashboard shows Cursor usage and cost alongside Claude Code data. The dashboard cost copy is updated to reflect Cursor and Claude Code coverage, and the employee detail page now shows cost beside total tokens.
+- ed12a35: Add multiple role support to the RBAC system. Users can now be assigned multiple roles simultaneously, replacing the previous single-role assignment model.
+- 3b8bfb4: Adds `risk.results.listForAgent` — a redacted variant of `risk.results.list` for AI assistant / MCP consumption. The new endpoint returns the same fields as `listRiskResults` but replaces the `match` field with `match_redacted`, an opaque token of the form `<redacted len=N sha=XXXXXXXX>` where `N` is the byte length and `XXXXXXXX` is the first 8 hex characters of `sha256(match)`. Identical secrets produce identical fingerprints so agents can dedupe leak counts without ever seeing secret content.
+
+  `shadow_mcp` findings pass `match` through verbatim because the value is a server URL or stdio command identifier (already shown unmasked in the dashboard), and exact byte positions are coarsened to a single `position_known` boolean to remove reconstruction signals.
+
+  The dashboard's AI Insights sidebar gains risk-aware suggestions on the Security Overview and Policy Center pages, plus a system-prompt rule that bars the assistant from echoing `match_redacted` values verbatim.
+
+### Patch Changes
+
+- 9d6ba7b: The Source Activity panel on the Remote MCP source overview now shows real telemetry for the last 7 days, scoped to that remote server via the new `remote_mcp_server_id` filter. `TelemetrySummaryRow` and `ToolBarList` are extracted into a shared `SourceActivityPanel` component consumed by both the OpenAPI and Remote MCP source overview tabs.
+- 4b49beb: Expand the assistant onboarding personality picker with Brad and Walker, rebalance Quinn against Nolan and Daniel, and group team voices into a compact chip row above the generic preset cards (Friendly / Professional / Playful / Analytical / Teacher).
+- 8e247f9: Chat loading is now paginated by generation, returning one generation per request. The chat detail panel fetches older generations in parallel until the full transcript is assembled, so long-running sessions no longer stall on the initial fetch.
+
 ## 0.59.0
 
 ### Minor Changes
