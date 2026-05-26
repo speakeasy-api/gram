@@ -870,20 +870,19 @@ func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRe
 	}
 
 	if metadata.MachineID != "" {
-		destroyCtx, cancel := context.WithTimeout(ctx, flyRuntimeReapCallTimeout)
-		err := flapsClient.Destroy(destroyCtx, metadata.AppName, fly.RemoveMachineInput{
+		destroyCtx, cancelDestroy := context.WithTimeout(ctx, flyRuntimeReapCallTimeout)
+		defer cancelDestroy()
+		if err := flapsClient.Destroy(destroyCtx, metadata.AppName, fly.RemoveMachineInput{
 			ID:   metadata.MachineID,
 			Kill: true,
-		}, "")
-		cancel()
-		if err != nil && !isFlyNotFound(err) {
+		}, ""); err != nil && !isFlyNotFound(err) {
 			return fmt.Errorf("destroy assistant fly runtime machine: %w", err)
 		}
 	}
 
-	listCtx, cancel := context.WithTimeout(ctx, flyRuntimeReapCallTimeout)
+	listCtx, cancelList := context.WithTimeout(ctx, flyRuntimeReapCallTimeout)
+	defer cancelList()
 	machines, err := flapsClient.List(listCtx, metadata.AppName, "")
-	cancel()
 	switch {
 	case err == nil:
 		for _, m := range machines {
