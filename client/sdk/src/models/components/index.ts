@@ -107,6 +107,8 @@ export * from "./functionenvironmentvariable.js";
 export * from "./functionresourcedefinition.js";
 export * from "./functiontooldefinition.js";
 export * from "./generatetitleresponsebody.js";
+export * from "./generateworkosadminportallinkrequestbody.js";
+export * from "./generateworkosadminportallinkresult.js";
 export * from "./getactivedeploymentresult.js";
 export * from "./getdeploymentlogsresult.js";
 export * from "./getdeploymentresult.js";

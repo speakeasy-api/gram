@@ -3410,6 +3410,12 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
 	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
 
 	return res
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	organizations "github.com/speakeasy-api/gram/server/gen/organizations"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetPayload builds the payload for the organizations get endpoint from
@@ -191,6 +192,37 @@ func BuildCreatePortalSessionPayload(organizationsCreatePortalSessionSessionToke
 		}
 	}
 	v := &organizations.CreatePortalSessionPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGenerateWorkOSAdminPortalLinkPayload builds the payload for the
+// organizations generateWorkOSAdminPortalLink endpoint from CLI flags.
+func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminPortalLinkBody string, organizationsGenerateWorkOSAdminPortalLinkSessionToken string) (*organizations.GenerateWorkOSAdminPortalLinkPayload, error) {
+	var err error
+	var body GenerateWorkOSAdminPortalLinkRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsGenerateWorkOSAdminPortalLinkBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"intent\": \"sso\"\n   }'")
+		}
+		if !(body.Intent == "dsync" || body.Intent == "sso" || body.Intent == "audit_logs" || body.Intent == "domain_verification" || body.Intent == "log_streams") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.intent", body.Intent, []any{"dsync", "sso", "audit_logs", "domain_verification", "log_streams"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsGenerateWorkOSAdminPortalLinkSessionToken != "" {
+			sessionToken = &organizationsGenerateWorkOSAdminPortalLinkSessionToken
+		}
+	}
+	v := &organizations.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: body.Intent,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

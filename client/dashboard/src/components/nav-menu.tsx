@@ -397,6 +397,7 @@ export function NavButton({
       onMouseEnter={navItem.onMouseEnter}
       onMouseLeave={navItem.onMouseLeave}
       onMouseMove={navItem.onMouseMove}
+      className="group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
     >
       <Link
         to={href ?? "#"}
@@ -404,7 +405,7 @@ export function NavButton({
         onClick={handleClick}
         className={cn(
           "relative z-[1] flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
-          "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2!",
+          "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
           active
             ? "text-foreground font-semibold"
             : "text-muted-foreground hover:text-foreground font-medium",
@@ -421,7 +422,7 @@ export function NavButton({
         <Type
           variant="small"
           className={cn(
-            "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
+            "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
             active && "font-semibold",
             isLoading && "nav-shimmer",
           )}
@@ -476,13 +477,14 @@ export function CollapsibleNavGroup({
           onMouseEnter={navItem.onMouseEnter}
           onMouseLeave={navItem.onMouseLeave}
           onMouseMove={navItem.onMouseMove}
+          className="group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
         >
           <Link
             to={defaultHref ?? "#"}
             onClick={handleClick}
             className={cn(
               "relative z-[1] flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
-              "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2!",
+              "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
               "cursor-pointer outline-hidden",
               isOpen
                 ? "text-foreground font-semibold"

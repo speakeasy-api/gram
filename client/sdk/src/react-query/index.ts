@@ -91,6 +91,7 @@ export * from "./evolveDeployment.js";
 export * from "./exportMcpMetadata.js";
 export * from "./featuresSet.js";
 export * from "./fetchOpenAPIv3FromURL.js";
+export * from "./generateWorkOSAdminPortalLink.js";
 export * from "./getAssistantMemory.js";
 export * from "./getCreditUsage.js";
 export * from "./getDomain.js";

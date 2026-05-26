@@ -398,12 +398,14 @@ func (s *StubClient) GetOrgMembership(_ context.Context, workOSUserID, workOSOrg
 	return nil, nil
 }
 
-func (s *StubClient) CreateOrganization(_ context.Context, name, gramOrgID string) (string, error) {
+func (s *StubClient) CreateOrganization(_ context.Context, name, _ string) (string, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
-	workosOrgID := fmt.Sprintf("org_%s", gramOrgID)
-	s.orgState(workosOrgID) // initialize
+	workosOrgID := fmt.Sprintf("org_workos_%d", s.next)
+	s.next++
+	state := s.orgState(workosOrgID)
+	state.organization.Name = name
 
 	return workosOrgID, nil
 }
