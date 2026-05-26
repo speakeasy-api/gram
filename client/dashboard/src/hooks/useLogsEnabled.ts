@@ -21,7 +21,7 @@ function isLogsEnabled(error: Error | null): boolean {
  *
  * @example
  * const { data, isLoading, isLogsDisabled } = useLogsEnabledErrorCheck(
- *   useListChatsWithResolutions({ ... })
+ *   useListChats({ ... })
  * );
  */
 export function useLogsEnabledErrorCheck<T extends { error: Error | null }>(

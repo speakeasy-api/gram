@@ -5682,6 +5682,98 @@ paths:
             operationId: listChats
             parameters:
                 - allowEmptyValue: true
+                  description: Search query (searches chat ID, user ID, and title)
+                  in: query
+                  name: search
+                  schema:
+                    description: Search query (searches chat ID, user ID, and title)
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by external user ID
+                  in: query
+                  name: external_user_id
+                  schema:
+                    description: Filter by external user ID
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter to chats produced by this assistant
+                  in: query
+                  name: assistant_id
+                  schema:
+                    description: Filter to chats produced by this assistant
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+                  in: query
+                  name: has_risk
+                  schema:
+                    description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
+                    enum:
+                        - ""
+                        - "true"
+                        - "false"
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter chats created after this timestamp (ISO 8601)
+                  in: query
+                  name: from
+                  schema:
+                    description: Filter chats created after this timestamp (ISO 8601)
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter chats created before this timestamp (ISO 8601)
+                  in: query
+                  name: to
+                  schema:
+                    description: Filter chats created before this timestamp (ISO 8601)
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Number of results per page
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Number of results per page
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Pagination offset
+                  in: query
+                  name: offset
+                  schema:
+                    default: 0
+                    description: Pagination offset
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - allowEmptyValue: true
+                  description: Field to sort by
+                  in: query
+                  name: sort_by
+                  schema:
+                    default: created_at
+                    description: Field to sort by
+                    enum:
+                        - created_at
+                        - num_messages
+                    type: string
+                - allowEmptyValue: true
+                  description: Sort order
+                  in: query
+                  name: sort_order
+                  schema:
+                    default: desc
+                    description: Sort order
+                    enum:
+                        - asc
+                        - desc
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -5773,203 +5865,6 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListChats
-    /rpc/chat.listChatsWithResolutions:
-        get:
-            description: List all chats for a project with their resolutions
-            operationId: listChatsWithResolutions
-            parameters:
-                - allowEmptyValue: true
-                  description: Search query (searches chat ID, user ID, and title)
-                  in: query
-                  name: search
-                  schema:
-                    description: Search query (searches chat ID, user ID, and title)
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter by external user ID
-                  in: query
-                  name: external_user_id
-                  schema:
-                    description: Filter by external user ID
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter to chats produced by this assistant
-                  in: query
-                  name: assistant_id
-                  schema:
-                    description: Filter to chats produced by this assistant
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter by resolution status
-                  in: query
-                  name: resolution_status
-                  schema:
-                    description: Filter by resolution status
-                    type: string
-                - allowEmptyValue: true
-                  description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
-                  in: query
-                  name: has_risk
-                  schema:
-                    description: 'Filter by whether chat has risk findings: ''true'', ''false'', or empty for no filter.'
-                    enum:
-                        - ""
-                        - "true"
-                        - "false"
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter chats created after this timestamp (ISO 8601)
-                  in: query
-                  name: from
-                  schema:
-                    description: Filter chats created after this timestamp (ISO 8601)
-                    format: date-time
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter chats created before this timestamp (ISO 8601)
-                  in: query
-                  name: to
-                  schema:
-                    description: Filter chats created before this timestamp (ISO 8601)
-                    format: date-time
-                    type: string
-                - allowEmptyValue: true
-                  description: Number of results per page
-                  in: query
-                  name: limit
-                  schema:
-                    default: 50
-                    description: Number of results per page
-                    format: int64
-                    maximum: 100
-                    minimum: 1
-                    type: integer
-                - allowEmptyValue: true
-                  description: Pagination offset
-                  in: query
-                  name: offset
-                  schema:
-                    default: 0
-                    description: Pagination offset
-                    format: int64
-                    minimum: 0
-                    type: integer
-                - allowEmptyValue: true
-                  description: Field to sort by
-                  in: query
-                  name: sort_by
-                  schema:
-                    default: created_at
-                    description: Field to sort by
-                    enum:
-                        - created_at
-                        - num_messages
-                        - score
-                    type: string
-                - allowEmptyValue: true
-                  description: Sort order
-                  in: query
-                  name: sort_order
-                  schema:
-                    default: desc
-                    description: Sort order
-                    enum:
-                        - asc
-                        - desc
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-                - allowEmptyValue: true
-                  description: Chat Sessions token header
-                  in: header
-                  name: Gram-Chat-Session
-                  schema:
-                    description: Chat Sessions token header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListChatsWithResolutionsResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - chat_sessions_token_header_Gram-Chat-Session: []
-            summary: listChatsWithResolutions chat
-            tags:
-                - chat
-            x-speakeasy-name-override: listChatsWithResolutions
-            x-speakeasy-react-hook:
-                name: ListChatsWithResolutions
                 type: query
     /rpc/chat.load:
         get:
@@ -29619,115 +29514,6 @@ components:
                 - created_at
                 - updated_at
                 - last_message_timestamp
-        ChatOverviewWithResolutions:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: When the chat was created.
-                    format: date-time
-                external_user_id:
-                    type: string
-                    description: The ID of the external user who created the chat
-                id:
-                    type: string
-                    description: The ID of the chat
-                last_message_timestamp:
-                    type: string
-                    description: When the last message in the chat was created.
-                    format: date-time
-                num_messages:
-                    type: integer
-                    description: The number of messages in the chat
-                    format: int64
-                resolutions:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/ChatResolution'
-                    description: List of resolutions for this chat
-                risk_findings_count:
-                    type: integer
-                    description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
-                    format: int64
-                source:
-                    type: string
-                    description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
-                title:
-                    type: string
-                    description: The title of the chat
-                total_cost:
-                    type: number
-                    description: Total cost in USD for this chat
-                    format: double
-                total_input_tokens:
-                    type: integer
-                    description: Total input tokens used in this chat
-                    format: int64
-                total_output_tokens:
-                    type: integer
-                    description: Total output tokens used in this chat
-                    format: int64
-                total_tokens:
-                    type: integer
-                    description: Total tokens (input + output) used in this chat
-                    format: int64
-                updated_at:
-                    type: string
-                    description: When the chat was last updated.
-                    format: date-time
-                user_id:
-                    type: string
-                    description: The ID of the user who created the chat
-            description: Chat overview with embedded resolution data
-            required:
-                - resolutions
-                - id
-                - title
-                - num_messages
-                - created_at
-                - updated_at
-                - last_message_timestamp
-        ChatResolution:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: When resolution was created
-                    format: date-time
-                id:
-                    type: string
-                    description: Resolution ID
-                    format: uuid
-                message_ids:
-                    type: array
-                    items:
-                        type: string
-                    description: Message IDs associated with this resolution
-                    example:
-                        - abc-123
-                        - def-456
-                resolution:
-                    type: string
-                    description: Resolution status
-                resolution_notes:
-                    type: string
-                    description: Notes about the resolution
-                score:
-                    type: integer
-                    description: Score 0-100
-                    format: int64
-                user_goal:
-                    type: string
-                    description: User's intended goal
-            description: Resolution information for a chat
-            required:
-                - id
-                - user_goal
-                - resolution
-                - resolution_notes
-                - score
-                - created_at
-                - message_ids
         ChatSummary:
             type: object
             properties:
@@ -33363,21 +33149,10 @@ components:
                     items:
                         $ref: '#/components/schemas/ChatOverview'
                     description: The list of chats
-            required:
-                - chats
-        ListChatsWithResolutionsResult:
-            type: object
-            properties:
-                chats:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/ChatOverviewWithResolutions'
-                    description: List of chats with resolutions
                 total:
                     type: integer
                     description: Total number of chats (before pagination)
                     format: int64
-            description: Result of listing chats with resolutions
             required:
                 - chats
                 - total

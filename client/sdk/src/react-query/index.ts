@@ -129,7 +129,6 @@ export * from "./listAssets.js";
 export * from "./listAssistantMemories.js";
 export * from "./listAttributeKeys.js";
 export * from "./listChats.js";
-export * from "./listChatsWithResolutions.js";
 export * from "./listCollections.js";
 export * from "./listDeployments.js";
 export * from "./listEnvironments.js";
