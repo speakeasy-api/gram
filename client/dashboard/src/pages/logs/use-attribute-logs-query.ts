@@ -158,24 +158,27 @@ export function mergeTraceSummariesByTraceId(
   const merged = new Map<string, ToolCallSummary>();
   for (const trace of raw) {
     const existing = merged.get(trace.traceId);
-    if (existing) {
-      existing.logCount += trace.logCount;
-      if (
-        BigInt(trace.startTimeUnixNano) < BigInt(existing.startTimeUnixNano)
-      ) {
-        existing.startTimeUnixNano = trace.startTimeUnixNano;
-      }
-      if (
-        trace.httpStatusCode !== undefined &&
-        (existing.httpStatusCode === undefined ||
-          trace.httpStatusCode > existing.httpStatusCode)
-      ) {
-        existing.httpStatusCode = trace.httpStatusCode;
-      }
-    } else {
+
+    if (!existing) {
       merged.set(trace.traceId, { ...trace });
+      continue;
+    }
+
+    existing.logCount += trace.logCount;
+    if (BigInt(trace.startTimeUnixNano) < BigInt(existing.startTimeUnixNano)) {
+      existing.startTimeUnixNano = trace.startTimeUnixNano;
+    }
+
+    if (trace.httpStatusCode === undefined) continue;
+
+    if (
+      existing.httpStatusCode === undefined ||
+      trace.httpStatusCode > existing.httpStatusCode
+    ) {
+      existing.httpStatusCode = trace.httpStatusCode;
     }
   }
+
   return Array.from(merged.values()).sort((a, b) =>
     a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
   );
