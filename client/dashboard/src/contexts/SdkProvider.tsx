@@ -1,4 +1,5 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import { clearStorageForLogout } from "@/lib/logout-storage";
 import { getServerURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
@@ -55,12 +56,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
       datadogRum.clearUser();
       telemetry.reset();
       document.cookie = "gram_admin_override=; path=/; max-age=0;";
-      if (typeof localStorage !== "undefined") {
-        localStorage.clear();
-      }
-      if (typeof sessionStorage !== "undefined") {
-        sessionStorage?.clear();
-      }
+      clearStorageForLogout();
     });
 
     const gram = new Gram({
