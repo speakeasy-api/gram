@@ -77,6 +77,14 @@ func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Cont
 	return nil
 }
 
+func (m *MockOrganizationProvider) GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent thirdpartyworkos.PortalIntent, returnURL string) (string, error) {
+	args := m.Called(ctx, workosOrgID, intent, returnURL)
+	if err := args.Error(1); err != nil {
+		return "", fmt.Errorf("mock GenerateAdminPortalLink: %w", err)
+	}
+	return args.String(0), nil
+}
+
 // stubUserProvisioner is a no-op implementation of UserProvisioner for tests
 // that don't exercise the invite callback HTTP handler.
 type stubUserProvisioner struct{}
