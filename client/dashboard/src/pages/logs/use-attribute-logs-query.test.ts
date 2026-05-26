@@ -64,4 +64,65 @@ describe("logsToTraceSummaries", () => {
       }),
     ]);
   });
+
+  it("surfaces the failing status code when a trace mixes success and error logs", () => {
+    const summaries = logsToTraceSummaries([
+      makeLog({
+        id: "ok-log",
+        timeUnixNano: "1",
+        traceId: "trace-mixed",
+        attributes: {
+          gram: {
+            event: { source: "tool_call" },
+            tool: { urn: "urn:tool:failing" },
+          },
+          http: { response: { status_code: 200 } },
+        },
+      }),
+      makeLog({
+        id: "err-log",
+        timeUnixNano: "2",
+        traceId: "trace-mixed",
+        attributes: {
+          http: { response: { status_code: 500 } },
+        },
+      }),
+    ]);
+
+    expect(summaries).toEqual([
+      expect.objectContaining({
+        traceId: "trace-mixed",
+        httpStatusCode: 500,
+      }),
+    ]);
+  });
+
+  it("surfaces the error code regardless of log iteration order", () => {
+    const summaries = logsToTraceSummaries([
+      makeLog({
+        id: "err-log",
+        timeUnixNano: "2",
+        traceId: "trace-err-first",
+        attributes: {
+          gram: { tool: { urn: "urn:tool:err-first" } },
+          http: { response: { status_code: 500 } },
+        },
+      }),
+      makeLog({
+        id: "ok-log",
+        timeUnixNano: "1",
+        traceId: "trace-err-first",
+        attributes: {
+          http: { response: { status_code: 200 } },
+        },
+      }),
+    ]);
+
+    expect(summaries).toEqual([
+      expect.objectContaining({
+        traceId: "trace-err-first",
+        httpStatusCode: 500,
+      }),
+    ]);
+  });
 });

@@ -99,9 +99,15 @@ export function logsToTraceSummaries(
         const urn = getNestedAttr(log.attributes, "gram.tool.urn");
         if (typeof urn === "string") gramUrn = urn;
       }
-      if (httpStatusCode === undefined) {
-        const code = getNestedAttr(log.attributes, "http.response.status_code");
-        if (typeof code === "number") httpStatusCode = code;
+      // Prefer the highest HTTP status code seen in the trace so a trace
+      // containing both a 200 (e.g. MCP handshake) and a 500 (failed tool
+      // call) surfaces as failed. Picking the first code latches onto
+      // whichever log iterates first and can mislead the row indicator green.
+      const code = getNestedAttr(log.attributes, "http.response.status_code");
+      if (typeof code === "number") {
+        if (httpStatusCode === undefined || code > httpStatusCode) {
+          httpStatusCode = code;
+        }
       }
       if (!eventSource) {
         if (typeof src === "string") eventSource = src;
