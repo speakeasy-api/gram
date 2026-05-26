@@ -46,10 +46,17 @@ const OAuthAuthorizationServerPath = "/.well-known/oauth-authorization-server"
 const OAuthProtectedResourcePath = "/.well-known/oauth-protected-resource"
 
 // OAuthProtectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata (RFC 9728).
+//
+// Used for both serving Gram's own metadata documents and decoding metadata
+// probed from upstream resource servers via [DiscoverProtectedResourceMetadata].
+// Fields outside the minimum set required by the existing server-side callers
+// are tagged omitempty so adding them does not change emitted documents.
 type OAuthProtectedResourceMetadata struct {
-	Resource             string   `json:"resource"`
-	AuthorizationServers []string `json:"authorization_servers"`
-	ScopesSupported      []string `json:"scopes_supported,omitempty"`
+	Resource               string   `json:"resource"`
+	AuthorizationServers   []string `json:"authorization_servers"`
+	ScopesSupported        []string `json:"scopes_supported,omitempty"`
+	BearerMethodsSupported []string `json:"bearer_methods_supported,omitempty"`
+	ResourceDocumentation  string   `json:"resource_documentation,omitempty"`
 }
 
 // OAuthServerMetadata represents OAuth 2.0 Authorization Server Metadata (RFC 8414).
@@ -190,9 +197,11 @@ func ResolveOAuthProtectedResourceFromToolset(
 	// Check for OAuth proxy server or external OAuth server configuration
 	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
 		return &OAuthProtectedResourceMetadata{
-			Resource:             resourceURL,
-			AuthorizationServers: []string{resourceURL},
-			ScopesSupported:      nil,
+			Resource:               resourceURL,
+			AuthorizationServers:   []string{resourceURL},
+			ScopesSupported:        nil,
+			BearerMethodsSupported: nil,
+			ResourceDocumentation:  "",
 		}, nil
 	}
 

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: f4410ac7935fd9e815d4137d424386a4
+  docChecksum: 33268304507bbfd617070e8201aa6d37
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -276,6 +276,8 @@ trackedFiles:
     last_write_checksum: sha1:9b6481e8af0916f6e44a3dc2be0aafc40a9a381f
   docs/models/components/deploymentsummary.md:
     last_write_checksum: sha1:5d4ab2325f17cf618cafef456b8e52dd33d4da9a
+  docs/models/components/discoverprotectedresourcemetadatarequestbody.md:
+    last_write_checksum: sha1:dcc0161026e6559d55f9bbdaa0cb23ac90d8601b
   docs/models/components/discoverremotesessionissuerrequestbody.md:
     last_write_checksum: sha1:855425544cda46eb247637c4536ddebf66b2a8b7
   docs/models/components/disposition.md:
@@ -684,6 +686,12 @@ trackedFiles:
     last_write_checksum: sha1:2567ef3cd571550ffa62fbfcbbd028e11b43ca03
   docs/models/components/prompttemplatekind.md:
     last_write_checksum: sha1:173b75b43a17fea90612cb23fc9aa50b3550340b
+  docs/models/components/protectedresourcemetadata.md:
+    last_write_checksum: sha1:e4061d4a89eaa2a874029db24d2ba36e9bcd051a
+  docs/models/components/protectedresourcemetadatadiscovery.md:
+    last_write_checksum: sha1:55c3a792dbd808888092b53196d839c8918ff756
+  docs/models/components/protectedresourcemetadataunavailable.md:
+    last_write_checksum: sha1:0349894c24ac20c6f58727bf0d0544660d859212
   docs/models/components/providertype.md:
     last_write_checksum: sha1:fd54ee43f190153db3ffd9bac4b64953d4d249fd
   docs/models/components/publishpackageform.md:
@@ -1488,6 +1496,14 @@ trackedFiles:
     last_write_checksum: sha1:4047bb6d541fe75e00672ce1470f9efed7fb02b4
   docs/models/operations/disablewebhookssecurity.md:
     last_write_checksum: sha1:c49ffaa46d06615872fe2be7b0d8cf7119514c43
+  docs/models/operations/discoverremotemcpprotectedresourcemetadatarequest.md:
+    last_write_checksum: sha1:cbecad0285c7308cd3e1f7927fb57b40cfa69e40
+  docs/models/operations/discoverremotemcpprotectedresourcemetadatasecurity.md:
+    last_write_checksum: sha1:0c3f3dd37501b1c5d78d978ac6626679fe26f509
+  docs/models/operations/discoverremotemcpprotectedresourcemetadatasecurityoption1.md:
+    last_write_checksum: sha1:b45430c057bd878dac12b2ee52c87559a2877896
+  docs/models/operations/discoverremotemcpprotectedresourcemetadatasecurityoption2.md:
+    last_write_checksum: sha1:c1fcd915760fc75b305695c030e183ed99e34853
   docs/models/operations/discoverremotesessionissuerrequest.md:
     last_write_checksum: sha1:f5a68189c317a60fe1e63b301734aa5fda755f5b
   docs/models/operations/discoverremotesessionissuersecurity.md:
@@ -2831,7 +2847,7 @@ trackedFiles:
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
   docs/sdks/remotemcp/README.md:
-    last_write_checksum: sha1:ba40ec39aacdc278cab5c33f3c7668bade49ca6c
+    last_write_checksum: sha1:926fc9d59a4d3dcb56e24f65314f9c1f4d69f878
   docs/sdks/remotesessionclients/README.md:
     last_write_checksum: sha1:3765a51856c3d01695e4fc5ccb527a91be25c4c4
   docs/sdks/remotesessionissuers/README.md:
@@ -3360,6 +3376,8 @@ trackedFiles:
     last_write_checksum: sha1:75d5fd80b80d147ba156382e48b005ede17d9784
   src/funcs/remoteMcpDeleteServer.ts:
     last_write_checksum: sha1:b62b78321fc806e74f2c9ae0e21e5f30dc791a0a
+  src/funcs/remoteMcpDiscoverProtectedResourceMetadata.ts:
+    last_write_checksum: sha1:ab372a1eec6b56dfab535cdf8822299f1c89c4b5
   src/funcs/remoteMcpGetServer.ts:
     last_write_checksum: sha1:56f50f4b2fe46b6097d65a444155ac77bfc87176
   src/funcs/remoteMcpListServers.ts:
@@ -3956,6 +3974,8 @@ trackedFiles:
     id: 435890ac8384
     last_write_checksum: sha1:3f891f6011b55d6dcc85274122288babb19d8de4
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
+  src/models/components/discoverprotectedresourcemetadatarequestbody.ts:
+    last_write_checksum: sha1:1f8f8a7840c2951d4102a9b562ddc580e9385574
   src/models/components/discoverremotesessionissuerrequestbody.ts:
     last_write_checksum: sha1:a5e07e068cde80ee4d9f385dce489b0567c7598b
   src/models/components/environment.ts:
@@ -4112,7 +4132,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:0ec71c71d8711f8df7bfad0a545ffe45d874753e
+    last_write_checksum: sha1:eee6f1af2fa2f009a5e6f612c0189a8b79a2b26a
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4438,6 +4458,12 @@ trackedFiles:
     id: 2e0bddad1e58
     last_write_checksum: sha1:04b4a46caf6ab45efa2a4fc843657abb0a0db6a3
     pristine_git_object: 86d6a348005f41e309841cca068a3c309b9d1ef4
+  src/models/components/protectedresourcemetadata.ts:
+    last_write_checksum: sha1:9b130c4ff2e459c4959865da625ff5b819b17cba
+  src/models/components/protectedresourcemetadatadiscovery.ts:
+    last_write_checksum: sha1:c1d9572747a29cab0926c0bcb7273079c843ea06
+  src/models/components/protectedresourcemetadataunavailable.ts:
+    last_write_checksum: sha1:2de56818c99d6218a4e38e5a2f6f6cd731896f34
   src/models/components/publishpackageform.ts:
     id: ac62df1dace7
     last_write_checksum: sha1:2ecdd913b3d174ec30286cc1e1e4268ec01c9e47
@@ -5056,6 +5082,8 @@ trackedFiles:
     last_write_checksum: sha1:0d557ade2a9e135cf1c14c6f97b1e55a7d0347e5
   src/models/operations/disablewebhooks.ts:
     last_write_checksum: sha1:649c773ea00fe70bfe7100d0af0496a4ba0fb7da
+  src/models/operations/discoverremotemcpprotectedresourcemetadata.ts:
+    last_write_checksum: sha1:ec03266ab87604fb54b2a9aeabf9bc8e781779a5
   src/models/operations/discoverremotesessionissuer.ts:
     last_write_checksum: sha1:75936df81d56ce661b9a4899e072193f536f288a
   src/models/operations/downloadcodexinstallscript.ts:
@@ -5210,7 +5238,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:7128bbdb0a7bead029e0cc389abb6577c279eaa8
+    last_write_checksum: sha1:fd14848bf5bf8303524059944202eab5129b981b
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5852,6 +5880,8 @@ trackedFiles:
     last_write_checksum: sha1:87416ad89eee7088281956bd886437480bc70c34
   src/react-query/disableWebhooks.ts:
     last_write_checksum: sha1:2107b365915975e26d9700fa96f4c4aacad64d04
+  src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts:
+    last_write_checksum: sha1:f06017e5dc3fa7c59ab5268a4caf62e4018cc369
   src/react-query/discoverRemoteSessionIssuer.ts:
     last_write_checksum: sha1:0ef6b377db58b03e3551156f7e5988bf4cbb46aa
   src/react-query/enableRBAC.ts:
@@ -6002,7 +6032,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:e75e89ea3d39c708281729a2751765261f89a19d
+    last_write_checksum: sha1:31985144858bf8e24862e69ecfe640b73cbea70e
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6763,7 +6793,7 @@ trackedFiles:
     last_write_checksum: sha1:a80e20f3e6686ec35437d4054d5f1ff74b78c346
     pristine_git_object: 94f2eb9046b6d3e29fe5bf388a55a7d82ff2da08
   src/sdk/remotemcp.ts:
-    last_write_checksum: sha1:b441a0e7f045edc5e8e346027d0b9b9b5ca17d3c
+    last_write_checksum: sha1:98005b1f5a4586c627371aaa95769cf43fbb27ee
   src/sdk/remotesessionclients.ts:
     last_write_checksum: sha1:7e5b2c1a6b1bd43825aca55809f5f1ec7178a6f2
   src/sdk/remotesessionissuers.ts:
@@ -10151,6 +10181,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  discoverRemoteMcpProtectedResourceMetadata:
+    speakeasy-default-discover-remote-mcp-protected-resource-metadata:
+      requestBody:
+        application/json: {"remote_mcp_server_id": "e3ab09c2-fa66-4dc0-8300-c073cfbc9161"}
+      responses:
+        "200":
+          application/json: {"available": true, "discovery_warnings": ["<value 1>", "<value 2>", "<value 3>"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

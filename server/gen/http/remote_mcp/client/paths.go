@@ -27,6 +27,11 @@ func UpdateServerRemoteMcpPath() string {
 	return "/rpc/remoteMcp.updateServer"
 }
 
+// DiscoverProtectedResourceMetadataRemoteMcpPath returns the URL path to the remoteMcp service discoverProtectedResourceMetadata HTTP endpoint.
+func DiscoverProtectedResourceMetadataRemoteMcpPath() string {
+	return "/rpc/remoteMcp.discoverProtectedResourceMetadata"
+}
+
 // VerifyURLRemoteMcpPath returns the URL path to the remoteMcp service verifyURL HTTP endpoint.
 func VerifyURLRemoteMcpPath() string {
 	return "/rpc/remoteMcp.verifyURL"

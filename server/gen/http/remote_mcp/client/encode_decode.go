@@ -987,6 +987,251 @@ func DecodeUpdateServerResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildDiscoverProtectedResourceMetadataRequest instantiates a HTTP request
+// object with method and path set to call the "remoteMcp" service
+// "discoverProtectedResourceMetadata" endpoint
+func (c *Client) BuildDiscoverProtectedResourceMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DiscoverProtectedResourceMetadataRemoteMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "discoverProtectedResourceMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDiscoverProtectedResourceMetadataRequest returns an encoder for
+// requests sent to the remoteMcp discoverProtectedResourceMetadata server.
+func EncodeDiscoverProtectedResourceMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.DiscoverProtectedResourceMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "discoverProtectedResourceMetadata", "*remotemcp.DiscoverProtectedResourceMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewDiscoverProtectedResourceMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDiscoverProtectedResourceMetadataResponse returns a decoder for
+// responses returned by the remoteMcp discoverProtectedResourceMetadata
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeDiscoverProtectedResourceMetadataResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDiscoverProtectedResourceMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DiscoverProtectedResourceMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			res := NewDiscoverProtectedResourceMetadataProtectedResourceMetadataDiscoveryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DiscoverProtectedResourceMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			return nil, NewDiscoverProtectedResourceMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DiscoverProtectedResourceMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			return nil, NewDiscoverProtectedResourceMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DiscoverProtectedResourceMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			return nil, NewDiscoverProtectedResourceMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DiscoverProtectedResourceMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			return nil, NewDiscoverProtectedResourceMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DiscoverProtectedResourceMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			return nil, NewDiscoverProtectedResourceMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DiscoverProtectedResourceMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			return nil, NewDiscoverProtectedResourceMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DiscoverProtectedResourceMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			return nil, NewDiscoverProtectedResourceMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DiscoverProtectedResourceMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+				}
+				err = ValidateDiscoverProtectedResourceMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+				}
+				return nil, NewDiscoverProtectedResourceMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DiscoverProtectedResourceMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+				}
+				err = ValidateDiscoverProtectedResourceMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+				}
+				return nil, NewDiscoverProtectedResourceMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "discoverProtectedResourceMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DiscoverProtectedResourceMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			err = ValidateDiscoverProtectedResourceMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "discoverProtectedResourceMetadata", err)
+			}
+			return nil, NewDiscoverProtectedResourceMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "discoverProtectedResourceMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildVerifyURLRequest instantiates a HTTP request object with method and
 // path set to call the "remoteMcp" service "verifyURL" endpoint
 func (c *Client) BuildVerifyURLRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1527,6 +1772,54 @@ func unmarshalRemoteMcpServerResponseBodyToTypesRemoteMcpServer(v *RemoteMcpServ
 			continue
 		}
 		res.Headers[i] = unmarshalRemoteMcpServerHeaderResponseBodyToTypesRemoteMcpServerHeader(val)
+	}
+
+	return res
+}
+
+// unmarshalProtectedResourceMetadataResponseBodyToRemotemcpProtectedResourceMetadata
+// builds a value of type *remotemcp.ProtectedResourceMetadata from a value of
+// type *ProtectedResourceMetadataResponseBody.
+func unmarshalProtectedResourceMetadataResponseBodyToRemotemcpProtectedResourceMetadata(v *ProtectedResourceMetadataResponseBody) *remotemcp.ProtectedResourceMetadata {
+	if v == nil {
+		return nil
+	}
+	res := &remotemcp.ProtectedResourceMetadata{
+		Resource:              v.Resource,
+		ResourceDocumentation: v.ResourceDocumentation,
+	}
+	if v.AuthorizationServers != nil {
+		res.AuthorizationServers = make([]string, len(v.AuthorizationServers))
+		for i, val := range v.AuthorizationServers {
+			res.AuthorizationServers[i] = val
+		}
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.BearerMethodsSupported != nil {
+		res.BearerMethodsSupported = make([]string, len(v.BearerMethodsSupported))
+		for i, val := range v.BearerMethodsSupported {
+			res.BearerMethodsSupported[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalProtectedResourceMetadataUnavailableResponseBodyToRemotemcpProtectedResourceMetadataUnavailable
+// builds a value of type *remotemcp.ProtectedResourceMetadataUnavailable from
+// a value of type *ProtectedResourceMetadataUnavailableResponseBody.
+func unmarshalProtectedResourceMetadataUnavailableResponseBodyToRemotemcpProtectedResourceMetadataUnavailable(v *ProtectedResourceMetadataUnavailableResponseBody) *remotemcp.ProtectedResourceMetadataUnavailable {
+	if v == nil {
+		return nil
+	}
+	res := &remotemcp.ProtectedResourceMetadataUnavailable{
+		Code:    *v.Code,
+		Message: *v.Message,
 	}
 
 	return res

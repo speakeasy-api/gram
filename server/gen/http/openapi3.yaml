@@ -16830,6 +16830,110 @@ paths:
             x-speakeasy-name-override: deleteServer
             x-speakeasy-react-hook:
                 name: DeleteRemoteMcpServer
+    /rpc/remoteMcp.discoverProtectedResourceMetadata:
+        post:
+            description: Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.
+            operationId: discoverRemoteMcpProtectedResourceMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DiscoverProtectedResourceMetadataRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProtectedResourceMetadataDiscovery'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: discoverProtectedResourceMetadata remoteMcp
+            tags:
+                - remoteMcp
+            x-speakeasy-name-override: discoverProtectedResourceMetadata
+            x-speakeasy-react-hook:
+                name: DiscoverRemoteMcpProtectedResourceMetadata
     /rpc/remoteMcp.getServer:
         get:
             description: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
@@ -31259,6 +31363,15 @@ components:
                 - functions_tool_count
                 - external_mcp_asset_count
                 - external_mcp_tool_count
+        DiscoverProtectedResourceMetadataRequestBody:
+            type: object
+            properties:
+                remote_mcp_server_id:
+                    type: string
+                    description: The ID of the remote MCP server to probe.
+                    format: uuid
+            required:
+                - remote_mcp_server_id
         DiscoverRemoteSessionIssuerRequestBody:
             type: object
             properties:
@@ -35704,6 +35817,63 @@ components:
             required:
                 - id
                 - name
+        ProtectedResourceMetadata:
+            type: object
+            properties:
+                authorization_servers:
+                    type: array
+                    items:
+                        type: string
+                    description: Authorization servers that can issue access tokens for this resource.
+                bearer_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Bearer token presentation methods accepted by the resource server.
+                resource:
+                    type: string
+                    description: The resource server's identifier.
+                resource_documentation:
+                    type: string
+                    description: URL of human-readable documentation for the resource server.
+                scopes_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Scopes advertised by the resource server.
+            description: RFC 9728 OAuth Protected Resource Metadata advertised by a remote MCP server. Only fields the dashboard renders are typed; the RFC allows additional members.
+        ProtectedResourceMetadataDiscovery:
+            type: object
+            properties:
+                available:
+                    type: boolean
+                    description: True when the upstream advertised an RFC 9728 document. False for any unavailability reason — see the unavailable field for the cause.
+                discovery_warnings:
+                    type: array
+                    items:
+                        type: string
+                    description: Informational deviations from RFC 9728 detected on a successful probe (e.g. missing resource field, mismatched resource value). Empty when available is false.
+                metadata:
+                    $ref: '#/components/schemas/ProtectedResourceMetadata'
+                unavailable:
+                    $ref: '#/components/schemas/ProtectedResourceMetadataUnavailable'
+            description: Outcome of an RFC 9728 protected resource metadata probe against a remote MCP server. available=true exposes the parsed metadata; available=false exposes a typed unavailability reason. Always returned with HTTP 200 — probe failures (including 404 from upstream) are not errors at this layer because non-OAuth resource servers are an expected, normal outcome.
+            required:
+                - available
+                - discovery_warnings
+        ProtectedResourceMetadataUnavailable:
+            type: object
+            properties:
+                code:
+                    type: string
+                    description: Machine-readable failure code (e.g. not_found, http_error, transport_error, timeout, malformed, host_blocked, invalid_url). Intentionally a free-form string so adding new failure modes is not a breaking SDK change.
+                message:
+                    type: string
+                    description: Human-readable summary of the unavailability reason, composed by the backend. Dashboards should render verbatim.
+            description: Reason an RFC 9728 protected resource metadata probe was unavailable. Surfaced when available is false.
+            required:
+                - code
+                - message
         PublishPackageForm:
             type: object
             properties:
