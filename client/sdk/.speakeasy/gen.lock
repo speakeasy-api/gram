@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 25b914a67ffb4f0efda06b6ae5f34ad5
+  docChecksum: 558fb264429d04539d3e1180c2a5d63a
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -334,6 +334,10 @@ trackedFiles:
     last_write_checksum: sha1:c009199e05c8fa4216cea242dd224c2e7201e623
   docs/models/components/generatetitleresponsebody.md:
     last_write_checksum: sha1:38ee2cf743b12e9ffa968731732b84116e7d4da8
+  docs/models/components/generateworkosadminportallinkrequestbody.md:
+    last_write_checksum: sha1:c826f2d283efa223e67834a59bfecdfbf04fcb53
+  docs/models/components/generateworkosadminportallinkresult.md:
+    last_write_checksum: sha1:11eacabf9f1465e6d98dabb73b3e562569215c31
   docs/models/components/getactivedeploymentresult.md:
     last_write_checksum: sha1:b3b64581cc0a3c0439cc61e407f2b8dd21a41b49
   docs/models/components/getdeploymentlogsresult.md:
@@ -408,6 +412,8 @@ trackedFiles:
     last_write_checksum: sha1:37a319246383ec741f293edd211cad305dec63a5
   docs/models/components/integrationversion.md:
     last_write_checksum: sha1:0f1fa3345a198c9e8e429a1f8d41fc3c0965908e
+  docs/models/components/intent.md:
+    last_write_checksum: sha1:3edbc96125a9f5fecd38fd2e6d6ae3190fd62873
   docs/models/components/key.md:
     last_write_checksum: sha1:01ec12d1a17b6d6c5f6dfdd06215fe5a1545570a
   docs/models/components/kind.md:
@@ -1548,6 +1554,10 @@ trackedFiles:
     last_write_checksum: sha1:0661fdb6357a6fec4a526e473377e50a5798572f
   docs/models/operations/generatetitlesecurityoption2.md:
     last_write_checksum: sha1:c541562b9ad5b71ae3b424ad3319f6e6b8533b1f
+  docs/models/operations/generateworkosadminportallinkrequest.md:
+    last_write_checksum: sha1:b8c700d374d7aa346483b75edbebf3b7eb1ca863
+  docs/models/operations/generateworkosadminportallinksecurity.md:
+    last_write_checksum: sha1:08905606d5b78c862799133948633dfff0304546
   docs/models/operations/getactivedeploymentrequest.md:
     last_write_checksum: sha1:d1184a2375057ac0beadc2ceb014d3a03a80a504
   docs/models/operations/getactivedeploymentsecurity.md:
@@ -2807,7 +2817,7 @@ trackedFiles:
   docs/sdks/mcpservers/README.md:
     last_write_checksum: sha1:a3759b86c8c8ce239ad8b350857662b043299fa8
   docs/sdks/organizations/README.md:
-    last_write_checksum: sha1:c6dfb016efc31136253cfc3b3d9afd259886ecbd
+    last_write_checksum: sha1:72dee9f045da390ac739ab4a451fa4ea0951783b
   docs/sdks/otelforwarding/README.md:
     last_write_checksum: sha1:9599fbb87a1e733dbaf6180a1602c3ed20e46953
   docs/sdks/overview/README.md:
@@ -3246,6 +3256,8 @@ trackedFiles:
     last_write_checksum: sha1:e547f4803408ce6ce33bdb1b1888a4345c36b56c
   src/funcs/organizationsEnableWebhooks.ts:
     last_write_checksum: sha1:7f2651d52cb9292450a9b4c523e125ba854eee6d
+  src/funcs/organizationsGenerateWorkOSAdminPortalLink.ts:
+    last_write_checksum: sha1:256cde67e5978c4678da3c9d8bc8f8b97745a8f6
   src/funcs/organizationsGet.ts:
     last_write_checksum: sha1:425caca4be11163b202d6b893f8daa868c224c29
   src/funcs/organizationsListInvites.ts:
@@ -4016,6 +4028,10 @@ trackedFiles:
     id: 198c538ce22f
     last_write_checksum: sha1:0908a7700ea1b4d25b03d3baab6d728e51c3c43c
     pristine_git_object: b20f9dbac413b0d174584ce4085689cc722f3ed6
+  src/models/components/generateworkosadminportallinkrequestbody.ts:
+    last_write_checksum: sha1:a8a44e97660c83fbf9d31ae04a27021eda8e2021
+  src/models/components/generateworkosadminportallinkresult.ts:
+    last_write_checksum: sha1:d3bd403a25373794a42de9a7c1322634d5e77615
   src/models/components/getactivedeploymentresult.ts:
     id: b9cda2909971
     last_write_checksum: sha1:cdb9326399780dc979417f336c353ee5108d4150
@@ -4096,7 +4112,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:b8bfa0daafd76109fd149a10e26b0f6b1de0bf9c
+    last_write_checksum: sha1:0ec71c71d8711f8df7bfad0a545ffe45d874753e
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -5066,6 +5082,8 @@ trackedFiles:
     id: 894fe6967a6c
     last_write_checksum: sha1:20c96633141b08596c13b2898c5962ed9dca7467
     pristine_git_object: 082f55f121935a19dbd7fb64768cfd140572d602
+  src/models/operations/generateworkosadminportallink.ts:
+    last_write_checksum: sha1:46cd8d80e232f5c07b86c6eb58b2c8253689ab49
   src/models/operations/getactivedeployment.ts:
     id: 6387c7686988
     last_write_checksum: sha1:72ccae6acaa06ae73373ceba82c1bb4d2a5686d4
@@ -5192,7 +5210,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:d06fe265a78c32283994102c6c04820b06576565
+    last_write_checksum: sha1:7128bbdb0a7bead029e0cc389abb6577c279eaa8
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5854,6 +5872,8 @@ trackedFiles:
     id: c4d924cd91fe
     last_write_checksum: sha1:7f1309113ebc7424479948476aa1a463812ab05a
     pristine_git_object: 678ef863a9963b3c0c2f6ce18f9260badce71f9f
+  src/react-query/generateWorkOSAdminPortalLink.ts:
+    last_write_checksum: sha1:10b3fc45748c99a73910be688d01e09e2380f992
   src/react-query/getAssistantMemory.core.ts:
     last_write_checksum: sha1:1918957a6807ad4f8b1db46d8d5ca9b1465209e7
   src/react-query/getAssistantMemory.ts:
@@ -5982,7 +6002,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:88a5114a03d4b2568505da125c52b7fac63de497
+    last_write_checksum: sha1:e75e89ea3d39c708281729a2751765261f89a19d
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6725,7 +6745,7 @@ trackedFiles:
   src/sdk/mcpservers.ts:
     last_write_checksum: sha1:3e45664e9634dbdbfc2ec9b2c8a1b7af83a3a87b
   src/sdk/organizations.ts:
-    last_write_checksum: sha1:4b8ba486c1d36f572cf4e577f249d0fa3f3512aa
+    last_write_checksum: sha1:f6dae8ee8f012e15029247fb07f00ddc27940dc4
   src/sdk/otelforwarding.ts:
     last_write_checksum: sha1:bdff0a0685140d557a23b72fe543fdc8dbd95996
   src/sdk/overview.ts:
@@ -10120,6 +10140,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  generateWorkOSAdminPortalLink:
+    speakeasy-default-generate-work-OS-admin-portal-link:
+      requestBody:
+        application/json: {"intent": "domain_verification"}
+      responses:
+        "200":
+          application/json: {"url": "https://rapid-nun.biz/"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

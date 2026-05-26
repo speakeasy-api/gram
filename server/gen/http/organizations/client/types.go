@@ -33,6 +33,13 @@ type UpdateInviteRoleRequestBody struct {
 	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
 }
 
+// GenerateWorkOSAdminPortalLinkRequestBody is the type of the "organizations"
+// service "generateWorkOSAdminPortalLink" endpoint HTTP request body.
+type GenerateWorkOSAdminPortalLinkRequestBody struct {
+	// WorkOS Admin Portal intent.
+	Intent string `form:"intent" json:"intent" xml:"intent"`
+}
+
 // GetResponseBody is the type of the "organizations" service "get" endpoint
 // HTTP response body.
 type GetResponseBody struct {
@@ -122,6 +129,13 @@ type CreatePortalSessionResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// Front-end token for the webhook portal session.
 	Token *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkResponseBody is the type of the "organizations"
+// service "generateWorkOSAdminPortalLink" endpoint HTTP response body.
+type GenerateWorkOSAdminPortalLinkResponseBody struct {
+	// URL to the WorkOS Admin Portal flow.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 }
 
 // GetUnauthorizedResponseBody is the type of the "organizations" service "get"
@@ -1983,6 +1997,196 @@ type CreatePortalSessionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "unauthorized" error.
+type GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkForbiddenResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "forbidden" error.
+type GenerateWorkOSAdminPortalLinkForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkBadRequestResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "bad_request" error.
+type GenerateWorkOSAdminPortalLinkBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkNotFoundResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "not_found" error.
+type GenerateWorkOSAdminPortalLinkNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkConflictResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "conflict" error.
+type GenerateWorkOSAdminPortalLinkConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkInvalidResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "invalid" error.
+type GenerateWorkOSAdminPortalLinkInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkInvariantViolationResponseBody is the type of
+// the "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GenerateWorkOSAdminPortalLinkInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkUnexpectedResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "unexpected" error.
+type GenerateWorkOSAdminPortalLinkUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GenerateWorkOSAdminPortalLinkGatewayErrorResponseBody is the type of the
+// "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
+// response body for the "gateway_error" error.
+type GenerateWorkOSAdminPortalLinkGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // OrganizationInvitationResponseBody is used to define fields on response body
 // types.
 type OrganizationInvitationResponseBody struct {
@@ -2044,6 +2248,16 @@ func NewUpdateInviteRoleRequestBody(p *organizations.UpdateInviteRolePayload) *U
 	body := &UpdateInviteRoleRequestBody{
 		InvitationID: p.InvitationID,
 		RoleID:       p.RoleID,
+	}
+	return body
+}
+
+// NewGenerateWorkOSAdminPortalLinkRequestBody builds the HTTP request body
+// from the payload of the "generateWorkOSAdminPortalLink" endpoint of the
+// "organizations" service.
+func NewGenerateWorkOSAdminPortalLinkRequestBody(p *organizations.GenerateWorkOSAdminPortalLinkPayload) *GenerateWorkOSAdminPortalLinkRequestBody {
+	body := &GenerateWorkOSAdminPortalLinkRequestBody{
+		Intent: p.Intent,
 	}
 	return body
 }
@@ -3642,6 +3856,166 @@ func NewCreatePortalSessionGatewayError(body *CreatePortalSessionGatewayErrorRes
 	return v
 }
 
+// NewGenerateWorkOSAdminPortalLinkResultOK builds a "organizations" service
+// "generateWorkOSAdminPortalLink" endpoint result from a HTTP "OK" response.
+func NewGenerateWorkOSAdminPortalLinkResultOK(body *GenerateWorkOSAdminPortalLinkResponseBody) *organizations.GenerateWorkOSAdminPortalLinkResult {
+	v := &organizations.GenerateWorkOSAdminPortalLinkResult{
+		URL: *body.URL,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkUnauthorized builds a organizations service
+// generateWorkOSAdminPortalLink endpoint unauthorized error.
+func NewGenerateWorkOSAdminPortalLinkUnauthorized(body *GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkForbidden builds a organizations service
+// generateWorkOSAdminPortalLink endpoint forbidden error.
+func NewGenerateWorkOSAdminPortalLinkForbidden(body *GenerateWorkOSAdminPortalLinkForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkBadRequest builds a organizations service
+// generateWorkOSAdminPortalLink endpoint bad_request error.
+func NewGenerateWorkOSAdminPortalLinkBadRequest(body *GenerateWorkOSAdminPortalLinkBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkNotFound builds a organizations service
+// generateWorkOSAdminPortalLink endpoint not_found error.
+func NewGenerateWorkOSAdminPortalLinkNotFound(body *GenerateWorkOSAdminPortalLinkNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkConflict builds a organizations service
+// generateWorkOSAdminPortalLink endpoint conflict error.
+func NewGenerateWorkOSAdminPortalLinkConflict(body *GenerateWorkOSAdminPortalLinkConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkUnsupportedMedia builds a organizations
+// service generateWorkOSAdminPortalLink endpoint unsupported_media error.
+func NewGenerateWorkOSAdminPortalLinkUnsupportedMedia(body *GenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkInvalid builds a organizations service
+// generateWorkOSAdminPortalLink endpoint invalid error.
+func NewGenerateWorkOSAdminPortalLinkInvalid(body *GenerateWorkOSAdminPortalLinkInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkInvariantViolation builds a organizations
+// service generateWorkOSAdminPortalLink endpoint invariant_violation error.
+func NewGenerateWorkOSAdminPortalLinkInvariantViolation(body *GenerateWorkOSAdminPortalLinkInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkUnexpected builds a organizations service
+// generateWorkOSAdminPortalLink endpoint unexpected error.
+func NewGenerateWorkOSAdminPortalLinkUnexpected(body *GenerateWorkOSAdminPortalLinkUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateWorkOSAdminPortalLinkGatewayError builds a organizations service
+// generateWorkOSAdminPortalLink endpoint gateway_error error.
+func NewGenerateWorkOSAdminPortalLinkGatewayError(body *GenerateWorkOSAdminPortalLinkGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetResponseBody runs the validations defined on GetResponseBody
 func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.ID == nil {
@@ -3807,6 +4181,15 @@ func ValidateCreatePortalSessionResponseBody(body *CreatePortalSessionResponseBo
 	}
 	if body.Token == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkResponseBody runs the validations
+// defined on GenerateWorkOSAdminPortalLinkResponseBody
+func ValidateGenerateWorkOSAdminPortalLinkResponseBody(body *GenerateWorkOSAdminPortalLinkResponseBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
 	return
 }
@@ -6190,6 +6573,251 @@ func ValidateCreatePortalSessionUnexpectedResponseBody(body *CreatePortalSession
 // ValidateCreatePortalSessionGatewayErrorResponseBody runs the validations
 // defined on createPortalSession_gateway_error_response_body
 func ValidateCreatePortalSessionGatewayErrorResponseBody(body *CreatePortalSessionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkUnauthorizedResponseBody runs the
+// validations defined on
+// generateWorkOSAdminPortalLink_unauthorized_response_body
+func ValidateGenerateWorkOSAdminPortalLinkUnauthorizedResponseBody(body *GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkForbiddenResponseBody runs the
+// validations defined on generateWorkOSAdminPortalLink_forbidden_response_body
+func ValidateGenerateWorkOSAdminPortalLinkForbiddenResponseBody(body *GenerateWorkOSAdminPortalLinkForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkBadRequestResponseBody runs the
+// validations defined on
+// generateWorkOSAdminPortalLink_bad_request_response_body
+func ValidateGenerateWorkOSAdminPortalLinkBadRequestResponseBody(body *GenerateWorkOSAdminPortalLinkBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkNotFoundResponseBody runs the
+// validations defined on generateWorkOSAdminPortalLink_not_found_response_body
+func ValidateGenerateWorkOSAdminPortalLinkNotFoundResponseBody(body *GenerateWorkOSAdminPortalLinkNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkConflictResponseBody runs the
+// validations defined on generateWorkOSAdminPortalLink_conflict_response_body
+func ValidateGenerateWorkOSAdminPortalLinkConflictResponseBody(body *GenerateWorkOSAdminPortalLinkConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody runs the
+// validations defined on
+// generateWorkOSAdminPortalLink_unsupported_media_response_body
+func ValidateGenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody(body *GenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkInvalidResponseBody runs the
+// validations defined on generateWorkOSAdminPortalLink_invalid_response_body
+func ValidateGenerateWorkOSAdminPortalLinkInvalidResponseBody(body *GenerateWorkOSAdminPortalLinkInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkInvariantViolationResponseBody runs the
+// validations defined on
+// generateWorkOSAdminPortalLink_invariant_violation_response_body
+func ValidateGenerateWorkOSAdminPortalLinkInvariantViolationResponseBody(body *GenerateWorkOSAdminPortalLinkInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkUnexpectedResponseBody runs the
+// validations defined on generateWorkOSAdminPortalLink_unexpected_response_body
+func ValidateGenerateWorkOSAdminPortalLinkUnexpectedResponseBody(body *GenerateWorkOSAdminPortalLinkUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGenerateWorkOSAdminPortalLinkGatewayErrorResponseBody runs the
+// validations defined on
+// generateWorkOSAdminPortalLink_gateway_error_response_body
+func ValidateGenerateWorkOSAdminPortalLinkGatewayErrorResponseBody(body *GenerateWorkOSAdminPortalLinkGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -61,6 +61,7 @@ type OrganizationProvider interface {
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
 	ListRoles(ctx context.Context, workosOrgID string) ([]workos.Role, error)
+	GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent workos.PortalIntent, returnURL string) (string, error)
 }
 
 var _ OrganizationProvider = (*workos.Client)(nil)
@@ -892,6 +893,36 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	return &gen.CreatePortalSessionResult{
 		URL:   session.Url,
 		Token: session.Token,
+	}, nil
+}
+
+func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *gen.GenerateWorkOSAdminPortalLinkPayload) (res *gen.GenerateWorkOSAdminPortalLinkResult, err error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+	}
+
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	if workosOrgID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS")
+	}
+
+	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), "")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate WorkOS admin portal link").Log(ctx, s.logger)
+	}
+
+	return &gen.GenerateWorkOSAdminPortalLinkResult{
+		URL: link,
 	}, nil
 }
 

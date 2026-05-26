@@ -214,6 +214,30 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "createPortalSession")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreatePortalSession"}`)
 	})
+
+	Method("generateWorkOSAdminPortalLink", func() {
+		Description("Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).")
+
+		Payload(func() {
+			Attribute("intent", String, "WorkOS Admin Portal intent.", func() {
+				Enum("dsync", "sso", "audit_logs", "domain_verification", "log_streams")
+			})
+			Required("intent")
+			security.SessionPayload()
+		})
+
+		Result(GenerateWorkOSAdminPortalLinkResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.generateWorkOSAdminPortalLink")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "generateWorkOSAdminPortalLink")
+		Meta("openapi:extension:x-speakeasy-name-override", "generateWorkOSAdminPortalLink")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GenerateWorkOSAdminPortalLink"}`)
+	})
 })
 
 // OrganizationInvitation is a non-sensitive admin view (no invitation token or accept URL).
@@ -293,4 +317,10 @@ var CreatePortalSessionResult = Type("CreatePortalSessionResult", func() {
 	Attribute("token", String, "Front-end token for the webhook portal session.")
 
 	Required("url", "token")
+})
+
+var GenerateWorkOSAdminPortalLinkResult = Type("GenerateWorkOSAdminPortalLinkResult", func() {
+	Attribute("url", String, "URL to the WorkOS Admin Portal flow.")
+
+	Required("url")
 })

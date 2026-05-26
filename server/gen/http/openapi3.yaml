@@ -12870,6 +12870,93 @@ paths:
             x-speakeasy-name-override: enableWebhooks
             x-speakeasy-react-hook:
                 name: EnableWebhooks
+    /rpc/organizations.generateWorkOSAdminPortalLink:
+        post:
+            description: Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
+            operationId: generateWorkOSAdminPortalLink
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GenerateWorkOSAdminPortalLinkRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GenerateWorkOSAdminPortalLinkResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: generateWorkOSAdminPortalLink organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: generateWorkOSAdminPortalLink
+            x-speakeasy-react-hook:
+                name: GenerateWorkOSAdminPortalLink
     /rpc/organizations.get:
         get:
             description: Get the active organization from the session.
@@ -31894,6 +31981,28 @@ components:
                     description: The generated title
             required:
                 - title
+        GenerateWorkOSAdminPortalLinkRequestBody:
+            type: object
+            properties:
+                intent:
+                    type: string
+                    description: WorkOS Admin Portal intent.
+                    enum:
+                        - dsync
+                        - sso
+                        - audit_logs
+                        - domain_verification
+                        - log_streams
+            required:
+                - intent
+        GenerateWorkOSAdminPortalLinkResult:
+            type: object
+            properties:
+                url:
+                    type: string
+                    description: URL to the WorkOS Admin Portal flow.
+            required:
+                - url
         GetActiveDeploymentResult:
             type: object
             properties:
