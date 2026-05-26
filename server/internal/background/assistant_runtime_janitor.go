@@ -31,15 +31,17 @@ const (
 	AssistantRuntimeJanitorBatchSize int32 = 200
 
 	// assistantRuntimeJanitorActivityTimeout is the upper bound on a single
-	// sweep, sized for the worst case where every row in the batch hits the
-	// per-call Fly timeout twice. Liveness is enforced by the heartbeat
-	// timeout, not this ceiling.
-	assistantRuntimeJanitorActivityTimeout = 4 * time.Hour
+	// sweep, sized for the pathological case where every row in the batch
+	// hits the per-call Fly timeout on every call (Destroy + List +
+	// DeleteApp). Liveness is enforced by the heartbeat timeout, not this
+	// ceiling.
+	assistantRuntimeJanitorActivityTimeout = 6 * time.Hour
 
 	// assistantRuntimeJanitorHeartbeatTimeout must comfortably exceed the
-	// worst-case time the reap loop can spend on a single row (Destroy +
-	// List, each bounded by flyRuntimeReapCallTimeout).
-	assistantRuntimeJanitorHeartbeatTimeout = 2 * time.Minute
+	// worst-case time the reap loop can spend on a single row. Each row
+	// makes up to three Fly calls (Destroy, List, DeleteApp), each
+	// bounded by flyRuntimeReapCallTimeout.
+	assistantRuntimeJanitorHeartbeatTimeout = 3 * time.Minute
 
 	// AssistantRuntimeJanitorInactivityThreshold is the quiet period an
 	// assistant must have before its backend resources become eligible

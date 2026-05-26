@@ -31,8 +31,8 @@ const (
 	defaultFlyRuntimeHealthTimeout  = 45 * time.Second
 	defaultFlyRuntimeRequestTimeout = 2 * time.Minute
 
-	// flyRuntimeReapCallTimeout caps a single Destroy/List call during reap
-	// so one wedged row cannot consume the parent activity's deadline.
+	// flyRuntimeReapCallTimeout caps a single Fly API call during reap so
+	// one wedged row cannot consume the parent activity's deadline.
 	flyRuntimeReapCallTimeout = 30 * time.Second
 
 	flyMachineMetadataAssistantID   = "gram_assistant_id"
@@ -900,7 +900,9 @@ func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRe
 		return fmt.Errorf("list assistant fly runtime machines: %w", err)
 	}
 
-	return f.deleteApp(ctx, metadata.AppName)
+	deleteCtx, cancel := context.WithTimeout(ctx, flyRuntimeReapCallTimeout)
+	defer cancel()
+	return f.deleteApp(deleteCtx, metadata.AppName)
 }
 
 func (f *FlyRuntimeBackend) deleteApp(ctx context.Context, appName string) error {
