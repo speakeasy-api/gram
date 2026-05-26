@@ -268,8 +268,8 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		HasRiskFilter:  baseParams.HasRiskFilter,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
-		PageLimit:      int32(payload.Limit),  //nolint:gosec // Goa design enforces Maximum(100) so value is safe
-		PageOffset:     int32(payload.Offset), //nolint:gosec // Goa design enforces Minimum(0) so value is safe
+		PageLimit:      conv.SafeInt32(payload.Limit),
+		PageOffset:     conv.SafeInt32(payload.Offset),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chats").Log(ctx, s.logger)
