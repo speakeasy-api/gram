@@ -14,7 +14,7 @@ import (
 )
 
 type IngressProvisioner struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 	namespace string
 	logger    *slog.Logger
 }
