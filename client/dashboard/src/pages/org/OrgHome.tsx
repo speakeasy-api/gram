@@ -260,8 +260,8 @@ export function OrgHomeInner() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[320px_1fr]">
-          <aside className="flex flex-col gap-8 lg:sticky lg:top-4 lg:self-start">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[320px_1fr]">
+          <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
             {isRbacEnabled && <RecentChallengesCompact />}
             <RecentActivityCompact logs={auditLogs} />
           </aside>
@@ -849,7 +849,7 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
           {preview.map((log) => (
             <li
               key={log.id}
-              className="flex items-start gap-2 px-3 py-2 text-xs"
+              className="flex items-start gap-2 px-3 py-3 text-xs"
             >
               <ActionDot action={log.action} />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -942,7 +942,7 @@ function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
   const count = Number(bucket.challengeCount);
 
   return (
-    <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-2 px-3 py-2 text-xs no-underline transition-colors">
+    <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-2 px-3 py-3 text-xs no-underline transition-colors hover:no-underline">
       <div className="bg-muted text-muted-foreground flex size-6 shrink-0 items-center justify-center rounded-full">
         {isApiKey || !bucket.userEmail ? (
           <KeyRound className="size-3" />
