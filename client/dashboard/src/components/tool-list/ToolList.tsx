@@ -303,17 +303,16 @@ function ToolRow({
   const [annotIdempotent, setAnnotIdempotent] = useState(false);
   const [annotOpenWorld, setAnnotOpenWorld] = useState(false);
 
-  // Tags editing state (HTTP tools only)
+  // Tags editing state (HTTP and function tools)
   const [tagsValue, setTagsValue] = useState<string[] | undefined>(undefined);
 
   const hasAnnotations = tool.type === "http" || tool.type === "function";
-  // TODO(AGE-2348): extend tag variations to function tools.
   // TODO: extend tag variations to prompt tools once they support tags.
-  const supportsTags = tool.type === "http";
+  const supportsTags = tool.type === "http" || tool.type === "function";
   // Memoize: the inline `[]` fallback would produce a fresh reference per
   // render and invalidate downstream memoization in TagsVariationEditor.
   const baseTags = useMemo(
-    () => (tool.type === "http" ? tool.tags : []),
+    () => (tool.type === "http" || tool.type === "function" ? tool.tags : []),
     [tool],
   );
   const origTags = supportsTags ? tool.variation?.tags : undefined;

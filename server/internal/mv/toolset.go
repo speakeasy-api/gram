@@ -1075,6 +1075,7 @@ func readToolsetTools(
 				UpdatedAt:     def.FunctionToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:     nil,
 				Variation:     nil,
+				Tags:          def.FunctionToolDefinition.Tags,
 				Meta:          meta,
 				Annotations: conv.AnnotationsFromColumns(
 					def.FunctionToolDefinition.ReadOnlyHint,

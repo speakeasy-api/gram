@@ -3465,6 +3465,10 @@ func unmarshalFunctionToolDefinitionResponseBodyToTypesFunctionToolDefinition(v 
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
 	}
+	res.Tags = make([]string, len(v.Tags))
+	for i, val := range v.Tags {
+		res.Tags[i] = val
+	}
 	if v.Meta != nil {
 		res.Meta = make(map[string]any, len(v.Meta))
 		for key, val := range v.Meta {
