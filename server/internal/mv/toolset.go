@@ -1290,6 +1290,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 			ConfirmPrompt:   conv.FromPGText[string](variation.ConfirmPrompt),
 			Name:            conv.FromPGText[string](variation.Name),
 			Description:     conv.FromPGText[string](variation.Description),
+			Tags:            variation.Tags,
 			Summarizer:      conv.FromPGText[string](variation.Summarizer),
 			Title:           conv.FromPGText[string](variation.Title),
 			ReadOnlyHint:    conv.FromPGBool[bool](variation.ReadOnlyHint),

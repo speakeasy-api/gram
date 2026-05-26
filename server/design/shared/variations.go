@@ -15,6 +15,7 @@ var ToolVariation = Type("ToolVariation", func() {
 	Attribute("confirm_prompt", String, "The confirmation prompt for the tool variation")
 	Attribute("name", String, "The name of the tool variation")
 	Attribute("description", String, "The description of the tool variation")
+	Attribute("tags", ArrayOf(String), "The tags of the tool variation")
 	Attribute("summarizer", String, "The summarizer of the tool variation")
 	Attribute("title", String, "Display name override for the tool")
 	Attribute("read_only_hint", Boolean, "Override: if true, the tool does not modify its environment")

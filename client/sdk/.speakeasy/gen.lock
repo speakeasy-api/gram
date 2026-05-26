@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 558fb264429d04539d3e1180c2a5d63a
+  docChecksum: f4410ac7935fd9e815d4137d424386a4
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -923,7 +923,7 @@ trackedFiles:
   docs/models/components/toolusage.md:
     last_write_checksum: sha1:8e7c7baf87404355b4ba6b0cc6ae83b688cfa009
   docs/models/components/toolvariation.md:
-    last_write_checksum: sha1:daf9ad86e5cd7fc8e343c09afcd225b2b9d802ca
+    last_write_checksum: sha1:e8607834fa0b8d627934a110ab162d682dacf89f
   docs/models/components/topserver.md:
     last_write_checksum: sha1:c0194182b96ca033c6aaed133e061f0181ff36aa
   docs/models/components/topuser.md:
@@ -4692,7 +4692,7 @@ trackedFiles:
     last_write_checksum: sha1:afa11676e6aca32a23cae82bbc3472152265112c
   src/models/components/toolvariation.ts:
     id: 6e3433d12529
-    last_write_checksum: sha1:b424832c9b43633e0ce29f5168660bdeab9e5050
+    last_write_checksum: sha1:924f0ec97561dd369d50dd2cc777e148c001de66
     pristine_git_object: 0a5713c489b317bd226e36163c30f9d71082f933
   src/models/components/topserver.ts:
     last_write_checksum: sha1:33edafb8fd7c5047661d44cc183079e100de7b63
@@ -10026,15 +10026,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  getRiskOverview:
-    speakeasy-default-get-risk-overview:
-      responses:
-        "200":
-          application/json: {"active_policies": 705076, "findings": 627926, "flagged_sessions": 304659, "from": "2026-06-19T12:28:06.346Z", "messages_scanned": 370773, "time_series_findings": [{"bucket_start": "2024-12-08T02:32:23.245Z", "category": "<value>", "findings": 627926}], "to": "2025-12-13T22:42:16.392Z", "top_categories": [], "top_rules": [{"findings": 312140, "rule_id": "<id>", "source": "<value>"}], "top_users": [{"email": "Ocie.Corwin@gmail.com", "external_user_id": "<id>", "findings": 58689}]}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   updateMemberRoles:
     speakeasy-default-update-member-roles:
       requestBody:
@@ -10046,6 +10037,38 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteAIIntegrationConfig:
+    speakeasy-default-delete-AI-integration-config:
+      requestBody:
+        application/json: {"provider": "<value>"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getAIIntegrationConfig:
+    speakeasy-default-get-AI-integration-config:
+      parameters:
+        query:
+          provider: "<value>"
+      responses:
+        "200":
+          application/json: {"enabled": true, "has_api_key": false, "organization_id": "<id>", "provider": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  upsertAIIntegrationConfig:
+    speakeasy-default-upsert-AI-integration-config:
+      requestBody:
+        application/json: {"api_key": "<value>", "enabled": false, "provider": "<value>"}
+      responses:
+        "200":
+          application/json: {"enabled": true, "has_api_key": false, "organization_id": "<id>", "provider": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listCustomDomainMcpEndpoints:
     speakeasy-default-list-custom-domain-mcp-endpoints:
       responses:
@@ -10055,6 +10078,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  generateWorkOSAdminPortalLink:
+    speakeasy-default-generate-work-OS-admin-portal-link:
+      requestBody:
+        application/json: {"intent": "domain_verification"}
+      responses:
+        "200":
+          application/json: {"url": "https://rapid-nun.biz/"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listRiskCategories:
     speakeasy-default-list-risk-categories:
       responses:
@@ -10064,6 +10098,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getRiskOverview:
+    speakeasy-default-get-risk-overview:
+      responses:
+        "200":
+          application/json: {"active_policies": 705076, "findings": 312140, "flagged_sessions": 627926, "from": "2024-11-29T21:45:00.489Z", "messages_scanned": 821642, "time_series_findings": [], "to": "2025-12-13T22:42:16.392Z", "top_categories": [], "top_rules": [{"findings": 241800, "rule_id": "<id>", "source": "<value>"}], "top_users": [{"email": "Camilla.Bode5@hotmail.com", "external_user_id": "<id>", "findings": 53434}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getRiskRuleBreakdown:
     speakeasy-default-get-risk-rule-breakdown:
       parameters:
@@ -10097,38 +10140,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  deleteAIIntegrationConfig:
-    speakeasy-default-delete-AI-integration-config:
-      requestBody:
-        application/json: {"provider": "<value>"}
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  getAIIntegrationConfig:
-    speakeasy-default-get-AI-integration-config:
-      parameters:
-        query:
-          provider: "<value>"
-      responses:
-        "200":
-          application/json: {"enabled": true, "has_api_key": false, "organization_id": "<id>", "provider": "<value>"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  upsertAIIntegrationConfig:
-    speakeasy-default-upsert-AI-integration-config:
-      requestBody:
-        application/json: {"api_key": "<value>", "enabled": false, "provider": "<value>"}
-      responses:
-        "200":
-          application/json: {"enabled": true, "has_api_key": false, "organization_id": "<id>", "provider": "<value>"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   mintUserSession:
     speakeasy-default-mint-user-session:
       requestBody:
@@ -10140,17 +10151,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  generateWorkOSAdminPortalLink:
-    speakeasy-default-generate-work-OS-admin-portal-link:
-      requestBody:
-        application/json: {"intent": "domain_verification"}
-      responses:
-        "200":
-          application/json: {"url": "https://rapid-nun.biz/"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
