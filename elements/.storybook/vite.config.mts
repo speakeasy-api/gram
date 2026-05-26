@@ -127,7 +127,9 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       apiMiddlewarePlugin(),
       cspPlugin(),
-      protocolSniffingPlugin(6006),
+      protocolSniffingPlugin(
+        parseInt(process.env.ELEMENTS_STORYBOOK_PORT ?? "6007") - 1,
+      ),
     ],
     resolve: {
       alias: {
