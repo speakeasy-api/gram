@@ -67,21 +67,26 @@ type testInstance struct {
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
+	// servicePolicy blocks loopback / private ranges so validateURL exercises
+	// the real production CIDR set, and uses a mock resolver so hostname-based
+	// test cases are deterministic.
+	servicePolicy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(newRemoteMCPMockResolver()),
+	)
+	return newTestServiceWithPolicy(t, servicePolicy)
+}
+
+// newTestServiceWithPolicy is the variant of [newTestService] that lets the
+// caller override the guardian.Policy. Discovery tests use this with an
+// unsafe policy so the service can dial httptest.NewServer on 127.0.0.1.
+func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-
-	// Two guardian policies are required because the test setup has two
-	// conflicting needs:
-	//
-	// servicePolicy blocks loopback / private ranges so validateURL
-	// exercises the real production CIDR set, and uses a mock resolver so
-	// hostname-based test cases are deterministic.
-	servicePolicy := guardian.NewDefaultPolicy(
-		tracerProvider,
-		guardian.WithResolver(newRemoteMCPMockResolver()),
-	)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)

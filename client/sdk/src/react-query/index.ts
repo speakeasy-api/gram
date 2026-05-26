@@ -84,6 +84,7 @@ export * from "./deployment.js";
 export * from "./deploymentLogs.js";
 export * from "./disableRBAC.js";
 export * from "./disableWebhooks.js";
+export * from "./discoverRemoteMcpProtectedResourceMetadata.js";
 export * from "./discoverRemoteSessionIssuer.js";
 export * from "./enableRBAC.js";
 export * from "./enableWebhooks.js";
