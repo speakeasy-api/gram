@@ -614,8 +614,7 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT custom_domains_pkey PRIMARY KEY (id),
-  CONSTRAINT custom_domains_provisioner_kind_check CHECK (provisioner_kind IN ('ingress', 'gateway'))
+  CONSTRAINT custom_domains_pkey PRIMARY KEY (id)
 
 );
 
