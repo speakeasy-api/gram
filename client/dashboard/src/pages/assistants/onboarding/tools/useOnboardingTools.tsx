@@ -10,8 +10,15 @@ import { computeBehaviorSection } from "../behaviors";
 import { getIntegrationDoc, listIntegrationDocs } from "../docs";
 import { setSection } from "../sections";
 import {
+  SLACK_CAPABILITY_GROUPS,
+  SLACK_EVENT_GROUPS,
+  expandCapabilities,
+  expandEvents,
+} from "../slackCapabilities";
+import {
   ProposeNameComponent,
   ProposePersonalityComponent,
+  ProposeSlackSetupComponent,
   RequestEnvironmentSecretsComponent,
   ShowSlackAppGuideComponent,
   ShowWebhookUrlComponent,
@@ -622,14 +629,14 @@ function buildAssistantTools(deps: ToolDeps) {
           .min(0)
           .optional()
           .describe(
-            "Seconds to keep a warm runtime alive after the last request. 0 disables warm runtimes. Default 300.",
+            "Seconds to keep a warm runtime alive after the last request. 0 disables warm runtimes. Default 60.",
           ),
         max_concurrency: z
           .number()
           .int()
           .min(1)
           .optional()
-          .describe("Maximum number of concurrent warm runtimes. Default 1."),
+          .describe("Maximum number of concurrent warm runtimes. Default 5."),
       }),
       execute: async (args) =>
         serialize(async () => {
@@ -1644,6 +1651,159 @@ function buildAssistantTools(deps: ToolDeps) {
     "read_docs",
   );
 
+  const capabilitySlugEnum = z.enum(
+    SLACK_CAPABILITY_GROUPS.map((g) => g.slug) as [string, ...string[]],
+  );
+  const eventSlugEnum = z.enum(
+    SLACK_EVENT_GROUPS.map((g) => g.slug) as [string, ...string[]],
+  );
+  type ProposeSlackSetupArgs = {
+    preselected_capabilities?: string[];
+    preselected_events?: string[];
+  };
+
+  const propose_slack_setup = defineFrontendTool<
+    ProposeSlackSetupArgs,
+    ToolResult
+  >(
+    {
+      description:
+        "Show the Slack setup card. The user picks which Slack capabilities the assistant has and which Slack events wake it up. On submit, this tool creates a dedicated per-assistant Slack toolset with only the chosen tools (never reuse a catalog toolset), attaches it to the assistant's shared env, and creates a slack trigger when events are chosen. Returns the webhook_url to pass into show_slack_app_guide. Never call this tool in the same turn as show_slack_app_guide or request_environment_secrets — propose_slack_setup first, wait for it to resolve, then continue with declare-keys → install card → secrets card in subsequent turns. Pass plausible preselected groups derived from the user's stated goal; do not call with both empty.",
+      parameters: z.object({
+        preselected_capabilities: z
+          .array(capabilitySlugEnum)
+          .optional()
+          .describe(
+            "Capability group slugs to pre-check based on the user's stated goal.",
+          ),
+        preselected_events: z
+          .array(eventSlugEnum)
+          .optional()
+          .describe(
+            "Event group slugs to pre-check based on the user's stated goal.",
+          ),
+      }),
+      execute: async (_args, ctx) => {
+        const toolCallId = ctx.toolCallId ?? "";
+        type SubmitPayload = {
+          success: boolean;
+          cancelled?: boolean;
+          capabilities?: string[];
+          events?: string[];
+        };
+        const userInput: SubmitPayload = await withTimeout(
+          new Promise<SubmitPayload>((resolve) => {
+            draft.registerPending(toolCallId, (r) =>
+              resolve(r as SubmitPayload),
+            );
+          }),
+          15 * 60 * 1000,
+          "propose_slack_setup",
+        ).catch((): SubmitPayload => ({ success: false, cancelled: true }));
+
+        if (!userInput.success) {
+          return okResult({
+            cancelled: true,
+            note: "User skipped Slack setup. Acknowledge briefly and do not call show_slack_app_guide or request_environment_secrets for Slack credentials in this turn — they have nothing to set up yet.",
+          });
+        }
+
+        const capabilitySlugs = userInput.capabilities ?? [];
+        const eventSlugs = userInput.events ?? [];
+        const toolUrns = expandCapabilities(capabilitySlugs);
+        const eventTypes = expandEvents(eventSlugs);
+
+        return serialize(async () => {
+          try {
+            const a = await ensureAssistant(deps, {}, live.id);
+            trackLive(a);
+            const envResult = await ensureAssistantEnv(deps, a.name);
+            const notes: string[] = [];
+            if (envResult.note) notes.push(envResult.note);
+
+            let toolsetSlug: string | undefined;
+            if (toolUrns.length > 0) {
+              const toolset = await sdk.toolsets.create({
+                createToolsetRequestBody: {
+                  name: `${a.name} Slack`,
+                  description: `Slack capabilities for ${a.name}.`,
+                  toolUrns,
+                  defaultEnvironmentSlug: envResult.env.slug,
+                },
+              });
+              toolsetSlug = toolset.slug;
+              const next = a.toolsets
+                .filter((t) => t.toolsetSlug !== toolset.slug)
+                .concat([
+                  {
+                    toolsetSlug: toolset.slug,
+                    environmentSlug: envResult.env.slug,
+                  },
+                ]);
+              const updated = await sdk.assistants.update({
+                updateAssistantForm: { id: a.id, toolsets: next },
+              });
+              draft.setAssistant(updated);
+              trackLive(updated);
+              await recomputeBehaviorSection(deps, updated);
+            }
+
+            let triggerId: string | undefined;
+            let webhookUrl: string | undefined;
+            if (eventTypes.length > 0) {
+              const existingList = await sdk.triggers.list().catch(() => null);
+              const duplicate = existingList?.triggers.find(
+                (t) =>
+                  t.targetKind === "assistant" &&
+                  t.targetRef === a.id &&
+                  t.definitionSlug === "slack" &&
+                  t.name === "Slack",
+              );
+              if (duplicate) {
+                triggerId = duplicate.id;
+                webhookUrl = duplicate.webhookUrl;
+                await sdk.triggers.update({
+                  updateTriggerInstanceForm: {
+                    id: duplicate.id,
+                    config: { event_types: eventTypes },
+                  },
+                });
+              } else {
+                const created = await sdk.triggers.create({
+                  createTriggerInstanceForm: {
+                    name: "Slack",
+                    definitionSlug: "slack",
+                    config: { event_types: eventTypes },
+                    environmentId: envResult.env.id,
+                    targetKind: "assistant",
+                    targetRef: a.id,
+                    targetDisplay: a.name,
+                  },
+                });
+                triggerId = created.id;
+                webhookUrl = created.webhookUrl;
+              }
+            }
+
+            return okResult({
+              toolset_slug: toolsetSlug,
+              trigger_id: triggerId,
+              webhook_url: webhookUrl,
+              environment_slug: envResult.env.slug,
+              ...(notes.length > 0 ? { notes } : {}),
+              note: "Per-assistant Slack toolset attached. Next: declare the credentials this combination needs with add_environment_keys (include SLACK_SIGNING_SECRET only when a slack trigger was created here), then show_slack_app_guide (pass the webhook_url from this result), then request_environment_secrets in Slack-UI order. After the self-handshake, offer in plain English to narrow which events fire — translate the user's answer into a trigger filter via update_trigger; never mention CEL.",
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "slack setup failed",
+            );
+          }
+        });
+      },
+    },
+    "propose_slack_setup",
+  );
+
   const finish_onboarding = defineFrontendTool<FinishArgs, ToolResult>(
     {
       description:
@@ -1701,6 +1861,7 @@ function buildAssistantTools(deps: ToolDeps) {
     update_trigger,
     show_webhook_url,
     show_slack_app_guide,
+    propose_slack_setup,
     list_integrations,
     list_docs,
     read_docs,
@@ -1729,6 +1890,7 @@ export function useOnboardingTools(): {
     () => ({
       propose_name: ProposeNameComponent,
       propose_personality: ProposePersonalityComponent,
+      propose_slack_setup: ProposeSlackSetupComponent,
       request_environment_secrets: RequestEnvironmentSecretsComponent,
       show_webhook_url: ShowWebhookUrlComponent,
       show_slack_app_guide: ShowSlackAppGuideComponent,
