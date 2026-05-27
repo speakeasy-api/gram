@@ -200,6 +200,9 @@ export function RolesTab() {
           data={roles}
           rowKey={(row) => row.id}
           className="mt-4"
+          noResultsMessage={
+            <div className="p-4">No roles have been created yet.</div>
+          }
         />
       )}
 
