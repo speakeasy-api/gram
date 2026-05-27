@@ -30389,6 +30389,11 @@ components:
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
+                disabled_rules:
+                    type: array
+                    items:
+                        type: string
+                    description: Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
@@ -36417,6 +36422,11 @@ components:
                     type: string
                     description: When the policy was created.
                     format: date-time
+                disabled_rules:
+                    type: array
+                    items:
+                        type: string
+                    description: Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
@@ -39237,6 +39247,11 @@ components:
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
+                disabled_rules:
+                    type: array
+                    items:
+                        type: string
+                    description: Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
