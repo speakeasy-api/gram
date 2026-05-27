@@ -809,9 +809,9 @@ const ORG_ROUTE_STRUCTURE = {
         url: "challenges",
         component: Access,
       },
-      shadowMCP: {
-        title: "Roles & Permissions",
-        url: "shadow-mcp",
+      approvalRequests: {
+        title: "Approval Requests",
+        url: "approval-requests",
         component: Access,
       },
     },

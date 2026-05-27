@@ -71,9 +71,9 @@ type RequestStatusFilter = "requested" | "approved" | "denied" | "all";
 type RuleDispositionFilter = "allowed" | "denied" | "all";
 type ReviewAction = "approve" | "deny";
 
-const SHADOW_MCP_PAGE_SIZE = 100;
-const SHADOW_MCP_REQUESTS_QUERY_KEY = ["shadow-mcp", "approval-requests"];
-const SHADOW_MCP_RULES_QUERY_KEY = ["shadow-mcp", "access-rules"];
+const APPROVAL_REQUESTS_PAGE_SIZE = 100;
+const APPROVAL_REQUESTS_QUERY_KEY = ["approval-requests", "requests"];
+const APPROVAL_REQUEST_RULES_QUERY_KEY = ["approval-requests", "access-rules"];
 
 const MATCH_BREADTH_OPTIONS: {
   value: ShadowMCPMatchBreadth;
@@ -286,7 +286,7 @@ function ReviewRequestSheet({
         <SheetHeader>
           <SheetTitle>Review request</SheetTitle>
           <SheetDescription>
-            Decide how this Shadow MCP server should be handled.
+            Decide how this access request should be handled.
           </SheetDescription>
         </SheetHeader>
 
@@ -562,7 +562,7 @@ function AccessRuleSheet({
             {rule ? "Edit Access Rule" : "Add Access Rule"}
           </SheetTitle>
           <SheetDescription>
-            Configure a Shadow MCP allow or deny decision.
+            Configure an allow or deny decision for matching requests.
           </SheetDescription>
         </SheetHeader>
 
@@ -730,7 +730,7 @@ function RuleActionsMenu({
   );
 }
 
-export function ShadowMCPAccessContent() {
+export function ApprovalRequestsContent() {
   const queryClient = useQueryClient();
   const client = useSdkClient();
   const organization = useOrganization();
@@ -753,10 +753,10 @@ export function ShadowMCPAccessContent() {
     ruleDispositionFilter === "all" ? undefined : ruleDispositionFilter;
 
   const requestsQuery = useInfiniteQuery({
-    queryKey: [...SHADOW_MCP_REQUESTS_QUERY_KEY, requestStatus],
+    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, requestStatus],
     queryFn: ({ pageParam }) =>
       client.access.listShadowMCPApprovalRequests({
-        limit: SHADOW_MCP_PAGE_SIZE,
+        limit: APPROVAL_REQUESTS_PAGE_SIZE,
         status: requestStatus,
         cursor: pageParam,
       }),
@@ -765,10 +765,10 @@ export function ShadowMCPAccessContent() {
     enabled: canAdmin,
   });
   const rulesQuery = useInfiniteQuery({
-    queryKey: [...SHADOW_MCP_RULES_QUERY_KEY, ruleDisposition],
+    queryKey: [...APPROVAL_REQUEST_RULES_QUERY_KEY, ruleDisposition],
     queryFn: ({ pageParam }) =>
       client.access.listShadowMCPAccessRules({
-        limit: SHADOW_MCP_PAGE_SIZE,
+        limit: APPROVAL_REQUESTS_PAGE_SIZE,
         disposition: ruleDisposition,
         accessScope: "project",
         cursor: pageParam,
@@ -841,15 +841,15 @@ export function ShadowMCPAccessContent() {
   const isRuleSubmitting =
     createRule.isPending || updateRule.isPending || deleteRule.isPending;
 
-  const refreshShadowMCPData = async () => {
+  const refreshApprovalRequestsData = async () => {
     await Promise.all([
       invalidateAllShadowMCPApprovalRequests(queryClient),
       invalidateAllShadowMCPAccessRules(queryClient),
       queryClient.invalidateQueries({
-        queryKey: SHADOW_MCP_REQUESTS_QUERY_KEY,
+        queryKey: APPROVAL_REQUESTS_QUERY_KEY,
       }),
       queryClient.invalidateQueries({
-        queryKey: SHADOW_MCP_RULES_QUERY_KEY,
+        queryKey: APPROVAL_REQUEST_RULES_QUERY_KEY,
       }),
     ]);
   };
@@ -993,7 +993,7 @@ export function ShadowMCPAccessContent() {
 
             try {
               await deleteRule.mutateAsync({ request: { id: rule.id } });
-              await refreshShadowMCPData();
+              await refreshApprovalRequestsData();
               toast.success("Access Rule deleted");
             } catch {
               toast.error("Access Rule delete failed");
@@ -1033,7 +1033,7 @@ export function ShadowMCPAccessContent() {
               },
             },
           });
-          await refreshShadowMCPData();
+          await refreshApprovalRequestsData();
           toast.success("Request approved");
           setReviewRequest(null);
         }}
@@ -1056,7 +1056,7 @@ export function ShadowMCPAccessContent() {
               },
             },
           });
-          await refreshShadowMCPData();
+          await refreshApprovalRequestsData();
           toast.success("Request denied");
           setReviewRequest(null);
         }}
@@ -1129,7 +1129,7 @@ export function ShadowMCPAccessContent() {
             toast.success("Access Rule created");
           }
 
-          await refreshShadowMCPData();
+          await refreshApprovalRequestsData();
           setIsRuleSheetOpen(false);
           setEditingRule(null);
         }}
@@ -1139,10 +1139,9 @@ export function ShadowMCPAccessContent() {
         <section className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <Heading variant="h5">Requests</Heading>
+              <Heading variant="h5">Approval Requests</Heading>
               <Type muted small className="mt-1">
-                Review Shadow MCP servers users have requested after a policy
-                block.
+                Review access requests users created after a policy block.
               </Type>
             </div>
             <Select
@@ -1172,8 +1171,8 @@ export function ShadowMCPAccessContent() {
             />
           ) : requests.length === 0 ? (
             <TableEmptyState
-              title="No requests"
-              description="Blocked Shadow MCP servers will appear here after a user requests access."
+              title="No approval requests"
+              description="Blocked resources will appear here after a user requests access."
             />
           ) : (
             <div className="overflow-hidden rounded-lg border">
@@ -1204,8 +1203,7 @@ export function ShadowMCPAccessContent() {
           <div>
             <Heading variant="h5">Access Rules</Heading>
             <Type muted small className="mt-1">
-              Manage the Shadow MCP servers that are explicitly allowed or
-              denied.
+              Manage resources that are explicitly allowed or denied.
             </Type>
           </div>
 
@@ -1250,8 +1248,8 @@ export function ShadowMCPAccessContent() {
           />
         ) : rules.length === 0 ? (
           <TableEmptyState
-            title="No Access Rules"
-            description="Create a rule manually or approve a request to make a Shadow MCP decision available for enforcement."
+            title="No access rules"
+            description="Create a rule manually or approve a request to make a decision available for enforcement."
           />
         ) : (
           <div className="overflow-hidden rounded-lg border">

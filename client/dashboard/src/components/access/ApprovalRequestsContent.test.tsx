@@ -209,14 +209,14 @@ vi.mock("@/components/moon/textarea", () => ({
   ),
 }));
 
-import { ShadowMCPAccessContent } from "./ShadowMCPAccessContent";
+import { ApprovalRequestsContent } from "./ApprovalRequestsContent";
 
 function renderContent() {
   const queryClient = new QueryClient();
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <ShadowMCPAccessContent />
+      <ApprovalRequestsContent />
     </QueryClientProvider>,
   );
 }
@@ -254,7 +254,7 @@ afterEach(() => {
   cleanup();
 });
 
-describe("ShadowMCPAccessContent", () => {
+describe("ApprovalRequestsContent", () => {
   it("does not load or render approval requests for non-admin org readers", () => {
     mocks.useRBAC.mockReturnValue({
       hasScope: (scope: string) => scope === "org:read",
@@ -268,7 +268,9 @@ describe("ShadowMCPAccessContent", () => {
     expect(
       mocks.useSdkClient().access.listShadowMCPApprovalRequests,
     ).not.toHaveBeenCalled();
-    expect(screen.queryByRole("heading", { name: "Requests" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Approval Requests" }),
+    ).toBeNull();
     expect(screen.getByRole("heading", { name: "Access Rules" })).toBeTruthy();
   });
 
@@ -327,7 +329,7 @@ describe("ShadowMCPAccessContent", () => {
       expect(screen.getAllByText("First request").length).toBeGreaterThan(0);
     });
     const requestsSection = screen
-      .getByRole("heading", { name: "Requests" })
+      .getByRole("heading", { name: "Approval Requests" })
       .closest("section");
     if (!requestsSection) throw new Error("Requests section not found");
     fireEvent.click(
