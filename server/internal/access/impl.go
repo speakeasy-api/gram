@@ -20,6 +20,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -58,6 +59,7 @@ type Service struct {
 	featureCache FeatureCacheWriter
 	audit        *audit.Logger
 	jwtSecret    string
+	accessStore  accesscontrol.Store
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -74,6 +76,7 @@ func NewService(
 	featureCache FeatureCacheWriter,
 	auditLogger *audit.Logger,
 	jwtSecret string,
+	accessStore accesscontrol.Store,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -88,6 +91,7 @@ func NewService(
 		featureCache: featureCache,
 		audit:        auditLogger,
 		jwtSecret:    jwtSecret,
+		accessStore:  accessStore,
 	}
 }
 

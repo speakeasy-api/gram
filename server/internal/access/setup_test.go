@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -89,8 +90,9 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
+	accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
 
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roles, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{}, auditLogger, "test-jwt-secret")
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roles, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{}, auditLogger, "test-jwt-secret", accessStore)
 
 	return ctx, &testInstance{
 		service: svc,
