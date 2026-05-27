@@ -36,6 +36,8 @@ type ObservedSummary struct {
 	ToolName       *string
 	ToolCall       *string
 	BlockReason    *string
+	RiskPolicyID   *string
+	RiskResultID   *string
 }
 
 type AccessApprovalRequest struct {
@@ -50,11 +52,16 @@ type AccessApprovalRequest struct {
 	RequestFingerprint   string
 	DisplayName          string
 	ObservedSummary      ObservedSummary
+	BlockedCount         int
+	FirstBlockedAt       time.Time
+	LastBlockedAt        time.Time
 	RequestedAt          time.Time
 	DecidedAt            *time.Time
 	DecidedBy            string
 	DecisionNote         string
 	SourceRuleIDs        []string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 type AccessRule struct {
@@ -113,6 +120,11 @@ type ListRulesResult struct {
 	NextCursor string
 }
 
+type RuleUpsertResult struct {
+	Rule    AccessRule
+	Created bool
+}
+
 type Store interface {
 	ListRequests(ctx context.Context, filters RequestFilters) (ListRequestsResult, error)
 	UpsertRequest(ctx context.Context, request AccessApprovalRequest) (AccessApprovalRequest, bool, error)
@@ -120,6 +132,9 @@ type Store interface {
 	DecideRequest(ctx context.Context, organizationID, resourceType, id, status, decidedBy, note string, sourceRuleIDs []string) (AccessApprovalRequest, error)
 	ListRules(ctx context.Context, filters RuleFilters) (ListRulesResult, error)
 	CreateRule(ctx context.Context, rule AccessRule) (AccessRule, error)
+	CreateRules(ctx context.Context, rules []AccessRule) ([]AccessRule, error)
+	GetOrCreateRules(ctx context.Context, rules []AccessRule) ([]RuleUpsertResult, error)
+	DecideRequestWithRules(ctx context.Context, organizationID, resourceType, id, status, decidedBy, note string, sourceRules []AccessRule) (AccessApprovalRequest, []RuleUpsertResult, error)
 	UpdateRule(ctx context.Context, rule AccessRule) (AccessRule, error)
 	DeleteRule(ctx context.Context, organizationID, resourceType, id string) (AccessRule, error)
 	GetRule(ctx context.Context, organizationID, resourceType, id string) (AccessRule, error)

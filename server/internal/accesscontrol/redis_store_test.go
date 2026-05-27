@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -77,6 +79,92 @@ func TestRedisStoreUpsertRequestIdempotentByFingerprint(t *testing.T) {
 	require.False(t, wasCreated)
 	require.Equal(t, created.ID, got.ID)
 	require.Equal(t, "fingerprint-1", got.RequestFingerprint)
+}
+
+func TestRedisStoreUpsertRequestIdempotentUpdatesBlockMetadata(t *testing.T) {
+	ctx := t.Context()
+	store := newTestRedisStore()
+	firstBlockedAt := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	lastBlockedAt := firstBlockedAt.Add(time.Minute)
+
+	request := testRequest("req-1", "proj-1", RequestStatusRequested, firstBlockedAt)
+	request.RequestFingerprint = "fingerprint-1"
+	request.BlockedCount = 1
+	request.FirstBlockedAt = firstBlockedAt
+	request.LastBlockedAt = firstBlockedAt
+	request.CreatedAt = firstBlockedAt
+	request.UpdatedAt = firstBlockedAt
+	created, wasCreated, err := store.UpsertRequest(ctx, request)
+	require.NoError(t, err)
+	require.True(t, wasCreated)
+	require.Equal(t, 1, created.BlockedCount)
+	require.Equal(t, firstBlockedAt, created.FirstBlockedAt)
+	require.Equal(t, firstBlockedAt, created.LastBlockedAt)
+
+	duplicate := testRequest("req-2", "proj-1", RequestStatusRequested, lastBlockedAt)
+	duplicate.RequestFingerprint = "fingerprint-1"
+	duplicate.BlockedCount = 1
+	duplicate.FirstBlockedAt = lastBlockedAt
+	duplicate.LastBlockedAt = lastBlockedAt
+	duplicate.CreatedAt = lastBlockedAt
+	duplicate.UpdatedAt = lastBlockedAt
+	got, wasCreated, err := store.UpsertRequest(ctx, duplicate)
+	require.NoError(t, err)
+	require.False(t, wasCreated)
+	require.Equal(t, created.ID, got.ID)
+	require.Equal(t, 2, got.BlockedCount)
+	require.Equal(t, firstBlockedAt, got.FirstBlockedAt)
+	require.Equal(t, lastBlockedAt, got.LastBlockedAt)
+	require.Equal(t, firstBlockedAt, got.CreatedAt)
+	require.Equal(t, lastBlockedAt, got.UpdatedAt)
+}
+
+func TestRedisStoreUpsertRequestIdempotentRefreshesMetadata(t *testing.T) {
+	ctx := t.Context()
+	store := newTestRedisStore()
+	firstBlockedAt := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	lastBlockedAt := firstBlockedAt.Add(time.Minute)
+	originalToolName := "search"
+	updatedToolName := "create_issue"
+	updatedBlockReason := "risk policy denied tool"
+	updatedRiskPolicyID := "6e4b83ed-b86f-4943-b15b-dfc698c25e4d"
+	originalFullURL := "https://first.example.com/mcp"
+
+	request := testRequest("req-1", "proj-1", RequestStatusRequested, firstBlockedAt)
+	request.RequestFingerprint = "fingerprint-1"
+	request.RequesterEmail = "first@example.com"
+	request.RequesterDisplayName = "First Requester"
+	request.DisplayName = "First Display"
+	request.ObservedSummary.ToolName = &originalToolName
+	request.ObservedSummary.FullURL = &originalFullURL
+	created, wasCreated, err := store.UpsertRequest(ctx, request)
+	require.NoError(t, err)
+	require.True(t, wasCreated)
+
+	duplicate := testRequest("req-2", "proj-1", RequestStatusRequested, lastBlockedAt)
+	duplicate.RequestFingerprint = "fingerprint-1"
+	duplicate.RequesterEmail = "second@example.com"
+	duplicate.RequesterDisplayName = "Second Requester"
+	duplicate.DisplayName = "Second Display"
+	duplicate.ObservedSummary.ToolName = &updatedToolName
+	duplicate.ObservedSummary.BlockReason = &updatedBlockReason
+	duplicate.ObservedSummary.RiskPolicyID = &updatedRiskPolicyID
+	got, wasCreated, err := store.UpsertRequest(ctx, duplicate)
+	require.NoError(t, err)
+	require.False(t, wasCreated)
+	require.Equal(t, created.ID, got.ID)
+	require.Equal(t, firstBlockedAt, got.RequestedAt)
+	require.Equal(t, firstBlockedAt, got.FirstBlockedAt)
+	require.Equal(t, firstBlockedAt, got.CreatedAt)
+	require.Equal(t, lastBlockedAt, got.LastBlockedAt)
+	require.Equal(t, lastBlockedAt, got.UpdatedAt)
+	require.Equal(t, "second@example.com", got.RequesterEmail)
+	require.Equal(t, "Second Requester", got.RequesterDisplayName)
+	require.Equal(t, "Second Display", got.DisplayName)
+	require.Nil(t, got.ObservedSummary.FullURL)
+	require.Equal(t, updatedToolName, *got.ObservedSummary.ToolName)
+	require.Equal(t, updatedBlockReason, *got.ObservedSummary.BlockReason)
+	require.Equal(t, updatedRiskPolicyID, *got.ObservedSummary.RiskPolicyID)
 }
 
 func TestRedisStoreUpsertRequestAllowsSameFingerprintForDifferentProject(t *testing.T) {
@@ -199,6 +287,7 @@ func TestRedisStoreDecideRequestSetsDecisionFields(t *testing.T) {
 	require.Equal(t, "user-1", got.DecidedBy)
 	require.Equal(t, "looks fine", got.DecisionNote)
 	require.Equal(t, []string{"rule-1", "rule-2"}, got.SourceRuleIDs)
+	require.False(t, got.UpdatedAt.Equal(request.UpdatedAt))
 
 	got, err = store.DecideRequest(ctx, "org-1", ResourceTypeShadowMCP, "req-2", RequestStatusDenied, "user-2", "not allowed", []string{"rule-3"})
 	require.NoError(t, err)
@@ -207,6 +296,107 @@ func TestRedisStoreDecideRequestSetsDecisionFields(t *testing.T) {
 	require.Equal(t, "user-2", got.DecidedBy)
 	require.Equal(t, "not allowed", got.DecisionNote)
 	require.Equal(t, []string{"rule-3"}, got.SourceRuleIDs)
+}
+
+func TestRedisStoreDecideRequestRejectsSecondDecision(t *testing.T) {
+	ctx := t.Context()
+	store := newTestRedisStore()
+	request := testRequest("req-1", "proj-1", RequestStatusRequested, time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
+	_, _, err := store.UpsertRequest(ctx, request)
+	require.NoError(t, err)
+
+	approved, err := store.DecideRequest(ctx, "org-1", ResourceTypeShadowMCP, "req-1", RequestStatusApproved, "user-1", "approved", []string{"rule-1"})
+	require.NoError(t, err)
+	require.Equal(t, RequestStatusApproved, approved.Status)
+
+	_, err = store.DecideRequest(ctx, "org-1", ResourceTypeShadowMCP, "req-1", RequestStatusDenied, "user-2", "denied", []string{"rule-2"})
+	require.ErrorIs(t, err, ErrConflict)
+	require.ErrorIs(t, err, ErrRequestAlreadyDecided)
+
+	got, err := store.GetRequest(ctx, "org-1", ResourceTypeShadowMCP, "req-1")
+	require.NoError(t, err)
+	require.Equal(t, RequestStatusApproved, got.Status)
+	require.Equal(t, "user-1", got.DecidedBy)
+	require.Equal(t, "approved", got.DecisionNote)
+	require.Equal(t, []string{"rule-1"}, got.SourceRuleIDs)
+}
+
+func TestRedisStoreDecideRequestWithRulesConflictLeavesRequestAndRulesUnchanged(t *testing.T) {
+	ctx := t.Context()
+	store := newTestRedisStore()
+	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	request := testRequest("req-1", "proj-1", RequestStatusRequested, base)
+	_, _, err := store.UpsertRequest(ctx, request)
+	require.NoError(t, err)
+	existing := testRule("existing", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "existing.example.com", base)
+	_, err = store.CreateRule(ctx, existing)
+	require.NoError(t, err)
+
+	_, _, err = store.DecideRequestWithRules(
+		ctx,
+		"org-1",
+		ResourceTypeShadowMCP,
+		"req-1",
+		RequestStatusApproved,
+		"user-1",
+		"approved",
+		[]AccessRule{
+			testRule("new", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "new.example.com", base.Add(time.Minute)),
+			testRule("conflict", "proj-1", AccessScopeProject, DispositionDenied, MatchKindURLHost, "existing.example.com", base.Add(2*time.Minute)),
+		},
+	)
+	require.ErrorIs(t, err, ErrConflict)
+
+	gotRequest, err := store.GetRequest(ctx, "org-1", ResourceTypeShadowMCP, "req-1")
+	require.NoError(t, err)
+	require.Equal(t, RequestStatusRequested, gotRequest.Status)
+	require.Empty(t, gotRequest.SourceRuleIDs)
+	_, err = store.GetRule(ctx, "org-1", ResourceTypeShadowMCP, "new")
+	require.ErrorIs(t, err, ErrNotFound)
+	gotRule, err := store.GetRule(ctx, "org-1", ResourceTypeShadowMCP, "existing")
+	require.NoError(t, err)
+	require.Equal(t, existing, gotRule)
+}
+
+func TestRedisStoreDecideRequestWithRulesCommitsRequestAndRules(t *testing.T) {
+	ctx := t.Context()
+	store := newTestRedisStore()
+	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	request := testRequest("req-1", "proj-1", RequestStatusRequested, base)
+	_, _, err := store.UpsertRequest(ctx, request)
+	require.NoError(t, err)
+
+	decided, rules, err := store.DecideRequestWithRules(
+		ctx,
+		"org-1",
+		ResourceTypeShadowMCP,
+		"req-1",
+		RequestStatusApproved,
+		"user-1",
+		"approved",
+		[]AccessRule{
+			testRule("rule-1", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "one.example.com", base.Add(time.Minute)),
+			testRule("rule-2", "proj-2", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "two.example.com", base.Add(2*time.Minute)),
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, RequestStatusApproved, decided.Status)
+	require.Equal(t, []string{"rule-1", "rule-2"}, decided.SourceRuleIDs)
+	require.Len(t, rules, 2)
+	require.True(t, rules[0].Created)
+	require.True(t, rules[1].Created)
+
+	gotRequest, err := store.GetRequest(ctx, "org-1", ResourceTypeShadowMCP, "req-1")
+	require.NoError(t, err)
+	require.Equal(t, RequestStatusApproved, gotRequest.Status)
+	_, err = store.GetRule(ctx, "org-1", ResourceTypeShadowMCP, "rule-1")
+	require.NoError(t, err)
+	_, err = store.GetRule(ctx, "org-1", ResourceTypeShadowMCP, "rule-2")
+	require.NoError(t, err)
+
+	_, _, err = store.DecideRequestWithRules(ctx, "org-1", ResourceTypeShadowMCP, "req-1", RequestStatusDenied, "user-2", "denied", nil)
+	require.ErrorIs(t, err, ErrConflict)
+	require.ErrorIs(t, err, ErrRequestAlreadyDecided)
 }
 
 func TestRedisStoreCreateRuleCanonicalizesAndRejectsDuplicate(t *testing.T) {
@@ -221,6 +411,27 @@ func TestRedisStoreCreateRuleCanonicalizesAndRejectsDuplicate(t *testing.T) {
 	duplicate := testRule("rule-2", "proj-1", AccessScopeProject, DispositionDenied, MatchKindFullURL, "https://example.com/mcp", got.CreatedAt.Add(time.Hour))
 	_, err = store.CreateRule(ctx, duplicate)
 	require.ErrorIs(t, err, ErrConflict)
+}
+
+func TestRedisStoreCreateRulesConflictLeavesNoEarlierRulesCommitted(t *testing.T) {
+	ctx := t.Context()
+	store := newTestRedisStore()
+	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	existing := testRule("existing", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "existing.example.com", base)
+	_, err := store.CreateRule(ctx, existing)
+	require.NoError(t, err)
+
+	_, err = store.CreateRules(ctx, []AccessRule{
+		testRule("new", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "new.example.com", base.Add(time.Minute)),
+		testRule("conflict", "proj-1", AccessScopeProject, DispositionDenied, MatchKindURLHost, "existing.example.com", base.Add(2*time.Minute)),
+	})
+	require.ErrorIs(t, err, ErrConflict)
+
+	_, err = store.GetRule(ctx, "org-1", ResourceTypeShadowMCP, "new")
+	require.ErrorIs(t, err, ErrNotFound)
+	got, err := store.GetRule(ctx, "org-1", ResourceTypeShadowMCP, "existing")
+	require.NoError(t, err)
+	require.Equal(t, existing, got)
 }
 
 func TestRedisStoreListRulesFiltersAndSortsNewestFirst(t *testing.T) {
@@ -297,6 +508,42 @@ func TestRedisStoreDeleteRuleReturnsDeletedRuleAndRemovesIt(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestRedisStoreWriteUsesCacheMutate(t *testing.T) {
+	ctx := t.Context()
+	cache := newMemoryCache()
+	store := NewRedisStore(cache, 0)
+	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+
+	_, _, err := store.UpsertRequest(ctx, testRequest("req-1", "proj-1", RequestStatusRequested, base))
+	require.NoError(t, err)
+	_, err = store.DecideRequest(ctx, "org-1", ResourceTypeShadowMCP, "req-1", RequestStatusApproved, "user-1", "approved", nil)
+	require.NoError(t, err)
+	_, err = store.CreateRules(ctx, []AccessRule{testRule("rule-1", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "one.example.com", base)})
+	require.NoError(t, err)
+	_, err = store.GetOrCreateRules(ctx, []AccessRule{testRule("rule-1", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "one.example.com", base)})
+	require.NoError(t, err)
+	_, _, err = store.UpsertRequest(ctx, testRequest("req-2", "proj-1", RequestStatusRequested, base.Add(time.Minute)))
+	require.NoError(t, err)
+	_, _, err = store.DecideRequestWithRules(ctx, "org-1", ResourceTypeShadowMCP, "req-2", RequestStatusApproved, "user-1", "approved", []AccessRule{
+		testRule("rule-2", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "two.example.com", base),
+	})
+	require.NoError(t, err)
+	_, err = store.UpdateRule(ctx, testRule("rule-2", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "updated.example.com", base))
+	require.NoError(t, err)
+	_, err = store.DeleteRule(ctx, "org-1", ResourceTypeShadowMCP, "rule-2")
+	require.NoError(t, err)
+
+	require.Equal(t, 8, cache.mutateCalls)
+}
+
+func TestRedisStoreWriteRequiresCacheMutate(t *testing.T) {
+	ctx := t.Context()
+	store := NewRedisStore(newNonMutatingMemoryCache(), 0)
+
+	_, _, err := store.UpsertRequest(ctx, testRequest("req-1", "proj-1", RequestStatusRequested, time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)))
+	require.ErrorContains(t, err, "access control cache does not support atomic mutation")
+}
+
 func newTestRedisStore() *RedisStore {
 	return NewRedisStore(newMemoryCache(), 0)
 }
@@ -321,12 +568,19 @@ func testRequest(id, projectID, status string, requestedAt time.Time) AccessAppr
 			ToolName:       nil,
 			ToolCall:       nil,
 			BlockReason:    nil,
+			RiskPolicyID:   nil,
+			RiskResultID:   nil,
 		},
-		RequestedAt:   requestedAt,
-		DecidedAt:     nil,
-		DecidedBy:     "",
-		DecisionNote:  "",
-		SourceRuleIDs: nil,
+		BlockedCount:   1,
+		FirstBlockedAt: requestedAt,
+		LastBlockedAt:  requestedAt,
+		RequestedAt:    requestedAt,
+		DecidedAt:      nil,
+		DecidedBy:      "",
+		DecisionNote:   "",
+		SourceRuleIDs:  nil,
+		CreatedAt:      requestedAt,
+		UpdatedAt:      requestedAt,
 	}
 }
 
@@ -349,6 +603,8 @@ func testRule(id, projectID, accessScope, disposition, matchKind, matchValue str
 			ToolName:       nil,
 			ToolCall:       nil,
 			BlockReason:    nil,
+			RiskPolicyID:   nil,
+			RiskResultID:   nil,
 		},
 		SourceRequestID: "",
 		CreatedBy:       "creator-1",
@@ -360,7 +616,9 @@ func testRule(id, projectID, accessScope, disposition, matchKind, matchValue str
 }
 
 type memoryCache struct {
-	values map[string][]byte
+	mu          sync.Mutex
+	values      map[string][]byte
+	mutateCalls int
 }
 
 func newMemoryCache() *memoryCache {
@@ -368,6 +626,8 @@ func newMemoryCache() *memoryCache {
 }
 
 func (c *memoryCache) Get(_ context.Context, key string, value any) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	raw, ok := c.values[key]
 	if !ok {
 		return redisCache.ErrCacheMiss
@@ -382,11 +642,15 @@ func (c *memoryCache) GetAndDelete(ctx context.Context, key string, value any) e
 	if err := c.Get(ctx, key, value); err != nil {
 		return err
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	delete(c.values, key)
 	return nil
 }
 
 func (c *memoryCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -396,14 +660,44 @@ func (c *memoryCache) Set(_ context.Context, key string, value any, _ time.Durat
 }
 
 func (c *memoryCache) Update(ctx context.Context, key string, value any) error {
-	if _, ok := c.values[key]; !ok {
+	c.mu.Lock()
+	_, ok := c.values[key]
+	c.mu.Unlock()
+	if !ok {
 		return redisCache.ErrCacheMiss
 	}
 	return c.Set(ctx, key, value, 0)
 }
 
 func (c *memoryCache) Delete(_ context.Context, key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	delete(c.values, key)
+	return nil
+}
+
+func (c *memoryCache) Mutate(_ context.Context, key string, value any, _ time.Duration, fn func(exists bool) error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mutateCalls++
+
+	raw, exists := c.values[key]
+	if exists {
+		if err := json.Unmarshal(raw, value); err != nil {
+			return err
+		}
+	} else {
+		valueOf := reflect.ValueOf(value)
+		valueOf.Elem().Set(reflect.Zero(valueOf.Elem().Type()))
+	}
+	if err := fn(exists); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	c.values[key] = raw
 	return nil
 }
 
@@ -420,10 +714,56 @@ func (c *memoryCache) ListRange(_ context.Context, _ string, _, _ int64, _ any) 
 }
 
 func (c *memoryCache) DeleteByPrefix(_ context.Context, prefix string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for key := range c.values {
 		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
 			delete(c.values, key)
 		}
 	}
 	return nil
+}
+
+type nonMutatingMemoryCache struct {
+	inner *memoryCache
+}
+
+func newNonMutatingMemoryCache() *nonMutatingMemoryCache {
+	return &nonMutatingMemoryCache{inner: newMemoryCache()}
+}
+
+func (c *nonMutatingMemoryCache) Get(ctx context.Context, key string, value any) error {
+	return c.inner.Get(ctx, key, value)
+}
+
+func (c *nonMutatingMemoryCache) GetAndDelete(ctx context.Context, key string, value any) error {
+	return c.inner.GetAndDelete(ctx, key, value)
+}
+
+func (c *nonMutatingMemoryCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	return c.inner.Set(ctx, key, value, ttl)
+}
+
+func (c *nonMutatingMemoryCache) Update(ctx context.Context, key string, value any) error {
+	return c.inner.Update(ctx, key, value)
+}
+
+func (c *nonMutatingMemoryCache) Delete(ctx context.Context, key string) error {
+	return c.inner.Delete(ctx, key)
+}
+
+func (c *nonMutatingMemoryCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	return c.inner.Expire(ctx, key, ttl)
+}
+
+func (c *nonMutatingMemoryCache) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
+	return c.inner.ListAppend(ctx, key, value, ttl)
+}
+
+func (c *nonMutatingMemoryCache) ListRange(ctx context.Context, key string, start, stop int64, value any) error {
+	return c.inner.ListRange(ctx, key, start, stop, value)
+}
+
+func (c *nonMutatingMemoryCache) DeleteByPrefix(ctx context.Context, prefix string) error {
+	return c.inner.DeleteByPrefix(ctx, prefix)
 }
