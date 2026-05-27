@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -222,6 +223,7 @@ function ReviewRequestSheet({
   const [matchValue, setMatchValue] = useState("");
   const [projectSelection, setProjectSelection] = useState("");
   const [reason, setReason] = useState("");
+  const [createDenyRule, setCreateDenyRule] = useState(false);
 
   useEffect(() => {
     if (!request || !open) return;
@@ -233,6 +235,7 @@ function ReviewRequestSheet({
     setMatchValue(getMatchValue(request, nextMatchBreadth));
     setProjectSelection(request.projectId || projects?.[0]?.id || "");
     setReason("");
+    setCreateDenyRule(false);
   }, [projects, request, open]);
 
   if (!request) return null;
@@ -244,7 +247,11 @@ function ReviewRequestSheet({
     matchValue.trim().length > 0 &&
     projectIds.length > 0;
   const submitLabel =
-    action === "approve" ? "Approve and create rule" : "Deny and create rule";
+    action === "approve"
+      ? "Approve and create rule"
+      : createDenyRule
+        ? "Deny and create rule"
+        : "Deny request";
 
   const submit = async () => {
     const trimmedReason = reason.trim() || undefined;
@@ -260,7 +267,7 @@ function ReviewRequestSheet({
         });
       } else {
         await onDeny({
-          createDenyRule: true,
+          createDenyRule,
           projectIds,
           displayName: displayName.trim(),
           matchBreadth,
@@ -440,6 +447,18 @@ function ReviewRequestSheet({
                 placeholder="Optional"
               />
             </Field>
+
+            {action === "deny" && (
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={createDenyRule}
+                  onCheckedChange={(checked) =>
+                    setCreateDenyRule(checked === true)
+                  }
+                />
+                <span>Create deny rule</span>
+              </label>
+            )}
           </section>
         </div>
 
@@ -751,6 +770,7 @@ export function ShadowMCPAccessContent() {
       client.access.listShadowMCPAccessRules({
         limit: SHADOW_MCP_PAGE_SIZE,
         disposition: ruleDisposition,
+        accessScope: "project",
         cursor: pageParam,
       }),
     initialPageParam: undefined as string | undefined,
@@ -1066,15 +1086,15 @@ export function ShadowMCPAccessContent() {
                   observedFullUrl:
                     input.matchBreadth === "full_url"
                       ? input.matchValue
-                      : editingRule.observedFullUrl,
+                      : undefined,
                   observedServerIdentity:
                     input.matchBreadth === "server_identity"
                       ? input.matchValue
-                      : editingRule.observedServerIdentity,
+                      : undefined,
                   observedUrlHost:
                     input.matchBreadth === "url_host"
                       ? input.matchValue
-                      : editingRule.observedUrlHost,
+                      : undefined,
                   reason: input.reason,
                 },
               },

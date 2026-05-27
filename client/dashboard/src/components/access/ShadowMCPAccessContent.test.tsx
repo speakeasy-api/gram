@@ -417,6 +417,7 @@ describe("ShadowMCPAccessContent", () => {
       expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
         limit: 100,
         disposition: undefined,
+        accessScope: "project",
         cursor: "next-rules",
       });
     });

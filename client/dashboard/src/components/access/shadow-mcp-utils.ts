@@ -74,12 +74,15 @@ export function getRequestServerDetail(request: ShadowMCPApprovalRequest) {
 }
 
 export function getRuleServerDetail(rule: ShadowMCPAccessRule) {
+  if (rule.matchValue) {
+    return `${getMatchBreadthLabel(rule.matchBreadth)}: ${rule.matchValue}`;
+  }
   if (rule.observedFullUrl) return rule.observedFullUrl;
   if (rule.observedUrlHost) return rule.observedUrlHost;
   if (rule.observedServerIdentity) {
     return `Server identity: ${rule.observedServerIdentity}`;
   }
-  return `${getMatchBreadthLabel(rule.matchBreadth)}: ${rule.matchValue}`;
+  return undefined;
 }
 
 export function getRequesterLabel(request: ShadowMCPApprovalRequest) {
