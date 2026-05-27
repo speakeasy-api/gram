@@ -38708,6 +38708,8 @@ components:
                     enum:
                         - active
                         - paused
+                        - fired
+                        - cancelled
                 target_display:
                     type: string
                     description: The user-facing target display value.
