@@ -144,13 +144,13 @@ function RiskOverviewUserDetailContent() {
               <MetricCard
                 title="Findings"
                 value={userEntry?.findings ?? 0}
-                format="number"
+                format="compact"
                 icon="flag"
               />
               <MetricCard
                 title="Chat Sessions"
                 value={totalChats}
-                format="number"
+                format="compact"
                 icon="message-square"
               />
             </div>

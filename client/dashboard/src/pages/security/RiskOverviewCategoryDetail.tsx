@@ -205,7 +205,7 @@ function RiskOverviewCategoryDetailContent() {
               <MetricCard
                 title="Findings"
                 value={overviewCategory?.findings ?? totalCount}
-                format="number"
+                format="compact"
                 icon="flag"
               />
             </div>
