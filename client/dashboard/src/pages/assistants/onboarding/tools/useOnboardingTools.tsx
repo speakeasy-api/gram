@@ -1750,24 +1750,23 @@ function buildAssistantTools(deps: ToolDeps) {
             const notes: string[] = [];
             if (envResult.note) notes.push(envResult.note);
 
+            const existingToolsets = await sdk.toolsets
+              .list()
+              .catch(() => null);
+            const attachedSlugs = new Set(a.toolsets.map((t) => t.toolsetSlug));
+            const existingSlackToolset = existingToolsets?.toolsets.find(
+              (t) =>
+                attachedSlugs.has(t.slug) &&
+                t.tools.some((tool) =>
+                  tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
+                ),
+            );
+
             let toolsetSlug: string | undefined;
             if (toolUrns.length > 0) {
-              const existingToolsets = await sdk.toolsets
-                .list()
-                .catch(() => null);
-              const attachedSlugs = new Set(
-                a.toolsets.map((t) => t.toolsetSlug),
-              );
-              const existing = existingToolsets?.toolsets.find(
-                (t) =>
-                  attachedSlugs.has(t.slug) &&
-                  t.tools.some((tool) =>
-                    tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
-                  ),
-              );
-              const upserted = existing
+              const upserted = existingSlackToolset
                 ? await sdk.toolsets.updateBySlug({
-                    slug: existing.slug,
+                    slug: existingSlackToolset.slug,
                     updateToolsetRequestBody: { toolUrns },
                   })
                 : await sdk.toolsets.create({
@@ -1793,26 +1792,45 @@ function buildAssistantTools(deps: ToolDeps) {
               draft.setAssistant(updated);
               trackLive(updated);
               await recomputeBehaviorSection(deps, updated);
+            } else if (existingSlackToolset) {
+              const next = a.toolsets.filter(
+                (t) => t.toolsetSlug !== existingSlackToolset.slug,
+              );
+              const updated = await sdk.assistants.update({
+                updateAssistantForm: { id: a.id, toolsets: next },
+              });
+              draft.setAssistant(updated);
+              trackLive(updated);
+              await recomputeBehaviorSection(deps, updated);
             }
+
+            const existingTriggerList = await sdk.triggers
+              .list()
+              .catch(() => null);
+            const existingSlackTrigger = existingTriggerList?.triggers.find(
+              (t) =>
+                t.targetKind === "assistant" &&
+                t.targetRef === a.id &&
+                t.definitionSlug === "slack",
+            );
 
             let triggerId: string | undefined;
             let webhookUrl: string | undefined;
             if (eventTypes.length > 0) {
-              const existingList = await sdk.triggers.list().catch(() => null);
-              const duplicate = existingList?.triggers.find(
-                (t) =>
-                  t.targetKind === "assistant" &&
-                  t.targetRef === a.id &&
-                  t.definitionSlug === "slack" &&
-                  t.name === "Slack",
-              );
-              if (duplicate) {
-                triggerId = duplicate.id;
-                webhookUrl = duplicate.webhookUrl;
+              if (existingSlackTrigger) {
+                triggerId = existingSlackTrigger.id;
+                webhookUrl = existingSlackTrigger.webhookUrl;
+                const mergedConfig: Record<string, unknown> = {
+                  ...((existingSlackTrigger.config as Record<
+                    string,
+                    unknown
+                  > | null) ?? {}),
+                  event_types: eventTypes,
+                };
                 await sdk.triggers.update({
                   updateTriggerInstanceForm: {
-                    id: duplicate.id,
-                    config: { event_types: eventTypes },
+                    id: existingSlackTrigger.id,
+                    config: mergedConfig,
                   },
                 });
               } else {
@@ -1830,6 +1848,8 @@ function buildAssistantTools(deps: ToolDeps) {
                 triggerId = created.id;
                 webhookUrl = created.webhookUrl;
               }
+            } else if (existingSlackTrigger) {
+              await sdk.triggers.delete({ id: existingSlackTrigger.id });
             }
 
             return okResult({
