@@ -14,12 +14,7 @@ if [ "${usage_readonly:-false}" = "true" ]; then
 fi
 
 git_sha=$(git rev-parse HEAD)
-runtime_image_hash=${GRAM_ASSISTANT_RUNTIME_IMAGE_HASH:-$(mise run hash:assistant-runtime-image)}
-
-if [ -z "${runtime_image_hash}" ]; then
-    echo "build:server: runtime image hash is empty" >&2
-    exit 1
-fi
+runtime_image_hash=${GRAM_ASSISTANT_RUNTIME_IMAGE_HASH:-dev}
 
 CGO_ENABLED=0 go \
     build \
