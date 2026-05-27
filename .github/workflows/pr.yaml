@@ -333,7 +333,7 @@ jobs:
 
       - name: "[DEV] Extract assistant runtime metadata"
         id: assistantMetaDev
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
           tags: |
@@ -362,7 +362,7 @@ jobs:
 
       - name: "[PROD] Extract assistant runtime metadata"
         id: assistantMetaProd
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
           tags: |
@@ -1407,7 +1407,7 @@ jobs:
       - name: Extract Docker metadata
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: |
             ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
@@ -1735,7 +1735,7 @@ jobs:
     steps:
       - name: Generate GitHub App Token
         id: generate-token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}

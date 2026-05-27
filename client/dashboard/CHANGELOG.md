@@ -1,5 +1,28 @@
 # dashboard
 
+## 0.62.0
+
+### Minor Changes
+
+- 5b5dc6d: Replace Vaul drawers with Radix sheets for chat detail panels, restoring text selection in trace/log views and removing the unused drawer dependency.
+
+### Patch Changes
+
+- 5a9c1f4: expose the Destructive CLI Commands category in the risk policy form so customers can opt into `cli_destructive` scanning, and stop silently stripping the source when editing policies that had it set via the API
+- 217b173: Fix the empty "Logs" panel on a source's Deployments tab. The embedded panel was comparing a kind string (e.g. `"function"`) against log events' `attachmentId` (a UUID) and was also sending the wrong type token (`"function"` instead of the backend's `"functions"`). Now filters on `event.attachmentType` with the correct backend constants (`functions`, `openapi`, `external_mcp`), so per-source deployment logs render as expected.
+
+## 0.61.0
+
+### Minor Changes
+
+- 23d2150: expose tags on tool variations and add a tags row to the playground tool editor for HTTP tools, with chip input, base-source quick-add, override indicator, and reset-to-source affordance
+- 46e00ac: Migrate dashboard tables to Moonshine Table with sortable insights columns and remove the legacy table wrapper.
+
+### Patch Changes
+
+- 821f4a2: Redesign the org home page with a two-column layout. Left rail shows compressed Recent challenges (color-coded deny pills, sidebar-friendly width) and Recent activity (sharing the audit-log action color scheme). Right column shows projects as a thin rectangular stack (list view) or a 1/2/3-column card grid (grid view, toggle persisted in localStorage). Each project row/card shows the most recent audit-log action with a hover tooltip for full UTC + local timestamps, a facepile of active contributors (up to 10, sourced from audit-log actors with a deterministic earliest-by-joinedAt fallback), a star to favorite/unfavorite (stored client-side per org), and a kebab menu (favorite toggle, project settings, view audit logs, copy slug). New "Add New" dropdown next to the search bar offers Project / Team member / Role, gated by `org:admin`. Favorites surface in their own section above an "All projects" divider when present.
+- 5ded32c: Preserve theme and saved project favorites when logging out.
+
 ## 0.60.0
 
 ### Minor Changes

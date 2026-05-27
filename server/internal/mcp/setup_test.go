@@ -113,6 +113,7 @@ func newTestMCPServiceWithDevIDP(t *testing.T) (context.Context, *testInstance, 
 		"devidp-test-client", // non-"client_" prefix routes through idpBaseURL
 		nil,                  // idpClient — BuildAuthorizationURL doesn't touch it
 		nil, nil, nil, nil, nil,
+		cache.SuffixNone,
 	)
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, resolver)
 	return ctx, ti, idp

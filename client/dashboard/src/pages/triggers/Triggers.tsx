@@ -9,14 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Type } from "@/components/ui/type";
 import {
   Collapsible,
@@ -38,7 +30,13 @@ import { TriggerInstance } from "@gram/client/models/components/triggerinstance.
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  type Column,
+  Icon,
+  Stack,
+  Table,
+} from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet } from "react-router";
@@ -169,64 +167,81 @@ function TriggersTable({
 }) {
   const routes = useRoutes();
   const defMap = new Map(definitions.map((d) => [d.slug, d]));
+  const columns: Column<TriggerInstance>[] = [
+    {
+      key: "name",
+      header: "Name",
+      width: "1fr",
+      render: (trigger) => <span className="font-medium">{trigger.name}</span>,
+    },
+    {
+      key: "definitionSlug",
+      header: "Type",
+      width: "2fr",
+      render: (trigger) => {
+        const def = defMap.get(trigger.definitionSlug);
+
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <KindBadge kind={def?.kind ?? "webhook"} />
+            <span className="text-muted-foreground shrink-0 text-sm">
+              {def?.title ?? trigger.definitionSlug}
+            </span>
+            {def?.kind === "webhook" && trigger.webhookUrl && (
+              <WebhookUrlPill url={trigger.webhookUrl} />
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: "targetDisplay",
+      header: "Target",
+      width: "1fr",
+      render: (trigger) => (
+        <span className="text-muted-foreground">{trigger.targetDisplay}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "0.8fr",
+      render: (trigger) => <StatusBadge status={trigger.status} />,
+    },
+    {
+      key: "updatedAt",
+      header: "Updated",
+      width: "1fr",
+      render: (trigger) => (
+        <span className="text-muted-foreground">
+          <HumanizeDateTime date={trigger.updatedAt} />
+        </span>
+      ),
+    },
+    {
+      key: "logs",
+      header: "",
+      width: "auto",
+      render: (trigger) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <routes.logs.tools.Link
+            queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
+            className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
+          >
+            <Icon name="file-text" className="h-4 w-4" />
+          </routes.logs.tools.Link>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Target</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Updated</TableHead>
-          <TableHead className="w-10" />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {triggers.map((trigger) => {
-          const def = defMap.get(trigger.definitionSlug);
-          return (
-            <TableRow
-              key={trigger.id}
-              className="cursor-pointer"
-              onClick={() => onEdit(trigger)}
-            >
-              <TableCell className="font-medium">{trigger.name}</TableCell>
-              <TableCell>
-                <div className="flex min-w-0 items-center gap-2">
-                  <KindBadge kind={def?.kind ?? "webhook"} />
-                  <span className="text-muted-foreground shrink-0 text-sm">
-                    {def?.title ?? trigger.definitionSlug}
-                  </span>
-                  {def?.kind === "webhook" && trigger.webhookUrl && (
-                    <WebhookUrlPill url={trigger.webhookUrl} />
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {trigger.targetDisplay}
-              </TableCell>
-              <TableCell>
-                <StatusBadge status={trigger.status} />
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                <HumanizeDateTime date={trigger.updatedAt} />
-              </TableCell>
-              <TableCell>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <routes.logs.tools.Link
-                    queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
-                    className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
-                  >
-                    <Icon name="file-text" className="h-4 w-4" />
-                  </routes.logs.tools.Link>
-                </div>
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+    <Table
+      columns={columns}
+      data={triggers}
+      rowKey={(trigger) => trigger.id}
+      onRowClick={onEdit}
+    />
   );
 }
 

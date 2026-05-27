@@ -72,12 +72,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
+  // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
+  const isDeploymentsPageEnabled =
+    telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
 
   const connectActive = [
     routes.sources,
     routes.catalog,
     routes.playground,
-    routes.deployments,
+    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
   ].some((r) => r.active);
 
   const buildActive = [
@@ -116,7 +119,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     routes.sources,
     routes.catalog,
     routes.playground,
-    routes.deployments,
+    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
     routes.mcp,
     ...(isAssistantsEnabled ? [routes.assistants] : []),
     routes.clis,
@@ -164,10 +167,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.playground}
                 scope={["mcp:read", "mcp:write", "mcp:connect"]}
               />
-              <ScopeGatedNavItem
-                item={routes.deployments}
-                scope={["project:read", "project:write"]}
-              />
+              {isDeploymentsPageEnabled && (
+                <ScopeGatedNavItem
+                  item={routes.deployments}
+                  scope={["project:read", "project:write"]}
+                />
+              )}
             </CollapsibleNavGroup>
 
             {/* Build group */}

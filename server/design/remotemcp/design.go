@@ -119,6 +119,34 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateRemoteMcpServer"}`)
 	})
 
+	Method("discoverProtectedResourceMetadata", func() {
+		Description("Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.")
+
+		Payload(func() {
+			Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to probe.", func() {
+				Format(FormatUUID)
+			})
+			Required("remote_mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ProtectedResourceMetadataDiscovery)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.discoverProtectedResourceMetadata")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "discoverRemoteMcpProtectedResourceMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "discoverProtectedResourceMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DiscoverRemoteMcpProtectedResourceMetadata"}`)
+	})
+
 	Method("verifyURL", func() {
 		Description("Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.")
 
@@ -208,6 +236,36 @@ var UpdateServerForm = Type("UpdateServerForm", func() {
 	Attribute("headers", ArrayOf(HeaderInput), "The complete desired set of headers. Omit to leave headers unchanged. Provide an empty array to remove all headers.")
 
 	Required("id")
+})
+
+var ProtectedResourceMetadata = Type("ProtectedResourceMetadata", func() {
+	Description("RFC 9728 OAuth Protected Resource Metadata advertised by a remote MCP server. Only fields the dashboard renders are typed; the RFC allows additional members.")
+
+	Attribute("resource", String, "The resource server's identifier.")
+	Attribute("authorization_servers", ArrayOf(String), "Authorization servers that can issue access tokens for this resource.")
+	Attribute("scopes_supported", ArrayOf(String), "Scopes advertised by the resource server.")
+	Attribute("bearer_methods_supported", ArrayOf(String), "Bearer token presentation methods accepted by the resource server.")
+	Attribute("resource_documentation", String, "URL of human-readable documentation for the resource server.")
+})
+
+var ProtectedResourceMetadataUnavailable = Type("ProtectedResourceMetadataUnavailable", func() {
+	Description("Reason an RFC 9728 protected resource metadata probe was unavailable. Surfaced when available is false.")
+
+	Attribute("code", String, "Machine-readable failure code (e.g. not_found, http_error, transport_error, timeout, malformed, host_blocked, invalid_url). Intentionally a free-form string so adding new failure modes is not a breaking SDK change.")
+	Attribute("message", String, "Human-readable summary of the unavailability reason, composed by the backend. Dashboards should render verbatim.")
+
+	Required("code", "message")
+})
+
+var ProtectedResourceMetadataDiscovery = Type("ProtectedResourceMetadataDiscovery", func() {
+	Description("Outcome of an RFC 9728 protected resource metadata probe against a remote MCP server. available=true exposes the parsed metadata; available=false exposes a typed unavailability reason. Always returned with HTTP 200 — probe failures (including 404 from upstream) are not errors at this layer because non-OAuth resource servers are an expected, normal outcome.")
+
+	Attribute("available", Boolean, "True when the upstream advertised an RFC 9728 document. False for any unavailability reason — see the unavailable field for the cause.")
+	Attribute("metadata", ProtectedResourceMetadata, "Parsed RFC 9728 document. Present when available is true.")
+	Attribute("unavailable", ProtectedResourceMetadataUnavailable, "Reason the probe was unavailable. Present when available is false.")
+	Attribute("discovery_warnings", ArrayOf(String), "Informational deviations from RFC 9728 detected on a successful probe (e.g. missing resource field, mismatched resource value). Empty when available is false.")
+
+	Required("available", "discovery_warnings")
 })
 
 var VerifyURLForm = Type("VerifyURLForm", func() {

@@ -124,12 +124,13 @@ func NewResolver(
 	userRepo *userRepo.Queries,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
+	suffix cache.Suffix,
 ) *Resolver {
 	logger = logger.With(attr.SlogComponent("identity"))
 	return &Resolver{
 		logger:        logger,
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/identity"),
-		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), redisClient, cache.SuffixNone),
+		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), redisClient, suffix),
 		idpBaseURL:    idpBaseURL,
 		idpClientID:   idpClientID,
 		idpClient:     idpClient,

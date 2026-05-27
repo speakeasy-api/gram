@@ -26,6 +26,12 @@ type Service interface {
 	GetServer(context.Context, *GetServerPayload) (res *types.RemoteMcpServer, err error)
 	// Update a remote MCP server
 	UpdateServer(context.Context, *UpdateServerPayload) (res *types.RemoteMcpServer, err error)
+	// Probe the remote MCP server's origin for an RFC 9728
+	// .well-known/oauth-protected-resource document and return either the parsed
+	// metadata or a typed unavailability reason. Runs server-side under
+	// guardian.Policy so production resource servers without CORS can still be
+	// inspected.
+	DiscoverProtectedResourceMetadata(context.Context, *DiscoverProtectedResourceMetadataPayload) (res *ProtectedResourceMetadataDiscovery, err error)
 	// Probe a candidate remote MCP server URL by issuing an MCP initialize request
 	// and reporting the outcome. Used to give users a reachability signal before
 	// they save a new or updated remote MCP server. Treats reachable-but-401/403
@@ -55,7 +61,7 @@ const ServiceName = "remoteMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createServer", "listServers", "getServer", "updateServer", "verifyURL", "deleteServer"}
+var MethodNames = [7]string{"createServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "verifyURL", "deleteServer"}
 
 // CreateServerPayload is the payload type of the remoteMcp service
 // createServer method.
@@ -82,6 +88,16 @@ type DeleteServerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// DiscoverProtectedResourceMetadataPayload is the payload type of the
+// remoteMcp service discoverProtectedResourceMetadata method.
+type DiscoverProtectedResourceMetadataPayload struct {
+	// The ID of the remote MCP server to probe.
+	RemoteMcpServerID string
+	SessionToken      *string
+	ApikeyToken       *string
+	ProjectSlugInput  *string
 }
 
 // GetServerPayload is the payload type of the remoteMcp service getServer
@@ -125,6 +141,50 @@ type ListServersPayload struct {
 // method.
 type ListServersResult struct {
 	RemoteMcpServers []*types.RemoteMcpServer
+}
+
+// RFC 9728 OAuth Protected Resource Metadata advertised by a remote MCP
+// server. Only fields the dashboard renders are typed; the RFC allows
+// additional members.
+type ProtectedResourceMetadata struct {
+	// The resource server's identifier.
+	Resource *string
+	// Authorization servers that can issue access tokens for this resource.
+	AuthorizationServers []string
+	// Scopes advertised by the resource server.
+	ScopesSupported []string
+	// Bearer token presentation methods accepted by the resource server.
+	BearerMethodsSupported []string
+	// URL of human-readable documentation for the resource server.
+	ResourceDocumentation *string
+}
+
+// ProtectedResourceMetadataDiscovery is the result type of the remoteMcp
+// service discoverProtectedResourceMetadata method.
+type ProtectedResourceMetadataDiscovery struct {
+	// True when the upstream advertised an RFC 9728 document. False for any
+	// unavailability reason — see the unavailable field for the cause.
+	Available bool
+	// Parsed RFC 9728 document. Present when available is true.
+	Metadata *ProtectedResourceMetadata
+	// Reason the probe was unavailable. Present when available is false.
+	Unavailable *ProtectedResourceMetadataUnavailable
+	// Informational deviations from RFC 9728 detected on a successful probe (e.g.
+	// missing resource field, mismatched resource value). Empty when available is
+	// false.
+	DiscoveryWarnings []string
+}
+
+// Reason an RFC 9728 protected resource metadata probe was unavailable.
+// Surfaced when available is false.
+type ProtectedResourceMetadataUnavailable struct {
+	// Machine-readable failure code (e.g. not_found, http_error, transport_error,
+	// timeout, malformed, host_blocked, invalid_url). Intentionally a free-form
+	// string so adding new failure modes is not a breaking SDK change.
+	Code string
+	// Human-readable summary of the unavailability reason, composed by the
+	// backend. Dashboards should render verbatim.
+	Message string
 }
 
 // UpdateServerPayload is the payload type of the remoteMcp service

@@ -1186,6 +1186,7 @@ type RiskPolicy struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	DisabledRules        []string
 	Action               string
 	AutoName             bool
 	UserMessage          pgtype.Text

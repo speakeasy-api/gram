@@ -2647,6 +2647,11 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
   prompt_injection_rules TEXT[],
+  -- Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card')
+  -- the policy author has unchecked within an otherwise-enabled category.
+  -- Empty/NULL means every rule in the selected categories runs. Scanner
+  -- drops any finding whose canonical rule_id appears here.
+  disabled_rules TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,

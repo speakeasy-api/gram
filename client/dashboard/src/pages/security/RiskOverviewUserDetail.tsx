@@ -5,11 +5,10 @@ import {
 } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import {
-  useListChatsWithResolutions,
+  useListChats,
   useRiskOverview,
   useRiskUserBreakdown,
 } from "@gram/client/react-query/index.js";
@@ -95,7 +94,7 @@ function RiskOverviewUserDetailContent() {
     [overviewQuery.data?.topUsers, externalUserId],
   );
 
-  const chatsQuery = useListChatsWithResolutions(
+  const chatsQuery = useListChats(
     {
       externalUserId,
       from,
@@ -174,22 +173,12 @@ function RiskOverviewUserDetailContent() {
         </Page.Section.Body>
       </Page.Section>
 
-      <Drawer
-        open={!!selectedChatId}
-        onOpenChange={(open) => !open && setSelectedChatId(null)}
-        direction="right"
-      >
-        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
-          {selectedChatId && (
-            <ChatDetailPanel
-              chatId={selectedChatId}
-              onClose={() => setSelectedChatId(null)}
-              onDelete={() => setSelectedChatId(null)}
-              collapseNonRisk
-            />
-          )}
-        </DrawerContent>
-      </Drawer>
+      <ChatDetailSheet
+        chatId={selectedChatId}
+        onClose={() => setSelectedChatId(null)}
+        onDelete={() => setSelectedChatId(null)}
+        collapseNonRisk
+      />
     </>
   );
 }

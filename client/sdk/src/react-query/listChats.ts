@@ -102,6 +102,16 @@ export function setListChatsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      search?: string | undefined;
+      externalUserId?: string | undefined;
+      assistantId?: string | undefined;
+      hasRisk?: operations.HasRisk | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
+      limit?: number | undefined;
+      offset?: number | undefined;
+      sortBy?: operations.SortBy | undefined;
+      sortOrder?: operations.SortOrder | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
@@ -118,6 +128,16 @@ export function invalidateListChats(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      search?: string | undefined;
+      externalUserId?: string | undefined;
+      assistantId?: string | undefined;
+      hasRisk?: operations.HasRisk | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
+      limit?: number | undefined;
+      offset?: number | undefined;
+      sortBy?: operations.SortBy | undefined;
+      sortOrder?: operations.SortOrder | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;

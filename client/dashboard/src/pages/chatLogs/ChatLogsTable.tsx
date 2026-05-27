@@ -2,15 +2,15 @@ import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
 
 interface ChatLogsTableProps {
-  chats: ChatOverviewWithResolutions[];
+  chats: ChatOverview[];
   selectedChatId?: string;
-  onSelectChat: (chat: ChatOverviewWithResolutions) => void;
+  onSelectChat: (chat: ChatOverview) => void;
   onDeleteChat: (chatId: string) => void;
   isLoading: boolean;
   error: Error | null;
@@ -50,7 +50,7 @@ function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
   );
 }
 
-function formatDuration(chat: ChatOverviewWithResolutions): string {
+function formatDuration(chat: ChatOverview): string {
   // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const seconds = Math.round(

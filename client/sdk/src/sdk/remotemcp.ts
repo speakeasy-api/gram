@@ -4,6 +4,7 @@
 
 import { remoteMcpCreateServer } from "../funcs/remoteMcpCreateServer.js";
 import { remoteMcpDeleteServer } from "../funcs/remoteMcpDeleteServer.js";
+import { remoteMcpDiscoverProtectedResourceMetadata } from "../funcs/remoteMcpDiscoverProtectedResourceMetadata.js";
 import { remoteMcpGetServer } from "../funcs/remoteMcpGetServer.js";
 import { remoteMcpListServers } from "../funcs/remoteMcpListServers.js";
 import { remoteMcpUpdateServer } from "../funcs/remoteMcpUpdateServer.js";
@@ -45,6 +46,27 @@ export class RemoteMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteMcpDeleteServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * discoverProtectedResourceMetadata remoteMcp
+   *
+   * @remarks
+   * Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.
+   */
+  async discoverProtectedResourceMetadata(
+    request: operations.DiscoverRemoteMcpProtectedResourceMetadataRequest,
+    security?:
+      | operations.DiscoverRemoteMcpProtectedResourceMetadataSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ProtectedResourceMetadataDiscovery> {
+    return unwrapAsync(remoteMcpDiscoverProtectedResourceMetadata(
       this,
       request,
       security,
