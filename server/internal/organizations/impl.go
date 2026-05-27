@@ -853,7 +853,7 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	// capabilities in svix.
 	var caps *[]models.AppPortalCapability
 	readCheckErr := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err == nil {
 		caps = new(fullSvixAppPortalCapabilities())
 	} else if readCheckErr == nil {
 		caps = new(minimumSvixAppPortalCapabilities())
