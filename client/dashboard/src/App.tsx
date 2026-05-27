@@ -36,15 +36,6 @@ import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
-  // Initialize Pylon widget in production only
-  useEffect(() => {
-    if (import.meta.env.PROD) {
-      import("./lib/pylon").then((module) => {
-        module.initializePylon();
-      });
-    }
-  }, []);
-
   const applyTheme = (theme: "light" | "dark") => {
     const root = document.documentElement;
     if (root.classList.contains(theme)) return;
