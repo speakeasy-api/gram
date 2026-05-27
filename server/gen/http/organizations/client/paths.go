@@ -56,3 +56,8 @@ func DisableWebhooksOrganizationsPath() string {
 func CreatePortalSessionOrganizationsPath() string {
 	return "/rpc/organizations.createPortalSession"
 }
+
+// GenerateWorkOSAdminPortalLinkOrganizationsPath returns the URL path to the organizations service generateWorkOSAdminPortalLink HTTP endpoint.
+func GenerateWorkOSAdminPortalLinkOrganizationsPath() string {
+	return "/rpc/organizations.generateWorkOSAdminPortalLink"
+}

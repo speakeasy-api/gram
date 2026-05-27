@@ -297,17 +297,18 @@ type ChatUserFeedback struct {
 }
 
 type CustomDomain struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Domain         string
-	Verified       bool
-	Activated      bool
-	IngressName    pgtype.Text
-	CertSecretName pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	OrganizationID  string
+	Domain          string
+	Verified        bool
+	Activated       bool
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type Deployment struct {
@@ -847,6 +848,8 @@ type OrganizationMetadatum struct {
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -1183,6 +1186,7 @@ type RiskPolicy struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	DisabledRules        []string
 	Action               string
 	AutoName             bool
 	UserMessage          pgtype.Text

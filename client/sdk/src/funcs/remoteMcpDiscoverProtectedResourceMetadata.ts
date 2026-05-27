@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -28,19 +28,21 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listChatsWithResolutions chat
+ * discoverProtectedResourceMetadata remoteMcp
  *
  * @remarks
- * List all chats for a project with their resolutions
+ * Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.
  */
-export function chatListChatsWithResolutions(
+export function remoteMcpDiscoverProtectedResourceMetadata(
   client: GramCore,
-  request?: operations.ListChatsWithResolutionsRequest | undefined,
-  security?: operations.ListChatsWithResolutionsSecurity | undefined,
+  request: operations.DiscoverRemoteMcpProtectedResourceMetadataRequest,
+  security?:
+    | operations.DiscoverRemoteMcpProtectedResourceMetadataSecurity
+    | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListChatsWithResolutionsResult,
+    components.ProtectedResourceMetadataDiscovery,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +64,15 @@ export function chatListChatsWithResolutions(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListChatsWithResolutionsRequest | undefined,
-  security?: operations.ListChatsWithResolutionsSecurity | undefined,
+  request: operations.DiscoverRemoteMcpProtectedResourceMetadataRequest,
+  security?:
+    | operations.DiscoverRemoteMcpProtectedResourceMetadataSecurity
+    | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListChatsWithResolutionsResult,
+      components.ProtectedResourceMetadataDiscovery,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -86,7 +90,8 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.ListChatsWithResolutionsRequest$outboundSchema),
+        operations
+          .DiscoverRemoteMcpProtectedResourceMetadataRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -95,36 +100,26 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON(
+    "body",
+    payload.DiscoverProtectedResourceMetadataRequestBody,
+    { explode: true },
+  );
 
-  const path = pathToFunc("/rpc/chat.listChatsWithResolutions")();
-
-  const query = encodeFormQuery({
-    "assistant_id": payload?.assistant_id,
-    "external_user_id": payload?.external_user_id,
-    "from": payload?.from,
-    "has_risk": payload?.has_risk,
-    "limit": payload?.limit,
-    "offset": payload?.offset,
-    "resolution_status": payload?.resolution_status,
-    "search": payload?.search,
-    "sort_by": payload?.sort_by,
-    "sort_order": payload?.sort_order,
-    "to": payload?.to,
-  });
+  const path = pathToFunc("/rpc/remoteMcp.discoverProtectedResourceMetadata")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Chat-Session": encodeSimple(
-      "Gram-Chat-Session",
-      payload?.["Gram-Chat-Session"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -145,9 +140,14 @@ async function $do(
     ],
     [
       {
-        fieldName: "Authorization",
-        type: "http:bearer",
-        value: security?.option2?.chatSessionsTokenHeaderGramChatSession,
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option2?.apikeyHeaderGramKey,
+      },
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option2?.projectSlugHeaderGramProject,
       },
     ],
   );
@@ -155,7 +155,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listChatsWithResolutions",
+    operationID: "discoverRemoteMcpProtectedResourceMetadata",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -169,11 +169,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -211,7 +210,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListChatsWithResolutionsResult,
+    components.ProtectedResourceMetadataDiscovery,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -222,7 +221,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListChatsWithResolutionsResult$inboundSchema),
+    M.json(200, components.ProtectedResourceMetadataDiscovery$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

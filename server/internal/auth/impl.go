@@ -724,10 +724,8 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").Log(ctx, s.logger)
 	}
 
-	gramOrgID := "org_" + uuid.New().String()
-
-	// Provision the WorkOS org first so it exists before we create the Gram org.
-	workosOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, gramOrgID, payload.OrgName, authCtx.UserID)
+	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
+	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, payload.OrgName, authCtx.UserID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").Log(ctx, s.logger)
 	}
@@ -774,10 +772,8 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 		return "", fmt.Errorf("find unique slug: %w", err)
 	}
 
-	gramOrgID := "org_" + uuid.New().String()
-
-	// Provision the WorkOS org first so it exists before we create the Gram org.
-	workosOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, gramOrgID, orgName, userInfo.UserID)
+	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
+	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userInfo.UserID)
 	if err != nil {
 		return "", fmt.Errorf("provision org in WorkOS: %w", err)
 	}

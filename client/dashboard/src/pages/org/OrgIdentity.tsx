@@ -1,13 +1,15 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query";
 import { Button } from "@speakeasy-api/moonshine";
-import { FolderSync, Lock } from "lucide-react";
+import { FolderSync, Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -24,6 +26,7 @@ type IdentityCardProps = {
   providerSubtitle: string;
   learnMoreText: string;
   learnMoreHref: string;
+  configureButton?: React.ReactNode;
   children?: React.ReactNode;
 };
 
@@ -64,6 +67,121 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
   );
 }
 
+function useDirectorySyncPortalTelemetry() {
+  const telemetry = useTelemetry();
+  const { session } = useSessionData();
+
+  return () => {
+    telemetry.capture("identity_provider_interest", {
+      section: "directory_sync",
+      action: "dsync_portal_opened",
+      email: session?.user.email ?? "",
+      organization_id: session?.organization?.id ?? "",
+      organization_name: session?.organization?.name ?? "",
+      organization_slug: session?.organization?.slug ?? "",
+    });
+  };
+}
+
+function DirectorySyncConfigureButton() {
+  const [open, setOpen] = useState(false);
+  const captureOpened = useDirectorySyncPortalTelemetry();
+
+  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to start Directory Sync setup",
+      );
+    },
+  });
+
+  const handleConfirm = () => {
+    generatePortalLink.mutate(
+      {
+        request: {
+          generateWorkOSAdminPortalLinkRequestBody: {
+            intent: "dsync",
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          captureOpened();
+          window.open(data.url, "_blank", "noopener,noreferrer");
+          toast.info("Continue setup in the WorkOS portal");
+          setOpen(false);
+        },
+      },
+    );
+  };
+
+  return (
+    <RequireScope scope="org:admin" level="component">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setOpen(true)}
+        disabled={generatePortalLink.isPending}
+      >
+        Configure
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!generatePortalLink.isPending) {
+            setOpen(next);
+          }
+        }}
+      >
+        <Dialog.Content className="sm:max-w-lg">
+          <Dialog.Header>
+            <Dialog.Title>Set up Directory Sync</Dialog.Title>
+            <Dialog.Description>
+              Connecting Directory Sync lets your identity provider manage who
+              belongs to this workspace and which role each directory user has.
+              You&apos;ll still create roles and grants in Speakeasy, but role
+              assignments for synced users will be controlled by your identity
+              provider&apos;s groups.
+            </Dialog.Description>
+          </Dialog.Header>
+          <div className="space-y-3 pt-2">
+            <Type muted small>
+              Members you invite outside of your directory will continue to be
+              managed here.
+            </Type>
+            <Type muted small>
+              You&apos;ll be redirected to your identity provider to complete
+              setup.
+            </Type>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => setOpen(false)}
+              disabled={generatePortalLink.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirm}
+              disabled={generatePortalLink.isPending}
+            >
+              {generatePortalLink.isPending && (
+                <Button.LeftIcon>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>Continue to setup</Button.Text>
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog>
+    </RequireScope>
+  );
+}
+
 function IdentitySection({
   sectionId,
   heading,
@@ -73,6 +191,7 @@ function IdentitySection({
   providerSubtitle,
   learnMoreText,
   learnMoreHref,
+  configureButton,
   children,
 }: IdentityCardProps) {
   return (
@@ -97,7 +216,7 @@ function IdentitySection({
                 {providerSubtitle}
               </Type>
             </div>
-            <ConfigureButton sectionId={sectionId} />
+            {configureButton ?? <ConfigureButton sectionId={sectionId} />}
           </div>
           {children}
         </div>
@@ -175,6 +294,7 @@ function OrgIdentityInner() {
           providerSubtitle="Choose an identity provider to get started."
           learnMoreText="Learn more about SCIM Directory Sync"
           learnMoreHref="https://www.speakeasy.com/docs"
+          configureButton={<DirectorySyncConfigureButton />}
         />
       </div>
     </div>

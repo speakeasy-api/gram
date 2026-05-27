@@ -74,9 +74,13 @@ func (m *mockWorkOSFetcher) EnsureOrgExternalID(_ context.Context, _, _ string) 
 	return nil
 }
 
+func (m *mockWorkOSFetcher) UpdateOrganizationExternalID(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func (m *mockWorkOSFetcher) CreateOrganization(_ context.Context, name, gramOrgID string) (string, error) {
 	m.createdOrgs = append(m.createdOrgs, createdOrgRecord{Name: name, ExternalID: gramOrgID})
-	return "workos_org_" + gramOrgID, nil
+	return "workos_org_" + name, nil
 }
 
 func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, _ string) (string, error) {
@@ -145,7 +149,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 		wf = fetcher
 	}
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cache.SuffixNone)
 	sessionManager := sessions.NewManager(
 		logger, tracerProvider, conn, redisClient, cache.Suffix("gram-e2e"),
 		idpClient, billingClient, resolver,
@@ -1118,25 +1122,27 @@ func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
 	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "WorkOS Test Org"})
 	require.NoError(t, err)
 
-	// Assert WorkOS CreateOrganization was called with the Gram org ID as external_id.
+	// Assert WorkOS CreateOrganization was called.
 	require.Len(t, fetcher.createdOrgs, 1, "should have called CreateOrganization once")
 	assert.Equal(t, "WorkOS Test Org", fetcher.createdOrgs[0].Name)
-	assert.NotEmpty(t, fetcher.createdOrgs[0].ExternalID, "external_id should be the Gram org ID")
+
+	// The mock returns "workos_org_<name>" as the WorkOS org ID.
+	workosOrgID := "workos_org_WorkOS Test Org"
+	expectedGramOrgID := orgid.FromWorkOSID(workosOrgID)
 
 	// Assert WorkOS membership was created.
 	require.Len(t, fetcher.createdMemberships, 1, "should have called CreateOrganizationMembership once")
 	assert.Equal(t, workosUserID, fetcher.createdMemberships[0].WorkOSUserID)
-	assert.Equal(t, "workos_org_"+fetcher.createdOrgs[0].ExternalID, fetcher.createdMemberships[0].WorkOSOrgID)
+	assert.Equal(t, workosOrgID, fetcher.createdMemberships[0].WorkOSOrgID)
 
 	// Verify workos_id was stored on the Gram org row.
 	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
 	require.NoError(t, err)
 	orgQueries := orgRepo.New(inst.conn)
-	gramOrgID := fetcher.createdOrgs[0].ExternalID
-	dbOrg, err := orgQueries.GetOrganizationMetadata(ctx, gramOrgID)
+	dbOrg, err := orgQueries.GetOrganizationMetadata(ctx, expectedGramOrgID)
 	require.NoError(t, err)
 	assert.True(t, dbOrg.WorkosID.Valid, "workos_id should be stored on org")
-	assert.Equal(t, "workos_org_"+gramOrgID, dbOrg.WorkosID.String)
+	assert.Equal(t, workosOrgID, dbOrg.WorkosID.String)
 }
 
 // TestE2E_Register_RejectsWhenOrgAlreadyActive verifies that Register returns

@@ -50,6 +50,19 @@ if [ -f "mise.worktree.local.toml" ]; then
     export MISE_ENV=worktree
 fi
 
+# Detect git worktree (a working tree distinct from the main one). When in a
+# worktree, sync port mappings against mise.toml so newly-added _PORT vars
+# and dependents land in mise.local.toml. Migrations are skipped here because
+# ./zero applies them later.
+if command -v git &> /dev/null && git rev-parse --is-inside-work-tree &> /dev/null; then
+    git_main_worktree=$(cd "$(git rev-parse --git-common-dir)/.." && pwd 2>/dev/null || true)
+    git_current_worktree=$(git rev-parse --show-toplevel 2>/dev/null || true)
+    if [ -n "$git_main_worktree" ] && [ -n "$git_current_worktree" ] && [ "$git_main_worktree" != "$git_current_worktree" ]; then
+        echo -e "\n⏳ Syncing worktree port mappings"
+        mise run git:worksync --no-migrate
+    fi
+fi
+
 check_command() {
     local cmd=$1
     local instructions=$2

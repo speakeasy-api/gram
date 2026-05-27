@@ -66,6 +66,10 @@ export type ToolVariation = {
    */
   summarizer?: string | undefined;
   /**
+   * The tags of the tool variation
+   */
+  tags?: Array<string> | undefined;
+  /**
    * Display name override for the tool
    */
   title?: string | undefined;
@@ -95,6 +99,7 @@ export const ToolVariation$inboundSchema: z.ZodMiniType<
     src_tool_name: z.string(),
     src_tool_urn: z.string(),
     summarizer: z.optional(z.string()),
+    tags: z.optional(z.array(z.string())),
     title: z.optional(z.string()),
     updated_at: z.string(),
   }),

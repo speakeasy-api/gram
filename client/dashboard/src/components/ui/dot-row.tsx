@@ -12,7 +12,7 @@ interface DotRowProps {
  * with an icon overlay, matching the card sidebar aesthetic. Remaining content
  * is rendered as additional cells via `children`.
  *
- * Must be used inside a `<TableBody>`.
+ * Must be used inside a table body.
  */
 export function DotRow({ children, icon, className, onClick }: DotRowProps) {
   return (

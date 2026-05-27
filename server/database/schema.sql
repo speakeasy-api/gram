@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   free_trial_started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   free_trial_ends_at timestamptz NOT NULL DEFAULT clock_timestamp() + INTERVAL '14 days',
 
+  scim_enabled boolean DEFAULT FALSE,
+  sso_enabled boolean DEFAULT FALSE,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   disabled_at timestamptz,
@@ -604,8 +607,11 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   domain TEXT NOT NULL,
   verified BOOLEAN NOT NULL DEFAULT FALSE,
   activated BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Generic resource identifier: Ingress name (provisioner_kind='ingress') or HTTPRoute name (provisioner_kind='gateway').
   ingress_name TEXT,
   cert_secret_name TEXT,
+  -- Discriminates which K8s API provisioned this domain. Gateway rows write NULL cert_secret_name.
+  provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2641,6 +2647,11 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
   prompt_injection_rules TEXT[],
+  -- Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card')
+  -- the policy author has unchecked within an otherwise-enabled category.
+  -- Empty/NULL means every rule in the selected categories runs. Scanner
+  -- drops any finding whose canonical rule_id appears here.
+  disabled_rules TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,

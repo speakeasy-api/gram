@@ -92,6 +92,9 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /authorization/organizations/{id}/roles", h.handleWorkosCreateRole)
 	mux.HandleFunc("PATCH /authorization/organizations/{id}/roles/{slug}", h.handleWorkosUpdateRole)
 	mux.HandleFunc("DELETE /authorization/organizations/{id}/roles/{slug}", h.handleWorkosDeleteRole)
+
+	mux.HandleFunc("POST /portal/generate_link", h.handleWorkosGeneratePortalLink)
+	mux.HandleFunc("GET /portal", h.handleWorkosPortalPage)
 }
 
 // =============================================================================
@@ -1081,6 +1084,77 @@ func (h *Handler) handleWorkosDeleteRole(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// =============================================================================
+// Admin Portal
+// =============================================================================
+
+func (h *Handler) handleWorkosGeneratePortalLink(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body struct {
+		Organization string `json:"organization"`
+		Intent       string `json:"intent"`
+		ReturnURL    string `json:"return_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.logger.ErrorContext(ctx, "workos generate portal link: invalid body", slog.Any("error", err))
+		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.Organization == "" || body.Intent == "" {
+		h.logger.ErrorContext(ctx, "workos generate portal link: missing required fields",
+			slog.String("organization", body.Organization), slog.String("intent", body.Intent))
+		writeWorkosError(w, http.StatusBadRequest, "organization and intent are required")
+		return
+	}
+
+	// Return a mock portal URL. In production WorkOS returns a short-lived
+	// link to their hosted admin portal; locally we just point back at the
+	// dev-idp so the dashboard has something to open.
+	link := fmt.Sprintf("http://localhost:35291/mock-workos/portal?intent=%s&organization=%s", body.Intent, body.Organization)
+	h.logger.InfoContext(ctx, "workos generate portal link",
+		slog.String("organization", body.Organization), slog.String("intent", body.Intent), slog.String("link", link))
+	writeJSON(w, http.StatusOK, map[string]string{"link": link})
+}
+
+const portalPageHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock WorkOS Admin Portal</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0a0a0a; color: #e5e5e5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .card { max-width: 480px; width: 100%%; margin: 2rem; padding: 2.5rem; border: 1px solid #262626; border-radius: 12px; background: #141414; }
+  .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; background: #1a1a2e; color: #818cf8; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 1.25rem; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; color: #f5f5f5; }
+  p { color: #a3a3a3; font-size: 0.875rem; line-height: 1.6; margin-bottom: 1rem; }
+  .intent { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 4px; background: #1c1c1c; border: 1px solid #333; font-family: monospace; font-size: 0.8rem; color: #d4d4d4; }
+  .info { padding: 1rem; border-radius: 8px; background: #1a1a1a; border: 1px solid #262626; margin-top: 0.5rem; }
+  .info p:last-child { margin-bottom: 0; }
+</style>
+</head>
+<body>
+<div class="card">
+  <span class="badge">mock-workos mode</span>
+  <h1>WorkOS Admin Portal</h1>
+  <p>This is the local dev-idp mock. In production, this page would be hosted by WorkOS and allow configuring your identity provider.</p>
+  <p>Intent: <span class="intent">%s</span></p>
+  <p>Organization: <span class="intent">%s</span></p>
+  <div class="info">
+    <p>No real IdP configuration is needed for local development. User and membership management is handled directly through the mock-workos API.</p>
+  </div>
+</div>
+</body>
+</html>`
+
+func (h *Handler) handleWorkosPortalPage(w http.ResponseWriter, r *http.Request) {
+	intent := r.URL.Query().Get("intent")
+	org := r.URL.Query().Get("organization")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, portalPageHTML, intent, org)
 }
 
 // =============================================================================
