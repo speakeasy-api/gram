@@ -50,8 +50,8 @@ Triggers are "always on": every matching Slack event in any channel the bot is i
 
 - "Want to limit this to a few specific channels?" — if yes, ask for channel names, then add \`event.channel_id in ["C..."]\` (look up channel IDs via the Slack search/list tools the assistant just gained).
 - "Want it to only respond when you (or specific people) mention it?" — if yes, gather Slack handles, add \`event.user_id in ["U..."]\` (look up via \`platform_slack_lookup_user_by_email\` or \`search_users\` if those tools are attached).
-- "Should it stay out of DMs?" or "Only listen in DMs?" — \`event.envelope_type == "channel"\` or \`event.envelope_type == "im"\`.
-- "Should it only react in threads?" — \`event.thread_id != ""\`.
+- "Should it stay out of DMs?" or "Only listen in DMs?" — Slack DM channels have IDs that start with \`D\`. Use \`!event.channel_id.startsWith("D")\` (channels only) or \`event.channel_id.startsWith("D")\` (DMs only). Do NOT use \`event.envelope_type\` for this — that field is the Slack API request type (\`event_callback\` / \`interactive\`), not the conversation kind.
+- "Should it only react in threads?" — \`event.thread_id != ""\` (thread_id is the parent's timestamp; non-empty only for replies in a thread).
 
 AND multiple conditions with \`&&\` and merge with any existing \`config.filter\` (e.g. the bot-loop guard from step 6d) — never replace it. Apply via \`update_trigger(id, { filter: "<expr>" })\`.
 
@@ -75,7 +75,7 @@ If for some reason the webhook URL isn't returned at step 1 (e.g. trigger creati
 ## Trigger config
 
 - \`event_types\` *(string[])* — required. Common: \`app_mention\`, \`message\` (noisy; pair with \`filter\`), \`reaction_added\`. Use bare event names — dotted names (\`message.im\` etc.) are rejected.
-- \`filter\` *(string, optional)* — CEL expression. Do not mention CEL to the user; describe rules in plain English. Available fields on \`event\`: \`envelope_type\`, \`event_type\`, \`subtype\`, \`team_id\`, \`channel_id\`, \`thread_id\`, \`user_id\`, \`bot_id\`, \`app_id\`, \`text\`, \`timestamp\`. AND multiple conditions with \`&&\`. Use \`event.bot_id != "<id>"\` to break reply loops (id from step 6c).
+- \`filter\` *(string, optional)* — CEL expression. Do not mention CEL to the user; describe rules in plain English. Available fields on \`event\`: \`envelope_type\` (Slack API envelope: \`event_callback\` for events, \`interactive\` for Block Kit actions — NOT the conversation kind), \`event_type\` (e.g. \`message\`, \`app_mention\`, \`reaction_added\`), \`subtype\`, \`team_id\`, \`channel_id\` (\`D…\` for DMs, otherwise channels/groups), \`thread_id\`, \`user_id\`, \`bot_id\`, \`app_id\`, \`text\`, \`timestamp\`. AND multiple conditions with \`&&\`. Use \`event.bot_id != "<id>"\` to break reply loops (id from step 6c).
 
 ## Tokens
 
