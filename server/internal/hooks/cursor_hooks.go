@@ -574,6 +574,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -636,6 +637,7 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -683,6 +685,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -746,6 +749,7 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		ChatID:           chatID,
 		ProjectID:        parsedProjectID,
 		Role:             "user",

@@ -362,6 +362,14 @@ func (a *Activities) FetchUnanalyzedMessages(ctx context.Context, input risk_ana
 	return result, nil
 }
 
+func (a *Activities) GetRiskPolicyMetadata(ctx context.Context, input risk_analysis.GetRiskPolicyMetadataArgs) (*risk_analysis.GetRiskPolicyMetadataResult, error) {
+	result, err := a.fetchUnanalyzedMessages.GetMetadata(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get risk policy metadata: %w", err)
+	}
+	return result, nil
+}
+
 func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
 	if a.analyzeBatch == nil {
 		return nil, fmt.Errorf("analyze batch: gitleaks detector pool not initialized")

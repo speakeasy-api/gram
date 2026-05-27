@@ -104,3 +104,56 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		PromptInjectionRules: policy.PromptInjectionRules,
 	}, nil
 }
+
+type GetRiskPolicyMetadataArgs struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+}
+
+type GetRiskPolicyMetadataResult struct {
+	OrganizationID       string
+	PolicyVersion        int64
+	Enabled              bool
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
+}
+
+// GetRiskPolicyMetadata loads the current policy snapshot AnalyzeBatch needs.
+// Lives next to FetchUnanalyzed because both wrap repo.GetRiskPolicy; the
+// signal-driven workflow uses this when message IDs are already known and the
+// unanalyzed scan is not needed.
+func (a *FetchUnanalyzed) GetMetadata(ctx context.Context, args GetRiskPolicyMetadataArgs) (_ *GetRiskPolicyMetadataResult, err error) {
+	ctx, span := a.tracer.Start(ctx, "risk.getRiskPolicyMetadata", trace.WithAttributes(
+		attribute.String("risk.project_id", args.ProjectID.String()),
+		attribute.String("risk.policy_id", args.RiskPolicyID.String()),
+	))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	policy, err := repo.New(a.db).GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        args.RiskPolicyID,
+		ProjectID: args.ProjectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get risk policy: %w", err)
+	}
+
+	span.SetAttributes(
+		attribute.Int64("risk.policy_version", policy.Version),
+		attribute.Bool("risk.policy_enabled", policy.Enabled),
+	)
+
+	return &GetRiskPolicyMetadataResult{
+		OrganizationID:       policy.OrganizationID,
+		PolicyVersion:        policy.Version,
+		Enabled:              policy.Enabled,
+		Sources:              policy.Sources,
+		PresidioEntities:     policy.PresidioEntities,
+		PromptInjectionRules: policy.PromptInjectionRules,
+	}, nil
+}

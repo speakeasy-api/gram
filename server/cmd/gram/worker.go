@@ -541,7 +541,9 @@ func newWorkerCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
+
+			analyzeNewMsgSignaler := &background.TemporalAnalyzeNewMessageSignaler{TemporalEnv: temporalEnv, Logger: logger}
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, analyzeNewMsgSignaler, auditLogger))
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,

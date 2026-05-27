@@ -57,12 +57,27 @@ func (s *signalerStub) SignalNewMessages(_ context.Context, params background.Dr
 	return nil
 }
 
+type analyzeNewMessageSignalCall struct {
+	Params    background.AnalyzeNewMessageParams
+	MessageID uuid.UUID
+}
+
+type analyzeNewMessageSignalerStub struct {
+	calls []analyzeNewMessageSignalCall
+}
+
+func (s *analyzeNewMessageSignalerStub) SignalNewMessage(_ context.Context, params background.AnalyzeNewMessageParams, messageID uuid.UUID) error {
+	s.calls = append(s.calls, analyzeNewMessageSignalCall{Params: params, MessageID: messageID})
+	return nil
+}
+
 type testInstance struct {
-	service        *risk.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	signaler       *signalerStub
-	chatRepo       *chatrepo.Queries
+	service         *risk.Service
+	conn            *pgxpool.Pool
+	sessionManager  *sessions.Manager
+	signaler        *signalerStub
+	analyzeSignaler *analyzeNewMessageSignalerStub
+	chatRepo        *chatrepo.Queries
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -85,6 +100,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	sig := &signalerStub{}
+	analyzeSig := &analyzeNewMessageSignalerStub{}
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -94,14 +110,15 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 	auditLogger := audit.NewLogger()
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, auditLogger, cache.NewRedisCacheAdapter(redisClient), false)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, analyzeSig, nil, shadowMCPClient, auditLogger, cache.NewRedisCacheAdapter(redisClient), false)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		signaler:       sig,
-		chatRepo:       chatrepo.New(conn),
+		service:         svc,
+		conn:            conn,
+		sessionManager:  sessionManager,
+		signaler:        sig,
+		analyzeSignaler: analyzeSig,
+		chatRepo:        chatrepo.New(conn),
 	}
 }
 

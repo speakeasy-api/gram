@@ -296,6 +296,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.MarkTriggerFired)
 	// Risk analysis activities — AnalyzeBatch on the dedicated worker.
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
+	temporalWorker.RegisterActivity(activities.GetRiskPolicyMetadata)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
@@ -343,8 +344,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerWakeWorkflow)
-	// Risk analysis workflow
+	// Risk analysis workflows
 	temporalWorker.RegisterWorkflow(DrainRiskAnalysisWorkflow)
+	temporalWorker.RegisterWorkflow(AnalyzeNewMessageWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)

@@ -34,22 +34,27 @@ func TestOnMessagesStored_SignalsEnabledPolicies(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Reset signaler calls from create.
+	// Reset signaler calls from create (drain workflow path).
 	ti.signaler.calls = nil
+	ti.analyzeSignaler.calls = nil
 
-	ti.service.OnMessagesStored(ctx, *authCtx.ProjectID)
+	msgIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+	ti.service.OnMessagesStored(ctx, *authCtx.ProjectID, msgIDs)
 
-	// Only the enabled policy should have been signaled.
-	require.Len(t, ti.signaler.calls, 1)
-	require.Equal(t, *authCtx.ProjectID, ti.signaler.calls[0].ProjectID)
+	// One per-message signal per enabled policy, drain workflow untouched.
+	require.Empty(t, ti.signaler.calls)
+	require.Len(t, ti.analyzeSignaler.calls, len(msgIDs))
+	for _, c := range ti.analyzeSignaler.calls {
+		require.Equal(t, *authCtx.ProjectID, c.Params.ProjectID)
+	}
 }
 
 func TestOnMessagesStored_NoPolicies(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	// No policies created — should not signal anything.
-	ti.service.OnMessagesStored(ctx, uuid.New())
+	ti.service.OnMessagesStored(ctx, uuid.New(), []uuid.UUID{uuid.New()})
 
 	require.Empty(t, ti.signaler.calls)
+	require.Empty(t, ti.analyzeSignaler.calls)
 }

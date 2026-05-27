@@ -338,6 +338,7 @@ func buildAssistantRows(
 		content = ""
 	}
 	base := repo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		ChatID:           request.ChatID,
 		Role:             "assistant",
 		ProjectID:        projectID,
