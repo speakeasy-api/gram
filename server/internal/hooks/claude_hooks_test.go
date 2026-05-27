@@ -5,12 +5,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -203,22 +202,7 @@ func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
-	_, err := accessrepo.New(ti.conn).CreateAccessRule(ctx, accessrepo.CreateAccessRuleParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		AccessScope:     "project",
-		ResourceType:    "shadow_mcp",
-		Disposition:     "allowed",
-		MatchKind:       shadowmcp.MatchBreadthServerIdentity,
-		MatchValue:      "mise mcp",
-		DisplayName:     "mise",
-		ObservedSummary: []byte("{}"),
-		SourceRequestID: uuid.NullUUID{},
-		CreatedBy:       pgtype.Text{String: "", Valid: false},
-		UpdatedBy:       pgtype.Text{String: "", Valid: false},
-		Reason:          pgtype.Text{String: "", Valid: false},
-	})
-	require.NoError(t, err)
+	createHookAccessRule(t, ctx, ti, authCtx.ProjectID.String(), accesscontrol.AccessScopeProject, accesscontrol.DispositionAllowed, shadowmcp.MatchBreadthServerIdentity, "mise mcp", "mise")
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",

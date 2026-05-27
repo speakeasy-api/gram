@@ -2,12 +2,12 @@ package shadowmcp_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -24,7 +24,7 @@ func TestEvaluateAccessRules_AllowsMatchingOrganizationRule(t *testing.T) {
 	})
 
 	require.Equal(t, shadowmcp.AccessRuleOutcomeAllowed, decision.Outcome)
-	require.Equal(t, rule.ID.String(), decision.RuleID)
+	require.Equal(t, rule.ID, decision.RuleID)
 }
 
 func TestEvaluateAccessRules_DenyRuleWins(t *testing.T) {
@@ -41,7 +41,7 @@ func TestEvaluateAccessRules_DenyRuleWins(t *testing.T) {
 	})
 
 	require.Equal(t, shadowmcp.AccessRuleOutcomeDenied, decision.Outcome)
-	require.Equal(t, denied.ID.String(), decision.RuleID)
+	require.Equal(t, denied.ID, decision.RuleID)
 }
 
 func TestEvaluateAccessRules_ProjectRuleOnlyMatchesSameProject(t *testing.T) {
@@ -57,7 +57,7 @@ func TestEvaluateAccessRules_ProjectRuleOnlyMatchesSameProject(t *testing.T) {
 		ServerIdentity: "github",
 	})
 	require.Equal(t, shadowmcp.AccessRuleOutcomeAllowed, allowed.Outcome)
-	require.Equal(t, rule.ID.String(), allowed.RuleID)
+	require.Equal(t, rule.ID, allowed.RuleID)
 
 	blocked := f.client.EvaluateAccessRules(t.Context(), f.orgID, otherProjectID.String(), shadowmcp.AccessEvidence{
 		FullURL:        "",
@@ -67,32 +67,46 @@ func TestEvaluateAccessRules_ProjectRuleOnlyMatchesSameProject(t *testing.T) {
 	require.Equal(t, shadowmcp.AccessRuleOutcomeNoMatch, blocked.Outcome)
 }
 
-func (f *fixture) createAccessRule(t *testing.T, disposition string, matchBreadth string, matchValue string) accessrepo.AccessRule {
+func (f *fixture) createAccessRule(t *testing.T, disposition string, matchBreadth string, matchValue string) accesscontrol.AccessRule {
 	t.Helper()
-	return f.createAccessRuleWithScope(t, uuid.NullUUID{}, "organization", disposition, matchBreadth, matchValue)
+	return f.createAccessRuleWithScope(t, "", accesscontrol.AccessScopeOrganization, disposition, matchBreadth, matchValue)
 }
 
-func (f *fixture) createProjectAccessRule(t *testing.T, projectID uuid.UUID, disposition string, matchBreadth string, matchValue string) accessrepo.AccessRule {
+func (f *fixture) createProjectAccessRule(t *testing.T, projectID uuid.UUID, disposition string, matchBreadth string, matchValue string) accesscontrol.AccessRule {
 	t.Helper()
-	return f.createAccessRuleWithScope(t, uuid.NullUUID{UUID: projectID, Valid: true}, "project", disposition, matchBreadth, matchValue)
+	return f.createAccessRuleWithScope(t, projectID.String(), accesscontrol.AccessScopeProject, disposition, matchBreadth, matchValue)
 }
 
-func (f *fixture) createAccessRuleWithScope(t *testing.T, projectID uuid.NullUUID, accessScope string, disposition string, matchBreadth string, matchValue string) accessrepo.AccessRule {
+func (f *fixture) createAccessRuleWithScope(t *testing.T, projectID string, accessScope string, disposition string, matchBreadth string, matchValue string) accesscontrol.AccessRule {
 	t.Helper()
-	rule, err := accessrepo.New(f.conn).CreateAccessRule(t.Context(), accessrepo.CreateAccessRuleParams{
-		OrganizationID:  f.orgID,
-		ProjectID:       projectID,
-		AccessScope:     accessScope,
-		ResourceType:    "shadow_mcp",
-		Disposition:     disposition,
-		MatchKind:       matchBreadth,
-		MatchValue:      matchValue,
-		DisplayName:     matchValue,
-		ObservedSummary: []byte("{}"),
-		SourceRequestID: uuid.NullUUID{},
-		CreatedBy:       pgtype.Text{String: "", Valid: false},
-		UpdatedBy:       pgtype.Text{String: "", Valid: false},
-		Reason:          pgtype.Text{String: "", Valid: false},
+	now := time.Now().UTC()
+	rule, err := f.accessStore.CreateRule(t.Context(), accesscontrol.AccessRule{
+		ID:             uuid.NewString(),
+		OrganizationID: f.orgID,
+		ProjectID:      projectID,
+		AccessScope:    accessScope,
+		ResourceType:   accesscontrol.ResourceTypeShadowMCP,
+		Disposition:    disposition,
+		MatchKind:      matchBreadth,
+		MatchValue:     matchValue,
+		DisplayName:    matchValue,
+		ObservedSummary: accesscontrol.ObservedSummary{
+			Name:           nil,
+			FullURL:        nil,
+			URLHost:        nil,
+			ServerIdentity: nil,
+			ToolName:       nil,
+			ToolCall:       nil,
+			BlockReason:    nil,
+			RiskPolicyID:   nil,
+			RiskResultID:   nil,
+		},
+		SourceRequestID: "",
+		CreatedBy:       "",
+		UpdatedBy:       "",
+		Reason:          "",
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	})
 	require.NoError(t, err)
 	return rule

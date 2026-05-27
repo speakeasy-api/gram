@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -457,7 +458,8 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
 
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache)
+	accessStore := accesscontrol.NewRedisStore(cache.NoopCache, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore)
 	ab := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -52,22 +52,7 @@ func TestEnforceShadowMCPToolAccess_DenyRuleOverridesValidToolsetCall(t *testing
 	require.NotNil(t, authCtx.ProjectID)
 
 	toolsetID := createHookToolsetWithHTTPTool(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "do_thing")
-	_, err := accessrepo.New(ti.conn).CreateAccessRule(ctx, accessrepo.CreateAccessRuleParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       uuid.NullUUID{},
-		AccessScope:     "organization",
-		ResourceType:    "shadow_mcp",
-		Disposition:     "denied",
-		MatchKind:       shadowmcp.MatchBreadthServerIdentity,
-		MatchValue:      "blocked-server",
-		DisplayName:     "Blocked server",
-		ObservedSummary: []byte("{}"),
-		SourceRequestID: uuid.NullUUID{},
-		CreatedBy:       pgtype.Text{String: "", Valid: false},
-		UpdatedBy:       pgtype.Text{String: "", Valid: false},
-		Reason:          pgtype.Text{String: "", Valid: false},
-	})
-	require.NoError(t, err)
+	createHookAccessRule(t, ctx, ti, "", accesscontrol.AccessScopeOrganization, accesscontrol.DispositionDenied, shadowmcp.MatchBreadthServerIdentity, "blocked-server", "Blocked server")
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(
 		ctx,

@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
@@ -15,10 +15,6 @@ const (
 	AccessRuleOutcomeDenied  = "denied"
 	AccessRuleOutcomeNoMatch = "no_match"
 	AccessRuleOutcomeError   = "error"
-
-	accessRuleDispositionAllowed = "allowed"
-	accessRuleDispositionDenied  = "denied"
-	accessRuleResourceType       = "shadow_mcp"
 )
 
 type AccessRuleDecision struct {
@@ -55,10 +51,10 @@ func (c *Client) EvaluateAccessRules(ctx context.Context, organizationID string,
 	}
 
 	matchKinds, matchValues := accessRuleMatchCandidates(normalized)
-	rules, err := repo.New(c.db).ListMatchingAccessRules(ctx, repo.ListMatchingAccessRulesParams{
+	rules, err := c.accessStore.ListMatchingRules(ctx, accesscontrol.MatchingRuleFilters{
 		OrganizationID: organizationID,
-		ResourceType:   accessRuleResourceType,
-		ProjectID:      uuid.NullUUID{UUID: parsedProjectID, Valid: true},
+		ResourceType:   accesscontrol.ResourceTypeShadowMCP,
+		ProjectID:      parsedProjectID.String(),
 		MatchKinds:     matchKinds,
 		MatchValues:    matchValues,
 	})
@@ -76,22 +72,22 @@ func (c *Client) EvaluateAccessRules(ctx context.Context, organizationID string,
 	}
 
 	for _, rule := range rules {
-		if rule.Disposition == accessRuleDispositionDenied {
+		if rule.Disposition == accesscontrol.DispositionDenied {
 			return AccessRuleDecision{
 				Outcome: AccessRuleOutcomeDenied,
-				RuleID:  rule.ID.String(),
+				RuleID:  rule.ID,
 				Reason:  fmt.Sprintf("matched denied Shadow MCP Access Rule %q", rule.DisplayName),
 			}
 		}
 	}
 
 	for _, rule := range rules {
-		if rule.Disposition != accessRuleDispositionAllowed {
+		if rule.Disposition != accesscontrol.DispositionAllowed {
 			continue
 		}
 		return AccessRuleDecision{
 			Outcome: AccessRuleOutcomeAllowed,
-			RuleID:  rule.ID.String(),
+			RuleID:  rule.ID,
 			Reason:  fmt.Sprintf("matched allowed Shadow MCP Access Rule %q", rule.DisplayName),
 		}
 	}

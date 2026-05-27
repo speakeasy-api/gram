@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -26,7 +27,9 @@ func newShadowMCPClientForTest(t *testing.T) *shadowmcp.Client {
 	require.NoError(t, err)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	return shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NewRedisCacheAdapter(redisClient))
+	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	return shadowmcp.NewClient(testenv.NewLogger(t), conn, cacheAdapter, accessStore)
 }
 
 func TestToolsListShadowMCPInjectInterceptor_Name(t *testing.T) {

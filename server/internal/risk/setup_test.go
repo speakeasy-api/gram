@@ -95,7 +95,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
 
 	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, accessStore, auditLogger, false, nil, nil)

@@ -2,6 +2,8 @@ package shadowmcp
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/matchvalue"
 )
