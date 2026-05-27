@@ -1632,6 +1632,16 @@ WITH paged AS (
   FROM deployments d
   WHERE d.project_id = $1
     AND ($2::uuid IS NULL OR d.id <= $2::uuid)
+    AND (
+      $3::text[] IS NULL
+      OR d.id IN (
+        SELECT deployment_id FROM deployments_openapiv3_assets
+        WHERE slug = ANY($3::text[])
+        UNION
+        SELECT deployment_id FROM deployments_functions
+        WHERE slug = ANY($3::text[])
+      )
+    )
   ORDER BY d.id DESC
   LIMIT 51
 ),
@@ -1696,8 +1706,9 @@ ORDER BY p.id DESC
 `
 
 type ListDeploymentsParams struct {
-	ProjectID uuid.UUID
-	Cursor    uuid.NullUUID
+	ProjectID   uuid.UUID
+	Cursor      uuid.NullUUID
+	SourceSlugs []string
 }
 
 type ListDeploymentsRow struct {
@@ -1714,7 +1725,7 @@ type ListDeploymentsRow struct {
 }
 
 func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams) ([]ListDeploymentsRow, error) {
-	rows, err := q.db.Query(ctx, listDeployments, arg.ProjectID, arg.Cursor)
+	rows, err := q.db.Query(ctx, listDeployments, arg.ProjectID, arg.Cursor, arg.SourceSlugs)
 	if err != nil {
 		return nil, err
 	}

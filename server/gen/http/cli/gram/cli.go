@@ -557,6 +557,7 @@ func ParseEndpoint(
 
 		deploymentsListDeploymentsFlags                = flag.NewFlagSet("list-deployments", flag.ExitOnError)
 		deploymentsListDeploymentsCursorFlag           = deploymentsListDeploymentsFlags.String("cursor", "", "")
+		deploymentsListDeploymentsSourceSlugsFlag      = deploymentsListDeploymentsFlags.String("source-slugs", "", "")
 		deploymentsListDeploymentsApikeyTokenFlag      = deploymentsListDeploymentsFlags.String("apikey-token", "", "")
 		deploymentsListDeploymentsSessionTokenFlag     = deploymentsListDeploymentsFlags.String("session-token", "", "")
 		deploymentsListDeploymentsProjectSlugInputFlag = deploymentsListDeploymentsFlags.String("project-slug-input", "", "")
@@ -3658,7 +3659,7 @@ func ParseEndpoint(
 				data, err = deploymentsc.BuildRedeployPayload(*deploymentsRedeployBodyFlag, *deploymentsRedeployApikeyTokenFlag, *deploymentsRedeploySessionTokenFlag, *deploymentsRedeployProjectSlugInputFlag)
 			case "list-deployments":
 				endpoint = c.ListDeployments()
-				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsApikeyTokenFlag, *deploymentsListDeploymentsSessionTokenFlag, *deploymentsListDeploymentsProjectSlugInputFlag)
+				data, err = deploymentsc.BuildListDeploymentsPayload(*deploymentsListDeploymentsCursorFlag, *deploymentsListDeploymentsSourceSlugsFlag, *deploymentsListDeploymentsApikeyTokenFlag, *deploymentsListDeploymentsSessionTokenFlag, *deploymentsListDeploymentsProjectSlugInputFlag)
 			case "get-deployment-logs":
 				endpoint = c.GetDeploymentLogs()
 				data, err = deploymentsc.BuildGetDeploymentLogsPayload(*deploymentsGetDeploymentLogsDeploymentIDFlag, *deploymentsGetDeploymentLogsCursorFlag, *deploymentsGetDeploymentLogsApikeyTokenFlag, *deploymentsGetDeploymentLogsSessionTokenFlag, *deploymentsGetDeploymentLogsProjectSlugInputFlag)
@@ -6263,6 +6264,7 @@ func deploymentsListDeploymentsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] deployments list-deployments", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -source-slugs JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6274,13 +6276,14 @@ func deploymentsListDeploymentsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -source-slugs JSON: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments list-deployments --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments list-deployments --cursor \"abc123\" --source-slugs '[\n      \"fermat-mcp\"\n   ]' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func deploymentsGetDeploymentLogsUsage() {

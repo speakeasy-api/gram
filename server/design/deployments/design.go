@@ -186,6 +186,7 @@ var _ = Service("deployments", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("cursor")
+			Param("source_slugs")
 			Response(StatusOK)
 		})
 
@@ -397,6 +398,10 @@ var CreateDeploymentResult = Type("CreateDeploymentResult", func() {
 
 var ListDeploymentForm = Type("ListDeploymentForm", func() {
 	Attribute("cursor", String, "The cursor to fetch results from")
+	Attribute("source_slugs", ArrayOf(String), func() {
+		Description("Only return deployments that include at least one source (OpenAPI document or Function asset) with one of the given slugs. Matching is by exact slug across both source kinds (OR semantics).")
+		Example([]string{"fermat-mcp"})
+	})
 })
 
 var ListDeploymentResult = Type("ListDeploymentResult", func() {

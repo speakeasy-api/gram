@@ -1,8 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { useRoutes } from "@/routes";
-import { useListDeploymentsSuspense } from "@gram/client/react-query";
+import {
+  useLatestDeployment,
+  useListDeploymentsSuspense,
+} from "@gram/client/react-query";
 import {
   Badge,
   Button,
@@ -14,7 +18,7 @@ import {
   Table,
   TableProps,
 } from "@speakeasy-api/moonshine";
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
@@ -126,12 +130,38 @@ export function DeploymentsTable({
   showHeader = true,
 }: { showHeader?: boolean } = {}) {
   const routes = useRoutes();
-  const { data: res } = useListDeploymentsSuspense();
+
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
+
+  const { data: res } = useListDeploymentsSuspense(
+    selectedSlugs.length > 0 ? { sourceSlugs: selectedSlugs } : undefined,
+  );
   const deployments = res.items ?? [];
 
   const { data: activeDeployment } = useActiveDeployment();
 
-  if (deployments.length === 0) {
+  // Source options are derived from the latest deployment's assets — same
+  // discovery pattern used by SourceDetails. Slugs are per-source and stable
+  // across deployments.
+  const { data: latest } = useLatestDeployment();
+  const sourceOptions = useMemo(() => {
+    const opts: { label: string; value: string }[] = [];
+    const seen = new Set<string>();
+    for (const asset of latest?.deployment?.openapiv3Assets ?? []) {
+      if (seen.has(asset.slug)) continue;
+      seen.add(asset.slug);
+      opts.push({ label: `${asset.name} (API)`, value: asset.slug });
+    }
+    for (const fn of latest?.deployment?.functionsAssets ?? []) {
+      if (seen.has(fn.slug)) continue;
+      seen.add(fn.slug);
+      opts.push({ label: `${fn.name} (Function)`, value: fn.slug });
+    }
+    return opts.sort((a, b) => a.label.localeCompare(b.label));
+  }, [latest]);
+
+  const hasFilter = selectedSlugs.length > 0;
+  if (deployments.length === 0 && !hasFilter) {
     return <DeploymentsEmptyState />;
   }
 
@@ -253,11 +283,30 @@ export function DeploymentsTable({
         </>
       )}
 
+      {sourceOptions.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <MultiSelect
+            options={sourceOptions}
+            defaultValue={selectedSlugs}
+            onValueChange={setSelectedSlugs}
+            placeholder="Filter by source"
+            className="min-w-[240px]"
+            hideSelectAll
+            singleLine
+          />
+        </div>
+      )}
+
       <Table<DeploymentSummary>
         columns={columnsWithData}
         rowKey={(row) => row.id}
         data={deployments}
         className="mb-8 overflow-auto"
+        noResultsMessage={
+          hasFilter
+            ? "No deployments match the selected source(s)."
+            : "No deployments yet."
+        }
       />
     </>
   );

@@ -17,6 +17,16 @@ WITH paged AS (
   FROM deployments d
   WHERE d.project_id = @project_id
     AND (sqlc.narg(cursor)::uuid IS NULL OR d.id <= sqlc.narg(cursor)::uuid)
+    AND (
+      sqlc.narg(source_slugs)::text[] IS NULL
+      OR d.id IN (
+        SELECT deployment_id FROM deployments_openapiv3_assets
+        WHERE slug = ANY(sqlc.narg(source_slugs)::text[])
+        UNION
+        SELECT deployment_id FROM deployments_functions
+        WHERE slug = ANY(sqlc.narg(source_slugs)::text[])
+      )
+    )
   ORDER BY d.id DESC
   LIMIT 51
 ),

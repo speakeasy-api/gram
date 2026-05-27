@@ -3390,9 +3390,10 @@ func NewRedeployPayload(body *RedeployRequestBody, apikeyToken *string, sessionT
 
 // NewListDeploymentsPayload builds a deployments service listDeployments
 // endpoint payload.
-func NewListDeploymentsPayload(cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
+func NewListDeploymentsPayload(cursor *string, sourceSlugs []string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.ListDeploymentsPayload {
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
+	v.SourceSlugs = sourceSlugs
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

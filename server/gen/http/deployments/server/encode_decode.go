@@ -1418,14 +1418,17 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		var payload *deployments.ListDeploymentsPayload
 		var (
 			cursor           *string
+			sourceSlugs      []string
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
 		)
-		cursorRaw := r.URL.Query().Get("cursor")
+		qp := r.URL.Query()
+		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
 		}
+		sourceSlugs = qp["source_slugs"]
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -1438,7 +1441,7 @@ func DecodeListDeploymentsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewListDeploymentsPayload(cursor, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListDeploymentsPayload(cursor, sourceSlugs, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

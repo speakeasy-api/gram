@@ -359,6 +359,7 @@ export default function SourceDetails() {
             >
               <SourceDeploymentsPanel
                 sourceKind={sourceKind}
+                sourceSlug={sourceSlug}
                 attachmentType={attachmentTypeForSourceKind(sourceKind)}
               />
             </Suspense>

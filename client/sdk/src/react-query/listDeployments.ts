@@ -109,6 +109,7 @@ export function setListDeploymentsData(
   queryKeyBase: [
     parameters: {
       cursor?: string | undefined;
+      sourceSlugs?: Array<string> | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -126,6 +127,7 @@ export function invalidateListDeployments(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       cursor?: string | undefined;
+      sourceSlugs?: Array<string> | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
