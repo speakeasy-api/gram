@@ -610,7 +610,7 @@ func handleSSOConnectionChange(ctx context.Context, logger *slog.Logger, dbtx da
 	}
 
 	logger.InfoContext(ctx, "updated sso_enabled from connection event",
-		slog.Bool("sso_enabled", enabled),
+		attr.SlogWorkOSSSOEnabled(enabled),
 		attr.SlogWorkOSOrganizationID(payload.OrganizationID),
 	)
 	return nil
@@ -642,7 +642,7 @@ func handleDSyncChange(ctx context.Context, logger *slog.Logger, dbtx database.D
 	}
 
 	logger.InfoContext(ctx, "updated scim_enabled from dsync event",
-		slog.Bool("scim_enabled", enabled),
+		attr.SlogWorkOSSCIMEnabled(enabled),
 		attr.SlogWorkOSOrganizationID(payload.OrganizationID),
 	)
 	return nil
