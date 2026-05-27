@@ -98,7 +98,7 @@ func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *up
 	secretCiphertext, err := enc.Encrypt([]byte("aud-secret"))
 	require.NoError(t, err)
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:               *authCtx.ProjectID,
+		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID:   issuer.ID,
 		UserSessionIssuerID:     userIssuer,
 		ClientID:                "aud-cid",
