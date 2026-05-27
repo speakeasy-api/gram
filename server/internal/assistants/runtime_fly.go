@@ -927,7 +927,7 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 		flyMachineMetadataRole:                         flyMachineMetadataRoleAssistant,
 	}
 	return &fly.MachineConfig{
-		Image: fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageTag),
+		Image: f.desiredImageRef(),
 		Env:   env,
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",

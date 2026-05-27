@@ -47,9 +47,6 @@ func (c FlyRuntimeConfig) Validate() error {
 	if c.OCIImage == "" {
 		return fmt.Errorf("--assistant-runtime-oci-image is required")
 	}
-	if c.ImageTag == "" {
-		return fmt.Errorf("assistant runtime image tag is empty")
-	}
 	if c.ServerURL == nil {
 		return fmt.Errorf("assistant fly runtime server URL is not configured")
 	}
