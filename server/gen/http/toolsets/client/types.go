@@ -3390,6 +3390,8 @@ type FunctionToolDefinitionResponseBody struct {
 	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Variables configuration for the function
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// The tags list for this function tool
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Meta tags for the tool
 	Meta map[string]any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// The ID of the tool
@@ -11865,6 +11867,9 @@ func ValidateFunctionToolDefinitionResponseBody(body *FunctionToolDefinitionResp
 	}
 	if body.Runtime == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
+	if body.Tags == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
 	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))

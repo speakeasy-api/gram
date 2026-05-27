@@ -90,18 +90,17 @@ export function EditToolDialog({
   const [destructiveHint, setDestructiveHint] = useState<boolean | undefined>();
   const [idempotentHint, setIdempotentHint] = useState<boolean | undefined>();
   const [openWorldHint, setOpenWorldHint] = useState<boolean | undefined>();
-  // TODO(AGE-2348): extend tag variations to function tools.
   // TODO: extend tag variations to prompt tools once they support tags.
   const [tags, setTags] = useState<string[] | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const hasAnnotations = tool ? toolSupportsAnnotations(tool) : false;
-  const supportsTags = tool?.type === "http";
+  const supportsTags = tool?.type === "http" || tool?.type === "function";
   // Memoize: the inline `[]` fallback would produce a fresh reference per
   // render and invalidate downstream memoization in TagsVariationEditor.
   const baseTags = useMemo(
-    () => (tool?.type === "http" ? tool.tags : []),
+    () => (tool?.type === "http" || tool?.type === "function" ? tool.tags : []),
     [tool],
   );
   const origTags = supportsTags ? tool?.variation?.tags : undefined;
@@ -116,7 +115,11 @@ export function EditToolDialog({
       setDestructiveHint(getAnnotationValue(tool, "destructiveHint"));
       setIdempotentHint(getAnnotationValue(tool, "idempotentHint"));
       setOpenWorldHint(getAnnotationValue(tool, "openWorldHint"));
-      setTags(tool.type === "http" ? tool.variation?.tags : undefined);
+      setTags(
+        tool.type === "http" || tool.type === "function"
+          ? tool.variation?.tags
+          : undefined,
+      );
     }
   }, [tool]);
 

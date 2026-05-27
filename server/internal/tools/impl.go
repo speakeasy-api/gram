@@ -383,6 +383,7 @@ func (s *Service) getFunctionTools(
 				CanonicalName: tool.Name,
 				Description:   tool.Description,
 				Variables:     tool.Variables,
+				Tags:          tool.Tags,
 				Meta:          meta,
 				SchemaVersion: nil,
 				Schema:        string(tool.InputSchema),

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: c07fdb797e925426a53f3d831a005f4d
+  docChecksum: 84e63202b0dbc5f6345c3fdc50c4da6d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -307,7 +307,7 @@ trackedFiles:
   docs/models/components/functionresourcedefinition.md:
     last_write_checksum: sha1:1df20aa88f01f3862e289bca08c3495efc00d523
   docs/models/components/functiontooldefinition.md:
-    last_write_checksum: sha1:c009199e05c8fa4216cea242dd224c2e7201e623
+    last_write_checksum: sha1:dadf68c76b2e0ed4d0205950f9b81504cab4d30c
   docs/models/components/generatetitleresponsebody.md:
     last_write_checksum: sha1:38ee2cf743b12e9ffa968731732b84116e7d4da8
   docs/models/components/generateworkosadminportallinkrequestbody.md:
@@ -3648,7 +3648,7 @@ trackedFiles:
   src/models/components/functionresourcedefinition.ts:
     last_write_checksum: sha1:cd82ab538fbb9585fc6d90b445e54499335975f0
   src/models/components/functiontooldefinition.ts:
-    last_write_checksum: sha1:5f4ba2f5a9da9d6f67d64e0315d5010678473b94
+    last_write_checksum: sha1:81cdcc477d5b4407af6e3b80b3eee59c04fdc5bd
   src/models/components/generatetitleresponsebody.ts:
     last_write_checksum: sha1:0908a7700ea1b4d25b03d3baab6d728e51c3c43c
   src/models/components/generateworkosadminportallinkrequestbody.ts:

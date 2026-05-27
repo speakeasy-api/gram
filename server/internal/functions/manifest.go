@@ -22,6 +22,7 @@ type ManifestToolV0 struct {
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
 	AuthInput   *ManifestAuthInputAttributeV0           `json:"authInput,omitempty"`
 	Annotations *ManifestAnnotationsV0                  `json:"annotations,omitempty"`
+	Tags        []string                                `json:"tags,omitempty"`
 	Meta        map[string]any                          `json:"meta"`
 }
 
@@ -96,6 +97,10 @@ func validateManifestToolV0(tool ManifestToolV0) (err error) {
 		if jerr := jsonschema.IsValidJSONSchema(tool.InputSchema); jerr != nil {
 			err = errors.Join(err, fmt.Errorf("invalid tool input schema: %w", jerr))
 		}
+	}
+
+	if len(tool.Tags) > constants.MaxFunctionToolTags {
+		err = errors.Join(err, fmt.Errorf("tool tags exceed maximum of %d", constants.MaxFunctionToolTags))
 	}
 
 	return
