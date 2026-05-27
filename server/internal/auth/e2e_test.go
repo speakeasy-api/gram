@@ -375,7 +375,7 @@ func TestE2E_Callback_ExistingUserWithDBOrgs(t *testing.T) {
 	// WorkOS returns the same org that already exists in the DB.
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
-			workosUserID: {{ID: "om_99", UserID: workosUserID, OrganizationID: "org_01DB_EXISTING", Organization: "DB Corp", RoleSlug: "admin"}},
+			workosUserID: {{ID: "om_99", UserID: workosUserID, OrganizationID: "org_01DB_EXISTING", Organization: "DB Corp", RoleSlugs: []string{"admin"}}},
 		},
 		orgs: map[string]*workos.Organization{
 			"org_01DB_EXISTING": {ID: "org_01DB_EXISTING", Name: "DB Corp"},
