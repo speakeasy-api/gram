@@ -496,7 +496,7 @@ export default function DeviceAgent() {
             </Page.Section.Description>
             <Page.Section.Body>
               <Tabs defaultValue="fleet" className="gap-6">
-                <TabsList className="grid h-auto w-full gap-4 bg-transparent p-0 @2xl/main:grid-cols-2">
+                <TabsList className="grid h-auto w-full items-stretch gap-4 bg-transparent p-0 @2xl/main:grid-cols-2">
                   <SetupTab
                     value="fleet"
                     icon="building-2"
