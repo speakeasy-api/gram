@@ -1750,13 +1750,22 @@ function buildAssistantTools(deps: ToolDeps) {
             const notes: string[] = [];
             if (envResult.note) notes.push(envResult.note);
 
-            const existingToolsets = await sdk.toolsets
-              .list()
-              .catch(() => null);
+            const [existingToolsets, allAssistants] = await Promise.all([
+              sdk.toolsets.list().catch(() => null),
+              sdk.assistants.list().catch(() => null),
+            ]);
             const attachedSlugs = new Set(a.toolsets.map((t) => t.toolsetSlug));
+            const sharedSlugs = new Set<string>();
+            for (const other of allAssistants?.assistants ?? []) {
+              if (other.id === a.id) continue;
+              for (const ref of other.toolsets ?? []) {
+                sharedSlugs.add(ref.toolsetSlug);
+              }
+            }
             const existingSlackToolset = existingToolsets?.toolsets.find(
               (t) =>
                 attachedSlugs.has(t.slug) &&
+                !sharedSlugs.has(t.slug) &&
                 t.tools.some((tool) =>
                   tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
                 ),
