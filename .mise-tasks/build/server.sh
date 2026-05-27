@@ -14,10 +14,12 @@ if [ "${usage_readonly:-false}" = "true" ]; then
 fi
 
 git_sha=$(git rev-parse HEAD)
+runtime_image_hash=${GRAM_ASSISTANT_RUNTIME_IMAGE_HASH:-dev}
+
 CGO_ENABLED=0 go \
     build \
     "${args[@]}" \
     -trimpath \
-    -ldflags="-s -w -X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=\"${git_sha}\" -X goa.design/clue/health.Version=\"${git_sha}\"" \
+    -ldflags="-s -w -X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${git_sha} -X github.com/speakeasy-api/gram/server/cmd/gram.AssistantRuntimeImageHash=${runtime_image_hash} -X goa.design/clue/health.Version=${git_sha}" \
     -o bin/gram \
     ./main.go

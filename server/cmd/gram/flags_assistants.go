@@ -60,11 +60,6 @@ var assistantRuntimeFlags = []cli.Flag{
 		Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-image-version",
-		Usage:   "The assistant runtime image tag/version to run on fly.io.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION"},
-	},
 }
 
 func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {
@@ -96,7 +91,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			DefaultFlyOrg:      c.String("assistant-runtime-flyio-org"),
 			DefaultFlyRegion:   c.String("assistant-runtime-flyio-region"),
 			OCIImage:           c.String("assistant-runtime-oci-image"),
-			ImageVersion:       c.String("assistant-runtime-image-version"),
+			ImageTag:           AssistantRuntimeImageHash,
 			AppNamePrefix:      c.String("assistant-runtime-flyio-app-name-prefix"),
 			ServerURL:          resolvedServerURL,
 		},
