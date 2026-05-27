@@ -2707,6 +2707,11 @@ CREATE TABLE IF NOT EXISTS risk_results (
 CREATE INDEX IF NOT EXISTS risk_results_project_policy_version_message_idx
 ON risk_results (project_id, risk_policy_id, risk_policy_version, chat_message_id);
 
+-- Leading chat_message_id gives the FetchUnanalyzedMessageIDs anti-join a
+-- selective first key (UUID), avoiding a full-policy scan per outer row.
+CREATE INDEX IF NOT EXISTS risk_results_message_policy_coverage_idx
+ON risk_results (chat_message_id, project_id, risk_policy_id, risk_policy_version);
+
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_message_idx
 ON risk_results (project_id, chat_message_id);
 
