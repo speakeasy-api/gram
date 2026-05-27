@@ -28,7 +28,7 @@ type RemoteSession struct {
 
 type RemoteSessionClient struct {
 	ID                      uuid.UUID
-	ProjectID               uuid.UUID
+	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	ClientID                string

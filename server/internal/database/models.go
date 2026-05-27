@@ -1139,7 +1139,7 @@ type RemoteSession struct {
 
 type RemoteSessionClient struct {
 	ID                      uuid.UUID
-	ProjectID               uuid.UUID
+	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	ClientID                string
@@ -1154,6 +1154,12 @@ type RemoteSessionClient struct {
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz
 	Deleted                 bool
+}
+
+type RemoteSessionClientUserSessionIssuer struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	CreatedAt             pgtype.Timestamptz
 }
 
 type RemoteSessionIssuer struct {
