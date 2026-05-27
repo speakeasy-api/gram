@@ -217,7 +217,7 @@ func createIssuerGatedExternalMCPFixture(
 
 	remoteRepo := remotesessions_repo.New(ti.conn)
 	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         toolset.ProjectID,
+		ProjectID:                         uuid.NullUUID{UUID: toolset.ProjectID, Valid: true},
 		Slug:                              "resolver-extmcp-rsi-" + suffix,
 		Issuer:                            "https://upstream.example/" + suffix,
 		AuthorizationEndpoint:             conv.ToPGText("https://upstream.example/" + suffix + "/authorize"),

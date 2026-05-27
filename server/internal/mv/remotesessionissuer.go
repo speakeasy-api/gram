@@ -11,7 +11,7 @@ import (
 func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSessionIssuer {
 	return &types.RemoteSessionIssuer{
 		ID:                                row.ID.String(),
-		ProjectID:                         row.ProjectID.String(),
+		ProjectID:                         row.ProjectID.UUID.String(),
 		Slug:                              row.Slug,
 		Issuer:                            row.Issuer,
 		AuthorizationEndpoint:             conv.FromPGText[string](row.AuthorizationEndpoint),

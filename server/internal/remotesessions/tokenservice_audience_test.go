@@ -77,7 +77,7 @@ func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *up
 		slugSuffix = "aud-unset"
 	}
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         *authCtx.ProjectID,
+		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Slug:                              "refresh-" + slugSuffix,
 		Issuer:                            tokenServer.URL,
 		AuthorizationEndpoint:             conv.ToPGText(tokenServer.URL + "/authorize"),
