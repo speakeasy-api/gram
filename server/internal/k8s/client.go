@@ -13,10 +13,6 @@ import (
 	gatewayclient "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
-var _ CustomDomainProvisioner = (*StubProvisioner)(nil)
-var _ CustomDomainProvisioner = (*IngressProvisioner)(nil)
-var _ CustomDomainProvisioner = (*GatewayProvisioner)(nil)
-
 type KubernetesClients struct {
 	Clientset     *kubernetes.Clientset
 	DynamicClient dynamic.Interface

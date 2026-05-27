@@ -27,23 +27,24 @@ func (p *GatewayProvisioner) Setup(ctx context.Context, domain string) (SetupRes
 	}
 
 	route := p.buildHTTPRoute(name, domain)
+	routeInterface := p.client.GatewayV1().HTTPRoutes(p.namespace)
 
-	existing, err := p.client.GatewayV1().HTTPRoutes(p.namespace).Get(ctx, name, metav1.GetOptions{})
+	existing, err := routeInterface.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			p.logger.InfoContext(ctx, "httproute not found, creating", attr.SlogResourceName(name))
-			if _, createErr := p.client.GatewayV1().HTTPRoutes(p.namespace).Create(ctx, route, metav1.CreateOptions{}); createErr != nil {
-				return SetupResult{}, fmt.Errorf("create httproute %s: %w", name, createErr)
-			}
-		} else {
+		if !k8serrors.IsNotFound(err) {
 			return SetupResult{}, fmt.Errorf("get httproute %s: %w", name, err)
 		}
-	} else {
-		p.logger.InfoContext(ctx, "httproute found, updating", attr.SlogResourceName(name))
-		route.ResourceVersion = existing.ResourceVersion
-		if _, updateErr := p.client.GatewayV1().HTTPRoutes(p.namespace).Update(ctx, route, metav1.UpdateOptions{}); updateErr != nil {
-			return SetupResult{}, fmt.Errorf("update httproute %s: %w", name, updateErr)
+		p.logger.InfoContext(ctx, "httproute not found, creating", attr.SlogResourceName(name))
+		if _, createErr := routeInterface.Create(ctx, route, metav1.CreateOptions{}); createErr != nil {
+			return SetupResult{}, fmt.Errorf("create httproute %s: %w", name, createErr)
 		}
+		return SetupResult{ResourceName: name, SecretName: ""}, nil
+	}
+
+	p.logger.InfoContext(ctx, "httproute found, updating", attr.SlogResourceName(name))
+	route.ResourceVersion = existing.ResourceVersion
+	if _, updateErr := routeInterface.Update(ctx, route, metav1.UpdateOptions{}); updateErr != nil {
+		return SetupResult{}, fmt.Errorf("update httproute %s: %w", name, updateErr)
 	}
 
 	return SetupResult{ResourceName: name, SecretName: ""}, nil

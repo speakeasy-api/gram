@@ -165,7 +165,7 @@ const (
 	HTTPResponseFilteredKey        = attribute.Key("gram.http.response.filtered")
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
-	ProvisionerKindKey             = attribute.Key("gram.provisioner.kind")
+	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
 	McpServerIDKey                 = attribute.Key("gram.mcp_server.id")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
@@ -808,8 +808,12 @@ func SlogHTTPParamValue(v any) slog.Attr      { return slog.Any(string(HTTPParam
 func IngressName(v string) attribute.KeyValue { return IngressNameKey.String(v) }
 func SlogIngressName(v string) slog.Attr      { return slog.String(string(IngressNameKey), v) }
 
-func ProvisionerKind(v string) attribute.KeyValue { return ProvisionerKindKey.String(v) }
-func SlogProvisionerKind(v string) slog.Attr      { return slog.String(string(ProvisionerKindKey), v) }
+func CustomDomainProvisionerKind(v string) attribute.KeyValue {
+	return CustomDomainProvisionerKindKey.String(v)
+}
+func SlogCustomDomainProvisionerKind(v string) slog.Attr {
+	return slog.String(string(CustomDomainProvisionerKindKey), v)
+}
 
 func MetricName(v string) attribute.KeyValue { return MetricNameKey.String(v) }
 func SlogMetricName(v string) slog.Attr      { return slog.String(string(MetricNameKey), v) }

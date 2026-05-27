@@ -24,30 +24,40 @@ const (
 type CustomDomainIngress struct {
 	domains            *customdomainsRepo.Queries
 	logger             *slog.Logger
-	k8sFactory         k8s.ProvisionerFactory
+	provisionerFactory k8s.ProvisionerFactory
 	defaultProvisioner k8s.ProvisionerKind
 	setupSleep         time.Duration
 }
 
-func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient k8s.ProvisionerFactory, defaultProvisioner k8s.ProvisionerKind) *CustomDomainIngress {
-	return &CustomDomainIngress{
-		domains:            customdomainsRepo.New(db),
-		logger:             logger,
-		k8sFactory:         k8sClient,
-		defaultProvisioner: defaultProvisioner,
-		setupSleep:         120 * time.Second,
+// CustomDomainIngressOption configures a CustomDomainIngress.
+type CustomDomainIngressOption func(*CustomDomainIngress)
+
+// WithSetupSleep overrides the post-Setup convergence wait. Intended for tests.
+func WithSetupSleep(d time.Duration) CustomDomainIngressOption {
+	return func(c *CustomDomainIngress) {
+		c.setupSleep = d
 	}
 }
 
-// SetSetupSleep overrides the post-Setup convergence wait. Intended for tests.
-func (c *CustomDomainIngress) SetSetupSleep(d time.Duration) {
-	c.setupSleep = d
+func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient k8s.ProvisionerFactory, defaultProvisioner k8s.ProvisionerKind, opts ...CustomDomainIngressOption) *CustomDomainIngress {
+	c := &CustomDomainIngress{
+		domains:            customdomainsRepo.New(db),
+		logger:             logger,
+		provisionerFactory: k8sClient,
+		defaultProvisioner: defaultProvisioner,
+		setupSleep:         120 * time.Second,
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 type CustomDomainIngressArgs struct {
-	OrgID           string
-	Domain          string
-	Action          CustomDomainIngressAction
+	OrgID  string
+	Domain string
+	Action CustomDomainIngressAction
+	// TODO: Remove IngressName in a follow-up release once all in-flight workflows have drained.
 	IngressName     string // Legacy field — kept for in-flight workflow compat. Prefer ResourceName when non-empty.
 	ResourceName    string // Generic resource name (Ingress or HTTPRoute). Preferred over IngressName.
 	CertSecretName  string
@@ -66,7 +76,7 @@ func (c *CustomDomainIngress) resolveKind(args CustomDomainIngressArgs) k8s.Prov
 
 func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressArgs) error {
 	kind := c.resolveKind(args)
-	provisioner := c.k8sFactory.Provisioner(kind)
+	provisioner := c.provisionerFactory.Provisioner(kind)
 
 	if args.Action == CustomDomainIngressActionDelete {
 		resourceName := args.ResourceName
@@ -95,7 +105,7 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 
 	if args.Action == CustomDomainIngressActionSetup {
 		c.logger.InfoContext(ctx, "provisioning custom domain resource",
-			attr.SlogProvisionerKind(string(kind)),
+			attr.SlogCustomDomainProvisionerKind(string(kind)),
 			attr.SlogURLDomain(customDomain.Domain),
 		)
 

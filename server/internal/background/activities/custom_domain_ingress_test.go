@@ -118,8 +118,7 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
-	act.SetSetupSleep(0)
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:           orgID,
@@ -173,8 +172,7 @@ func TestCustomDomainIngress_Setup_Gateway_WritesNullCertSecret(t *testing.T) {
 
 	// GatewayProvisioner returns empty SecretName — stub mirrors this behaviour.
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindGateway, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindGateway)
-	act.SetSetupSleep(0)
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindGateway, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:           orgID,
@@ -221,8 +219,7 @@ func TestCustomDomainIngress_Setup_KindResolution_DefaultsToIngress(t *testing.T
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
 	// No default provisioner set and no kind in args — must resolve to ingress.
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, "")
-	act.SetSetupSleep(0)
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, "", activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:  orgID,
@@ -264,8 +261,7 @@ func TestCustomDomainIngress_Setup_WrongOrg_Errors(t *testing.T) {
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress)
-	act.SetSetupSleep(0)
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
 
 	err = act.Do(ctx, activities.CustomDomainIngressArgs{
 		OrgID:  "org-intruder",

@@ -2,6 +2,10 @@ package k8s
 
 import "context"
 
+var _ CustomDomainProvisioner = (*StubProvisioner)(nil)
+var _ CustomDomainProvisioner = (*IngressProvisioner)(nil)
+var _ CustomDomainProvisioner = (*GatewayProvisioner)(nil)
+
 type ProvisionerKind string
 
 const (
