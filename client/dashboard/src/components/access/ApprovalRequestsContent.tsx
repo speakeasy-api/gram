@@ -45,7 +45,7 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Ellipsis, Plus } from "lucide-react";
+import { Ellipsis, Inbox, Plus, ShieldCheck } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -67,7 +67,6 @@ import {
   type ShadowMCPMatchBreadth,
 } from "./shadow-mcp-utils";
 
-type RequestStatusFilter = "requested" | "approved" | "denied" | "all";
 type RuleDispositionFilter = "allowed" | "denied" | "all";
 type ReviewAction = "approve" | "deny";
 
@@ -99,6 +98,33 @@ function TableEmptyState({
       <Type muted small className="max-w-md">
         {description}
       </Type>
+    </div>
+  );
+}
+
+function ApprovalSectionEmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16 text-center">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Icon className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        {title}
+      </Type>
+      <Type small muted className="mb-4 max-w-md">
+        {description}
+      </Type>
+      {action}
     </div>
   );
 }
@@ -730,14 +756,23 @@ function RuleActionsMenu({
   );
 }
 
+function AddRuleButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button onClick={onClick}>
+      <Button.LeftIcon>
+        <Plus className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>Add Rule</Button.Text>
+    </Button>
+  );
+}
+
 export function ApprovalRequestsContent() {
   const queryClient = useQueryClient();
   const client = useSdkClient();
   const organization = useOrganization();
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
-  const [requestStatusFilter, setRequestStatusFilter] =
-    useState<RequestStatusFilter>("requested");
   const [ruleDispositionFilter, setRuleDispositionFilter] =
     useState<RuleDispositionFilter>("all");
   const [reviewRequest, setReviewRequest] =
@@ -747,17 +782,16 @@ export function ApprovalRequestsContent() {
     null,
   );
 
-  const requestStatus =
-    requestStatusFilter === "all" ? undefined : requestStatusFilter;
   const ruleDisposition =
     ruleDispositionFilter === "all" ? undefined : ruleDispositionFilter;
+  const hasActiveRuleFilter = ruleDispositionFilter !== "all";
 
   const requestsQuery = useInfiniteQuery({
-    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, requestStatus],
+    queryKey: APPROVAL_REQUESTS_QUERY_KEY,
     queryFn: ({ pageParam }) =>
       client.access.listShadowMCPApprovalRequests({
         limit: APPROVAL_REQUESTS_PAGE_SIZE,
-        status: requestStatus,
+        status: "requested",
         cursor: pageParam,
       }),
     initialPageParam: undefined as string | undefined,
@@ -1004,6 +1038,11 @@ export function ApprovalRequestsContent() {
     },
   ];
 
+  const openCreateRuleSheet = () => {
+    setEditingRule(null);
+    setIsRuleSheetOpen(true);
+  };
+
   return (
     <div className="space-y-8">
       <ReviewRequestSheet
@@ -1144,22 +1183,6 @@ export function ApprovalRequestsContent() {
                 Review access requests users created after a policy block.
               </Type>
             </div>
-            <Select
-              value={requestStatusFilter}
-              onValueChange={(value) =>
-                setRequestStatusFilter(value as RequestStatusFilter)
-              }
-            >
-              <SelectTrigger className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="requested">Requested</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="denied">Denied</SelectItem>
-                <SelectItem value="all">All</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           {requestsLoading ? (
@@ -1170,9 +1193,10 @@ export function ApprovalRequestsContent() {
               description="Refresh the page or try again later."
             />
           ) : requests.length === 0 ? (
-            <TableEmptyState
+            <ApprovalSectionEmptyState
+              icon={Inbox}
               title="No approval requests"
-              description="Blocked resources will appear here after a user requests access."
+              description="Requests will appear here when users ask for access after a policy block."
             />
           ) : (
             <div className="overflow-hidden rounded-lg border">
@@ -1207,36 +1231,28 @@ export function ApprovalRequestsContent() {
             </Type>
           </div>
 
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <Select
-              value={ruleDispositionFilter}
-              onValueChange={(value) =>
-                setRuleDispositionFilter(value as RuleDispositionFilter)
-              }
-            >
-              <SelectTrigger className="w-[150px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All rules</SelectItem>
-                <SelectItem value="allowed">Allowed</SelectItem>
-                <SelectItem value="denied">Denied</SelectItem>
-              </SelectContent>
-            </Select>
-            <RequireScope scope="org:admin" level="component">
-              <Button
-                onClick={() => {
-                  setEditingRule(null);
-                  setIsRuleSheetOpen(true);
-                }}
+          {(rules.length > 0 || hasActiveRuleFilter) && (
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <Select
+                value={ruleDispositionFilter}
+                onValueChange={(value) =>
+                  setRuleDispositionFilter(value as RuleDispositionFilter)
+                }
               >
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Rule</Button.Text>
-              </Button>
-            </RequireScope>
-          </div>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All rules</SelectItem>
+                  <SelectItem value="allowed">Allowed</SelectItem>
+                  <SelectItem value="denied">Denied</SelectItem>
+                </SelectContent>
+              </Select>
+              <RequireScope scope="org:admin" level="component">
+                <AddRuleButton onClick={openCreateRuleSheet} />
+              </RequireScope>
+            </div>
+          )}
         </div>
 
         {rulesLoading ? (
@@ -1246,10 +1262,16 @@ export function ApprovalRequestsContent() {
             title="Access Rules could not be loaded"
             description="Refresh the page or try again later."
           />
-        ) : rules.length === 0 ? (
-          <TableEmptyState
+        ) : rules.length === 0 && !hasActiveRuleFilter ? (
+          <ApprovalSectionEmptyState
+            icon={ShieldCheck}
             title="No access rules"
-            description="Create a rule manually or approve a request to make a decision available for enforcement."
+            description="Create a rule manually or approve a request to allow or deny matching resources."
+            action={
+              <RequireScope scope="org:admin" level="component">
+                <AddRuleButton onClick={openCreateRuleSheet} />
+              </RequireScope>
+            }
           />
         ) : (
           <div className="overflow-hidden rounded-lg border">
@@ -1258,6 +1280,11 @@ export function ApprovalRequestsContent() {
               data={rules}
               rowKey={(row) => row.id}
               className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+              noResultsMessage={
+                <div className="bg-muted/20 flex justify-center p-6 text-center">
+                  <Type variant="subheading">No matching rules</Type>
+                </div>
+              }
             />
             {renderPaginationFooter({
               count: rules.length,

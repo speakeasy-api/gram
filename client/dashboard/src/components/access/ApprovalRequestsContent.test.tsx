@@ -133,6 +133,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     columns,
     data,
     rowKey,
+    noResultsMessage,
   }: {
     columns: Array<{
       header: ReactNode;
@@ -141,6 +142,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     }>;
     data: Array<Record<string, unknown>>;
     rowKey: (row: Record<string, unknown>) => string;
+    noResultsMessage?: ReactNode;
   }) => (
     <table>
       <thead>
@@ -151,29 +153,61 @@ vi.mock("@speakeasy-api/moonshine", () => ({
         </tr>
       </thead>
       <tbody>
-        {data.map((row) => (
-          <tr key={rowKey(row)}>
-            {columns.map((column) => (
-              <td key={column.key}>{column.render?.(row)}</td>
-            ))}
+        {data.length === 0 && noResultsMessage ? (
+          <tr>
+            <td colSpan={columns.length}>{noResultsMessage}</td>
           </tr>
-        ))}
+        ) : (
+          data.map((row) => (
+            <tr key={rowKey(row)}>
+              {columns.map((column) => (
+                <td key={column.key}>{column.render?.(row)}</td>
+              ))}
+            </tr>
+          ))
+        )}
       </tbody>
     </table>
   ),
 }));
 
-vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectItem: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SelectTrigger: ({ children }: { children: ReactNode }) => (
-    <button>{children}</button>
-  ),
-  SelectValue: () => <span />,
-}));
+vi.mock("@/components/ui/select", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  const SelectContext = React.createContext<
+    ((value: string) => void) | undefined
+  >(undefined);
+
+  return {
+    Select: ({
+      children,
+      onValueChange,
+    }: {
+      children: ReactNode;
+      onValueChange?: (value: string) => void;
+    }) => (
+      <SelectContext.Provider value={onValueChange}>
+        <div>{children}</div>
+      </SelectContext.Provider>
+    ),
+    SelectContent: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    SelectItem: ({
+      children,
+      value,
+    }: {
+      children: ReactNode;
+      value: string;
+    }) => {
+      const onValueChange = React.useContext(SelectContext);
+      return <button onClick={() => onValueChange?.(value)}>{children}</button>;
+    },
+    SelectTrigger: ({ children }: { children: ReactNode }) => (
+      <button>{children}</button>
+    ),
+    SelectValue: () => <span />,
+  };
+});
 
 vi.mock("@/components/ui/sheet", () => ({
   Sheet: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -255,6 +289,36 @@ afterEach(() => {
 });
 
 describe("ApprovalRequestsContent", () => {
+  it("renders first-run empty states for approval requests and access rules", async () => {
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("No approval requests")).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        "Requests will appear here when users ask for access after a policy block.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("No access rules")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Create a rule manually or approve a request to allow or deny matching resources.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Add Rule" })).toHaveLength(1);
+    expect(screen.queryByText("Requested")).toBeNull();
+    expect(screen.queryByText("Approved")).toBeNull();
+    expect(screen.queryByText("All")).toBeNull();
+  });
+
   it("does not load or render approval requests for non-admin org readers", () => {
     mocks.useRBAC.mockReturnValue({
       hasScope: (scope: string) => scope === "org:read",
@@ -422,6 +486,69 @@ describe("ApprovalRequestsContent", () => {
         accessScope: "project",
         cursor: "next-rules",
       });
+    });
+  });
+
+  it("renders a filtered empty state when a rule filter has no matches", async () => {
+    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
+      requests: [],
+    });
+    const listShadowMCPAccessRules = vi
+      .fn()
+      .mockImplementation(
+        ({ disposition }: { disposition?: "allowed" | "denied" }) => {
+          if (disposition === "denied") {
+            return Promise.resolve({ rules: [] });
+          }
+
+          return Promise.resolve({
+            rules: [
+              {
+                id: "rule-1",
+                displayName: "Allowed rule",
+                disposition: "allowed",
+                matchBreadth: "url_host",
+                matchValue: "allowed.example.com",
+                updatedAt: new Date("2026-01-01"),
+              },
+            ],
+          });
+        },
+      );
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Allowed rule")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Denied" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("No matching rules")).toBeTruthy();
+    });
+    expect(screen.queryByText("No access rules")).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Match" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Status" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Scope" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "All rules" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add Rule" })).toBeTruthy();
+    expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
+      limit: 100,
+      disposition: "denied",
+      accessScope: "project",
+      cursor: undefined,
     });
   });
 });
