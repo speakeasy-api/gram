@@ -331,7 +331,6 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 		return nil, oops.E(oops.CodeUnexpected, err, "parse shadow mcp approval request project id").Log(ctx, s.logger)
 	}
 
-	ruleViews := []*gen.ShadowMCPAccessRule{}
 	ruleAuditEvents := make([]audit.LogShadowMCPAccessRuleEvent, 0)
 	sourceRules := make([]accesscontrol.AccessRule, 0)
 	requestSummary := shadowMCPSummaryFromAccessControl(request.ObservedSummary)
@@ -385,7 +384,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 			return nil, shadowMCPStoreErr(ctx, s, err, "deny shadow mcp approval request")
 		}
 	}
-	ruleViews = make([]*gen.ShadowMCPAccessRule, 0, len(ruleResults))
+	ruleViews := make([]*gen.ShadowMCPAccessRule, 0, len(ruleResults))
 	ruleAuditEvents = make([]audit.LogShadowMCPAccessRuleEvent, 0, len(ruleResults))
 	for _, ruleResult := range ruleResults {
 		ruleAfter := buildShadowMCPAccessRule(ruleResult.Rule)
@@ -710,20 +709,6 @@ type shadowMCPObservedSummary struct {
 	BlockReason    *string `json:"block_reason,omitempty"`
 	RiskPolicyID   *string `json:"risk_policy_id,omitempty"`
 	RiskResultID   *string `json:"risk_result_id,omitempty"`
-}
-
-func shadowMCPEmptySummary() shadowMCPObservedSummary {
-	return shadowMCPObservedSummary{
-		Name:           nil,
-		FullURL:        nil,
-		URLHost:        nil,
-		ServerIdentity: nil,
-		ToolName:       nil,
-		ToolCall:       nil,
-		BlockReason:    nil,
-		RiskPolicyID:   nil,
-		RiskResultID:   nil,
-	}
 }
 
 func accessControlSummaryFromShadowMCPSummary(summary shadowMCPObservedSummary) accesscontrol.ObservedSummary {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
@@ -14,6 +15,8 @@ import (
 )
 
 func TestCanonicalizeMatchValue_URL(t *testing.T) {
+	t.Parallel()
+
 	got := CanonicalizeMatchValue(MatchKindFullURL, " HTTPS://Example.COM/path/ ")
 	if got != "https://example.com/path/" {
 		t.Fatalf("CanonicalizeMatchValue() = %q, want %q", got, "https://example.com/path/")
@@ -21,6 +24,8 @@ func TestCanonicalizeMatchValue_URL(t *testing.T) {
 }
 
 func TestCanonicalizeMatchValue_FullURLStripsDefaultPortAndFragment(t *testing.T) {
+	t.Parallel()
+
 	got := CanonicalizeMatchValue(MatchKindFullURL, "https://example.com:443/mcp#tools")
 	if got != "https://example.com/mcp" {
 		t.Fatalf("CanonicalizeMatchValue() = %q, want %q", got, "https://example.com/mcp")
@@ -28,6 +33,8 @@ func TestCanonicalizeMatchValue_FullURLStripsDefaultPortAndFragment(t *testing.T
 }
 
 func TestCanonicalizeMatchValue_FullURLSortsQueryKeys(t *testing.T) {
+	t.Parallel()
+
 	got := CanonicalizeMatchValue(MatchKindFullURL, "https://example.com/mcp?z=last&a=first")
 	if got != "https://example.com/mcp?a=first&z=last" {
 		t.Fatalf("CanonicalizeMatchValue() = %q, want %q", got, "https://example.com/mcp?a=first&z=last")
@@ -35,6 +42,8 @@ func TestCanonicalizeMatchValue_FullURLSortsQueryKeys(t *testing.T) {
 }
 
 func TestCanonicalizeMatchValue_URLHostExtractsDefaultPortHostFromURL(t *testing.T) {
+	t.Parallel()
+
 	got := CanonicalizeMatchValue(MatchKindURLHost, "HTTPS://Example.COM:443/path")
 	if got != "example.com" {
 		t.Fatalf("CanonicalizeMatchValue() = %q, want %q", got, "example.com")
@@ -42,6 +51,8 @@ func TestCanonicalizeMatchValue_URLHostExtractsDefaultPortHostFromURL(t *testing
 }
 
 func TestCanonicalizeMatchValue_CommandWhitespace(t *testing.T) {
+	t.Parallel()
+
 	got := CanonicalizeMatchValue(MatchKindServerIdentity, "  mcp__github__   ")
 	if got != "mcp__github__" {
 		t.Fatalf("CanonicalizeMatchValue() = %q, want %q", got, "mcp__github__")
@@ -49,6 +60,8 @@ func TestCanonicalizeMatchValue_CommandWhitespace(t *testing.T) {
 }
 
 func TestCanonicalizeMatchValue_ServerIdentityLowercases(t *testing.T) {
+	t.Parallel()
+
 	got := CanonicalizeMatchValue(MatchKindServerIdentity, "  Linear MCP  ")
 	if got != "linear mcp" {
 		t.Fatalf("CanonicalizeMatchValue() = %q, want %q", got, "linear mcp")
@@ -56,6 +69,8 @@ func TestCanonicalizeMatchValue_ServerIdentityLowercases(t *testing.T) {
 }
 
 func TestCanonicalizeMatchValue_UnknownKindCollapsesWhitespace(t *testing.T) {
+	t.Parallel()
+
 	got := CanonicalizeMatchValue("command", "  run   this\ttool  ")
 	if got != "run this tool" {
 		t.Fatalf("CanonicalizeMatchValue() = %q, want %q", got, "run this tool")
@@ -63,6 +78,8 @@ func TestCanonicalizeMatchValue_UnknownKindCollapsesWhitespace(t *testing.T) {
 }
 
 func TestRedisStoreUpsertRequestIdempotentByFingerprint(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	request := testRequest("req-1", "proj-1", RequestStatusRequested, time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
@@ -82,6 +99,8 @@ func TestRedisStoreUpsertRequestIdempotentByFingerprint(t *testing.T) {
 }
 
 func TestRedisStoreUpsertRequestIdempotentUpdatesBlockMetadata(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	firstBlockedAt := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
@@ -120,6 +139,8 @@ func TestRedisStoreUpsertRequestIdempotentUpdatesBlockMetadata(t *testing.T) {
 }
 
 func TestRedisStoreUpsertRequestIdempotentRefreshesMetadata(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	firstBlockedAt := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
@@ -168,6 +189,8 @@ func TestRedisStoreUpsertRequestIdempotentRefreshesMetadata(t *testing.T) {
 }
 
 func TestRedisStoreUpsertRequestAllowsSameFingerprintForDifferentProject(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	request := testRequest("req-1", "proj-1", RequestStatusRequested, time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
@@ -186,6 +209,8 @@ func TestRedisStoreUpsertRequestAllowsSameFingerprintForDifferentProject(t *test
 }
 
 func TestRedisStoreUpsertRequestAllowsSameFingerprintForDifferentRequester(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	request := testRequest("req-1", "proj-1", RequestStatusRequested, time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
@@ -205,6 +230,8 @@ func TestRedisStoreUpsertRequestAllowsSameFingerprintForDifferentRequester(t *te
 }
 
 func TestRedisStoreUpsertRequestAllowsSameFingerprintAfterApproval(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	request := testRequest("req-1", "proj-1", RequestStatusRequested, time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
@@ -226,6 +253,8 @@ func TestRedisStoreUpsertRequestAllowsSameFingerprintAfterApproval(t *testing.T)
 }
 
 func TestRedisStoreListRequestsFiltersAndSortsNewestFirst(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
@@ -271,6 +300,8 @@ func TestRedisStoreListRequestsFiltersAndSortsNewestFirst(t *testing.T) {
 }
 
 func TestRedisStoreDecideRequestSetsDecisionFields(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	request := testRequest("req-1", "proj-1", RequestStatusRequested, time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
@@ -299,6 +330,8 @@ func TestRedisStoreDecideRequestSetsDecisionFields(t *testing.T) {
 }
 
 func TestRedisStoreDecideRequestRejectsSecondDecision(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	request := testRequest("req-1", "proj-1", RequestStatusRequested, time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
@@ -322,6 +355,8 @@ func TestRedisStoreDecideRequestRejectsSecondDecision(t *testing.T) {
 }
 
 func TestRedisStoreDecideRequestWithRulesConflictLeavesRequestAndRulesUnchanged(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
@@ -359,6 +394,8 @@ func TestRedisStoreDecideRequestWithRulesConflictLeavesRequestAndRulesUnchanged(
 }
 
 func TestRedisStoreDecideRequestWithRulesCommitsRequestAndRules(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
@@ -400,6 +437,8 @@ func TestRedisStoreDecideRequestWithRulesCommitsRequestAndRules(t *testing.T) {
 }
 
 func TestRedisStoreCreateRuleCanonicalizesAndRejectsDuplicate(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	rule := testRule("rule-1", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindFullURL, " HTTPS://Example.COM:443/mcp#tools ", time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
@@ -414,6 +453,8 @@ func TestRedisStoreCreateRuleCanonicalizesAndRejectsDuplicate(t *testing.T) {
 }
 
 func TestRedisStoreCreateRulesConflictLeavesNoEarlierRulesCommitted(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
@@ -435,6 +476,8 @@ func TestRedisStoreCreateRulesConflictLeavesNoEarlierRulesCommitted(t *testing.T
 }
 
 func TestRedisStoreListRulesFiltersAndSortsNewestFirst(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
@@ -467,6 +510,8 @@ func TestRedisStoreListRulesFiltersAndSortsNewestFirst(t *testing.T) {
 }
 
 func TestRedisStoreListMatchingRulesScopesProjectAndOrganization(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
@@ -494,6 +539,8 @@ func TestRedisStoreListMatchingRulesScopesProjectAndOrganization(t *testing.T) {
 }
 
 func TestRedisStoreDeleteRuleReturnsDeletedRuleAndRemovesIt(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := newTestRedisStore()
 	rule := testRule("rule-1", "proj-1", AccessScopeProject, DispositionAllowed, MatchKindURLHost, "example.com", time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC))
@@ -509,6 +556,8 @@ func TestRedisStoreDeleteRuleReturnsDeletedRuleAndRemovesIt(t *testing.T) {
 }
 
 func TestRedisStoreWriteUsesCacheMutate(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	cache := newMemoryCache()
 	store := NewRedisStore(cache, 0)
@@ -537,6 +586,8 @@ func TestRedisStoreWriteUsesCacheMutate(t *testing.T) {
 }
 
 func TestRedisStoreWriteRequiresCacheMutate(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	store := NewRedisStore(newNonMutatingMemoryCache(), 0)
 
@@ -633,14 +684,14 @@ func (c *memoryCache) Get(_ context.Context, key string, value any) error {
 		return redisCache.ErrCacheMiss
 	}
 	if err := json.Unmarshal(raw, value); err != nil {
-		return err
+		return fmt.Errorf("unmarshal memory cache: %w", err)
 	}
 	return nil
 }
 
 func (c *memoryCache) GetAndDelete(ctx context.Context, key string, value any) error {
 	if err := c.Get(ctx, key, value); err != nil {
-		return err
+		return fmt.Errorf("get memory cache before delete: %w", err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -653,7 +704,7 @@ func (c *memoryCache) Set(_ context.Context, key string, value any, _ time.Durat
 	defer c.mu.Unlock()
 	raw, err := json.Marshal(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal memory cache: %w", err)
 	}
 	c.values[key] = raw
 	return nil
@@ -684,7 +735,7 @@ func (c *memoryCache) Mutate(_ context.Context, key string, value any, _ time.Du
 	raw, exists := c.values[key]
 	if exists {
 		if err := json.Unmarshal(raw, value); err != nil {
-			return err
+			return fmt.Errorf("unmarshal memory cache for mutation: %w", err)
 		}
 	} else {
 		valueOf := reflect.ValueOf(value)
@@ -695,7 +746,7 @@ func (c *memoryCache) Mutate(_ context.Context, key string, value any, _ time.Du
 	}
 	raw, err := json.Marshal(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal memory cache mutation: %w", err)
 	}
 	c.values[key] = raw
 	return nil

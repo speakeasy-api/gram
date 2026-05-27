@@ -121,39 +121,66 @@ func (p prefixedTestCache) key(key string) string {
 }
 
 func (p prefixedTestCache) Get(ctx context.Context, key string, value any) error {
-	return p.cache.Get(ctx, p.key(key), value)
+	if err := p.cache.Get(ctx, p.key(key), value); err != nil {
+		return fmt.Errorf("get prefixed test cache: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) GetAndDelete(ctx context.Context, key string, value any) error {
-	return p.cache.GetAndDelete(ctx, p.key(key), value)
+	if err := p.cache.GetAndDelete(ctx, p.key(key), value); err != nil {
+		return fmt.Errorf("get and delete prefixed test cache: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-	return p.cache.Set(ctx, p.key(key), value, ttl)
+	if err := p.cache.Set(ctx, p.key(key), value, ttl); err != nil {
+		return fmt.Errorf("set prefixed test cache: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) Update(ctx context.Context, key string, value any) error {
-	return p.cache.Update(ctx, p.key(key), value)
+	if err := p.cache.Update(ctx, p.key(key), value); err != nil {
+		return fmt.Errorf("update prefixed test cache: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) Delete(ctx context.Context, key string) error {
-	return p.cache.Delete(ctx, p.key(key))
+	if err := p.cache.Delete(ctx, p.key(key)); err != nil {
+		return fmt.Errorf("delete prefixed test cache: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	return p.cache.Expire(ctx, p.key(key), ttl)
+	if err := p.cache.Expire(ctx, p.key(key), ttl); err != nil {
+		return fmt.Errorf("expire prefixed test cache: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
-	return p.cache.ListAppend(ctx, p.key(key), value, ttl)
+	if err := p.cache.ListAppend(ctx, p.key(key), value, ttl); err != nil {
+		return fmt.Errorf("append prefixed test cache list: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) ListRange(ctx context.Context, key string, start, stop int64, value any) error {
-	return p.cache.ListRange(ctx, p.key(key), start, stop, value)
+	if err := p.cache.ListRange(ctx, p.key(key), start, stop, value); err != nil {
+		return fmt.Errorf("range prefixed test cache list: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) DeleteByPrefix(ctx context.Context, prefix string) error {
-	return p.cache.DeleteByPrefix(ctx, p.key(prefix))
+	if err := p.cache.DeleteByPrefix(ctx, p.key(prefix)); err != nil {
+		return fmt.Errorf("delete prefixed test cache by prefix: %w", err)
+	}
+	return nil
 }
 
 func (p prefixedTestCache) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
@@ -163,7 +190,10 @@ func (p prefixedTestCache) Mutate(ctx context.Context, key string, value any, tt
 	if !ok {
 		return fmt.Errorf("prefixed test cache does not support mutation")
 	}
-	return mutating.Mutate(ctx, p.key(key), value, ttl, fn)
+	if err := mutating.Mutate(ctx, p.key(key), value, ttl, fn); err != nil {
+		return fmt.Errorf("mutate prefixed test cache: %w", err)
+	}
+	return nil
 }
 
 func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {

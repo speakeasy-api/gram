@@ -477,9 +477,12 @@ func (s *RedisStore) mutate(ctx context.Context, organizationID, resourceType st
 	key := stateKey(organizationID, resourceType)
 	if cacheImpl, ok := s.cache.(mutatingCache); ok {
 		var state redisState
-		return cacheImpl.Mutate(ctx, key, &state, s.ttl, func(_ bool) error {
+		if err := cacheImpl.Mutate(ctx, key, &state, s.ttl, func(_ bool) error {
 			return fn(&state)
-		})
+		}); err != nil {
+			return fmt.Errorf("mutate access control state: %w", err)
+		}
+		return nil
 	}
 
 	return errors.New("access control cache does not support atomic mutation")
@@ -614,7 +617,34 @@ func findRuleByMatch(rules []AccessRule, rule AccessRule) (AccessRule, bool) {
 			return existing, true
 		}
 	}
-	return AccessRule{}, false
+	return AccessRule{
+		ID:             "",
+		OrganizationID: "",
+		ProjectID:      "",
+		AccessScope:    "",
+		ResourceType:   "",
+		Disposition:    "",
+		MatchKind:      "",
+		MatchValue:     "",
+		DisplayName:    "",
+		ObservedSummary: ObservedSummary{
+			Name:           nil,
+			FullURL:        nil,
+			URLHost:        nil,
+			ServerIdentity: nil,
+			ToolName:       nil,
+			ToolCall:       nil,
+			BlockReason:    nil,
+			RiskPolicyID:   nil,
+			RiskResultID:   nil,
+		},
+		SourceRequestID: "",
+		CreatedBy:       "",
+		UpdatedBy:       "",
+		Reason:          "",
+		CreatedAt:       time.Time{},
+		UpdatedAt:       time.Time{},
+	}, false
 }
 
 func sameRuleMatchKey(rule AccessRule) ruleMatchIdentity {

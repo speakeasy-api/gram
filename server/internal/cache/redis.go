@@ -95,13 +95,16 @@ func (r *RedisCacheAdapter) Mutate(ctx context.Context, key string, value any, t
 				pipe.Set(ctx, key, raw, ttl)
 				return nil
 			})
-			return err
+			if err != nil {
+				return fmt.Errorf("set %s: %w", key, err)
+			}
+			return nil
 		}, key)
 		if err == nil {
 			return nil
 		}
 		if !errors.Is(err, redis.TxFailedErr) {
-			return err
+			return fmt.Errorf("watch %s: %w", key, err)
 		}
 		lastErr = err
 	}
@@ -110,7 +113,7 @@ func (r *RedisCacheAdapter) Mutate(ctx context.Context, key string, value any, t
 
 func resetMutateValue(value any) error {
 	valueOf := reflect.ValueOf(value)
-	if valueOf.Kind() != reflect.Ptr || valueOf.IsNil() {
+	if valueOf.Kind() != reflect.Pointer || valueOf.IsNil() {
 		return fmt.Errorf("mutate value must be a non-nil pointer")
 	}
 	valueOf.Elem().Set(reflect.Zero(valueOf.Elem().Type()))

@@ -1,6 +1,10 @@
 package shadowmcp
 
-import "github.com/speakeasy-api/gram/server/internal/matchvalue"
+import (
+	"fmt"
+
+	"github.com/speakeasy-api/gram/server/internal/matchvalue"
+)
 
 const (
 	MatchBreadthFullURL        = "full_url"
@@ -9,7 +13,11 @@ const (
 )
 
 func NormalizeMatchValue(matchBreadth string, matchValue string) (string, error) {
-	return matchvalue.Normalize(matchBreadth, matchValue)
+	value, err := matchvalue.Normalize(matchBreadth, matchValue)
+	if err != nil {
+		return "", fmt.Errorf("normalize match value: %w", err)
+	}
+	return value, nil
 }
 
 func NormalizeHost(host string) string {
