@@ -2,6 +2,7 @@
 
 #MISE description="Print a deterministic content hash for the assistant runtime image sources"
 #MISE dir="{{ config_root }}"
+#MISE hide=true
 
 set -euo pipefail
 
