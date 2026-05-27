@@ -607,7 +607,7 @@ jobs:
         run: mise run build:server --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: server
@@ -694,7 +694,7 @@ jobs:
         run: mise run build:cli --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: cli
@@ -752,7 +752,7 @@ jobs:
         run: mise run build:plog --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: plog
@@ -1273,7 +1273,7 @@ jobs:
         run: pnpm type-check
 
       - name: Lint Go server
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: functions
