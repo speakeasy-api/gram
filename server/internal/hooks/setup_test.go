@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -90,7 +91,9 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
-	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil, nil, shadowMCPClient, chatWriter)
+	siteURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil, nil, shadowMCPClient, chatWriter, siteURL, "test-jwt-secret")
 
 	return ctx, &testInstance{
 		service:        svc,

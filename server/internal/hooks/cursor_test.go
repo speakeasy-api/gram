@@ -173,6 +173,36 @@ func TestCursor_BeforeMCPExecution_ReturnsAllow(t *testing.T) {
 	assert.Equal(t, "allow", *result.Permission)
 }
 
+func TestCursor_BeforeMCPExecution_ShadowMCPBlockIncludesRequestLink(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	toolName := "list_issues"
+	toolUseID := "toolu_mcp_blocked"
+	conversationID := "conv-mcp-blocked"
+	serverURL := "https://mcp.linear.app/sse"
+
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "beforeMCPExecution",
+		ToolName:       &toolName,
+		ToolUseID:      &toolUseID,
+		ConversationID: &conversationID,
+		URL:            &serverURL,
+		ToolInput:      map[string]any{"foo": "bar"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "deny", *result.Permission)
+	require.NotNil(t, result.UserMessage)
+	assert.Contains(t, *result.UserMessage, "Request access:\nhttps://app.example.test/shadow-mcp/request#request_token=smar1.",
+		"shadow-MCP deny messages should include a signed approval request link")
+	assert.Contains(t, *result.UserMessage, shadowMCPApprovalRequestPrompt)
+	require.NotNil(t, result.AgentMessage)
+	assert.Equal(t, *result.UserMessage, *result.AgentMessage)
+}
+
 func TestBuildCursorTelemetryAttributes_BeforeMCPExecution_ToolSourceFromURL(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

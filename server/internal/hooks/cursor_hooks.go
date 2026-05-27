@@ -86,7 +86,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			break
 		}
 		toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
-		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, authCtx.UserID, payload.ToolInput, toolName, cursorShadowMCPEvidence(payload)); denied {
+		evidence := cursorShadowMCPEvidence(payload)
+		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, authCtx.UserID, payload.ToolInput, toolName, evidence); denied {
 			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogHookBlockReason(detail),
@@ -94,7 +95,21 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 				attr.SlogRiskPolicyName(policy.Name),
 			)
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-			userReason := renderUserBlockReason(policy.UserMessage, auditReason)
+			requesterUserID := authCtx.UserID
+			if requesterUserID == "" {
+				requesterUserID = s.resolveUserByEmail(ctx, conv.PtrValOr(payload.UserEmail, ""), orgID)
+			}
+			userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+				OrganizationID:  orgID,
+				ProjectID:       projectID,
+				RequesterUserID: requesterUserID,
+				UserMessage:     policy.UserMessage,
+				AuditReason:     auditReason,
+				Evidence:        evidence,
+				ToolName:        toolName,
+				ToolInput:       payload.ToolInput,
+				RiskPolicyID:    policy.ID,
+			})
 			blockReason = auditReason
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
