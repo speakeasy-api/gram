@@ -1315,7 +1315,14 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 }
 
 func fullSvixAppPortalCapabilities() []models.AppPortalCapability {
-	return []models.AppPortalCapability{}
+	return []models.AppPortalCapability{
+		models.APPPORTALCAPABILITY_VIEW_BASE,
+		models.APPPORTALCAPABILITY_VIEW_ENDPOINT_SECRET,
+		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT_SECRET,
+		models.APPPORTALCAPABILITY_MANAGE_TRANSFORMATIONS,
+		models.APPPORTALCAPABILITY_CREATE_ATTEMPTS,
+		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT,
+	}
 }
 func minimumSvixAppPortalCapabilities() []models.AppPortalCapability {
 	return []models.AppPortalCapability{models.APPPORTALCAPABILITY_VIEW_BASE}
