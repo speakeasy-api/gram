@@ -759,7 +759,7 @@ export function TeamInner() {
               </Type>
             </Stack>
             <RequireScope scope="org:admin" level="component">
-              {organization.ssoEnabled ? (
+              {organization.scimEnabled ? (
                 <SimpleTooltip tooltip="Managed by your identity provider">
                   <span className="inline-flex">
                     <Button
