@@ -625,6 +625,8 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 					Slug:               orgMeta.Slug,
 					WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
 					UserWorkspaceSlugs: nil,
+					SSOEnabled:         orgMeta.SsoEnabled.Bool,
+					SCIMEnabled:        orgMeta.ScimEnabled.Bool,
 				}}
 			}
 		}
@@ -681,6 +683,8 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			Slug:               org.Slug,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           orgProjects,
+			SsoEnabled:         &org.SSOEnabled,
+			ScimEnabled:        &org.SCIMEnabled,
 		})
 	}
 

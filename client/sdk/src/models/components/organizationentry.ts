@@ -13,7 +13,15 @@ export type OrganizationEntry = {
   id: string;
   name: string;
   projects: Array<ProjectEntry>;
+  /**
+   * Whether SCIM directory sync is enabled for this organization (synced from WorkOS)
+   */
+  scimEnabled?: boolean | undefined;
   slug: string;
+  /**
+   * Whether SSO is enabled for this organization (synced from WorkOS)
+   */
+  ssoEnabled?: boolean | undefined;
   userWorkspaceSlugs?: Array<string> | undefined;
 };
 
@@ -26,11 +34,15 @@ export const OrganizationEntry$inboundSchema: z.ZodMiniType<
     id: z.string(),
     name: z.string(),
     projects: z.array(ProjectEntry$inboundSchema),
+    scim_enabled: z.optional(z.boolean()),
     slug: z.string(),
+    sso_enabled: z.optional(z.boolean()),
     user_workspace_slugs: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "scim_enabled": "scimEnabled",
+      "sso_enabled": "ssoEnabled",
       "user_workspace_slugs": "userWorkspaceSlugs",
     });
   }),

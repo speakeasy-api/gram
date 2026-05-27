@@ -10,6 +10,8 @@ var OrganizationEntry = Type("OrganizationEntry", func() {
 	Attribute("slug", String)
 	Attribute("projects", ArrayOf(ProjectEntry))
 	Attribute("user_workspace_slugs", ArrayOf(String))
+	Attribute("sso_enabled", Boolean, "Whether SSO is enabled for this organization (synced from WorkOS)")
+	Attribute("scim_enabled", Boolean, "Whether SCIM directory sync is enabled for this organization (synced from WorkOS)")
 	Required("id", "name", "slug", "projects")
 })
 

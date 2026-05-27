@@ -868,7 +868,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 }
 
 const listOrganizationsForUser = `-- name: ListOrganizationsForUser :many
-SELECT om.id, om.name, om.slug, om.workos_id
+SELECT om.id, om.name, om.slug, om.workos_id, om.sso_enabled, om.scim_enabled
 FROM organization_user_relationships our
 JOIN organization_metadata om ON om.id = our.organization_id
 WHERE our.user_id = $1
@@ -877,10 +877,12 @@ WHERE our.user_id = $1
 `
 
 type ListOrganizationsForUserRow struct {
-	ID       string
-	Name     string
-	Slug     string
-	WorkosID pgtype.Text
+	ID          string
+	Name        string
+	Slug        string
+	WorkosID    pgtype.Text
+	SsoEnabled  pgtype.Bool
+	ScimEnabled pgtype.Bool
 }
 
 func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID pgtype.Text) ([]ListOrganizationsForUserRow, error) {
@@ -897,6 +899,8 @@ func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID pgtype.Te
 			&i.Name,
 			&i.Slug,
 			&i.WorkosID,
+			&i.SsoEnabled,
+			&i.ScimEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -1157,6 +1161,48 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setSCIMEnabled = `-- name: SetSCIMEnabled :exec
+UPDATE organization_metadata
+SET scim_enabled = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type SetSCIMEnabledParams struct {
+	Enabled           pgtype.Bool
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Update the SCIM/directory sync enabled flag on an organization. Called when
+// a WorkOS dsync.activated or dsync.deactivated event is processed.
+func (q *Queries) SetSCIMEnabled(ctx context.Context, arg SetSCIMEnabledParams) error {
+	_, err := q.db.Exec(ctx, setSCIMEnabled, arg.Enabled, arg.WorkosLastEventID, arg.WorkosID)
+	return err
+}
+
+const setSSOEnabled = `-- name: SetSSOEnabled :exec
+UPDATE organization_metadata
+SET sso_enabled = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type SetSSOEnabledParams struct {
+	Enabled           pgtype.Bool
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Update the SSO enabled flag on an organization. Called when a WorkOS
+// connection.activated or connection.deactivated/deleted event is processed.
+func (q *Queries) SetSSOEnabled(ctx context.Context, arg SetSSOEnabledParams) error {
+	_, err := q.db.Exec(ctx, setSSOEnabled, arg.Enabled, arg.WorkosLastEventID, arg.WorkosID)
+	return err
 }
 
 const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
