@@ -390,7 +390,7 @@ function SecurityOverviewContent() {
             <MetricCard
               title="Events Scanned"
               value={overview?.messagesScanned ?? 0}
-              format="number"
+              format="compact"
               icon="scan-search"
             />
           )}
@@ -400,7 +400,7 @@ function SecurityOverviewContent() {
             <MetricCard
               title="Findings"
               value={overview?.findings ?? 0}
-              format="number"
+              format="compact"
               icon="flag"
             />
           )}
@@ -410,7 +410,7 @@ function SecurityOverviewContent() {
             <MetricCard
               title="Flagged Sessions"
               value={overview?.flaggedSessions ?? 0}
-              format="number"
+              format="compact"
               icon="message-square"
             />
           )}
@@ -420,7 +420,7 @@ function SecurityOverviewContent() {
             <MetricCard
               title="Active Policies"
               value={overview?.activePolicies ?? 0}
-              format="number"
+              format="compact"
               icon="shield-check"
             />
           )}

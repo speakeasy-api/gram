@@ -1,5 +1,6 @@
 import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
 
 type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
@@ -8,7 +9,7 @@ export type MetricCardProps = {
   title: string;
   value: number;
   previousValue?: number;
-  format?: "number" | "currency" | "percent" | "ms" | "seconds";
+  format?: "compact" | "number" | "currency" | "percent" | "ms" | "seconds";
   icon?: IconName;
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
@@ -23,7 +24,7 @@ export function MetricCard(props: MetricCardProps) {
     title,
     value,
     previousValue = 0,
-    format = "number",
+    format = "compact",
     icon,
     invertDelta = false,
     thresholds,
@@ -33,6 +34,8 @@ export function MetricCard(props: MetricCardProps) {
   } = props;
   const formatValue = (v: number) => {
     switch (format) {
+      case "compact":
+        return formatCompact(v);
       case "percent":
         return `${v.toFixed(1)}%`;
       case "ms":
