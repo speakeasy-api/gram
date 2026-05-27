@@ -1,4 +1,4 @@
-h1:GElRjM+zydzRJTPrs7OdFEJhGORGqV4PYerkXileU5U=
+h1:On+ZEg6dsf7eBowIVa9/gZdvmsWAjyc9JGqU/i9AkII=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -191,3 +191,4 @@ h1:GElRjM+zydzRJTPrs7OdFEJhGORGqV4PYerkXileU5U=
 20260526132630_add_custom_domain_provisioner_kind.sql h1:XoZWJ1F8RtKzAlz18m9242K03La7QV3hDlDRfWO5wQM=
 20260526164519_add-risk-policies-disabled-rules.sql h1:SmIuD/9RiaBWGHZBadLnVzwVdQ7x0riPTboR6+M0GLE=
 20260527093220_org-metadata-add-scim-sso-enabled.sql h1:Nq+Q4qTzQijE3X3vl2YDbZkq+8o0EHA0rA/5cFk0hlw=
+20260527214516_remote_session_client_user_session_issuers.sql h1:FR8pLqwNWxorR6HIc3DbE/dSytFx44OpPXTEvErcIRM=
