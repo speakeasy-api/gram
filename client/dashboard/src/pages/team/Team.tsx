@@ -803,29 +803,27 @@ export function TeamInner() {
             />
           </div>
 
-          <div>
-            <Table
-              columns={memberColumns}
-              data={visibleMembers}
-              rowKey={(row) => row.userId}
-              className="min-h-fit"
-              noResultsMessage={
-                <Stack
-                  gap={2}
-                  className="bg-background h-full p-8"
-                  align="center"
-                  justify="center"
-                >
-                  <Users className="text-muted-foreground h-12 w-12" />
-                  <Type variant="body" className="text-muted-foreground">
-                    {search
-                      ? "No members matching your search"
-                      : "No team members yet"}
-                  </Type>
-                </Stack>
-              }
-            />
-          </div>
+          <Table
+            columns={memberColumns}
+            data={visibleMembers}
+            rowKey={(row) => row.userId}
+            className="min-h-fit"
+            noResultsMessage={
+              <Stack
+                gap={2}
+                className="bg-background h-full p-8"
+                align="center"
+                justify="center"
+              >
+                <Users className="text-muted-foreground h-12 w-12" />
+                <Type variant="body" className="text-muted-foreground">
+                  {search
+                    ? "No members matching your search"
+                    : "No team members yet"}
+                </Type>
+              </Stack>
+            }
+          />
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t px-4 py-3">
               <Type variant="body" className="text-muted-foreground text-sm">
@@ -882,7 +880,7 @@ export function TeamInner() {
       </Stack>
 
       {/* Identity signpost */}
-      <div className="border-border mt-8 border-t pt-6">
+      <div className="border-border mt-8 border-t pt-8">
         {organization.scimEnabled ? (
           <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
             <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
