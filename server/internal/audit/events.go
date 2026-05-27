@@ -15,6 +15,7 @@ const (
 	subjectTypeCustomDomain        subjectType = "custom_domain"
 	subjectTypeDeployment          subjectType = "deployment"
 	subjectTypeEnvironment         subjectType = "environment"
+	subjectTypeAIIntegration       subjectType = "ai_integration_config"
 	subjectTypeMcpCollection       subjectType = "mcp_collection"
 	subjectTypeMcpEndpoint         subjectType = "mcp_endpoint"
 	subjectTypeMcpServer           subjectType = "mcp_server"

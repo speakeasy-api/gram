@@ -1,5 +1,4 @@
 import { Page } from "@/components/page-layout";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
@@ -43,7 +42,7 @@ export default function OrgWebhooks() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs stage="preview" />
       </Page.Header>
       <Page.Body>{content}</Page.Body>
     </Page>
@@ -66,10 +65,9 @@ function OrgWebhooksInner() {
 
   return (
     <>
-      <Stack direction="horizontal" gap={2} align="center" className="mb-4">
-        <Heading variant="h3">Webhooks</Heading>
-        <ReleaseStageBadge stage="preview" />
-      </Stack>
+      <Heading variant="h3" className="mb-4">
+        Webhooks
+      </Heading>
       <Type muted small className="mb-6">
         Configure webhook delivery for various platform events.
       </Type>

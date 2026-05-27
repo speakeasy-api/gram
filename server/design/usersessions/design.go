@@ -52,6 +52,38 @@ var _ = Service("userSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessions"}`)
 	})
 
+	Method("mintUserSession", func() {
+		Description("Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Attribute("toolset_id", String, "The toolset to bind the minted JWT to. Must be issuer-gated and live in the caller's project.", func() {
+				Format(FormatUUID)
+			})
+			Required("toolset_id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("access_token", String, "The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the toolset's /mcp/{slug} surface.")
+			Attribute("expires_in", Int, "Lifetime of the access token in seconds.")
+			Required("access_token", "expires_in")
+		})
+
+		HTTP(func() {
+			POST("/rpc/userSessions.mint")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "mintUserSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "mint")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MintUserSession"}`)
+	})
+
 	Method("revokeUserSession", func() {
 		Description("Push the session's jti into the revocation cache and soft-delete the row.")
 

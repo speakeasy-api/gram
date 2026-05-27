@@ -198,6 +198,8 @@ type GetObservabilityOverviewPayload struct {
 	APIKeyID *string
 	// Optional toolset/MCP server slug filter
 	ToolsetSlug *string
+	// Optional Remote MCP server ID filter
+	RemoteMcpServerID *string
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')

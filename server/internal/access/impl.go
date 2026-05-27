@@ -340,9 +340,10 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	return &gen.ListUserGrantsResult{Grants: listRoleGrantsFromGrants(grants)}, nil
 }
 
-// UpdateMemberRole is intentionally stricter than member listing: it only
-// mutates access for users Gram knows are connected to the local organization.
-func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMemberRolePayload) (*gen.AccessMember, error) {
+// UpdateMemberRoles replaces all role assignments for a member. It is
+// intentionally stricter than member listing: it only mutates access for users
+// Gram knows are connected to the local organization.
+func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemberRolesPayload) (*gen.AccessMember, error) {
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -350,25 +351,25 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
+	if len(payload.RoleIds) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one role is required").Log(ctx, s.logger)
+	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessMemberID(payload.UserID),
-		attr.AccessRoleID(payload.RoleID),
 	)
 
-	memberUpdate, err := s.roleMgr.UpdateMemberRole(ctx, ac.ActiveOrganizationID, payload.UserID, payload.RoleID, accessAuditActor{
+	memberUpdate, err := s.roleMgr.UpdateMemberRoles(ctx, ac.ActiveOrganizationID, payload.UserID, payload.RoleIds, accessAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		DisplayName: ac.Email,
 	})
 	if err != nil {
 		return nil, err
 	}
-	roleSlug := memberUpdate.RoleSlug
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
-		attr.AccessRoleSlug(roleSlug),
 	)
 
 	return memberUpdate.After, nil

@@ -54,7 +54,7 @@ export default function BookDemo() {
           </h1>
           <p className="text-sm leading-relaxed text-[#8B8684]">
             Book a demo with our team to activate your account and get started
-            with the Speakeasy MCP Platform.
+            with the Speakeasy AI Control Plane.
           </p>
         </div>
 

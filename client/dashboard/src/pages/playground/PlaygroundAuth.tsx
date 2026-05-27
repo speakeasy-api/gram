@@ -1,10 +1,11 @@
-import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PrivateInput } from "@/components/ui/private-input";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
 import { Toolset } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -14,14 +15,8 @@ import {
 } from "@gram/client/react-query";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  CheckCircle,
-  ExternalLink,
-  Loader2,
-  LogOut,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import { toast } from "sonner";
 import {
@@ -30,10 +25,6 @@ import {
 } from "../mcp/environmentVariableUtils";
 import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
 import { useToolset } from "@/hooks/toolTypes";
-import {
-  getOAuthProviderName,
-  getToolsetOAuthMode,
-} from "./playgroundOAuthMode";
 import {
   getExternalMcpOAuthStatusQueryKey,
   useExternalMcpOAuthStatus,
@@ -52,12 +43,10 @@ const PASSWORD_MASK = "••••••••";
  */
 function ExternalMcpOAuthConnection({
   toolsetSlug,
-  oauthMode,
   providerName,
   isIssuerGated,
 }: {
   toolsetSlug: string;
-  oauthMode: "custom-proxy" | "external";
   providerName: string;
   isIssuerGated: boolean;
 }) {
@@ -183,8 +172,6 @@ function ExternalMcpOAuthConnection({
   };
 
   const isConnected = oauthStatus?.status === "authenticated";
-  const oauthVersionLabel =
-    oauthMode === "custom-proxy" ? "MCP OAuth 2.1" : "OAuth";
 
   return (
     <div className="bg-muted/30 rounded-md border p-3">
@@ -195,7 +182,7 @@ function ExternalMcpOAuthConnection({
           className="justify-between"
         >
           <Type variant="small" className="font-medium">
-            {oauthVersionLabel}
+            OAuth
           </Type>
           {statusLoading ? (
             <Loader2 className="text-muted-foreground size-4 animate-spin" />
@@ -248,14 +235,10 @@ export function PlaygroundAuth({
 }: PlaygroundAuthProps) {
   const routes = useRoutes();
 
-  // Check if toolset has OAuth configuration at the toolset level
-  const oauthMode = useMemo(() => getToolsetOAuthMode(toolset), [toolset]);
-  const hasOAuth = oauthMode !== "none";
+  // Standard OAuth discovery against the MCP URL — no toolset-field sniffing.
+  const mcpUrl = useInternalMcpUrl(toolset);
+  const { oauthRequired } = useMcpOAuthRequired(mcpUrl);
   const loginSecured = !!toolset.userSessionIssuerSlug;
-  const oauthProviderName = useMemo(
-    () => getOAuthProviderName(toolset),
-    [toolset],
-  );
 
   // Use the same environment data fetching as MCPAuthenticationTab
   const { data: environmentsData } = useListEnvironments();
@@ -293,9 +276,6 @@ export function PlaygroundAuth({
     defaultEnvironmentSlug,
     mcpMetadata,
   );
-
-  const oauthConfigStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-  const oauthConfigRequired = oauthConfigStatus === "required-unconfigured";
 
   // Notify parent component of the playground environment slug.
   // The cleanup clears the slug on unmount so the parent never holds
@@ -349,12 +329,7 @@ export function PlaygroundAuth({
   };
 
   // Show "no auth required" only if there are no env vars AND no OAuth
-  if (
-    envVars.length === 0 &&
-    !hasOAuth &&
-    !oauthConfigRequired &&
-    !loginSecured
-  ) {
+  if (envVars.length === 0 && !oauthRequired && !loginSecured) {
     return (
       <div className="py-4 text-center">
         <Type variant="small" className="text-muted-foreground">
@@ -380,33 +355,6 @@ export function PlaygroundAuth({
         </div>
       )}
 
-      {oauthConfigRequired && (
-        <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 rounded-md border border-dashed p-3 text-center">
-          <AlertTriangle className="text-warning-foreground mx-auto mb-1 size-4" />
-          <Type
-            variant="small"
-            className="text-warning-foreground block font-bold"
-          >
-            OAuth setup required
-          </Type>
-          <Type
-            variant="small"
-            className="text-warning-foreground/80 mb-2 block"
-          >
-            This MCP server requires OAuth. Configure it before testing in the
-            playground.
-          </Type>
-          <routes.mcp.details.Link
-            params={[toolset.slug]}
-            hash="authentication"
-          >
-            <Button size="sm" variant="secondary" className="w-full">
-              Configure OAuth
-            </Button>
-          </routes.mcp.details.Link>
-        </div>
-      )}
-
       {/* Environment indicator */}
       {defaultEnvironmentName && (
         <div className="flex items-center gap-1.5">
@@ -418,15 +366,13 @@ export function PlaygroundAuth({
       )}
 
       {/* Toolset-level OAuth Connection UI */}
-      {hasOAuth &&
-        (oauthMode === "custom-proxy" || oauthMode === "external") && (
-          <ExternalMcpOAuthConnection
-            toolsetSlug={toolset.slug}
-            oauthMode={oauthMode}
-            providerName={oauthProviderName}
-            isIssuerGated={loginSecured}
-          />
-        )}
+      {oauthRequired && (
+        <ExternalMcpOAuthConnection
+          toolsetSlug={toolset.slug}
+          providerName={toolset.name}
+          isIssuerGated={loginSecured}
+        />
+      )}
 
       {/* Environment Variables */}
       {envVars.map((envVar) => {

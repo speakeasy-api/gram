@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/codes"
@@ -76,10 +78,11 @@ type WorkOSClient interface {
 	GetOrganization(ctx context.Context, orgID string) (*workos.Organization, error)
 	EnsureUserExternalID(ctx context.Context, workosUserID, gramUserID string) error
 	EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgID string) error
+	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
 	CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error)
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
-	UpdateMemberRole(ctx context.Context, membershipID, roleSlug string) (*workos.Member, error)
+	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 }
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
@@ -121,12 +124,13 @@ func NewResolver(
 	userRepo *userRepo.Queries,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
+	suffix cache.Suffix,
 ) *Resolver {
 	logger = logger.With(attr.SlogComponent("identity"))
 	return &Resolver{
 		logger:        logger,
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/identity"),
-		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), redisClient, cache.SuffixNone),
+		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), redisClient, suffix),
 		idpBaseURL:    idpBaseURL,
 		idpClientID:   idpClientID,
 		idpClient:     idpClient,
@@ -392,11 +396,16 @@ func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosU
 	if membership == nil || membership.ID == "" {
 		return "", errors.New("WorkOS organization membership not found")
 	}
-	if membership.RoleSlug == roleSlug {
+	// Add the invited role to whatever roles the member already has,
+	// rather than replacing them (multi-role safe).
+	newSlugs := membership.RoleSlugs
+	alreadyHas := slices.Contains(newSlugs, roleSlug)
+	if alreadyHas {
 		return membership.ID, nil
 	}
+	newSlugs = append(newSlugs, roleSlug)
 
-	updated, err := r.workosClient.UpdateMemberRole(ctx, membership.ID, roleSlug)
+	updated, err := r.workosClient.UpdateMemberRoles(ctx, membership.ID, newSlugs)
 	if err != nil {
 		return "", fmt.Errorf("update WorkOS organization membership role: %w", err)
 	}
@@ -606,35 +615,41 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	return authURL, nil
 }
 
-// ProvisionOrgInWorkOS creates a WorkOS organization and membership for a
-// locally-created org. Used by Register and auto-provisioning flows.
-// Non-fatal: logs errors but does not fail the caller.
-// ProvisionOrgInWorkOS creates a WorkOS organization with gramOrgID as the
-// external_id, then creates a membership linking the user. Returns the WorkOS
-// org ID so the caller can store it on the Gram org row. Returns ("", nil)
-// when no WorkOS client is configured (e.g. tests, OSS).
-func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, gramOrgID, orgName, gramUserID string) (string, error) {
+// ProvisionOrgInWorkOS creates a WorkOS organization, derives a deterministic
+// Gram org ID (UUIDv5) from the returned WorkOS org ID, sets the external_id
+// on the WorkOS org to the derived Gram ID, and creates a membership linking
+// the user. Returns (workosOrgID, gramOrgID, err).
+// When no WorkOS client is configured (tests, OSS), returns a random UUID as gramOrgID.
+func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID string) (string, string, error) {
 	if r.workosClient == nil {
-		return "", nil
+		return "", uuid.New().String(), nil
 	}
 
 	// Look up user's WorkOS ID from the database.
 	user, err := r.userRepo.GetUser(ctx, gramUserID)
 	if err != nil {
-		return "", fmt.Errorf("look up user for WorkOS provisioning: %w", err)
+		return "", "", fmt.Errorf("look up user for WorkOS provisioning: %w", err)
 	}
 	if !user.WorkosID.Valid {
-		return "", fmt.Errorf("user %s has no workos_id", gramUserID)
+		return "", "", fmt.Errorf("user %s has no workos_id", gramUserID)
 	}
 
-	workosOrgID, err := r.workosClient.CreateOrganization(ctx, orgName, gramOrgID)
+	// Create the WorkOS org first, then derive the Gram org ID from it.
+	workosOrgID, err := r.workosClient.CreateOrganization(ctx, orgName, "")
 	if err != nil {
-		return "", fmt.Errorf("create WorkOS organization: %w", err)
+		return "", "", fmt.Errorf("create WorkOS organization: %w", err)
+	}
+
+	gramOrgID := orgid.FromWorkOSID(workosOrgID)
+
+	// Back-fill the external_id so WorkOS knows the Gram org ID.
+	if err := r.workosClient.UpdateOrganizationExternalID(ctx, workosOrgID, gramOrgID); err != nil {
+		return "", "", fmt.Errorf("set external_id on WorkOS organization: %w", err)
 	}
 
 	if _, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, workosOrgID, "admin"); err != nil {
-		return "", fmt.Errorf("create WorkOS organization membership: %w", err)
+		return "", "", fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
 
-	return workosOrgID, nil
+	return workosOrgID, gramOrgID, nil
 }

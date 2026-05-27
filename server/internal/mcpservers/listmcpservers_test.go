@@ -1,6 +1,7 @@
 package mcpservers_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,16 +39,17 @@ func TestListMcpServers_Multiple(t *testing.T) {
 	serverA := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	serverB := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
-	for _, sid := range []string{serverA, serverB} {
+	for i, sid := range []string{serverA, serverB} {
+		name := fmt.Sprintf("test mcp server %d", i)
 		_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-			SessionToken:          nil,
-			ApikeyToken:           nil,
-			ProjectSlugInput:      nil,
-			Name:                  "test mcp server",
-			EnvironmentID:         nil,
-			RemoteMcpServerID:     &sid,
-			ToolsetID:             nil,
-			Visibility:            types.McpServerVisibility("disabled"),
+			SessionToken:      nil,
+			ApikeyToken:       nil,
+			ProjectSlugInput:  nil,
+			Name:              name,
+			EnvironmentID:     nil,
+			RemoteMcpServerID: &sid,
+			ToolsetID:         nil,
+			Visibility:        types.McpServerVisibility("disabled"),
 		})
 		require.NoError(t, err)
 	}
@@ -75,26 +77,26 @@ func TestListMcpServers_FilterByRemoteMcpServerID(t *testing.T) {
 	otherRemote := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	wanted, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "test mcp server",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     &wantedRemote,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &wantedRemote,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
 	_, err = ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "test mcp server",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     &otherRemote,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server other",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &otherRemote,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
@@ -120,14 +122,14 @@ func TestListMcpServers_FilterByRemoteMcpServerID_NoMatches(t *testing.T) {
 
 	existingRemote := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "test mcp server",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     &existingRemote,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &existingRemote,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 

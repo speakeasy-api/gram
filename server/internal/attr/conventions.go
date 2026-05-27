@@ -336,6 +336,9 @@ const (
 	GenAIUsageCacheCreationInputTokensKey = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
 	GenAIUsageCostKey                     = attribute.Key("gen_ai.usage.cost")
 
+	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
+	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
+
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
@@ -356,6 +359,9 @@ const (
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
 
 	GitHubUsernameKey = attribute.Key("gram.github.username")
+
+	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
+	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
 )
 
 const (
@@ -1502,3 +1508,15 @@ func SlogChatToolNames(v any) slog.Attr      { return slog.Any(string(ChatToolNa
 
 func GitHubUsername(v string) attribute.KeyValue { return GitHubUsernameKey.String(v) }
 func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(GitHubUsernameKey), v) }
+
+func AIIntegrationConfigID(v string) attribute.KeyValue { return AIIntegrationConfigIDKey.String(v) }
+func SlogAIIntegrationConfigID(v string) slog.Attr {
+	return slog.String(string(AIIntegrationConfigIDKey), v)
+}
+
+func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
+	return AIIntegrationUsagePollNextAfterKey.String(v.Format(time.RFC3339))
+}
+func SlogAIIntegrationUsagePollNextAfter(v time.Time) slog.Attr {
+	return slog.Time(string(AIIntegrationUsagePollNextAfterKey), v)
+}

@@ -424,6 +424,7 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
   name TEXT NOT NULL,
   description TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
   input_schema JSONB,
   -- Record<string, { description?: string }>
   variables JSONB,
@@ -603,8 +604,11 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   domain TEXT NOT NULL,
   verified BOOLEAN NOT NULL DEFAULT FALSE,
   activated BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Generic resource identifier: Ingress name (provisioner_kind='ingress') or HTTPRoute name (provisioner_kind='gateway').
   ingress_name TEXT,
   cert_secret_name TEXT,
+  -- Discriminates which K8s API provisioned this domain. Gateway rows write NULL cert_secret_name.
+  provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -866,6 +870,16 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   token_endpoint_auth_method TEXT,
   scope TEXT[],
   audience TEXT,
+
+  -- TRUE when this client was registered upstream with the legacy
+  -- /oauth/callback redirect_uri (e.g. cloned from oauth_proxy_providers).
+  -- The authorize leg sends the legacy URL + a JSON state carrying
+  -- remote_sessions=true so /oauth/callback can forward the response to
+  -- /mcp/remote_login_callback. Once oauth_proxy_servers are dropped, the
+  -- /oauth/callback handler degrades to only the forwarding dance; this
+  -- column then exists only to keep legacy-registered clients alive until
+  -- traffic on /oauth/callback drops to zero and they can be re-issued.
+  legacy_callback_url boolean NOT NULL DEFAULT FALSE,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2630,6 +2644,11 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
   prompt_injection_rules TEXT[],
+  -- Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card')
+  -- the policy author has unchecked within an otherwise-enabled category.
+  -- Empty/NULL means every rule in the selected categories runs. Scanner
+  -- drops any finding whose canonical rule_id appears here.
+  disabled_rules TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,

@@ -1,7 +1,7 @@
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,21 +16,16 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Type } from "@/components/ui/type";
 import {
+  Button,
+  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
+  Table,
 } from "@speakeasy-api/moonshine";
 import type { IconName } from "@speakeasy-api/moonshine";
 import {
@@ -79,6 +74,7 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "cli_destructive",
   "prompt_injection",
 ]);
 
@@ -88,9 +84,18 @@ const ALL_CATEGORIES: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "cli_destructive",
   "prompt_injection",
   "off_policy",
 ];
+
+/** Categories whose source the server rejects with action=block; the form
+ * must force flag when any of these are selected. Mirrors validateSourceAction
+ * in server/internal/risk/impl.go. */
+const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
+  "destructive_tool",
+  "cli_destructive",
+]);
 
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
@@ -105,6 +110,7 @@ function policyToCategories(
   if (sources.includes("gitleaks")) cats.add("secrets");
   if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
+  if (sources.includes("cli_destructive")) cats.add("cli_destructive");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     const wireEntities = DETECTION_RULES[cat].map((r) =>
@@ -131,6 +137,7 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
+  if (cats.has("cli_destructive")) sources.push("cli_destructive");
   if (cats.has("prompt_injection")) sources.push("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
@@ -231,10 +238,10 @@ function PolicyCenterContent() {
   const handleSave = () => {
     const { sources, presidioEntities, promptInjectionRules } =
       categoriesToPayload(selectedCategories);
-    const action =
-      sources.includes("destructive_tool") && formAction === "block"
-        ? "flag"
-        : formAction;
+    const flagOnly = [...FLAG_ONLY_CATEGORIES].some((c) =>
+      selectedCategories.has(c),
+    );
+    const action = flagOnly && formAction === "block" ? "flag" : formAction;
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -344,14 +351,16 @@ function PolicyCenterContent() {
               }}
               disabled={createMutation.isPending}
             >
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Get Started"
-              )}
+              <Button.Text>
+                {createMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Get Started"
+                )}
+              </Button.Text>
             </Button>
           </div>
         </Page.Body>
@@ -359,12 +368,141 @@ function PolicyCenterContent() {
     );
   }
 
+  const enabledPolicies = policies.filter((p) => p.enabled);
+  const insightsContext = [
+    "Page: Policy Center.",
+    `Total policies: ${policies.length}, enabled: ${enabledPolicies.length}.`,
+    `Policy actions: ${policies.map((p) => `${p.name} (${p.action})`).join(", ") || "none"}.`,
+    "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskCapabilities, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
+    "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
+  ].join(" ");
+
+  const insightsSuggestions = [
+    {
+      title: "Policy status snapshot",
+      label: "what's running and what's stuck",
+      prompt:
+        "For each policy returned by listRiskPolicies, call getRiskPolicyStatus and report: enabled flag, action (flag vs block), total messages, pending messages, and workflow state. Flag any policy with non-zero pending messages.",
+    },
+    {
+      title: "Quiet policies",
+      label: "policies with no recent findings",
+      prompt:
+        "Identify policies that have not produced any findings in the last 30 days. Use listRiskResultsForAgent with policy_id to check each policy. Report by name and last-seen finding date.",
+    },
+    {
+      title: "Coverage by source",
+      label: "what's each source catching",
+      prompt:
+        "Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days using listRiskResultsForAgent. Report counts and the top rule_id per source family.",
+    },
+    {
+      title: "Capabilities check",
+      label: "what detectors are available",
+      prompt:
+        "Call getRiskCapabilities and tell me which detection backends are configured on this server (e.g. prompt-injection ML classifier).",
+    },
+  ];
+
+  const policyColumns: Column<RiskPolicy>[] = [
+    {
+      key: "name",
+      header: "Name",
+      width: "1fr",
+      render: (policy) => <span className="font-medium">{policy.name}</span>,
+    },
+    {
+      key: "action",
+      header: "Action",
+      width: "0.5fr",
+      render: (policy) => (
+        <ActionBadge action={(policy.action as PolicyAction) ?? "flag"} />
+      ),
+    },
+    {
+      key: "sources",
+      header: "Categories",
+      width: "3fr",
+      render: (policy) => {
+        const categories = sourcesToCategories(
+          policy.sources,
+          policy.presidioEntities,
+        );
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            {categories.map((cat) => (
+              <Badge key={cat} variant="secondary">
+                {RULE_CATEGORY_META[cat].label}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: "enabled",
+      header: "Status",
+      width: "0.5fr",
+      render: (policy) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Switch
+            checked={policy.enabled}
+            onCheckedChange={(checked) => handleToggle(policy, checked)}
+          />
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "0.3fr",
+      render: (policy) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Button.Icon>
+                  <Ellipsis className="h-4 w-4" />
+                </Button.Icon>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() => setTimeout(() => setRunPanelPolicy(policy), 0)}
+              >
+                View Progress
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive cursor-pointer"
+                onSelect={() => handleDelete(policy.id)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
+        <InsightsConfig
+          contextInfo={insightsContext}
+          suggestions={insightsSuggestions}
+          title="Policy insights"
+          subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
+        />
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Risk Policies</h2>
@@ -374,90 +512,19 @@ function PolicyCenterContent() {
             </p>
           </div>
           <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Policy
+            <Button.LeftIcon>
+              <Plus className="mr-2 h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New Policy</Button.Text>
           </Button>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Categories</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-[60px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {policies.map((policy) => {
-              const categories = sourcesToCategories(
-                policy.sources,
-                policy.presidioEntities,
-              );
-              return (
-                <TableRow
-                  key={policy.id}
-                  className="cursor-pointer"
-                  onClick={() => handleEdit(policy)}
-                >
-                  <TableCell className="font-medium">{policy.name}</TableCell>
-                  <TableCell>
-                    <ActionBadge
-                      action={(policy.action as PolicyAction) ?? "flag"}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {categories.map((cat) => (
-                        <Badge key={cat} variant="secondary">
-                          {RULE_CATEGORY_META[cat].label}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      checked={policy.enabled}
-                      onCheckedChange={(checked) =>
-                        handleToggle(policy, checked)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Ellipsis className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="cursor-pointer"
-                          onSelect={() =>
-                            setTimeout(() => setRunPanelPolicy(policy), 0)
-                          }
-                        >
-                          View Progress
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive cursor-pointer"
-                          onSelect={() => handleDelete(policy.id)}
-                        >
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <Table
+          columns={policyColumns}
+          data={policies}
+          rowKey={(policy) => policy.id}
+          onRowClick={handleEdit}
+        />
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -497,16 +564,18 @@ function PolicyCenterContent() {
                   updateMutation.isPending
                 }
               >
-                {createMutation.isPending || updateMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : editingPolicy ? (
-                  "Update"
-                ) : (
-                  "Create"
+                {(createMutation.isPending || updateMutation.isPending) && (
+                  <Button.LeftIcon>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </Button.LeftIcon>
                 )}
+                <Button.Text>
+                  {createMutation.isPending || updateMutation.isPending
+                    ? "Saving..."
+                    : editingPolicy
+                      ? "Update"
+                      : "Create"}
+                </Button.Text>
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -568,9 +637,11 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
   );
-  const destructiveToolsSelected = selectedCategories.has("destructive_tool");
+  const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
+    selectedCategories.has(c),
+  );
   const actionValue =
-    destructiveToolsSelected && formAction === "block" ? "flag" : formAction;
+    flagOnlySelected && formAction === "block" ? "flag" : formAction;
 
   return (
     <div className="space-y-6 py-4">
@@ -669,7 +740,7 @@ function PolicySheetBody({
                       setSelectedCategories(next);
                       if (
                         checked &&
-                        cat === "destructive_tool" &&
+                        FLAG_ONLY_CATEGORIES.has(cat) &&
                         formAction === "block"
                       ) {
                         setFormAction("flag");
@@ -717,7 +788,7 @@ function PolicySheetBody({
         <RadioGroup
           value={actionValue}
           onValueChange={(v) => {
-            if (destructiveToolsSelected && v === "block") {
+            if (flagOnlySelected && v === "block") {
               return;
             }
             setFormAction(v as PolicyAction);
@@ -725,8 +796,7 @@ function PolicySheetBody({
         >
           <div className="border-border divide-border divide-y rounded-lg border">
             {ACTION_OPTIONS.map((opt) => {
-              const disabled =
-                destructiveToolsSelected && opt.value === "block";
+              const disabled = flagOnlySelected && opt.value === "block";
 
               return (
                 <label
@@ -754,7 +824,8 @@ function PolicySheetBody({
                     </div>
                     {disabled && (
                       <div className="text-destructive mt-1 text-xs font-medium">
-                        Destructive Tools supports flagging only.
+                        Destructive Tools and Destructive CLI Commands support
+                        flagging only.
                       </div>
                     )}
                   </div>
@@ -879,16 +950,16 @@ function RunPanel({
                 <p className="text-sm font-medium">Analysis Progress</p>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="tertiary"
                     onClick={() => refetch()}
                     disabled={isFetching}
-                    tooltip="Refresh"
                     className="h-6 w-6"
                   >
-                    <RefreshCw
-                      className={cn("h-3 w-3", isFetching && "animate-spin")}
-                    />
+                    <Button.Icon>
+                      <RefreshCw
+                        className={cn("h-3 w-3", isFetching && "animate-spin")}
+                      />
+                    </Button.Icon>
                   </Button>
                   <span className="text-muted-foreground text-xs font-medium">
                     {pct}%
@@ -936,9 +1007,11 @@ function RunPanel({
           className="w-full"
         >
           {isTriggerPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Button.LeftIcon>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            </Button.LeftIcon>
           )}
-          Trigger Analysis
+          <Button.Text>Trigger Analysis</Button.Text>
         </Button>
       </SheetFooter>
     </>

@@ -1,6 +1,5 @@
 import { LogWorkbench } from "@/components/log-workbench";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   Select,
   SelectContent,
@@ -10,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
-import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import type { RiskResult } from "@gram/client/models/components";
 import {
   invalidateAllRiskListResults,
@@ -310,23 +309,12 @@ export default function RiskEvents() {
           ) : null
         }
         detail={
-          <Drawer
-            open={!!selectedChatId}
-            onOpenChange={(open) => !open && setSelectedChatId(null)}
-            direction="right"
-          >
-            <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
-              {selectedChatId && (
-                <ChatDetailPanel
-                  chatId={selectedChatId}
-                  resolutions={[]}
-                  onClose={() => setSelectedChatId(null)}
-                  onDelete={() => setSelectedChatId(null)}
-                  collapseNonRisk
-                />
-              )}
-            </DrawerContent>
-          </Drawer>
+          <ChatDetailSheet
+            chatId={selectedChatId}
+            onClose={() => setSelectedChatId(null)}
+            onDelete={() => setSelectedChatId(null)}
+            collapseNonRisk
+          />
         }
         scrollRef={containerRef}
         onScroll={handleScroll}

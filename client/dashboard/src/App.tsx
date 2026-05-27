@@ -28,6 +28,7 @@ import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
 import { RBACDevToolbar } from "./components/dev-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
+import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
 import SwitchOrg from "./pages/demo/SwitchOrg";
@@ -65,13 +66,13 @@ export default function App() {
       faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
     }
 
-    localStorage.setItem("preferred-theme", theme);
+    localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
 
     setTheme(theme);
   };
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("preferred-theme") as
+    const savedTheme = localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) as
       | "light"
       | "dark"
       | null;

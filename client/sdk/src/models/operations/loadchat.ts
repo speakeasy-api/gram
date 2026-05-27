@@ -25,6 +25,10 @@ export type LoadChatRequest = {
    */
   id: string;
   /**
+   * Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.
+   */
+  generation?: number | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -132,6 +136,7 @@ export function loadChatSecurityToJSON(
 /** @internal */
 export type LoadChatRequest$Outbound = {
   id: string;
+  generation?: number | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -144,6 +149,7 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
+    generation: z.optional(z.int()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),

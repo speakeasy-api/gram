@@ -11,10 +11,10 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
 import type {
   ChatMessage,
-  ChatResolution,
   TelemetryLogRecord,
 } from "@gram/client/models/components";
-import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
+import { useSearchLogsMutation } from "@gram/client/react-query";
+import { useLoadChatAllGenerations } from "./useLoadChatAllGenerations";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -22,7 +22,12 @@ import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
-import { DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Popover,
   PopoverContent,
@@ -30,7 +35,6 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
-import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { MessageContent } from "@gram-ai/elements";
 import { useIsAdmin } from "@/contexts/Auth";
@@ -52,11 +56,14 @@ import {
 
 interface ChatDetailPanelProps {
   chatId: string;
-  resolutions: ChatResolution[];
   onClose: () => void;
   onDelete: (chatId: string) => void;
   /** When true, messages without risk findings are collapsed to a single line. */
   collapseNonRisk?: boolean;
+}
+
+interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
+  chatId: string | null;
 }
 
 function getTraceId(chatId: string): string {
@@ -64,6 +71,36 @@ function getTraceId(chatId: string): string {
 }
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
+export function ChatDetailSheet({
+  chatId,
+  onClose,
+  onDelete,
+  collapseNonRisk,
+}: ChatDetailSheetProps) {
+  return (
+    <Sheet
+      open={Boolean(chatId)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent
+        className="w-[min(720px,calc(100vw-2rem))] sm:max-w-[720px]"
+        showCloseButton={false}
+      >
+        {chatId && (
+          <ChatDetailPanel
+            chatId={chatId}
+            onClose={onClose}
+            onDelete={onDelete}
+            collapseNonRisk={collapseNonRisk}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 function downloadJsonFile(filename: string, data: unknown) {
   const json = JSON.stringify(data, null, 2);
@@ -89,6 +126,7 @@ function getTraceExportSlug(chat: { id: string; title?: string | null }) {
 function exportTraceDataAsJson({
   chatId,
   chat,
+  messages,
   telemetryLogLimit,
   telemetryLogs,
   riskResults,
@@ -97,8 +135,8 @@ function exportTraceDataAsJson({
   chat: {
     id: string;
     title?: string | null;
-    messages: ChatMessage[];
   };
+  messages: ChatMessage[];
   telemetryLogLimit: number;
   telemetryLogs: TelemetryLogRecord[];
   riskResults: RiskResult[];
@@ -116,7 +154,7 @@ function exportTraceDataAsJson({
       },
       panelData: {
         chat,
-        messages: chat.messages,
+        messages,
         telemetryLogs,
         riskResults,
       },
@@ -126,34 +164,6 @@ function exportTraceDataAsJson({
   } catch {
     toast.error("Failed to export trace data");
   }
-}
-
-function getOverallResolutionStatus(
-  resolutions: ChatResolution[],
-): "success" | "failure" | "partial" | "unresolved" {
-  if (resolutions.length === 0) return "unresolved";
-
-  const hasFailure = resolutions.some((r) => r.resolution === "failure");
-  const hasSuccess = resolutions.some((r) => r.resolution === "success");
-
-  if (hasFailure) return "failure";
-  if (hasSuccess) return "success";
-  return "partial";
-}
-
-function getAverageScore(resolutions: ChatResolution[]): number {
-  if (resolutions.length === 0) return 0;
-  const sum = resolutions.reduce((acc, r) => acc + r.score, 0);
-  return Math.round(sum / resolutions.length);
-}
-
-function getContextQuality(score: number): {
-  label: string;
-  variant: "success" | "warning" | "destructive";
-} {
-  if (score >= 80) return { label: "Good Context", variant: "success" };
-  if (score >= 50) return { label: "Fair Context", variant: "warning" };
-  return { label: "Poor Context", variant: "destructive" };
 }
 
 function getSeverityBadgeVariant(
@@ -172,13 +182,11 @@ function getSeverityBadgeVariant(
 
 function ChatMessagesList({
   messages,
-  messageResolutionMap,
   riskResultsByMessage,
   collapseNonRisk,
   enabledEntryTypes,
 }: {
   messages: ChatMessage[];
-  messageResolutionMap: Map<string, ChatResolution>;
   riskResultsByMessage: Map<string, RiskResult[]>;
   collapseNonRisk?: boolean;
   enabledEntryTypes: FilterableTraceEntryType[];
@@ -224,7 +232,6 @@ function ChatMessagesList({
           <MessageItem
             key={message.id}
             message={message}
-            resolution={messageResolutionMap.get(message.id)}
             riskResults={riskResultsByMessage.get(message.id)}
             collapseNonRisk={collapseNonRisk}
           />
@@ -252,7 +259,6 @@ function ChatMessagesList({
                 <MessageItem
                   key={message.id}
                   message={message}
-                  resolution={messageResolutionMap.get(message.id)}
                   riskResults={riskResultsByMessage.get(message.id)}
                   collapseNonRisk={collapseNonRisk}
                 />
@@ -267,12 +273,10 @@ function ChatMessagesList({
 
 function MessageItem({
   message,
-  resolution,
   riskResults,
   collapseNonRisk,
 }: {
   message: ChatMessage;
-  resolution: ChatResolution | undefined;
   riskResults: RiskResult[] | undefined;
   collapseNonRisk?: boolean;
 }) {
@@ -315,14 +319,6 @@ function MessageItem({
 
       {isCollapsed ? null : (
         <div className="pt-0 pr-3 pb-3 pl-12">
-          {resolution && (
-            <div className="bg-primary/10 border-primary mb-3 rounded-lg border-l-4 p-3">
-              <div className="text-xs font-semibold">
-                Resolution Point: {resolution.resolution}
-              </div>
-            </div>
-          )}
-
           <TraceEntryBody
             contentRevealed={contentRevealed}
             entryType={entryType}
@@ -984,7 +980,6 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
 
 export function ChatDetailPanel({
   chatId,
-  resolutions,
   onClose,
   onDelete,
   collapseNonRisk,
@@ -1000,11 +995,13 @@ export function ChatDetailPanel({
   const [enabledEntryTypes, setEnabledEntryTypes] = useState<
     FilterableTraceEntryType[]
   >([...DEFAULT_ENABLED_ENTRY_TYPES]);
-  const { data: chat, isLoading: chatLoading } = useLoadChat(
-    { id: chatId },
-    undefined,
-    {},
-  );
+  const {
+    chat,
+    messages: chatMessages,
+    isLoading: chatLoading,
+    isLoadingMore: chatLoadingMore,
+    hasErrors: chatLoadHasErrors,
+  } = useLoadChatAllGenerations(chatId);
 
   // Fetch telemetry logs for this chat
   const {
@@ -1053,8 +1050,8 @@ export function ChatDetailPanel({
   if (chatLoading) {
     return (
       <div className="p-8">
-        <DrawerTitle>Loading</DrawerTitle>
-        <DrawerDescription>Fetching chat session details...</DrawerDescription>
+        <SheetTitle>Loading</SheetTitle>
+        <SheetDescription>Fetching chat session details...</SheetDescription>
       </div>
     );
   }
@@ -1062,35 +1059,24 @@ export function ChatDetailPanel({
   if (!chat) {
     return (
       <div className="p-8">
-        <DrawerTitle>Not found</DrawerTitle>
-        <DrawerDescription>
+        <SheetTitle>Not found</SheetTitle>
+        <SheetDescription>
           The selected chat session could not be found.
-        </DrawerDescription>
+        </SheetDescription>
       </div>
     );
   }
 
-  const status = getOverallResolutionStatus(resolutions);
-  const averageScore = getAverageScore(resolutions);
-  const contextQuality = getContextQuality(averageScore);
   // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
-  const entryTypeCounts = getEntryTypeCounts(chat.messages);
+  const entryTypeCounts = getEntryTypeCounts(chatMessages);
   const visibleEntryCount = getVisibleMessageCount(
-    chat.messages,
+    chatMessages,
     enabledEntryTypes,
   );
-
-  // Create a map of message IDs to resolution info for showing breakpoints
-  const messageResolutionMap = new Map<string, ChatResolution>();
-  resolutions.forEach((res) => {
-    res.messageIds.forEach((msgId) => {
-      messageResolutionMap.set(msgId, res);
-    });
-  });
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -1098,7 +1084,7 @@ export function ChatDetailPanel({
       <div className="border-b p-6">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <DrawerTitle className="text-xl">{getTraceId(chatId)}</DrawerTitle>
+            <SheetTitle className="text-xl">{getTraceId(chatId)}</SheetTitle>
             {status !== "unresolved" && (
               <Badge
                 variant={
@@ -1126,6 +1112,7 @@ export function ChatDetailPanel({
                     exportTraceDataAsJson({
                       chatId,
                       chat,
+                      messages: chatMessages,
                       telemetryLogLimit: PANEL_TELEMETRY_LOG_LIMIT,
                       telemetryLogs: logs,
                       riskResults,
@@ -1158,7 +1145,7 @@ export function ChatDetailPanel({
         <div className="text-muted-foreground mb-3 font-mono text-sm">
           {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
         </div>
-        <DrawerDescription className="text-sm">{chat.title}</DrawerDescription>
+        <SheetDescription className="text-sm">{chat.title}</SheetDescription>
       </div>
 
       {/* Tabs */}
@@ -1239,9 +1226,7 @@ export function ChatDetailPanel({
                 <div className="text-muted-foreground mb-1 text-xs">
                   Messages:
                 </div>
-                <div className="text-sm font-medium">
-                  {chat.messages.length}
-                </div>
+                <div className="text-sm font-medium">{chatMessages.length}</div>
               </div>
               <div>
                 <div className="text-muted-foreground mb-1 text-xs">
@@ -1295,70 +1280,32 @@ export function ChatDetailPanel({
                   </div>
                 </div>
               )}
-              {resolutions.length > 0 && (
-                <>
-                  <div>
-                    <div className="text-muted-foreground mb-1 text-xs">
-                      Resolution Score:
-                    </div>
-                    <div className="text-lg font-medium">{averageScore}%</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground mb-1 text-xs">
-                      Context Quality:
-                    </div>
-                    <Badge variant={contextQuality.variant}>
-                      <Icon name="circle-check" className="size-3" />
-                      {contextQuality.label}
-                    </Badge>
-                  </div>
-                </>
-              )}
             </div>
           </div>
 
-          {/* Resolutions Summary */}
-          {resolutions.length > 0 && (
-            <div className="border-b p-6">
-              <Stack direction="vertical" gap={3}>
-                {resolutions.map((resolution) => (
-                  <div key={resolution.id} className="flex items-start gap-4">
-                    <CircularProgress
-                      score={resolution.score}
-                      status={
-                        resolution.resolution as
-                          | "success"
-                          | "failure"
-                          | "partial"
-                      }
-                      size="sm"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1 text-sm font-medium">
-                        {resolution.userGoal}
-                      </div>
-                      <div className="text-muted-foreground text-xs">
-                        {resolution.resolutionNotes}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </Stack>
+          {chatLoadHasErrors && (
+            <div className="border-destructive/30 bg-destructive/10 text-destructive border-b px-6 py-3 text-sm">
+              Some older conversation segments failed to load. The transcript
+              below is incomplete.
+            </div>
+          )}
+          {chatLoadingMore && !chatLoadHasErrors && (
+            <div className="text-muted-foreground border-b px-6 py-2 text-xs">
+              Loading older conversation segments…
             </div>
           )}
 
           <EntryTypeFilterBar
             value={enabledEntryTypes}
             counts={entryTypeCounts}
-            totalCount={chat.messages.length}
+            totalCount={chatMessages.length}
             visibleCount={visibleEntryCount}
             onChange={setEnabledEntryTypes}
           />
 
           {/* Chat Messages */}
           <ChatMessagesList
-            messages={chat.messages}
-            messageResolutionMap={messageResolutionMap}
+            messages={chatMessages}
             riskResultsByMessage={riskResultsByMessage}
             collapseNonRisk={collapseNonRisk}
             enabledEntryTypes={enabledEntryTypes}

@@ -39,6 +39,8 @@ type Service interface {
 	DisableWebhooks(context.Context, *DisableWebhooksPayload) (err error)
 	// Create a webhook portal session.
 	CreatePortalSession(context.Context, *CreatePortalSessionPayload) (res *CreatePortalSessionResult, err error)
+	// Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
+	GenerateWorkOSAdminPortalLink(context.Context, *GenerateWorkOSAdminPortalLinkPayload) (res *GenerateWorkOSAdminPortalLinkResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -61,7 +63,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession"}
+var MethodNames = [11]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "generateWorkOSAdminPortalLink"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -88,6 +90,21 @@ type DisableWebhooksPayload struct {
 // enableWebhooks method.
 type EnableWebhooksPayload struct {
 	SessionToken *string
+}
+
+// GenerateWorkOSAdminPortalLinkPayload is the payload type of the
+// organizations service generateWorkOSAdminPortalLink method.
+type GenerateWorkOSAdminPortalLinkPayload struct {
+	// WorkOS Admin Portal intent.
+	Intent       string
+	SessionToken *string
+}
+
+// GenerateWorkOSAdminPortalLinkResult is the result type of the organizations
+// service generateWorkOSAdminPortalLink method.
+type GenerateWorkOSAdminPortalLinkResult struct {
+	// URL to the WorkOS Admin Portal flow.
+	URL string
 }
 
 // GetPayload is the payload type of the organizations service get method.

@@ -5,6 +5,7 @@
 import { organizationsCreatePortalSession } from "../funcs/organizationsCreatePortalSession.js";
 import { organizationsDisableWebhooks } from "../funcs/organizationsDisableWebhooks.js";
 import { organizationsEnableWebhooks } from "../funcs/organizationsEnableWebhooks.js";
+import { organizationsGenerateWorkOSAdminPortalLink } from "../funcs/organizationsGenerateWorkOSAdminPortalLink.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
@@ -68,6 +69,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsEnableWebhooks(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * generateWorkOSAdminPortalLink organizations
+   *
+   * @remarks
+   * Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
+   */
+  async generateWorkOSAdminPortalLink(
+    request: operations.GenerateWorkOSAdminPortalLinkRequest,
+    security?: operations.GenerateWorkOSAdminPortalLinkSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GenerateWorkOSAdminPortalLinkResult> {
+    return unwrapAsync(organizationsGenerateWorkOSAdminPortalLink(
       this,
       request,
       security,

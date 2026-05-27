@@ -342,6 +342,7 @@ export function ToolsetView({
       destructiveHint?: boolean;
       idempotentHint?: boolean;
       openWorldHint?: boolean;
+      tags?: string[] | undefined;
     },
   ) => {
     if (tool.type === "prompt") {

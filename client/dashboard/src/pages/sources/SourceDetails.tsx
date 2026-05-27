@@ -1,6 +1,7 @@
 import { DetailHero } from "@/components/detail-hero";
 import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
+import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import { useFetchSourceContent } from "@/components/sources/useFetchSourceContent";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import {
@@ -37,6 +38,20 @@ import { SourceOverviewTab } from "./SourceOverviewTab";
 import { SourceToolsTab } from "./SourceToolsTab";
 import { SourceMCPServersTab } from "./SourceMCPServersTab";
 import { SourceSettingsTab } from "./SourceSettingsTab";
+
+// Map dashboard source kinds to backend deployment_logs.attachment_type values.
+// See server/internal/deployments/events/log.go.
+function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
+  switch (sourceKind) {
+    case "function":
+      return "functions";
+    case "externalmcp":
+    case "remotemcp":
+      return "external_mcp";
+    default:
+      return "openapi";
+  }
+}
 
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
@@ -152,26 +167,10 @@ export default function SourceDetails() {
     return telemetryData.topToolsByCount.filter((m) => urnSet.has(m.gramUrn));
   }, [telemetryData, sourceToolUrnsArray]);
 
-  const sourceTelemetrySummary = useMemo(() => {
-    if (sourceToolMetrics.length === 0) return null;
-    const totalCalls = sourceToolMetrics.reduce(
-      (sum, m) => sum + m.callCount,
-      0,
-    );
-    const totalFailures = sourceToolMetrics.reduce(
-      (sum, m) => sum + m.failureCount,
-      0,
-    );
-    const avgLatency =
-      totalCalls > 0
-        ? sourceToolMetrics.reduce(
-            (sum, m) => sum + m.avgLatencyMs * m.callCount,
-            0,
-          ) / totalCalls
-        : 0;
-    const errorRate = totalCalls > 0 ? (totalFailures / totalCalls) * 100 : 0;
-    return { totalCalls, totalFailures, avgLatency, errorRate };
-  }, [sourceToolMetrics]);
+  const sourceTelemetrySummary = useMemo(
+    () => computeTelemetrySummary(sourceToolMetrics),
+    [sourceToolMetrics],
+  );
 
   const isOpenAPI = sourceKind === "http" || sourceKind === "openapi";
   const sourceType = isOpenAPI ? "OpenAPI" : "Function";
@@ -360,9 +359,7 @@ export default function SourceDetails() {
             >
               <SourceDeploymentsPanel
                 sourceKind={sourceKind}
-                attachmentType={
-                  sourceKind === "function" ? "function" : "openapi"
-                }
+                attachmentType={attachmentTypeForSourceKind(sourceKind)}
               />
             </Suspense>
           </TabsContent>

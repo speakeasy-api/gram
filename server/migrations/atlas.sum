@@ -1,4 +1,4 @@
-h1:eCY6LvzStIcct6FmbuJly/+Z6FaSCzBzh8pl7cGC7+c=
+h1:SlyAQFtiG9gUR0aWkki9alJdXj3Xu02x5fO074/HecM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -186,3 +186,7 @@ h1:eCY6LvzStIcct6FmbuJly/+Z6FaSCzBzh8pl7cGC7+c=
 20260520030115_add_audience_and_scope_to_remote_session_clients.sql h1:61DiqJmzoI4CR7F8oyNtDzs0hGFtsXliB4LVsHA+b5E=
 20260520182725_project-marketplace-settings.sql h1:4RMTKbJZG0ft/SUEnGR737b3iTY1SOmIp6NnisqTYO8=
 20260520194157_decouple-ai-integration-poll-state.sql h1:JCk3JZ5s7TbCALqdW0sA1vbhFr3U/HYwTYdPkfYNbqg=
+20260522040618_add_legacy_callback_url_to_remote_session_clients.sql h1:LrHAK7LBxV+2oO4pYEz7dImXUpI0C9b3+0Q0as7GthA=
+20260522194835_add_function_tool_definitions_tags.sql h1:zNH0ilgmHU+szGwhIBKT3xSSrj0+ayoUk5nhCsgPFtU=
+20260526132630_add_custom_domain_provisioner_kind.sql h1:XoZWJ1F8RtKzAlz18m9242K03La7QV3hDlDRfWO5wQM=
+20260526164519_add-risk-policies-disabled-rules.sql h1:SmIuD/9RiaBWGHZBadLnVzwVdQ7x0riPTboR6+M0GLE=

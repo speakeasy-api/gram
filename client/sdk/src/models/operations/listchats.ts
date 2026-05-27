@@ -4,6 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 export type ListChatsSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -19,7 +20,84 @@ export type ListChatsSecurity = {
   option2?: ListChatsSecurityOption2 | undefined;
 };
 
+/**
+ * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
+ */
+export const HasRisk = {
+  Unknown: "",
+  True: "true",
+  False: "false",
+} as const;
+/**
+ * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
+ */
+export type HasRisk = ClosedEnum<typeof HasRisk>;
+
+/**
+ * Field to sort by
+ */
+export const SortBy = {
+  CreatedAt: "created_at",
+  NumMessages: "num_messages",
+} as const;
+/**
+ * Field to sort by
+ */
+export type SortBy = ClosedEnum<typeof SortBy>;
+
+/**
+ * Sort order
+ */
+export const SortOrder = {
+  Asc: "asc",
+  Desc: "desc",
+} as const;
+/**
+ * Sort order
+ */
+export type SortOrder = ClosedEnum<typeof SortOrder>;
+
 export type ListChatsRequest = {
+  /**
+   * Search query (searches chat ID, user ID, and title)
+   */
+  search?: string | undefined;
+  /**
+   * Filter by external user ID
+   */
+  externalUserId?: string | undefined;
+  /**
+   * Filter to chats produced by this assistant
+   */
+  assistantId?: string | undefined;
+  /**
+   * Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.
+   */
+  hasRisk?: HasRisk | undefined;
+  /**
+   * Filter chats created after this timestamp (ISO 8601)
+   */
+  from?: Date | undefined;
+  /**
+   * Filter chats created before this timestamp (ISO 8601)
+   */
+  to?: Date | undefined;
+  /**
+   * Number of results per page
+   */
+  limit?: number | undefined;
+  /**
+   * Pagination offset
+   */
+  offset?: number | undefined;
+  /**
+   * Field to sort by
+   */
+  sortBy?: SortBy | undefined;
+  /**
+   * Sort order
+   */
+  sortOrder?: SortOrder | undefined;
   /**
    * Session header
    */
@@ -126,7 +204,32 @@ export function listChatsSecurityToJSON(
 }
 
 /** @internal */
+export const HasRisk$outboundSchema: z.ZodMiniEnum<typeof HasRisk> = z.enum(
+  HasRisk,
+);
+
+/** @internal */
+export const SortBy$outboundSchema: z.ZodMiniEnum<typeof SortBy> = z.enum(
+  SortBy,
+);
+
+/** @internal */
+export const SortOrder$outboundSchema: z.ZodMiniEnum<typeof SortOrder> = z.enum(
+  SortOrder,
+);
+
+/** @internal */
 export type ListChatsRequest$Outbound = {
+  search?: string | undefined;
+  external_user_id?: string | undefined;
+  assistant_id?: string | undefined;
+  has_risk?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  limit: number;
+  offset: number;
+  sort_by: string;
+  sort_order: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -138,12 +241,27 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
   ListChatsRequest
 > = z.pipe(
   z.object({
+    search: z.optional(z.string()),
+    externalUserId: z.optional(z.string()),
+    assistantId: z.optional(z.string()),
+    hasRisk: z.optional(HasRisk$outboundSchema),
+    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    limit: z._default(z.int(), 50),
+    offset: z._default(z.int(), 0),
+    sortBy: z._default(SortBy$outboundSchema, "created_at"),
+    sortOrder: z._default(SortOrder$outboundSchema, "desc"),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      externalUserId: "external_user_id",
+      assistantId: "assistant_id",
+      hasRisk: "has_risk",
+      sortBy: "sort_by",
+      sortOrder: "sort_order",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       gramChatSession: "Gram-Chat-Session",

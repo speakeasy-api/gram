@@ -56,7 +56,7 @@ export type LoadChatQueryError =
  * loadChat chat
  *
  * @remarks
- * Load a chat by its ID
+ * Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
  */
 export function useLoadChat(
   request: operations.LoadChatRequest,
@@ -79,7 +79,7 @@ export function useLoadChat(
  * loadChat chat
  *
  * @remarks
- * Load a chat by its ID
+ * Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
  */
 export function useLoadChatSuspense(
   request: operations.LoadChatRequest,
@@ -103,6 +103,7 @@ export function setLoadChatData(
   queryKeyBase: [
     parameters: {
       id: string;
+      generation?: number | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;
@@ -120,6 +121,7 @@ export function invalidateLoadChat(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       id: string;
+      generation?: number | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
       gramChatSession?: string | undefined;

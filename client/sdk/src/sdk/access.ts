@@ -15,7 +15,7 @@ import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
-import { accessUpdateMemberRole } from "../funcs/accessUpdateMemberRole.js";
+import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -271,17 +271,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * updateMemberRole access
+   * updateMemberRoles access
    *
    * @remarks
-   * Change a team member's role assignment.
+   * Update a team member's role assignments.
    */
-  async updateMemberRole(
-    request: operations.UpdateMemberRoleRequest,
-    security?: operations.UpdateMemberRoleSecurity | undefined,
+  async updateMemberRoles(
+    request: operations.UpdateMemberRolesRequest,
+    security?: operations.UpdateMemberRolesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.AccessMember> {
-    return unwrapAsync(accessUpdateMemberRole(
+    return unwrapAsync(accessUpdateMemberRoles(
       this,
       request,
       security,

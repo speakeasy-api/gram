@@ -1,7 +1,7 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+
 import { Button as LocalButton } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -22,17 +22,13 @@ import {
   invalidateAllMembers,
   useMembers,
 } from "@gram/client/react-query/members.js";
-import {
-  invalidateAllRoles,
-  useRoles,
-} from "@gram/client/react-query/roles.js";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  ArrowRight,
   Ban,
   Check,
   ChevronDown,
@@ -48,6 +44,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useMemo, useState } from "react";
+import {
+  getSelectableMembers,
+  isMemberLockedToRole,
+  membersWithRole,
+} from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type {
   ActivePanel,
@@ -208,10 +209,8 @@ export function CreateRoleDialog({
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const { data: membersData } = useMembers();
-  const members = membersData?.members ?? [];
-  const { data: rolesData } = useRoles();
-  const roleNameById = new Map(
-    (rolesData?.roles ?? []).map((r) => [r.id, r.name]),
+  const members = [...(membersData?.members ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
   );
   const { data: scopesData } = useListScopes();
 
@@ -250,9 +249,7 @@ export function CreateRoleDialog({
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
     setInitialGrantKeys(grantKeysStringFn(roleGrants));
-    const assignedIds = new Set(
-      members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
-    );
+    const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
     setInitialized(true);
@@ -463,8 +460,10 @@ export function CreateRoleDialog({
   };
 
   const toggleAllMembers = () => {
-    const selectableMembers = members.filter(
-      (m) => !(isEditing && m.roleId === editingRole?.id),
+    const selectableMembers = getSelectableMembers(
+      members,
+      isEditing,
+      editingRole?.id,
     );
     setSelectedMembers((prev) => {
       const allSelected = selectableMembers.every((m) => prev.has(m.id));
@@ -936,8 +935,10 @@ export function CreateRoleDialog({
                   <div className="border-border divide-border mt-3 divide-y rounded-md border">
                     {/* Select-all header */}
                     {(() => {
-                      const selectableMembers = members.filter(
-                        (m) => !(isEditing && m.roleId === editingRole?.id),
+                      const selectableMembers = getSelectableMembers(
+                        members,
+                        isEditing,
+                        editingRole?.id,
                       );
                       const allSelected =
                         selectableMembers.length > 0 &&
@@ -971,8 +972,11 @@ export function CreateRoleDialog({
                       );
                     })()}
                     {members.map((member) => {
-                      const alreadyHasRole =
-                        isEditing && member.roleId === editingRole?.id;
+                      const alreadyHasRole = isMemberLockedToRole(
+                        isEditing,
+                        editingRole?.id,
+                        member.roleIds,
+                      );
                       return (
                         <label
                           key={member.id}
@@ -1007,46 +1011,12 @@ export function CreateRoleDialog({
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0 flex-1 space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <Type
-                                variant="body"
-                                className="text-sm font-medium"
-                              >
-                                {member.name}
-                              </Type>
-                              {member.roleId &&
-                                roleNameById.get(member.roleId) && (
-                                  <div className="flex items-center gap-1">
-                                    <Badge
-                                      variant="outline"
-                                      size="sm"
-                                      className={cn(
-                                        "font-mono text-[10px] uppercase",
-                                        selectedMembers.has(member.id) &&
-                                          member.roleId !== editingRole?.id &&
-                                          name.trim() &&
-                                          "line-through opacity-60",
-                                      )}
-                                    >
-                                      {roleNameById.get(member.roleId)}
-                                    </Badge>
-                                    {selectedMembers.has(member.id) &&
-                                      member.roleId !== editingRole?.id &&
-                                      name.trim() && (
-                                        <>
-                                          <ArrowRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                                          <Badge
-                                            variant="outline"
-                                            size="sm"
-                                            className="border-primary text-primary font-mono text-[10px] uppercase"
-                                          >
-                                            {name}
-                                          </Badge>
-                                        </>
-                                      )}
-                                  </div>
-                                )}
-                            </div>
+                            <Type
+                              variant="body"
+                              className="text-sm font-medium"
+                            >
+                              {member.name}
+                            </Type>
                             <Type
                               variant="body"
                               className="text-muted-foreground text-xs"

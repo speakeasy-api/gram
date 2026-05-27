@@ -1012,6 +1012,9 @@ type ReapInactiveAssistantRuntimesParams struct {
 	// BatchSize caps how many runtime rows one sweep will reap. Keeps the
 	// activity duration bounded under Temporal's StartToCloseTimeout.
 	BatchSize int32
+	// OnRowProcessed, if set, fires once per row after the reap attempt
+	// (success or failure).
+	OnRowProcessed func()
 }
 
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
@@ -1048,6 +1051,9 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 			result.Reaped++
 		} else {
 			result.Errors++
+		}
+		if params.OnRowProcessed != nil {
+			params.OnRowProcessed()
 		}
 	}
 	return result, nil
@@ -1823,15 +1829,22 @@ const assistantRuntimeTokenTTL = 60 * time.Minute
 
 const outputChannelAddendum = `## Output channel
 
-Your text responses are not delivered to the user. To communicate, call a tool (e.g. post a Slack message, send an email). If no suitable tool is available, the user will not see your reply.
+Text responses not delivered to user. To communicate, call a tool (e.g. post Slack message, send email). No suitable tool = user won't see reply.
 
 ## MCP authentication
 
-Two MCP authentication events may appear in this thread, each delivered as a <message-context> block with EventType and field lines.
+OAuth + MCP auth are owner-only: only owner can sign in and complete flow. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
-- EventType "assistant_mcp_auth_required" carries an AuthURL. Surface AuthURL to the user verbatim through an output tool (do not shorten, summarize, or rewrite it); follow any source-specific output preferences for whether the URL is shown directly, hidden behind a button, or delivered to a single recipient. Reference the MCP server using its MCPSlug rather than MCPServerID.
+Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
 
-- EventType "assistant_mcp_auth" reports the result. When Status is "success" and you still need that server, call mcp_force_reconnect with server_id set to the MCPServerID value, then continue your task. When Status is "failed", inform the user via an output tool and include the ErrorDescription if present.`
+- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim via output tool (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID.
+
+  Delivery rules — never post AuthURL to public or shared channel readable by non-owners. Pick most private channel available:
+    1. Conversation supports owner-only ephemeral message (single recipient) → send AuthURL there, addressed to owner.
+    2. Else DM the owner. AuthURL expires, so don't paste cold into DM owner hasn't engaged with recently. First ask owner if available to authenticate now; only after they confirm, re-attempt the tool call that required auth to issue a fresh AuthURL, then deliver new AuthURL in same DM.
+    3. Neither ephemeral nor DM possible → don't surface AuthURL; tell requester (without URL) that owner must complete auth, then stop.
+
+- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform user via output tool, include ErrorDescription if present.`
 
 func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)

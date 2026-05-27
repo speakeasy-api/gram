@@ -11,12 +11,37 @@ import (
 	"context"
 
 	goa "goa.design/goa/v3/pkg"
+	"goa.design/goa/v3/security"
 )
 
-// Operational endpoints for administrative tasks.
+// Operations supporting admin tasks, protected by Google workspace auth.
 type Service interface {
-	// Poke implements poke.
-	Poke(context.Context) (res *PokeResult, err error)
+	// Login implements login.
+	Login(context.Context, *LoginPayload) (res *LoginResult, err error)
+	// Callback implements callback.
+	Callback(context.Context, *CallbackPayload) (res *CallbackResult, err error)
+	// Logout implements logout.
+	Logout(context.Context, *LogoutPayload) (err error)
+	// Returns full admin details for a project by id or slug, including aggregated
+	// counts of child resources.
+	GetProject(context.Context, *GetProjectPayload) (res *AdminProjectDetail, err error)
+	// Updates admin-managed fields on an organization. At least one of
+	// account_type or whitelisted must be supplied.
+	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Returns full admin details for a single organization by id or slug.
+	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
+	// Lists members of an organization (admin view, no auth scoping).
+	ListOrganizationMembers(context.Context, *ListOrganizationMembersPayload) (res *AdminListOrganizationMembersResult, err error)
+	// Lists projects belonging to an organization (admin view, no auth scoping).
+	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
+	// Lists organizations for admin operations with optional search and filters.
+	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
+}
+
+// Auther defines the authorization functions to be implemented by the service.
+type Auther interface {
+	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
+	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -33,11 +58,223 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"poke"}
+var MethodNames = [9]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations"}
 
-// PokeResult is the result type of the admin service poke method.
-type PokeResult struct {
-	OK bool
+// AdminListOrganizationMembersResult is the result type of the admin service
+// listOrganizationMembers method.
+type AdminListOrganizationMembersResult struct {
+	// The members of the organization.
+	Members []*AdminOrganizationMember
+}
+
+// AdminListOrganizationProjectsResult is the result type of the admin service
+// listOrganizationProjects method.
+type AdminListOrganizationProjectsResult struct {
+	// The projects belonging to the organization.
+	Projects []*AdminProject
+}
+
+// AdminListOrganizationsResult is the result type of the admin service
+// listOrganizations method.
+type AdminListOrganizationsResult struct {
+	// The page of organizations.
+	Organizations []*AdminOrganization
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
+// AdminOrganization is the result type of the admin service updateOrganization
+// method.
+type AdminOrganization struct {
+	// The ID of the organization
+	ID string
+	// The name of the organization
+	Name string
+	// The slug of the organization
+	Slug string
+	// Gram account type (e.g. free, pro, enterprise).
+	AccountType string
+	// WorkOS organization ID, if linked.
+	WorkosID *string
+	// Whether the organization is whitelisted for full access.
+	Whitelisted bool
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string
+	// The time at which the free trial started.
+	FreeTrialStartedAt *string
+	// The time at which the free trial ends.
+	FreeTrialEndsAt *string
+	// Number of active members in the organization.
+	MemberCount int
+	// The creation date of the organization.
+	CreatedAt string
+	// The last update date of the organization.
+	UpdatedAt string
+}
+
+// Organization member surfaced to admin operators.
+type AdminOrganizationMember struct {
+	// User ID.
+	ID string
+	// User email address.
+	Email string
+	// User display name.
+	DisplayName string
+	// The time the user last logged in, if any.
+	LastLogin *string
+	CreatedAt string
+	UpdatedAt string
+}
+
+// Project summary surfaced to admin operators.
+type AdminProject struct {
+	// The ID of the project
+	ID string
+	// The name of the project
+	Name string
+	// The slug of the project
+	Slug string
+	// The creation date of the project.
+	CreatedAt string
+	// The last update date of the project.
+	UpdatedAt string
+}
+
+// AdminProjectDetail is the result type of the admin service getProject method.
+type AdminProjectDetail struct {
+	// Project ID.
+	ID string
+	// Project name.
+	Name string
+	// Project slug.
+	Slug string
+	// Owning organization ID.
+	OrganizationID string
+	// Project logo asset ID, if set.
+	LogoAssetID *string
+	// Functions runner version pin, if set.
+	FunctionsRunnerVersion *string
+	// Number of active toolsets in the project.
+	ToolsetCount int
+	// Total number of deployments in the project.
+	DeploymentCount int
+	// Number of active HTTP tool definitions in the project.
+	HTTPToolCount int
+	// Number of active environments in the project.
+	EnvironmentCount int
+	// Number of active API keys in the project.
+	APIKeyCount int
+	// Number of active assistants in the project.
+	AssistantCount int
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+// CallbackPayload is the payload type of the admin service callback method.
+type CallbackPayload struct {
+	// The authorization code returned by the provider on success
+	Code *string
+	// The state parameter returned, which should match the one generated in the
+	// login step
+	StateParam string
+	// The state cookie value for CSRF sanity checking against the state parameter
+	StateCookie *string
+	// OAuth error code returned by the provider (e.g. login_required for
+	// prompt=none failures)
+	Error *string
+	// Human-readable OAuth error description
+	ErrorDescription *string
+}
+
+// CallbackResult is the result type of the admin service callback method.
+type CallbackResult struct {
+	// The URL to redirect the client to after processing the callback
+	Location string
+	// The admin session cookie value
+	SessionID string
+}
+
+// GetOrganizationPayload is the payload type of the admin service
+// getOrganization method.
+type GetOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID or slug.
+	IDOrSlug string
+}
+
+// GetProjectPayload is the payload type of the admin service getProject method.
+type GetProjectPayload struct {
+	AdminSessionToken *string
+	// Project ID or slug.
+	IDOrSlug string
+}
+
+// ListOrganizationMembersPayload is the payload type of the admin service
+// listOrganizationMembers method.
+type ListOrganizationMembersPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	OrganizationID string
+}
+
+// ListOrganizationProjectsPayload is the payload type of the admin service
+// listOrganizationProjects method.
+type ListOrganizationProjectsPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	OrganizationID string
+}
+
+// ListOrganizationsPayload is the payload type of the admin service
+// listOrganizations method.
+type ListOrganizationsPayload struct {
+	AdminSessionToken *string
+	// Search term applied to name and slug (case-insensitive substring).
+	Q *string
+	// Filter by gram_account_type (e.g. free, pro, enterprise).
+	AccountType *string
+	// Include organizations with disabled_at set. Defaults to false.
+	IncludeDisabled *bool
+	// Pagination cursor: id of the last item from the previous page.
+	Cursor *string
+	// Page size (default 50, max 100).
+	Limit *int
+}
+
+// LoginPayload is the payload type of the admin service login method.
+type LoginPayload struct {
+	// Optional URL to return the user to after login. Relative paths and absolute
+	// URLs whose origin is in the admin allowed-origins list are accepted.
+	ReturnTo *string
+	// Optional OAuth prompt parameter forwarded to the provider. Pass 'none' to
+	// attempt silent re-authentication.
+	Prompt *string
+}
+
+// LoginResult is the result type of the admin service login method.
+type LoginResult struct {
+	// The URL to redirect the user to for Google authentication
+	Location string
+	// Short-lived CSRF state value set as a cookie for sanity-checking the callback
+	StateCookie string
+}
+
+// LogoutPayload is the payload type of the admin service logout method.
+type LogoutPayload struct {
+	// The session cookie value to clear for logging out
+	SessionID *string
+}
+
+// UpdateOrganizationPayload is the payload type of the admin service
+// updateOrganization method.
+type UpdateOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// New gram_account_type (e.g. free, pro, enterprise).
+	AccountType *string
+	// New whitelisted flag.
+	Whitelisted *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

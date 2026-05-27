@@ -54,6 +54,30 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 			head := *p.ChatSessionsToken
 			req.Header.Set("Gram-Chat-Session", head)
 		}
+		values := req.URL.Query()
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		if p.ExternalUserID != nil {
+			values.Add("external_user_id", *p.ExternalUserID)
+		}
+		if p.AssistantID != nil {
+			values.Add("assistant_id", *p.AssistantID)
+		}
+		if p.HasRisk != nil {
+			values.Add("has_risk", *p.HasRisk)
+		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		values.Add("offset", fmt.Sprintf("%v", p.Offset))
+		values.Add("sort_by", p.SortBy)
+		values.Add("sort_order", p.SortOrder)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -294,6 +318,9 @@ func EncodeLoadChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
+		if p.Generation != nil {
+			values.Add("generation", fmt.Sprintf("%v", *p.Generation))
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -970,272 +997,6 @@ func DecodeCreditUsageResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
-// BuildListChatsWithResolutionsRequest instantiates a HTTP request object with
-// method and path set to call the "chat" service "listChatsWithResolutions"
-// endpoint
-func (c *Client) BuildListChatsWithResolutionsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListChatsWithResolutionsChatPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("chat", "listChatsWithResolutions", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeListChatsWithResolutionsRequest returns an encoder for requests sent
-// to the chat listChatsWithResolutions server.
-func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*chat.ListChatsWithResolutionsPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("chat", "listChatsWithResolutions", "*chat.ListChatsWithResolutionsPayload", v)
-		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		if p.ChatSessionsToken != nil {
-			head := *p.ChatSessionsToken
-			req.Header.Set("Gram-Chat-Session", head)
-		}
-		values := req.URL.Query()
-		if p.Search != nil {
-			values.Add("search", *p.Search)
-		}
-		if p.ExternalUserID != nil {
-			values.Add("external_user_id", *p.ExternalUserID)
-		}
-		if p.AssistantID != nil {
-			values.Add("assistant_id", *p.AssistantID)
-		}
-		if p.ResolutionStatus != nil {
-			values.Add("resolution_status", *p.ResolutionStatus)
-		}
-		if p.HasRisk != nil {
-			values.Add("has_risk", *p.HasRisk)
-		}
-		if p.From != nil {
-			values.Add("from", *p.From)
-		}
-		if p.To != nil {
-			values.Add("to", *p.To)
-		}
-		values.Add("limit", fmt.Sprintf("%v", p.Limit))
-		values.Add("offset", fmt.Sprintf("%v", p.Offset))
-		values.Add("sort_by", p.SortBy)
-		values.Add("sort_order", p.SortOrder)
-		req.URL.RawQuery = values.Encode()
-		return nil
-	}
-}
-
-// DecodeListChatsWithResolutionsResponse returns a decoder for responses
-// returned by the chat listChatsWithResolutions endpoint. restoreBody controls
-// whether the response body should be restored after having been read.
-// DecodeListChatsWithResolutionsResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeListChatsWithResolutionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body ListChatsWithResolutionsResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			res := NewListChatsWithResolutionsResultOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body ListChatsWithResolutionsUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			return nil, NewListChatsWithResolutionsUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body ListChatsWithResolutionsForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			return nil, NewListChatsWithResolutionsForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body ListChatsWithResolutionsBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			return nil, NewListChatsWithResolutionsBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body ListChatsWithResolutionsNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			return nil, NewListChatsWithResolutionsNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body ListChatsWithResolutionsConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			return nil, NewListChatsWithResolutionsConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body ListChatsWithResolutionsUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			return nil, NewListChatsWithResolutionsUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body ListChatsWithResolutionsInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			return nil, NewListChatsWithResolutionsInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body ListChatsWithResolutionsInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-				}
-				err = ValidateListChatsWithResolutionsInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-				}
-				return nil, NewListChatsWithResolutionsInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body ListChatsWithResolutionsUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-				}
-				err = ValidateListChatsWithResolutionsUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-				}
-				return nil, NewListChatsWithResolutionsUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("chat", "listChatsWithResolutions", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body ListChatsWithResolutionsGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "listChatsWithResolutions", err)
-			}
-			err = ValidateListChatsWithResolutionsGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "listChatsWithResolutions", err)
-			}
-			return nil, NewListChatsWithResolutionsGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("chat", "listChatsWithResolutions", resp.StatusCode, string(body))
-		}
-	}
-}
-
 // BuildDeleteChatRequest instantiates a HTTP request object with method and
 // path set to call the "chat" service "deleteChat" endpoint
 func (c *Client) BuildDeleteChatRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1740,57 +1501,6 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      *v.CreatedAt,
 		Generation:     *v.Generation,
-	}
-
-	return res
-}
-
-// unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResolutions
-// builds a value of type *chat.ChatOverviewWithResolutions from a value of
-// type *ChatOverviewWithResolutionsResponseBody.
-func unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResolutions(v *ChatOverviewWithResolutionsResponseBody) *chat.ChatOverviewWithResolutions {
-	res := &chat.ChatOverviewWithResolutions{
-		ID:                   *v.ID,
-		Title:                *v.Title,
-		UserID:               v.UserID,
-		ExternalUserID:       v.ExternalUserID,
-		NumMessages:          *v.NumMessages,
-		Source:               v.Source,
-		CreatedAt:            *v.CreatedAt,
-		UpdatedAt:            *v.UpdatedAt,
-		TotalInputTokens:     v.TotalInputTokens,
-		TotalOutputTokens:    v.TotalOutputTokens,
-		TotalTokens:          v.TotalTokens,
-		TotalCost:            v.TotalCost,
-		LastMessageTimestamp: *v.LastMessageTimestamp,
-		RiskFindingsCount:    v.RiskFindingsCount,
-	}
-	res.Resolutions = make([]*chat.ChatResolution, len(v.Resolutions))
-	for i, val := range v.Resolutions {
-		if val == nil {
-			res.Resolutions[i] = nil
-			continue
-		}
-		res.Resolutions[i] = unmarshalChatResolutionResponseBodyToChatChatResolution(val)
-	}
-
-	return res
-}
-
-// unmarshalChatResolutionResponseBodyToChatChatResolution builds a value of
-// type *chat.ChatResolution from a value of type *ChatResolutionResponseBody.
-func unmarshalChatResolutionResponseBodyToChatChatResolution(v *ChatResolutionResponseBody) *chat.ChatResolution {
-	res := &chat.ChatResolution{
-		ID:              *v.ID,
-		UserGoal:        *v.UserGoal,
-		Resolution:      *v.Resolution,
-		ResolutionNotes: *v.ResolutionNotes,
-		Score:           *v.Score,
-		CreatedAt:       *v.CreatedAt,
-	}
-	res.MessageIds = make([]string, len(v.MessageIds))
-	for i, val := range v.MessageIds {
-		res.MessageIds[i] = val
 	}
 
 	return res

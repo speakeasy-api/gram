@@ -56,6 +56,10 @@ type Client struct {
 	// createPortalSession endpoint.
 	CreatePortalSessionDoer goahttp.Doer
 
+	// GenerateWorkOSAdminPortalLink Doer is the HTTP client used to make requests
+	// to the generateWorkOSAdminPortalLink endpoint.
+	GenerateWorkOSAdminPortalLinkDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -77,21 +81,22 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetDoer:                 doer,
-		SendInviteDoer:          doer,
-		RevokeInviteDoer:        doer,
-		UpdateInviteRoleDoer:    doer,
-		ListInvitesDoer:         doer,
-		ListUsersDoer:           doer,
-		RemoveUserDoer:          doer,
-		EnableWebhooksDoer:      doer,
-		DisableWebhooksDoer:     doer,
-		CreatePortalSessionDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		GetDoer:                           doer,
+		SendInviteDoer:                    doer,
+		RevokeInviteDoer:                  doer,
+		UpdateInviteRoleDoer:              doer,
+		ListInvitesDoer:                   doer,
+		ListUsersDoer:                     doer,
+		RemoveUserDoer:                    doer,
+		EnableWebhooksDoer:                doer,
+		DisableWebhooksDoer:               doer,
+		CreatePortalSessionDoer:           doer,
+		GenerateWorkOSAdminPortalLinkDoer: doer,
+		RestoreResponseBody:               restoreBody,
+		scheme:                            scheme,
+		host:                              host,
+		decoder:                           dec,
+		encoder:                           enc,
 	}
 }
 
@@ -330,6 +335,30 @@ func (c *Client) CreatePortalSession() goa.Endpoint {
 		resp, err := c.CreatePortalSessionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "createPortalSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GenerateWorkOSAdminPortalLink returns an endpoint that makes HTTP requests
+// to the organizations service generateWorkOSAdminPortalLink server.
+func (c *Client) GenerateWorkOSAdminPortalLink() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGenerateWorkOSAdminPortalLinkRequest(c.encoder)
+		decodeResponse = DecodeGenerateWorkOSAdminPortalLinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGenerateWorkOSAdminPortalLinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GenerateWorkOSAdminPortalLinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "generateWorkOSAdminPortalLink", err)
 		}
 		return decodeResponse(resp)
 	}

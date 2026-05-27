@@ -8,13 +8,13 @@ import (
 )
 
 // Member represents an active organization membership.
-// RoleSlug is the slug of the member's assigned role.
+// RoleSlugs contains all role slugs assigned to this membership.
 type Member struct {
 	ID             string
 	UserID         string
 	OrganizationID string
 	Organization   string
-	RoleSlug       string
+	RoleSlugs      []string
 	Status         string
 	CreatedAt      string
 	UpdatedAt      string
@@ -232,14 +232,14 @@ func (wc *Client) ListOrgUsers(ctx context.Context, orgID string) (map[string]Us
 	return users, nil
 }
 
-// UpdateMemberRole changes a member's role within an organization membership.
-func (wc *Client) UpdateMemberRole(ctx context.Context, membershipID string, roleSlug string) (*Member, error) {
+// UpdateMemberRoles replaces all roles on a membership.
+func (wc *Client) UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*Member, error) {
 	m, err := wc.um.UpdateOrganizationMembership(ctx, membershipID, usermanagement.UpdateOrganizationMembershipOpts{
-		RoleSlug:  roleSlug,
-		RoleSlugs: nil,
+		RoleSlug:  "",
+		RoleSlugs: roleSlugs,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("update member role: %w", err)
+		return nil, fmt.Errorf("update member roles: %w", err)
 	}
 
 	member := convertMember(m)

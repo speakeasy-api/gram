@@ -89,9 +89,12 @@ type testInstance struct {
 	audit               *audit.Logger
 }
 
+// newTestMCPService wires a permissive identity resolver. Tests asserting
+// non-member behaviour or specific IDP responses must use
+// newTestMCPServiceWithIdentityResolver with their own mock.
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithIdentityResolver(t, nil)
+	return newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{hasAccessOK: true})
 }
 
 // newTestMCPServiceWithDevIDP launches an in-process dev-idp instance and
@@ -110,6 +113,7 @@ func newTestMCPServiceWithDevIDP(t *testing.T) (context.Context, *testInstance, 
 		"devidp-test-client", // non-"client_" prefix routes through idpBaseURL
 		nil,                  // idpClient — BuildAuthorizationURL doesn't touch it
 		nil, nil, nil, nil, nil,
+		cache.SuffixNone,
 	)
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, resolver)
 	return ctx, ti, idp

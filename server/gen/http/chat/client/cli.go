@@ -18,7 +18,123 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+	var err error
+	var search *string
+	{
+		if chatListChatsSearch != "" {
+			search = &chatListChatsSearch
+		}
+	}
+	var externalUserID *string
+	{
+		if chatListChatsExternalUserID != "" {
+			externalUserID = &chatListChatsExternalUserID
+		}
+	}
+	var assistantID *string
+	{
+		if chatListChatsAssistantID != "" {
+			assistantID = &chatListChatsAssistantID
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var hasRisk *string
+	{
+		if chatListChatsHasRisk != "" {
+			hasRisk = &chatListChatsHasRisk
+			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var from *string
+	{
+		if chatListChatsFrom != "" {
+			from = &chatListChatsFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if chatListChatsTo != "" {
+			to = &chatListChatsTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if chatListChatsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatListChatsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var offset int
+	{
+		if chatListChatsOffset != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatListChatsOffset, 10, strconv.IntSize)
+			offset = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for offset, must be INT")
+			}
+			if offset < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sortBy string
+	{
+		if chatListChatsSortBy != "" {
+			sortBy = chatListChatsSortBy
+			if !(sortBy == "created_at" || sortBy == "num_messages") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sortOrder string
+	{
+		if chatListChatsSortOrder != "" {
+			sortOrder = chatListChatsSortOrder
+			if !(sortOrder == "asc" || sortOrder == "desc") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_order", sortOrder, []any{"asc", "desc"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if chatListChatsSessionToken != "" {
@@ -38,6 +154,16 @@ func BuildListChatsPayload(chatListChatsSessionToken string, chatListChatsProjec
 		}
 	}
 	v := &chat.ListChatsPayload{}
+	v.Search = search
+	v.ExternalUserID = externalUserID
+	v.AssistantID = assistantID
+	v.HasRisk = hasRisk
+	v.From = from
+	v.To = to
+	v.Limit = limit
+	v.Offset = offset
+	v.SortBy = sortBy
+	v.SortOrder = sortOrder
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -47,10 +173,29 @@ func BuildListChatsPayload(chatListChatsSessionToken string, chatListChatsProjec
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+	var err error
 	var id string
 	{
 		id = chatLoadChatID
+	}
+	var generation *int
+	{
+		if chatLoadChatGeneration != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatLoadChatGeneration, 10, strconv.IntSize)
+			val := int(v)
+			generation = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for generation, must be INT")
+			}
+			if *generation < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("generation", *generation, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	var sessionToken *string
 	{
@@ -72,6 +217,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatSessionToken string
 	}
 	v := &chat.LoadChatPayload{}
 	v.ID = id
+	v.Generation = generation
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -129,168 +275,6 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string) (*chat.CreditUs
 	}
 	v := &chat.CreditUsagePayload{}
 	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildListChatsWithResolutionsPayload builds the payload for the chat
-// listChatsWithResolutions endpoint from CLI flags.
-func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsAssistantID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsHasRisk string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSortBy string, chatListChatsWithResolutionsSortOrder string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
-	var err error
-	var search *string
-	{
-		if chatListChatsWithResolutionsSearch != "" {
-			search = &chatListChatsWithResolutionsSearch
-		}
-	}
-	var externalUserID *string
-	{
-		if chatListChatsWithResolutionsExternalUserID != "" {
-			externalUserID = &chatListChatsWithResolutionsExternalUserID
-		}
-	}
-	var assistantID *string
-	{
-		if chatListChatsWithResolutionsAssistantID != "" {
-			assistantID = &chatListChatsWithResolutionsAssistantID
-			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var resolutionStatus *string
-	{
-		if chatListChatsWithResolutionsResolutionStatus != "" {
-			resolutionStatus = &chatListChatsWithResolutionsResolutionStatus
-		}
-	}
-	var hasRisk *string
-	{
-		if chatListChatsWithResolutionsHasRisk != "" {
-			hasRisk = &chatListChatsWithResolutionsHasRisk
-			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var from *string
-	{
-		if chatListChatsWithResolutionsFrom != "" {
-			from = &chatListChatsWithResolutionsFrom
-			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var to *string
-	{
-		if chatListChatsWithResolutionsTo != "" {
-			to = &chatListChatsWithResolutionsTo
-			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var limit int
-	{
-		if chatListChatsWithResolutionsLimit != "" {
-			var v int64
-			v, err = strconv.ParseInt(chatListChatsWithResolutionsLimit, 10, strconv.IntSize)
-			limit = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for limit, must be INT")
-			}
-			if limit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-			}
-			if limit > 100 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var offset int
-	{
-		if chatListChatsWithResolutionsOffset != "" {
-			var v int64
-			v, err = strconv.ParseInt(chatListChatsWithResolutionsOffset, 10, strconv.IntSize)
-			offset = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for offset, must be INT")
-			}
-			if offset < 0 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var sortBy string
-	{
-		if chatListChatsWithResolutionsSortBy != "" {
-			sortBy = chatListChatsWithResolutionsSortBy
-			if !(sortBy == "created_at" || sortBy == "num_messages" || sortBy == "score") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages", "score"}))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var sortOrder string
-	{
-		if chatListChatsWithResolutionsSortOrder != "" {
-			sortOrder = chatListChatsWithResolutionsSortOrder
-			if !(sortOrder == "asc" || sortOrder == "desc") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_order", sortOrder, []any{"asc", "desc"}))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var sessionToken *string
-	{
-		if chatListChatsWithResolutionsSessionToken != "" {
-			sessionToken = &chatListChatsWithResolutionsSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if chatListChatsWithResolutionsProjectSlugInput != "" {
-			projectSlugInput = &chatListChatsWithResolutionsProjectSlugInput
-		}
-	}
-	var chatSessionsToken *string
-	{
-		if chatListChatsWithResolutionsChatSessionsToken != "" {
-			chatSessionsToken = &chatListChatsWithResolutionsChatSessionsToken
-		}
-	}
-	v := &chat.ListChatsWithResolutionsPayload{}
-	v.Search = search
-	v.ExternalUserID = externalUserID
-	v.AssistantID = assistantID
-	v.ResolutionStatus = resolutionStatus
-	v.HasRisk = hasRisk
-	v.From = from
-	v.To = to
-	v.Limit = limit
-	v.Offset = offset
-	v.SortBy = sortBy
-	v.SortOrder = sortOrder
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }

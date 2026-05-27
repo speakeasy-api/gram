@@ -189,6 +189,93 @@ func TestProcessWorkOSUserEvents_LinksOptimisticRoleAssignments(t *testing.T) {
 	require.Equal(t, gramID, assignments[0].UserID.String)
 }
 
+func TestProcessWorkOSUserEvents_LinksMultipleOptimisticRoleAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_link_multi_role_assignments")
+	logger := testenv.NewLogger(t)
+
+	const workosUserID = "user_multi_role_link"
+	gramID := users.UserIDFromWorkOSID(workosUserID)
+	seedTime := time.Date(2026, 5, 10, 10, 0, 0, 0, time.UTC)
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   "org_multi_role_link",
+		Name: "Multi Role Link Org",
+		Slug: "multi-role-link-org",
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
+		ID:                "org_multi_role_link",
+		Name:              "Multi Role Link Org",
+		WorkosID:          conv.ToPGText("org_multi_role_link"),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID: conv.ToPGText("event_org_multi_role_link"),
+	})
+	require.NoError(t, err)
+
+	// Seed two global roles
+	for _, slug := range []string{"admin-role", "builder-role"} {
+		err = accessrepo.New(conn).UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
+			WorkosSlug:        slug,
+			WorkosName:        slug,
+			WorkosDescription: conv.ToPGText(slug),
+			WorkosCreatedAt:   conv.ToPGTimestamptz(seedTime),
+			WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
+			WorkosLastEventID: conv.ToPGText("event_global_" + slug),
+		})
+		require.NoError(t, err)
+	}
+
+	// Sync two role assignments optimistically (no user_id yet)
+	err = orgrepo.New(conn).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     "org_multi_role_link",
+		WorkosUserID:       workosUserID,
+		WorkosRoleSlugs:    []string{"admin-role", "builder-role"},
+		UserID:             conv.ToPGTextEmpty(""),
+		WorkosMembershipID: conv.ToPGTextEmpty(""),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID:  conv.ToPGText("event_multi_optimistic"),
+	})
+	require.NoError(t, err)
+
+	// Verify both assignments exist without user_id
+	preAssignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: "org_multi_role_link",
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, preAssignments, 2)
+	for _, a := range preAssignments {
+		require.False(t, a.UserID.Valid, "user_id should be empty before user event")
+	}
+
+	// Process user.created event — should link ALL assignment rows
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_user_multi_role_link", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, "multirole@example.com", "Multi", "Role", "")},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+	require.Equal(t, "event_user_multi_role_link", res.LastEventID)
+
+	// All assignments should now have user_id populated
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: "org_multi_role_link",
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 2, "both role assignments should still exist")
+	for _, a := range assignments {
+		require.True(t, a.UserID.Valid, "user_id should be populated after user event")
+		require.Equal(t, gramID, a.UserID.String)
+	}
+}
+
 func TestProcessWorkOSUserEvents_LinksPendingRelationshipOverTombstone(t *testing.T) {
 	t.Parallel()
 

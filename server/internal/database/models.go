@@ -297,17 +297,18 @@ type ChatUserFeedback struct {
 }
 
 type CustomDomain struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Domain         string
-	Verified       bool
-	Activated      bool
-	IngressName    pgtype.Text
-	CertSecretName pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	OrganizationID  string
+	Domain          string
+	Verified        bool
+	Activated       bool
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type Deployment struct {
@@ -533,6 +534,7 @@ type FunctionToolDefinition struct {
 	Runtime         string
 	Name            string
 	Description     string
+	Tags            []string
 	InputSchema     []byte
 	Variables       []byte
 	AuthInput       []byte
@@ -1145,6 +1147,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
 	Audience                pgtype.Text
+	LegacyCallbackUrl       bool
 	CreatedAt               pgtype.Timestamptz
 	UpdatedAt               pgtype.Timestamptz
 	DeletedAt               pgtype.Timestamptz
@@ -1181,6 +1184,7 @@ type RiskPolicy struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	DisabledRules        []string
 	Action               string
 	AutoName             bool
 	UserMessage          pgtype.Text

@@ -33,10 +33,6 @@ type Client struct {
 	// endpoint.
 	CreditUsageDoer goahttp.Doer
 
-	// ListChatsWithResolutions Doer is the HTTP client used to make requests to
-	// the listChatsWithResolutions endpoint.
-	ListChatsWithResolutionsDoer goahttp.Doer
-
 	// DeleteChat Doer is the HTTP client used to make requests to the deleteChat
 	// endpoint.
 	DeleteChatDoer goahttp.Doer
@@ -65,18 +61,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListChatsDoer:                doer,
-		LoadChatDoer:                 doer,
-		GenerateTitleDoer:            doer,
-		CreditUsageDoer:              doer,
-		ListChatsWithResolutionsDoer: doer,
-		DeleteChatDoer:               doer,
-		SubmitFeedbackDoer:           doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		ListChatsDoer:       doer,
+		LoadChatDoer:        doer,
+		GenerateTitleDoer:   doer,
+		CreditUsageDoer:     doer,
+		DeleteChatDoer:      doer,
+		SubmitFeedbackDoer:  doer,
+		RestoreResponseBody: restoreBody,
+		scheme:              scheme,
+		host:                host,
+		decoder:             dec,
+		encoder:             enc,
 	}
 }
 
@@ -171,30 +166,6 @@ func (c *Client) CreditUsage() goa.Endpoint {
 		resp, err := c.CreditUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "creditUsage", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ListChatsWithResolutions returns an endpoint that makes HTTP requests to the
-// chat service listChatsWithResolutions server.
-func (c *Client) ListChatsWithResolutions() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListChatsWithResolutionsRequest(c.encoder)
-		decodeResponse = DecodeListChatsWithResolutionsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListChatsWithResolutionsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListChatsWithResolutionsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("chat", "listChatsWithResolutions", err)
 		}
 		return decodeResponse(resp)
 	}

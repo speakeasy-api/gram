@@ -4,6 +4,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { MoreActions } from "@/components/ui/more-actions";
 import { TextArea } from "@/components/ui/textarea";
+import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useLatestDeployment } from "@/hooks/toolTypes";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
@@ -36,6 +37,11 @@ export type ToolListUpdateFields = {
   destructiveHint?: boolean;
   idempotentHint?: boolean;
   openWorldHint?: boolean;
+  // tri-state:
+  //   undefined = no override (use source tags)
+  //   []        = explicit empty override
+  //   [...]     = explicit override
+  tags?: string[] | undefined;
 };
 
 interface ToolListProps {
@@ -285,7 +291,7 @@ function ToolRow({
   const isDisabled = false;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editType, setEditType] = useState<
-    "name" | "description" | "annotations"
+    "name" | "description" | "annotations" | "tags"
   >("name");
   const [editValue, setEditValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -297,9 +303,24 @@ function ToolRow({
   const [annotIdempotent, setAnnotIdempotent] = useState(false);
   const [annotOpenWorld, setAnnotOpenWorld] = useState(false);
 
-  const hasAnnotations = tool.type === "http" || tool.type === "function";
+  // Tags editing state (HTTP tools only)
+  const [tagsValue, setTagsValue] = useState<string[] | undefined>(undefined);
 
-  const openEditDialog = (type: "name" | "description" | "annotations") => {
+  const hasAnnotations = tool.type === "http" || tool.type === "function";
+  // TODO(AGE-2348): extend tag variations to function tools.
+  // TODO: extend tag variations to prompt tools once they support tags.
+  const supportsTags = tool.type === "http";
+  // Memoize: the inline `[]` fallback would produce a fresh reference per
+  // render and invalidate downstream memoization in TagsVariationEditor.
+  const baseTags = useMemo(
+    () => (tool.type === "http" ? tool.tags : []),
+    [tool],
+  );
+  const origTags = supportsTags ? tool.variation?.tags : undefined;
+
+  const openEditDialog = (
+    type: "name" | "description" | "annotations" | "tags",
+  ) => {
     setEditType(type);
     if (type === "annotations") {
       setAnnotTitle(tool.variation?.title ?? tool.annotations?.title ?? "");
@@ -321,6 +342,8 @@ function ToolRow({
           tool.annotations?.openWorldHint ??
           false,
       );
+    } else if (type === "tags") {
+      setTagsValue(origTags);
     } else {
       setEditValue(type === "name" ? tool.name : tool.description);
     }
@@ -342,6 +365,11 @@ function ToolRow({
         idempotentHint: annotIdempotent,
         openWorldHint: annotOpenWorld,
       });
+    } else if (editType === "tags") {
+      // tags key must always be present so the upsert form spread correctly
+      // overwrites any prior variation tags (sending undefined drops the key
+      // from the wire body, signalling no override).
+      onUpdate?.({ tags: tagsValue });
     } else {
       onUpdate?.({ [editType]: editValue });
     }
@@ -369,6 +397,15 @@ function ToolRow({
           {
             label: "Edit annotations",
             onClick: () => openEditDialog("annotations"),
+            icon: "pencil" as const,
+          },
+        ]
+      : []),
+    ...(supportsTags
+      ? [
+          {
+            label: "Edit tags",
+            onClick: () => openEditDialog("tags"),
             icon: "pencil" as const,
           },
         ]
@@ -466,16 +503,20 @@ function ToolRow({
             <Dialog.Title>
               {editType === "annotations"
                 ? "Edit annotations"
-                : editType === "name"
-                  ? "Edit tool name"
-                  : "Edit description"}
+                : editType === "tags"
+                  ? "Edit tags"
+                  : editType === "name"
+                    ? "Edit tool name"
+                    : "Edit description"}
             </Dialog.Title>
             <Dialog.Description>
               {editType === "annotations"
                 ? `Override behavior hints for '${tool.name}'`
-                : editType === "name"
-                  ? `Update the name of tool '${tool.name}'`
-                  : `Update the description of tool '${tool.name}'`}
+                : editType === "tags"
+                  ? `Override tags for '${tool.name}'`
+                  : editType === "name"
+                    ? `Update the name of tool '${tool.name}'`
+                    : `Update the description of tool '${tool.name}'`}
             </Dialog.Description>
           </Dialog.Header>
           <div className="space-y-4 py-4">
@@ -548,6 +589,12 @@ function ToolRow({
                   </div>
                 </div>
               </Stack>
+            ) : editType === "tags" ? (
+              <TagsVariationEditor
+                baseTags={baseTags}
+                value={tagsValue}
+                onChange={setTagsValue}
+              />
             ) : editType === "name" ? (
               <Stack gap={2}>
                 <Input

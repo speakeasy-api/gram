@@ -84,72 +84,136 @@ VALUES (
   , @generation
 );
 
--- name: ListAllChats :many
-SELECT
-    c.*,
-    (
-        COALESCE(
-            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
-            0
-        )
-    )::integer as num_messages
-    , (
-        COALESCE(
-            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
-            0
-        )
-    )::integer as total_tokens
-    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
-    , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
+-- name: CountChats :one
+SELECT COUNT(DISTINCT c.id) AS total
 FROM chats c
 WHERE c.project_id = @project_id
   AND c.deleted IS FALSE
-ORDER BY c.updated_at DESC;
+  AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
+  AND (@user_id = '' OR c.user_id = @user_id)
+  AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
+  AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
+  AND (
+    @search = ''
+    OR c.id::text ILIKE '%' || @search || '%'
+    OR c.external_user_id ILIKE '%' || @search || '%'
+    OR c.title ILIKE '%' || @search || '%'
+  )
+  AND (
+    @assistant_id = ''
+    OR EXISTS (
+      SELECT 1 FROM assistant_threads at
+      WHERE at.chat_id = c.id
+        AND at.assistant_id = @assistant_id::uuid
+        AND at.deleted IS FALSE
+    )
+  )
+  AND (
+    @has_risk_filter::text = ''
+    OR (
+      @has_risk_filter::text = 'true' AND EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = @project_id
+          AND rr.found IS TRUE
+      )
+    )
+    OR (
+      @has_risk_filter::text = 'false' AND NOT EXISTS (
+        SELECT 1 FROM risk_results rr
+        JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        WHERE cm.chat_id = c.id
+          AND rr.project_id = @project_id
+          AND rr.found IS TRUE
+      )
+    )
+  );
 
--- name: ListChatsForExternalUser :many
-SELECT
-    c.*,
+-- name: ListChats :many
+WITH limited_chats AS (
+  SELECT
+    c.id,
+    c.title,
+    c.user_id,
+    c.external_user_id,
+    c.created_at,
+    c.updated_at,
+    (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer AS num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
+    (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_timestamp,
     (
-        COALESCE(
-            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
-            0
+      SELECT COUNT(*)::integer
+      FROM risk_results rr
+      JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      WHERE cm.chat_id = c.id
+        AND rr.project_id = @project_id
+        AND rr.found IS TRUE
+    ) AS risk_findings_count
+  FROM chats c
+  WHERE c.project_id = @project_id
+    AND c.deleted IS FALSE
+    AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
+    AND (@user_id = '' OR c.user_id = @user_id)
+    AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
+    AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
+    AND (
+      @search = ''
+      OR c.id::text ILIKE '%' || @search || '%'
+      OR c.external_user_id ILIKE '%' || @search || '%'
+      OR c.title ILIKE '%' || @search || '%'
+    )
+    AND (
+      @assistant_id = ''
+      OR EXISTS (
+        SELECT 1 FROM assistant_threads at
+        WHERE at.chat_id = c.id
+          AND at.assistant_id = @assistant_id::uuid
+          AND at.deleted IS FALSE
+      )
+    )
+    AND (
+      @has_risk_filter::text = ''
+      OR (
+        @has_risk_filter::text = 'true' AND EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = @project_id
+            AND rr.found IS TRUE
         )
-    )::integer as num_messages
-    , (
-        COALESCE(
-            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
-            0
+      )
+      OR (
+        @has_risk_filter::text = 'false' AND NOT EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = @project_id
+            AND rr.found IS TRUE
         )
-    )::integer as total_tokens
-    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
-    , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
-FROM chats c
-WHERE c.project_id = @project_id AND c.external_user_id = @external_user_id
-  AND c.deleted IS FALSE
-ORDER BY c.updated_at DESC;
-
-
--- name: ListChatsForUser :many
+      )
+    )
+  ORDER BY
+    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'desc' THEN c.created_at END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'asc' THEN c.created_at END ASC NULLS LAST,
+    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END DESC NULLS LAST,
+    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END ASC NULLS LAST,
+    c.created_at DESC
+  LIMIT @page_limit
+  OFFSET @page_offset
+)
 SELECT
-    c.*,
-    (
-        COALESCE(
-            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
-            0
-        )
-    )::integer as num_messages
-    , (
-        COALESCE(
-            (SELECT SUM(total_tokens) FROM chat_messages WHERE chat_id = c.id),
-            0
-        )
-    )::integer as total_tokens
-    , (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source
-    , (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp
-FROM chats c
-WHERE c.project_id = @project_id AND c.user_id = @user_id
-  AND c.deleted IS FALSE
-ORDER BY c.updated_at DESC;
+  lc.id,
+  lc.title,
+  lc.user_id,
+  lc.external_user_id,
+  lc.source,
+  lc.created_at,
+  lc.updated_at,
+  lc.num_messages,
+  lc.last_message_timestamp,
+  lc.risk_findings_count
+FROM limited_chats lc;
 
 -- name: GetChat :one
 SELECT * FROM chats WHERE id = @id AND deleted IS FALSE;
@@ -164,6 +228,18 @@ ORDER BY seq ASC;
 -- list drift and the client hits "chat history mismatch" at
 -- message_capture_strategy.go.
 SELECT COUNT(*) FROM chat_messages
+WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
+
+-- name: GetChatMessageStats :one
+-- Chat-wide aggregates (total message count + most recent message timestamp).
+-- Used by loadChat so every paginated response can carry the chat's real
+-- last_message_timestamp without depending on chats.updated_at, which is bumped
+-- by metadata edits (e.g. title changes) and would drift from the actual last
+-- message.
+SELECT
+  COUNT(*)::bigint AS total,
+  MAX(created_at)::timestamptz AS last_message_at
+FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
 
 -- name: ListLatestGenerationChatMessages :many
@@ -309,168 +385,6 @@ WHERE c.project_id = @project_id
     )
   );
 
--- name: ListChatsWithResolutions :many
-WITH limited_chats AS (
-  SELECT
-    c.id,
-    c.title,
-    c.user_id,
-    c.external_user_id,
-    c.created_at,
-    c.updated_at,
-    (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer as num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) as source,
-    (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_timestamp,
-    COALESCE(
-      (SELECT AVG(score)::integer FROM chat_resolutions WHERE chat_id = c.id),
-      0
-    ) as avg_score,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = c.id
-        AND rr.project_id = @project_id
-        AND rr.found IS TRUE
-    ) as risk_findings_count
-  FROM chats c
-  WHERE c.project_id = @project_id
-    AND c.deleted IS FALSE
-    AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
-    AND (@from_time::timestamptz IS NULL OR c.created_at >= @from_time)
-    AND (@to_time::timestamptz IS NULL OR c.created_at <= @to_time)
-    AND (
-      @search = ''
-      OR c.id::text ILIKE '%' || @search || '%'
-      OR c.external_user_id ILIKE '%' || @search || '%'
-      OR c.title ILIKE '%' || @search || '%'
-    )
-    AND (
-      @assistant_id = ''
-      OR EXISTS (
-        SELECT 1 FROM assistant_threads at
-        WHERE at.chat_id = c.id
-          AND at.assistant_id = @assistant_id::uuid
-          AND at.deleted IS FALSE
-      )
-    )
-    AND (
-      @resolution_status = ''
-      OR (
-        @resolution_status = 'unresolved' AND NOT EXISTS (
-          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id
-        )
-      )
-      OR (
-        @resolution_status != 'unresolved' AND EXISTS (
-          SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
-        )
-      )
-    )
-    AND (
-      @has_risk_filter::text = ''
-      OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-        )
-      )
-    )
-  ORDER BY
-    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'desc' THEN c.created_at END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'asc' THEN c.created_at END ASC NULLS LAST,
-    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END ASC NULLS LAST,
-    CASE WHEN @sort_by = 'score' AND @sort_order = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'score' AND @sort_order = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
-    c.created_at DESC
-  LIMIT @page_limit
-  OFFSET @page_offset
-)
-SELECT
-    lc.id as chat_id,
-    lc.title,
-    lc.user_id,
-    lc.external_user_id,
-    lc.source,
-    lc.created_at,
-    lc.updated_at,
-    lc.num_messages,
-    lc.last_message_timestamp,
-    lc.avg_score,
-    lc.risk_findings_count,
-    cr.id as resolution_id,
-    cr.user_goal,
-    cr.resolution,
-    cr.resolution_notes,
-    cr.score,
-    cr.created_at as resolution_created_at,
-    COALESCE(
-        (
-            SELECT array_agg(crm.message_id)
-            FROM chat_resolution_messages crm
-            WHERE crm.chat_resolution_id = cr.id
-        ),
-        ARRAY[]::uuid[]
-    ) as message_ids
-FROM limited_chats lc
-LEFT JOIN chat_resolutions cr ON cr.chat_id = lc.id
-ORDER BY
-    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'desc' THEN lc.created_at END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'created_at' AND @sort_order = 'asc' THEN lc.created_at END ASC NULLS LAST,
-    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN lc.num_messages END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN lc.num_messages END ASC NULLS LAST,
-    CASE WHEN @sort_by = 'score' AND @sort_order = 'desc' THEN lc.avg_score END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'score' AND @sort_order = 'asc' THEN lc.avg_score END ASC NULLS LAST,
-    lc.created_at DESC,
-    cr.created_at DESC;
-
--- name: GetChatWithResolutions :one
-SELECT
-    c.*,
-    (
-        COALESCE(
-            (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id),
-            0
-        )
-    )::integer as num_messages,
-    COALESCE(
-        (
-            SELECT json_agg(
-                json_build_object(
-                    'id', cr.id,
-                    'user_goal', cr.user_goal,
-                    'resolution', cr.resolution,
-                    'resolution_notes', cr.resolution_notes,
-                    'score', cr.score,
-                    'created_at', cr.created_at,
-                    'message_ids', (
-                        SELECT COALESCE(array_agg(crm.message_id), ARRAY[]::uuid[])
-                        FROM chat_resolution_messages crm
-                        WHERE crm.chat_resolution_id = cr.id
-                    )
-                ) ORDER BY cr.created_at DESC
-            )
-            FROM chat_resolutions cr
-            WHERE cr.chat_id = c.id
-        ),
-        '[]'::json
-    ) as resolutions
-FROM chats c
-WHERE c.id = @id AND c.deleted IS FALSE;
-
 -- name: ListUserFeedbackForChat :many
 SELECT *
 FROM chat_user_feedback
@@ -604,3 +518,33 @@ FROM chat_stats;
 -- the full CreateChatMessage :copyfrom batch shape.
 INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id, generation)
 VALUES (@chat_id, @project_id, @role, @content, @tool_calls, @tool_call_id, @generation);
+
+-- name: SeedChatAtTime :one
+-- Test fixture: insert a chat with a specific created_at for date range tests.
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
+VALUES (@id, @project_id, @organization_id, @user_id, @external_user_id, @title, @created_at, @created_at)
+ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+RETURNING id;
+
+-- name: SeedChatMessage :one
+-- Test fixture: insert a minimal chat message and return its id.
+INSERT INTO chat_messages (chat_id, project_id, role, content)
+VALUES (@chat_id, @project_id, 'user', 'test message')
+RETURNING id;
+
+-- name: SeedRiskPolicy :one
+-- Test fixture: insert a minimal risk policy and return its id.
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version)
+VALUES (@project_id, @organization_id, 'test-policy', '{}', TRUE, 'flag', TRUE, 1)
+RETURNING id;
+
+-- name: SeedRiskResult :exec
+-- Test fixture: insert a risk result linking a chat message to a risk policy.
+INSERT INTO risk_results (
+    project_id, organization_id, risk_policy_id, risk_policy_version,
+    chat_message_id, source, found
+)
+VALUES (
+    @project_id, @organization_id, @risk_policy_id, 1,
+    @chat_message_id, 'test', @found
+);
