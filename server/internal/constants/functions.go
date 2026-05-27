@@ -6,4 +6,6 @@ const (
 
 	DefaultFunctionScale = 2
 	MaxFunctionScale     = 5
+
+	MaxFunctionToolTags = 40
 )

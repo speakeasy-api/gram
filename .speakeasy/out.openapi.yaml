@@ -31358,6 +31358,11 @@ components:
         summarizer:
           type: string
           description: Summarizer for the tool
+        tags:
+          type: array
+          items:
+            type: string
+          description: The tags list for this function tool
         tool_urn:
           type: string
           description: The URN of this tool
@@ -31375,6 +31380,7 @@ components:
         - asset_id
         - function_id
         - runtime
+        - tags
         - id
         - project_id
         - name

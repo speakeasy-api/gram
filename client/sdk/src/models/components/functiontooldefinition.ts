@@ -94,6 +94,10 @@ export type FunctionToolDefinition = {
    */
   summarizer?: string | undefined;
   /**
+   * The tags list for this function tool
+   */
+  tags: Array<string>;
+  /**
    * The URN of this tool
    */
   toolUrn: string;
@@ -135,6 +139,7 @@ export const FunctionToolDefinition$inboundSchema: z.ZodMiniType<
     schema: z.string(),
     schema_version: z.optional(z.string()),
     summarizer: z.optional(z.string()),
+    tags: z.array(z.string()),
     tool_urn: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

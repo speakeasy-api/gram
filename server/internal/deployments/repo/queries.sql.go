@@ -293,6 +293,8 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
+  , tags
+  , meta
   , read_only_hint
   , destructive_hint
   , idempotent_hint
@@ -309,6 +311,8 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
+  , current.tags
+  , current.meta
   , current.read_only_hint
   , current.destructive_hint
   , current.idempotent_hint
@@ -545,6 +549,7 @@ INSERT INTO function_tool_definitions (
   , input_schema
   , variables
   , auth_input
+  , tags
   , meta
   , read_only_hint
   , destructive_hint
@@ -566,6 +571,7 @@ INSERT INTO function_tool_definitions (
   , $13
   , $14
   , $15
+  , $16
 )
 RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, tags, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
@@ -581,6 +587,7 @@ type CreateFunctionsToolParams struct {
 	InputSchema     []byte
 	Variables       []byte
 	AuthInput       []byte
+	Tags            []string
 	Meta            []byte
 	ReadOnlyHint    pgtype.Bool
 	DestructiveHint pgtype.Bool
@@ -600,6 +607,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		arg.InputSchema,
 		arg.Variables,
 		arg.AuthInput,
+		arg.Tags,
 		arg.Meta,
 		arg.ReadOnlyHint,
 		arg.DestructiveHint,
