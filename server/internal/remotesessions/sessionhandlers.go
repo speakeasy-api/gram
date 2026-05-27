@@ -46,7 +46,7 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 	}
 
 	rows, err := repo.New(s.db).ListRemoteSessionsByProjectID(ctx, repo.ListRemoteSessionsByProjectIDParams{
-		ProjectID:             *authCtx.ProjectID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		SubjectUrn:            subjectFilter,
 		RemoteSessionClientID: clientFilter,
 		Cursor:                cursor,
@@ -100,7 +100,7 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 
 	revoked, err := txRepo.RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{
 		ID:        sessionID,
-		ProjectID: *authCtx.ProjectID,
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -93,7 +93,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-aud-"+slugSuffix)
 
 			_, err = q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-				ProjectID:               *authCtx.ProjectID,
+				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				RemoteSessionIssuerID:   issuer.ID,
 				UserSessionIssuerID:     userIssuer,
 				ClientID:                "aud-cid",
