@@ -340,6 +340,8 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 			Slug:               org.Slug,
 			WorkosID:           workosID,
 			UserWorkspaceSlugs: []string{org.Slug},
+			SSOEnabled:         org.SsoEnabled.Bool,
+			SCIMEnabled:        org.ScimEnabled.Bool,
 		}
 	}
 

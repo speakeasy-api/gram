@@ -759,12 +759,28 @@ export function TeamInner() {
               </Type>
             </Stack>
             <RequireScope scope="org:admin" level="component">
-              <Button onClick={() => setIsInviteDialogOpen(true)}>
-                <Button.LeftIcon>
-                  <UserPlus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Invite Member</Button.Text>
-              </Button>
+              {organization.ssoEnabled ? (
+                <SimpleTooltip tooltip="Managed by your identity provider">
+                  <span className="inline-flex">
+                    <Button
+                      onClick={() => setIsInviteDialogOpen(true)}
+                      disabled
+                    >
+                      <Button.LeftIcon>
+                        <UserPlus className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Invite Member</Button.Text>
+                    </Button>
+                  </span>
+                </SimpleTooltip>
+              ) : (
+                <Button onClick={() => setIsInviteDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <UserPlus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Invite Member</Button.Text>
+                </Button>
+              )}
             </RequireScope>
           </Stack>
 

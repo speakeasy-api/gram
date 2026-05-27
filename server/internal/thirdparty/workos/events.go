@@ -10,7 +10,12 @@ const (
 	EventKindOrganizationDeleted EventKind = "organization.deleted"
 	EventKindOrganizationUpdated EventKind = "organization.updated"
 
+	EventKindConnectionActivated   EventKind = "connection.activated"
+	EventKindConnectionDeactivated EventKind = "connection.deactivated"
+	EventKindConnectionDeleted     EventKind = "connection.deleted"
+
 	EventKindDirectorySyncActivated        EventKind = "dsync.activated"
+	EventKindDirectorySyncDeactivated      EventKind = "dsync.deactivated"
 	EventKindDirectorySyncDeleted          EventKind = "dsync.deleted"
 	EventKindDirectorySyncGroupCreated     EventKind = "dsync.group.created"
 	EventKindDirectorySyncGroupDeleted     EventKind = "dsync.group.deleted"

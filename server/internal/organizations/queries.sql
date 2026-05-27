@@ -581,7 +581,7 @@ WHERE id = @id
 RETURNING *;
 
 -- name: ListOrganizationsForUser :many
-SELECT om.id, om.name, om.slug, om.workos_id
+SELECT om.id, om.name, om.slug, om.workos_id, om.sso_enabled, om.scim_enabled
 FROM organization_user_relationships our
 JOIN organization_metadata om ON om.id = our.organization_id
 WHERE our.user_id = @user_id
@@ -633,6 +633,22 @@ RETURNING id, svix_app_id, webhooks_enabled;
 SELECT svix_app_id
 FROM organization_metadata
 WHERE id = @id AND svix_app_id IS NOT NULL;
+
+-- name: SetSSOEnabled :exec
+-- Update the SSO enabled flag on an organization. Called when a WorkOS
+-- connection.activated or connection.deactivated/deleted event is processed.
+UPDATE organization_metadata
+SET sso_enabled = @enabled,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
+
+-- name: SetSCIMEnabled :exec
+-- Update the SCIM/directory sync enabled flag on an organization. Called when
+-- a WorkOS dsync.activated or dsync.deactivated event is processed.
+UPDATE organization_metadata
+SET scim_enabled = @enabled,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
 
 -- name: ListActiveRoleAssignmentsByOrganization :many
 SELECT
