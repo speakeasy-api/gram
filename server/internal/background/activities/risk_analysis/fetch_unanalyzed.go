@@ -84,7 +84,7 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	}
 
 	ids, err := queries.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
-		ProjectID:         uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		ProjectID:         args.ProjectID,
 		RiskPolicyID:      args.RiskPolicyID,
 		RiskPolicyVersion: policy.Version,
 		BatchLimit:        args.BatchLimit,

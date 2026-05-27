@@ -410,25 +410,27 @@ LEFT JOIN findings_by_bucket ON findings_by_bucket.bucket_start = buckets.bucket
 ORDER BY buckets.bucket_start ASC, categories.category ASC;
 
 -- name: FetchUnanalyzedMessageIDs :many
--- uuidv7 is k-sortable. The existing composite index
--- chat_messages_project_id_id_idx (project_id, id) lets Postgres satisfy
--- ORDER BY cm.id DESC with an Index Only Scan Backward, so we get
--- "most recent first" without a Sort node or any new index. Combined
--- with LIMIT this lets the planner stop scanning early when only the
--- recent tail is needed (verified via EXPLAIN ANALYZE: LIMIT 100 over a
--- 15k-message table scans ~2k rows in ~2ms).
+-- uuidv7 is k-sortable. chat_messages_project_id_id_idx (project_id, id)
+-- satisfies ORDER BY cm.id DESC via Index Only Scan Backward — no Sort node.
+-- The LATERAL LEFT JOIN forces a Nested Loop plan so the planner cannot choose
+-- a Hash Anti-Join that materialises all risk_results for the policy version.
+-- risk_results_message_policy_coverage_idx (chat_message_id, project_id,
+-- risk_policy_id, risk_policy_version) serves the inner probe: chat_message_id
+-- leads so selectivity is near-1, giving O(log n) per outer row and early
+-- termination as soon as LIMIT is satisfied.
 SELECT cm.id
 FROM chat_messages cm
+LEFT JOIN LATERAL (
+  SELECT 1 AS analyzed
+  FROM risk_results rr
+  WHERE rr.chat_message_id = cm.id
+    AND rr.project_id = @project_id
+    AND rr.risk_policy_id = @risk_policy_id
+    AND rr.risk_policy_version = @risk_policy_version
+  LIMIT 1
+) analyzed ON TRUE
 WHERE cm.project_id = @project_id
-  AND NOT EXISTS (
-    SELECT 1
-    FROM risk_results rr
-    WHERE rr.chat_message_id = cm.id
-      AND rr.project_id = @project_id
-      AND rr.risk_policy_id = @risk_policy_id
-      AND rr.risk_policy_version = @risk_policy_version
-    LIMIT 1
-  )
+  AND analyzed.analyzed IS NULL
 ORDER BY cm.id DESC
 LIMIT @batch_limit;
 
