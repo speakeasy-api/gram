@@ -496,3 +496,115 @@ func TestDeploymentsService_ListDeployments_ValidCursor(t *testing.T) {
 	require.NoError(t, err, "should not error with valid cursor format")
 	require.NotNil(t, result.Items, "items should not be nil")
 }
+
+func TestDeploymentsService_ListDeployments_FilterBySourceSlugs(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload two distinct OpenAPI assets that will back two different sources.
+	bsTodo := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	aresTodo, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bsTodo.Len()),
+	}, io.NopCloser(bsTodo))
+	require.NoError(t, err, "upload todo openapi asset")
+
+	bsPet := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	aresPet, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bsPet.Len()),
+	}, io.NopCloser(bsPet))
+	require.NoError(t, err, "upload petstore openapi asset")
+
+	// Deployment A contains source slug "todos".
+	depA, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "filter-by-source-a",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{AssetID: aresTodo.Asset.ID, Name: "todos", Slug: "todos"},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment A")
+
+	// Deployment B contains source slug "pets".
+	depB, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "filter-by-source-b",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{AssetID: aresPet.Asset.ID, Name: "pets", Slug: "pets"},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment B")
+
+	// Filter by "todos" → only deployment A returned.
+	filtered, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
+		Cursor:           nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		SourceSlugs:      []string{"todos"},
+	})
+	require.NoError(t, err, "list deployments filtered by todos")
+	ids := make(map[string]bool, len(filtered.Items))
+	for _, item := range filtered.Items {
+		ids[item.ID] = true
+	}
+	require.True(t, ids[depA.Deployment.ID], "deployment A should match filter for todos")
+	require.False(t, ids[depB.Deployment.ID], "deployment B should not match filter for todos")
+
+	// Filter with both slugs (OR semantics) → both deployments returned.
+	both, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
+		Cursor:           nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		SourceSlugs:      []string{"todos", "pets"},
+	})
+	require.NoError(t, err, "list deployments filtered by todos OR pets")
+	ids = make(map[string]bool, len(both.Items))
+	for _, item := range both.Items {
+		ids[item.ID] = true
+	}
+	require.True(t, ids[depA.Deployment.ID], "deployment A should match OR filter")
+	require.True(t, ids[depB.Deployment.ID], "deployment B should match OR filter")
+
+	// Filter by a slug that doesn't exist → empty result.
+	empty, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
+		Cursor:           nil,
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		SourceSlugs:      []string{"does-not-exist"},
+	})
+	require.NoError(t, err, "list deployments filtered by unknown slug")
+	for _, item := range empty.Items {
+		require.NotEqual(t, depA.Deployment.ID, item.ID, "no matching slug should hide deployment A")
+		require.NotEqual(t, depB.Deployment.ID, item.ID, "no matching slug should hide deployment B")
+	}
+}

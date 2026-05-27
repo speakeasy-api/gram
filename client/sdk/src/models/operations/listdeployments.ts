@@ -26,6 +26,10 @@ export type ListDeploymentsRequest = {
    */
   cursor?: string | undefined;
   /**
+   * Only return deployments that include at least one source (OpenAPI document or Function asset) with one of the given slugs. Matching is by exact slug across both source kinds (OR semantics).
+   */
+  sourceSlugs?: Array<string> | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -143,6 +147,7 @@ export function listDeploymentsSecurityToJSON(
 /** @internal */
 export type ListDeploymentsRequest$Outbound = {
   cursor?: string | undefined;
+  source_slugs?: Array<string> | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -155,12 +160,14 @@ export const ListDeploymentsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     cursor: z.optional(z.string()),
+    sourceSlugs: z.optional(z.array(z.string())),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      sourceSlugs: "source_slugs",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

@@ -1507,6 +1507,9 @@ func EncodeListDeploymentsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
+		for _, value := range p.SourceSlugs {
+			values.Add("source_slugs", value)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

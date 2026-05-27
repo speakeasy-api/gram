@@ -360,6 +360,10 @@ type ListDeploymentsPayload struct {
 	ProjectSlugInput *string
 	// The cursor to fetch results from
 	Cursor *string
+	// Only return deployments that include at least one source (OpenAPI document
+	// or Function asset) with one of the given slugs. Matching is by exact slug
+	// across both source kinds (OR semantics).
+	SourceSlugs []string
 }
 
 // RedeployPayload is the payload type of the deployments service redeploy

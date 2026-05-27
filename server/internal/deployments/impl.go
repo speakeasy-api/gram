@@ -347,8 +347,9 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	}
 
 	rows, err := s.repo.ListDeployments(ctx, repo.ListDeploymentsParams{
-		ProjectID: *authCtx.ProjectID,
-		Cursor:    cursor,
+		ProjectID:   *authCtx.ProjectID,
+		Cursor:      cursor,
+		SourceSlugs: form.SourceSlugs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing deployments").Log(ctx, s.logger)

@@ -45,6 +45,7 @@ export function buildListDeploymentsQuery(
   return {
     queryKey: queryKeyListDeployments({
       cursor: request?.cursor,
+      sourceSlugs: request?.sourceSlugs,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
@@ -76,6 +77,7 @@ export function buildListDeploymentsQuery(
 export function queryKeyListDeployments(
   parameters: {
     cursor?: string | undefined;
+    sourceSlugs?: Array<string> | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

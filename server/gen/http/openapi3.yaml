@@ -7460,6 +7460,19 @@ paths:
                     description: The cursor to fetch results from
                     type: string
                 - allowEmptyValue: true
+                  description: Only return deployments that include at least one source (OpenAPI document or Function asset) with one of the given slugs. Matching is by exact slug across both source kinds (OR semantics).
+                  example:
+                    - fermat-mcp
+                  in: query
+                  name: source_slugs
+                  schema:
+                    description: Only return deployments that include at least one source (OpenAPI document or Function asset) with one of the given slugs. Matching is by exact slug across both source kinds (OR semantics).
+                    example:
+                        - fermat-mcp
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -33172,6 +33185,13 @@ components:
                 cursor:
                     type: string
                     description: The cursor to fetch results from
+                source_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Only return deployments that include at least one source (OpenAPI document or Function asset) with one of the given slugs. Matching is by exact slug across both source kinds (OR semantics).
+                    example:
+                        - fermat-mcp
         ListDeploymentResult:
             type: object
             properties:

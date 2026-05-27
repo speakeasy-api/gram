@@ -101,6 +101,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
+    "source_slugs": payload?.source_slugs,
   });
 
   const headers = new Headers(compactMap({

@@ -365,11 +365,21 @@ func BuildRedeployPayload(deploymentsRedeployBody string, deploymentsRedeployApi
 
 // BuildListDeploymentsPayload builds the payload for the deployments
 // listDeployments endpoint from CLI flags.
-func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsApikeyToken string, deploymentsListDeploymentsSessionToken string, deploymentsListDeploymentsProjectSlugInput string) (*deployments.ListDeploymentsPayload, error) {
+func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploymentsListDeploymentsSourceSlugs string, deploymentsListDeploymentsApikeyToken string, deploymentsListDeploymentsSessionToken string, deploymentsListDeploymentsProjectSlugInput string) (*deployments.ListDeploymentsPayload, error) {
+	var err error
 	var cursor *string
 	{
 		if deploymentsListDeploymentsCursor != "" {
 			cursor = &deploymentsListDeploymentsCursor
+		}
+	}
+	var sourceSlugs []string
+	{
+		if deploymentsListDeploymentsSourceSlugs != "" {
+			err = json.Unmarshal([]byte(deploymentsListDeploymentsSourceSlugs), &sourceSlugs)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for sourceSlugs, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"fermat-mcp\"\n   ]'")
+			}
 		}
 	}
 	var apikeyToken *string
@@ -392,6 +402,7 @@ func BuildListDeploymentsPayload(deploymentsListDeploymentsCursor string, deploy
 	}
 	v := &deployments.ListDeploymentsPayload{}
 	v.Cursor = cursor
+	v.SourceSlugs = sourceSlugs
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

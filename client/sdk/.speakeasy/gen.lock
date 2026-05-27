@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: e7260e7b1fb31d934c90febcdd34b7e8
+  docChecksum: 800d5e659681d07d586a762f7bd03cee
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1937,7 +1937,7 @@ trackedFiles:
   docs/models/operations/listcustomdomainmcpendpointssecurity.md:
     last_write_checksum: sha1:34db343c439215cc369c2deb246db60e53a13fc3
   docs/models/operations/listdeploymentsrequest.md:
-    last_write_checksum: sha1:fd4e1ce28cb917070b9bcbdb697464db94e567d2
+    last_write_checksum: sha1:14709bcd44059bf96eb097bf8d042f3f6cf10665
   docs/models/operations/listdeploymentssecurity.md:
     last_write_checksum: sha1:505fdd3a7f79d62f7ae000b6c508b8fe2d194f14
   docs/models/operations/listdeploymentssecurityoption1.md:
@@ -2769,7 +2769,7 @@ trackedFiles:
   docs/sdks/collections/README.md:
     last_write_checksum: sha1:ddea3a234e5ac30d31983aba98d7f85bcd98c81c
   docs/sdks/deployments/README.md:
-    last_write_checksum: sha1:9fa17d59c28cf90b83f4a66f2b8f26e16c1bbef4
+    last_write_checksum: sha1:416fbb264c8adc8f4bda82154d4ab0886444844b
   docs/sdks/domains/README.md:
     last_write_checksum: sha1:52466ad60c72aac1ec86ae9c1b37b661faa7d009
   docs/sdks/environments/README.md:
@@ -2995,7 +2995,7 @@ trackedFiles:
   src/funcs/deploymentsLatest.ts:
     last_write_checksum: sha1:d9c494d0824ca3331ccc9bf81adbf4a0db69ea68
   src/funcs/deploymentsList.ts:
-    last_write_checksum: sha1:01f7148cce4da18c413328b2feea68deb3bd746a
+    last_write_checksum: sha1:03e1358bf36a3e6832e030b43827199bf1623ea8
   src/funcs/deploymentsLogs.ts:
     last_write_checksum: sha1:efc71d0fd5b9e8a32954d43bc1fd1bd91ff8f73c
   src/funcs/deploymentsRedeployDeployment.ts:
@@ -4569,7 +4569,7 @@ trackedFiles:
   src/models/operations/listcustomdomainmcpendpoints.ts:
     last_write_checksum: sha1:cb76a4d2d37b7e8cd8f7a0e14de1ea0d0883726f
   src/models/operations/listdeployments.ts:
-    last_write_checksum: sha1:0ea74e63f2168802c45844df06d7b652dcbee209
+    last_write_checksum: sha1:bc55cfff2276eaf115c14f36265a3962facfc8b4
   src/models/operations/listenvironments.ts:
     last_write_checksum: sha1:f2d52f6f97affd68fb458cd01ab72b0395b84d97
   src/models/operations/listfilteroptions.ts:
@@ -5159,9 +5159,9 @@ trackedFiles:
   src/react-query/listCollections.ts:
     last_write_checksum: sha1:7e8b7c2f853ad0f92ac61db91c14182534b9108f
   src/react-query/listDeployments.core.ts:
-    last_write_checksum: sha1:96adc67fb218011ee756405621a24084c9df5ad2
+    last_write_checksum: sha1:5049013e508466766358e29815b89647667fac54
   src/react-query/listDeployments.ts:
-    last_write_checksum: sha1:5c4f87b8a3decb19dec8ed87f90662224f9ab54d
+    last_write_checksum: sha1:70eebd0edb5177c3ac271d6d7dc49df7a733c67b
   src/react-query/listEnvironments.core.ts:
     last_write_checksum: sha1:af32c0de407888ed02c28e77fde104afb2f341d4
   src/react-query/listEnvironments.ts:
@@ -6435,6 +6435,9 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listDeployments:
     speakeasy-default-list-deployments:
+      parameters:
+        query:
+          source_slugs: ["fermat-mcp"]
       responses:
         "200":
           application/json: {"items": [{"created_at": "2025-10-03T23:17:35.491Z", "external_mcp_asset_count": 122041, "external_mcp_tool_count": 539991, "functions_asset_count": 585527, "functions_tool_count": 478376, "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "openapiv3_asset_count": 891002, "openapiv3_tool_count": 598582, "status": "<value>", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}

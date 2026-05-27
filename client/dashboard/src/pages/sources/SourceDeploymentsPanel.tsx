@@ -193,12 +193,16 @@ function DeploymentDetailPanel({
 
 export function SourceDeploymentsPanel({
   sourceKind,
+  sourceSlug,
   attachmentType,
 }: {
   sourceKind?: string;
+  sourceSlug?: string;
   attachmentType?: string;
 }) {
-  const { data: res } = useListDeploymentsSuspense();
+  const { data: res } = useListDeploymentsSuspense(
+    sourceSlug ? { sourceSlugs: [sourceSlug] } : undefined,
+  );
   const deployments = res.items ?? [];
   const { data: activeDeployment } = useActiveDeployment();
   const routes = useRoutes();
