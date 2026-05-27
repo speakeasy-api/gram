@@ -21,6 +21,7 @@ import ChatSessions from "./pages/chatLogs/ChatLogs";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import DeviceAgent from "./pages/device-agent/DeviceAgent";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -794,6 +795,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
+  },
+  deviceAgent: {
+    title: "Device Agent",
+    url: "device-agent",
+    icon: "laptop",
+    component: DeviceAgent,
   },
   access: {
     title: "Roles & Permissions",
