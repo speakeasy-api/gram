@@ -14,6 +14,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -52,6 +53,16 @@ func syncedUserParams(id, workosUserID, email, displayName string) usersrepo.Ups
 		WorkosID:        conv.ToPGText(workosUserID),
 		WorkosCreatedAt: conv.ToPGTimestamptz(seedTime),
 		WorkosUpdatedAt: conv.ToPGTimestamptz(seedTime),
+	}
+}
+
+func localUserParams(id, email, displayName string) usersrepo.UpsertUserParams {
+	return usersrepo.UpsertUserParams{
+		ID:          id,
+		Email:       email,
+		DisplayName: displayName,
+		PhotoUrl:    conv.ToPGTextEmpty(""),
+		Admin:       false,
 	}
 }
 
@@ -121,6 +132,112 @@ func TestProcessWorkOSUserEvents_CreatesUserWithExistingExternalID(t *testing.T)
 	require.Equal(t, "ada@example.com", row.Email)
 	require.Equal(t, workosUserID, row.WorkosID.String)
 	require.Empty(t, workosClient.UserExternalIDUpdates())
+}
+
+func TestProcessWorkOSUserEvents_LinksExistingLocalUserByExternalID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_link_external_id")
+	logger := testenv.NewLogger(t)
+
+	const workosUserID = "user_link_external_id"
+	const externalID = "sb_existing_local_user"
+	_, err := usersrepo.New(conn).UpsertUser(ctx, localUserParams(externalID, "old@example.com", "Old Name"))
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_user_link_external_id", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "ada@example.com", "Ada", "Lovelace", "")},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+	require.Equal(t, "event_user_link_external_id", res.LastEventID)
+
+	row, err := usersrepo.New(conn).GetUser(ctx, externalID)
+	require.NoError(t, err)
+	require.Equal(t, "ada@example.com", row.Email)
+	require.Equal(t, "Ada Lovelace", row.DisplayName)
+	require.Equal(t, workosUserID, row.WorkosID.String)
+	require.True(t, row.WorkosCreatedAt.Valid)
+	require.True(t, row.WorkosUpdatedAt.Valid)
+	require.Empty(t, workosClient.UserExternalIDUpdates())
+
+	_, err = usersrepo.New(conn).GetUser(ctx, users.UserIDFromWorkOSID(workosUserID))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestProcessWorkOSUserEvents_UsesExistingWorkOSLinkBeforeExternalID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_workos_first")
+	logger := testenv.NewLogger(t)
+
+	const workosUserID = "user_workos_first"
+	const existingID = "sb_existing_workos_link"
+	const externalID = "sb_external_should_not_win"
+	_, err := usersrepo.New(conn).UpsertSyncedUser(ctx, syncedUserParams(existingID, workosUserID, "old@example.com", "Old Name"))
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_user_workos_first", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "new@example.com", "New", "Name", "")},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+	require.Equal(t, "event_user_workos_first", res.LastEventID)
+
+	row, err := usersrepo.New(conn).GetUser(ctx, existingID)
+	require.NoError(t, err)
+	require.Equal(t, "new@example.com", row.Email)
+	require.Equal(t, "New Name", row.DisplayName)
+	require.Equal(t, workosUserID, row.WorkosID.String)
+	require.Empty(t, workosClient.UserExternalIDUpdates())
+
+	_, err = usersrepo.New(conn).GetUser(ctx, externalID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestProcessWorkOSUserEvents_ExternalIDLinkedToDifferentWorkOSUserStopsSync(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_external_id_conflict")
+	logger := testenv.NewLogger(t)
+
+	const workosUserID = "user_external_id_conflict"
+	const otherWorkOSUserID = "user_external_id_owner"
+	const externalID = "sb_external_id_owner"
+	derivedID := users.UserIDFromWorkOSID(workosUserID)
+	_, err := usersrepo.New(conn).UpsertSyncedUser(ctx, syncedUserParams(externalID, otherWorkOSUserID, "owner@example.com", "Owner User"))
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_user_external_id_conflict", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "new@example.com", "New", "User", "")},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.Error(t, err)
+	require.Nil(t, res)
+	require.ErrorIs(t, err, oops.ErrPermanent)
+
+	externalIDRow, err := usersrepo.New(conn).GetUser(ctx, externalID)
+	require.NoError(t, err)
+	require.Equal(t, otherWorkOSUserID, externalIDRow.WorkosID.String)
+
+	_, err = usersrepo.New(conn).GetUser(ctx, derivedID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.Empty(t, workosClient.UserExternalIDUpdates())
+
+	_, err = workosrepo.New(conn).GetUserSyncLastEventID(ctx, conv.ToPGText(workosUserID))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestProcessWorkOSUserEvents_LinksOptimisticRoleAssignments(t *testing.T) {
@@ -354,6 +471,67 @@ func TestProcessWorkOSUserEvents_LinksPendingRelationshipOverTombstone(t *testin
 	require.False(t, relationship.Deleted)
 	require.Equal(t, secondMembershipID, relationship.WorkosMembershipID.String)
 	require.Equal(t, "event_relationship_tombstone_3", relationship.WorkosLastEventID.String)
+}
+
+func TestProcessWorkOSUserEvents_LinksPendingRelationshipToExistingExternalID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_link_relationship_external")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "org_relationship_external"
+	const workosOrgID = "org_workos_relationship_external"
+	const workosUserID = "user_relationship_external"
+	const externalID = "sb_relationship_external_user"
+	const membershipID = "mem_relationship_external"
+	seedTime := time.Date(2026, 5, 10, 10, 0, 0, 0, time.UTC)
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   organizationID,
+		Name: "Relationship External Org",
+		Slug: "relationship-external-org",
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
+		ID:                organizationID,
+		Name:              "Relationship External Org",
+		WorkosID:          conv.ToPGText(workosOrgID),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID: conv.ToPGText("event_org_relationship_external"),
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGTextEmpty(""),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID:  conv.ToPGText("event_relationship_external_pending"),
+	})
+	require.NoError(t, err)
+	_, err = usersrepo.New(conn).UpsertUser(ctx, localUserParams(externalID, "old@example.com", "Old Name"))
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_user_relationship_external", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, externalID, "new@example.com", "External", "User", "")},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+	require.Equal(t, "event_user_relationship_external", res.LastEventID)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(externalID),
+	})
+	require.NoError(t, err)
+	require.False(t, relationship.Deleted)
+	require.Equal(t, membershipID, relationship.WorkosMembershipID.String)
+	require.Equal(t, workosUserID, relationship.WorkosUserID.String)
 }
 
 func TestProcessWorkOSUserEvents_UsesExistingUserIDWhenExternalIDMissing(t *testing.T) {
