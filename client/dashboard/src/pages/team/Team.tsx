@@ -803,7 +803,7 @@ export function TeamInner() {
             />
           </div>
 
-          <div className="min-h-[580px]">
+          <div>
             <Table
               columns={memberColumns}
               data={visibleMembers}
