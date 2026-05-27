@@ -299,6 +299,18 @@ jobs:
             echo "enabled=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(mise run hash:assistant-runtime-image)
+          if [ -z "$hash" ]; then
+            echo "runtime image hash is empty" >&2
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
       - name: "[DEV] Create fly app"
         id: assistantFlyCreateDev
         shell: bash
@@ -341,6 +353,7 @@ jobs:
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
             type=schedule,pattern=nightly
             type=sha
             type=sha,format=long
@@ -370,6 +383,7 @@ jobs:
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
             type=schedule,pattern=nightly
             type=sha
             type=sha,format=long
@@ -603,7 +617,21 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(mise run hash:assistant-runtime-image)
+          if [ -z "$hash" ]; then
+            echo "runtime image hash is empty" >&2
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
       - name: Build
+        env:
+          GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
         run: mise run build:server --readonly
 
       - name: Lint with golangci-lint
