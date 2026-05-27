@@ -508,7 +508,7 @@ export function TeamInner() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {isRbacEnabled && accessMember && (
+              {isRbacEnabled && accessMember && !organization.scimEnabled && (
                 <RequireScope scope="org:admin" level="component">
                   <DropdownMenuItem
                     onSelect={() =>
@@ -1032,8 +1032,8 @@ export function TeamInner() {
         </Dialog.Content>
       </Dialog>
 
-      {/* Change Role Dialog */}
-      {isRbacEnabled && (
+      {/* Change Role Dialog — hidden when directory sync manages role assignment */}
+      {isRbacEnabled && !organization.scimEnabled && (
         <ChangeRoleDialog
           member={changingMember}
           onOpenChange={(open) => {
