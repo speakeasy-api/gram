@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   free_trial_started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   free_trial_ends_at timestamptz NOT NULL DEFAULT clock_timestamp() + INTERVAL '14 days',
 
+  scim_enabled boolean DEFAULT FALSE,
+  sso_enabled boolean DEFAULT FALSE,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   disabled_at timestamptz,
