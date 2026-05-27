@@ -14,9 +14,6 @@ if [ "${usage_readonly:-false}" = "true" ]; then
 fi
 
 git_sha=$(git rev-parse HEAD)
-# Allow CI to compute the runtime image hash once and pass it through so the
-# server binary and the runtime image push agree on a single canonical value
-# regardless of intermediate filesystem state on a runner.
 runtime_image_hash=${GRAM_ASSISTANT_RUNTIME_IMAGE_HASH:-$(mise run hash:assistant-runtime-image)}
 
 if [ -z "${runtime_image_hash}" ]; then

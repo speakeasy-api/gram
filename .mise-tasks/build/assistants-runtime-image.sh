@@ -20,9 +20,6 @@ image="gram-assistant-runtime:dev"
 echo "Building assistant runtime image for architecture(s): $arch"
 docker build --platform "linux/${arch}" -f ./agents/runtime-image/Dockerfile -t "${image}" .
 
-# Local builds publish under :dev so a freshly cloned dev iterates without
-# computing a content hash on each start. CI is what tags with the content
-# hash (see .github/workflows/pr.yaml) to skip machine recycles in prod.
 if [ -n "${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE:-}" ] && [ "$arch" = "amd64" ]; then
   fly_image="${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE}:dev"
   docker rmi "$fly_image" || true
