@@ -7,7 +7,7 @@
 set -e
 
 generate() {
-  speakeasy run --skip-versioning --skip-upload-spec
+  speakeasy run --skip-versioning --skip-upload-spec --minimal
 }
 
 check_inputs() {
