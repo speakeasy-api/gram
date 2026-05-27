@@ -71,7 +71,6 @@ export default defineConfig(({ command }) => {
               "react-error-boundary",
               "react-router",
               "sonner",
-              "vaul",
               "zod",
             ],
           },
