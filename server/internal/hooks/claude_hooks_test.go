@@ -220,6 +220,44 @@ func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
 	assert.Equal(t, "allow", *output.PermissionDecision)
 }
 
+func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__github__search"
+	toolUseID := "toolu_unconfigured_identity"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "linear", Command: "linear mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+	createHookAccessRule(t, ctx, ti, authCtx.ProjectID.String(), accesscontrol.AccessScopeProject, accesscontrol.DispositionAllowed, shadowmcp.MatchBreadthServerIdentity, "github", "GitHub")
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, `MCP server "github" is not in the active configuration`)
+}
+
 // Allow path: a cached entry that resolves the tool's server prefix and
 // points at app.getgram.ai must succeed even under a blocking policy.
 func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {

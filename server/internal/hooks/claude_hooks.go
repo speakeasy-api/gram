@@ -766,7 +766,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	}
 	// Access Rules can explicitly allow a shadow MCP server by URL, command,
 	// or server identity. Deny rules win inside EvaluateAccessRules.
-	if detail != "" {
+	if detail != "" && matched != nil {
 		if s.shadowMCPClient == nil {
 			detail = "Shadow MCP validation is unavailable"
 		} else {
