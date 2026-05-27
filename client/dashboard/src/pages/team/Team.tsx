@@ -877,50 +877,49 @@ export function TeamInner() {
             />
           </div>
         )}
+        {/* Identity signpost */}
+        <div className="border-border border-t pt-8">
+          {organization.scimEnabled ? (
+            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+              <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <Type variant="body" className="text-sm font-medium">
+                  Directory Sync is enabled
+                </Type>
+                <Type muted small className="mt-0.5">
+                  Team membership and role assignments are managed by your
+                  identity provider.{" "}
+                  <Link
+                    to={orgRoutes.identity.href()}
+                    className="text-foreground underline underline-offset-4"
+                  >
+                    Manage identity settings
+                  </Link>
+                </Type>
+              </div>
+            </div>
+          ) : (
+            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+              <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <Type variant="body" className="text-sm font-medium">
+                  SSO & Directory Sync
+                </Type>
+                <Type muted small className="mt-0.5">
+                  Automate member provisioning and enforce identity provider
+                  authentication.{" "}
+                  <Link
+                    to={orgRoutes.identity.href()}
+                    className="text-foreground underline underline-offset-4"
+                  >
+                    Set up SSO & SCIM
+                  </Link>
+                </Type>
+              </div>
+            </div>
+          )}
+        </div>
       </Stack>
-
-      {/* Identity signpost */}
-      <div className="border-border mt-8 border-t pt-8">
-        {organization.scimEnabled ? (
-          <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
-            <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <Type variant="body" className="text-sm font-medium">
-                Directory Sync is enabled
-              </Type>
-              <Type muted small className="mt-0.5">
-                Team membership and role assignments are managed by your
-                identity provider.{" "}
-                <Link
-                  to={orgRoutes.identity.href()}
-                  className="text-foreground underline underline-offset-4"
-                >
-                  Manage identity settings
-                </Link>
-              </Type>
-            </div>
-          </div>
-        ) : (
-          <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
-            <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <Type variant="body" className="text-sm font-medium">
-                SSO & Directory Sync
-              </Type>
-              <Type muted small className="mt-0.5">
-                Automate member provisioning and enforce identity provider
-                authentication.{" "}
-                <Link
-                  to={orgRoutes.identity.href()}
-                  className="text-foreground underline underline-offset-4"
-                >
-                  Set up SSO & SCIM
-                </Link>
-              </Type>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Invite Dialog */}
       <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
