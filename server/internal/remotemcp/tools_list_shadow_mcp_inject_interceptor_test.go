@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"encoding/json"
@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 // newShadowMCPClientForTest constructs a shadowmcp.Client backed by the
@@ -32,7 +32,7 @@ func newShadowMCPClientForTest(t *testing.T) *shadowmcp.Client {
 func TestToolsListShadowMCPInjectInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 	require.Equal(t, "tools-list-shadow-mcp-inject", interceptor.Name())
 }
 
@@ -42,7 +42,7 @@ func TestToolsListShadowMCPInjectInterceptor_InvalidProjectIDPassesThrough(t *te
 	// A non-UUID project id short-circuits with a warning log; the
 	// tools array is left unchanged so the upstream's response reaches
 	// the client verbatim.
-	interceptor := xmcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, "not-a-uuid", testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, "not-a-uuid", testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{"type": "object"}},
@@ -63,7 +63,7 @@ func TestToolsListShadowMCPInjectInterceptor_PolicyDisabledPassesThrough(t *test
 	// returns false (no risk policies). The interceptor is a no-op
 	// against the response, and the original schemas reach the client
 	// unmodified.
-	interceptor := xmcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{"type": "object"}},
@@ -78,7 +78,7 @@ func TestToolsListShadowMCPInjectInterceptor_PolicyDisabledPassesThrough(t *test
 func TestToolsListShadowMCPInjectInterceptor_NilResultPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := &proxy.ToolsListResponse{
 		Error:         &jsonrpc.Error{Code: -32601, Message: "method not found", Data: nil},
@@ -92,7 +92,7 @@ func TestToolsListShadowMCPInjectInterceptor_NilResultPassesThrough(t *testing.T
 func TestToolsListShadowMCPInjectInterceptor_EmptyToolsListShortCircuits(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListShadowMCPInjectInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, nil)
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))

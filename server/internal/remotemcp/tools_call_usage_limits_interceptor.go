@@ -1,4 +1,4 @@
-package xmcp
+package remotemcp
 
 import (
 	"context"
@@ -12,48 +12,47 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
-// ResourcesReadUsageLimitsInterceptor enforces the free-tier hard cap on
-// resources/read invocations by consulting the billing repository's cached
-// period usage. It mirrors [ToolsCallUsageLimitsInterceptor] — resource reads
-// are metered alongside tool calls in the same `ToolCalls` counter, so the
-// same cap applies. It is a [proxy.ResourcesReadRequestInterceptor]: it runs
-// after the generic user-request chain and before the request is forwarded
-// upstream. Non-free tiers and orgs with an active subscription skip the
-// check.
+// defaultHardToolCallsLimit is the fallback hard cap applied when the billing
+// repo reports an IncludedToolCalls value of zero. It mirrors the value used
+// by the existing tool usage check in the /mcp endpoint.
+const defaultHardToolCallsLimit = 2000
+
+// ToolsCallUsageLimitsInterceptor enforces the free-tier hard cap on tools/call
+// invocations by consulting the billing repository's cached period usage.
+// It is a [proxy.ToolsCallRequestInterceptor]: it runs after the generic
+// user-request chain and before the request is forwarded upstream. Non-free
+// tiers and orgs with an active subscription skip the check.
 //
 // The interceptor intentionally fails open when cached usage is unavailable
 // (the billing cache should always be warm, but a transient miss must not
-// take down resource reads). Failures are logged with the originating org ID
+// take down tool invocation). Failures are logged with the originating org ID
 // so operators can spot them in dashboards.
-type ResourcesReadUsageLimitsInterceptor struct {
+type ToolsCallUsageLimitsInterceptor struct {
 	billing billing.Repository
 	logger  *slog.Logger
 }
 
-var _ proxy.ResourcesReadRequestInterceptor = (*ResourcesReadUsageLimitsInterceptor)(nil)
+var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallUsageLimitsInterceptor)(nil)
 
-// NewResourcesReadUsageLimitsInterceptor constructs an interceptor bound to the
-// given billing repository. The same instance can be reused across requests.
-func NewResourcesReadUsageLimitsInterceptor(billingRepo billing.Repository, logger *slog.Logger) *ResourcesReadUsageLimitsInterceptor {
-	return &ResourcesReadUsageLimitsInterceptor{
+// NewToolsCallUsageLimitsInterceptor constructs an interceptor bound to the given
+// billing repository. The same instance can be reused across requests.
+func NewToolsCallUsageLimitsInterceptor(billingRepo billing.Repository, logger *slog.Logger) *ToolsCallUsageLimitsInterceptor {
+	return &ToolsCallUsageLimitsInterceptor{
 		billing: billingRepo,
 		logger:  logger,
 	}
 }
 
-// Name implements [proxy.ResourcesReadRequestInterceptor].
-func (i *ResourcesReadUsageLimitsInterceptor) Name() string {
-	return "resources-read-usage-limits"
+// Name implements [proxy.ToolsCallRequestInterceptor].
+func (i *ToolsCallUsageLimitsInterceptor) Name() string {
+	return "tools-call-usage-limits"
 }
 
-// InterceptResourcesReadRequest implements [proxy.ResourcesReadRequestInterceptor].
+// InterceptToolsCallRequest implements [proxy.ToolsCallRequestInterceptor].
 // It reads the organization and account type from the request's auth
 // context, consults cached billing usage, and returns a forbidden error when
-// the org has exceeded its hard cap. The cap shared with tools/call is
-// intentional — resource reads are accounted to the same `ToolCalls`
-// counter — so a free-tier org that has exhausted its quota on tool calls
-// is also blocked from resource reads, and vice versa.
-func (i *ResourcesReadUsageLimitsInterceptor) InterceptResourcesReadRequest(ctx context.Context, _ *proxy.ResourcesReadRequest) error {
+// the org has exceeded its hard cap.
+func (i *ToolsCallUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.Context, _ *proxy.ToolsCallRequest) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		// No auth context means the runtime handler did not install one —
@@ -66,7 +65,7 @@ func (i *ResourcesReadUsageLimitsInterceptor) InterceptResourcesReadRequest(ctx 
 	}
 
 	// Hot-path: only read cached usage. A miss here is treated as a
-	// best-effort skip so billing cache issues never break resource reads.
+	// best-effort skip so billing cache issues never break tool invocation.
 	periodUsage, err := i.billing.GetStoredPeriodUsage(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		i.logger.ErrorContext(ctx, "failed to get stored period usage",

@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"context"
@@ -12,16 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsCallClickHouseLogInterceptor(telemetry.NewStub(testenv.NewLogger(t)), "server-id", testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemetry.NewStub(testenv.NewLogger(t)), "server-id", testenv.NewLogger(t))
 	require.Equal(t, "tools-call-clickhouse-log", interceptor.Name())
 }
 
@@ -45,7 +45,7 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 		ProjectID:            &projectID,
 	})
 
-	interceptor := xmcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
 
 	req := &proxy.ToolsCallRequest{
 		UserRequest: nil,
@@ -118,7 +118,7 @@ func TestToolsCallClickHouseLogInterceptor_DurationMissingSentinel(t *testing.T)
 		ProjectID:            &projectID,
 	})
 
-	interceptor := xmcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
 
 	// Skip the request side so the response has no stashed start time.
 	req := &proxy.ToolsCallRequest{
@@ -179,7 +179,7 @@ func TestToolsCallClickHouseLogInterceptor_NoAuthContextSkips(t *testing.T) {
 	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled)
 
 	serverID := uuid.New().String()
-	interceptor := xmcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
 
 	// Deliberately call without an auth context on ctx — the response side
 	// must short-circuit and emit nothing.
@@ -317,7 +317,7 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 		ProjectID:            &projectID,
 	})
 
-	interceptor := xmcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
 
 	req := &proxy.ToolsCallRequest{
 		UserRequest: nil,

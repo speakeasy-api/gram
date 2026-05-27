@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"net/http"
@@ -11,9 +11,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 func newResourcesReadResponseForInterceptor(t *testing.T, sessionID string, resourceURI string) *proxy.ResourcesReadResponse {
@@ -63,7 +63,7 @@ func newResourcesReadResponseForInterceptor(t *testing.T, sessionID string, reso
 func TestResourcesReadUsageTrackingInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewResourcesReadUsageTrackingInterceptor(newFakeBillingTracker(), testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageTrackingInterceptor(newFakeBillingTracker(), testenv.NewLogger(t))
 	require.Equal(t, "resources-read-usage-tracking", interceptor.Name())
 }
 
@@ -71,7 +71,7 @@ func TestResourcesReadUsageTrackingInterceptor_NoAuthContextSkips(t *testing.T) 
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewResourcesReadUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	read := newResourcesReadResponseForInterceptor(t, "", "file:///etc/hosts")
 
@@ -86,7 +86,7 @@ func TestResourcesReadUsageTrackingInterceptor_EmitsEventForBaseTier(t *testing.
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewResourcesReadUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	projectSlug := "demo-project"
@@ -123,7 +123,7 @@ func TestResourcesReadUsageTrackingInterceptor_EmitsEventForPaidTier(t *testing.
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewResourcesReadUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
@@ -147,7 +147,7 @@ func TestResourcesReadUsageTrackingInterceptor_EmptyJSONRPCMessagesDoesNotPanic(
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewResourcesReadUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{

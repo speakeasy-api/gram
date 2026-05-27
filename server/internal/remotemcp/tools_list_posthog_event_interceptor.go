@@ -1,4 +1,4 @@
-package xmcp
+package remotemcp
 
 import (
 	"context"

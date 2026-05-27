@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 // fakeBillingTracker implements [billing.Tracker]. Only TrackToolCallUsage is
@@ -103,7 +103,7 @@ func newToolsCallResponseForInterceptor(t *testing.T, sessionID string) *proxy.T
 func TestToolsCallUsageTrackingInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsCallUsageTrackingInterceptor(newFakeBillingTracker(), testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageTrackingInterceptor(newFakeBillingTracker(), testenv.NewLogger(t))
 	require.Equal(t, "tools-call-usage-tracking", interceptor.Name())
 }
 
@@ -111,7 +111,7 @@ func TestToolsCallUsageTrackingInterceptor_NoAuthContextSkips(t *testing.T) {
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	call := newToolsCallResponseForInterceptor(t, "")
 
@@ -126,7 +126,7 @@ func TestToolsCallUsageTrackingInterceptor_EmitsEventForBaseTier(t *testing.T) {
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	projectSlug := "demo-project"
@@ -165,7 +165,7 @@ func TestToolsCallUsageTrackingInterceptor_EmitsEventForPaidTier(t *testing.T) {
 	// Limits gating is a separate concern handled by the request-side
 	// interceptor.
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{

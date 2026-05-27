@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 func newResourcesReadRequestForInterceptor(t *testing.T, ctx context.Context) *proxy.ResourcesReadRequest {
@@ -35,7 +35,7 @@ func newResourcesReadRequestForInterceptor(t *testing.T, ctx context.Context) *p
 func TestResourcesReadUsageLimitsInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewResourcesReadUsageLimitsInterceptor(&fakeBillingRepo{storedUsage: nil, storedErr: nil}, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(&fakeBillingRepo{storedUsage: nil, storedErr: nil}, testenv.NewLogger(t))
 	require.Equal(t, "resources-read-usage-limits", interceptor.Name())
 }
 
@@ -45,7 +45,7 @@ func TestResourcesReadUsageLimitsInterceptor_NoAuthContextPassesThrough(t *testi
 	// Billing repo deliberately left without behavior: the interceptor must
 	// not reach it when auth context is missing.
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := xmcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := t.Context()
 	read := newResourcesReadRequestForInterceptor(t, ctx)
@@ -57,7 +57,7 @@ func TestResourcesReadUsageLimitsInterceptor_NonBaseTierPassesThrough(t *testing
 	t.Parallel()
 
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := xmcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-pro",
@@ -74,7 +74,7 @@ func TestResourcesReadUsageLimitsInterceptor_BillingErrorPassesThrough(t *testin
 	// Billing cache miss must not take down resource reads — the interceptor
 	// logs and continues.
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("cache miss")}
-	interceptor := xmcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -96,7 +96,7 @@ func TestResourcesReadUsageLimitsInterceptor_ActiveSubscriptionPassesThrough(t *
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free-with-sub",
@@ -118,7 +118,7 @@ func TestResourcesReadUsageLimitsInterceptor_UnderHardLimitPassesThrough(t *test
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -141,7 +141,7 @@ func TestResourcesReadUsageLimitsInterceptor_AtOrOverHardLimitRejects(t *testing
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -167,7 +167,7 @@ func TestResourcesReadUsageLimitsInterceptor_ZeroIncludedUsesDefaultLimit(t *tes
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewResourcesReadUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",

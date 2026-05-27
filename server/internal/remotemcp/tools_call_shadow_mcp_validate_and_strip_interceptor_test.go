@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"context"
@@ -13,12 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 // newToolsCallRequestWithArguments builds a ToolsCallRequest for the
@@ -39,7 +39,7 @@ func newToolsCallRequestWithArguments(toolName string, args json.RawMessage) *pr
 func TestToolsCallShadowMCPValidateAndStripInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsCallShadowMCPValidateAndStripInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 	require.Equal(t, "tools-call-shadow-mcp-validate-and-strip", interceptor.Name())
 }
 
@@ -48,7 +48,7 @@ func TestToolsCallShadowMCPValidateAndStripInterceptor_NilParamsPassesThrough(t 
 
 	// Defensive: a nil Params (only reachable through direct
 	// construction) must not panic.
-	interceptor := xmcp.NewToolsCallShadowMCPValidateAndStripInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 
 	call := &proxy.ToolsCallRequest{
 		UserRequest: &proxy.UserRequest{},
@@ -63,7 +63,7 @@ func TestToolsCallShadowMCPValidateAndStripInterceptor_InvalidProjectIDPassesThr
 	// Non-UUID project id short-circuits with a warning log — the call
 	// flows through to upstream unchanged, since shadow-MCP cannot be
 	// validated against an unknown project scope.
-	interceptor := xmcp.NewToolsCallShadowMCPValidateAndStripInterceptor(newShadowMCPClientForTest(t), testServerID, "not-a-uuid", testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(newShadowMCPClientForTest(t), testServerID, "not-a-uuid", testenv.NewLogger(t))
 
 	call := newToolsCallRequestWithArguments("tool_a", json.RawMessage(`{"x-gram-toolset-id":"abc"}`))
 	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), call))
@@ -78,7 +78,7 @@ func TestToolsCallShadowMCPValidateAndStripInterceptor_PolicyDisabledPassesThrou
 	// validation and the arguments are forwarded verbatim — including
 	// any x-gram-toolset-id property the caller happened to echo (no
 	// validation, no strip).
-	interceptor := xmcp.NewToolsCallShadowMCPValidateAndStripInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(newShadowMCPClientForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 
 	call := newToolsCallRequestWithArguments("tool_a", json.RawMessage(`{"x-gram-toolset-id":"abc","location":"sf"}`))
 	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), call))
@@ -185,7 +185,7 @@ func TestToolsCallShadowMCPValidateAndStripInterceptor_RouteMismatchRejects(t *t
 	ctx, ti := newTestService(t)
 	f := newEnabledShadowMCPFixture(t, ctx, ti)
 
-	interceptor := xmcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
 
 	args := json.RawMessage(fmt.Sprintf(`{"%s":"%s"}`, shadowmcp.XGramToolsetIDField, f.serverB))
 	call := newToolsCallRequestForSetArguments("tool_a", args)
@@ -205,7 +205,7 @@ func TestToolsCallShadowMCPValidateAndStripInterceptor_MatchingEchoStripsPropert
 	ctx, ti := newTestService(t)
 	f := newEnabledShadowMCPFixture(t, ctx, ti)
 
-	interceptor := xmcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
 
 	args := json.RawMessage(fmt.Sprintf(`{"%s":"%s","location":"sf"}`, shadowmcp.XGramToolsetIDField, f.serverA))
 	call := newToolsCallRequestForSetArguments("tool_a", args)
@@ -227,7 +227,7 @@ func TestToolsCallShadowMCPValidateAndStripInterceptor_MalformedJSONArgumentsRej
 	ctx, ti := newTestService(t)
 	f := newEnabledShadowMCPFixture(t, ctx, ti)
 
-	interceptor := xmcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
 
 	call := newToolsCallRequestForSetArguments("tool_a", json.RawMessage(`[1,2,3]`))
 

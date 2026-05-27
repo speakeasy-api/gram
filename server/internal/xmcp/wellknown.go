@@ -14,22 +14,11 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
-
-// baseURLForRequest returns the appropriate base URL for well-known metadata
-// responses, switching to the custom domain when the request was resolved
-// through one.
-func (s *Service) baseURLForRequest(r *http.Request) string {
-	if domainCtx := customdomains.FromContext(r.Context()); domainCtx != nil {
-		return fmt.Sprintf("https://%s", domainCtx.Domain)
-	}
-	return s.serverURL.String()
-}
 
 // HandleWellKnownOAuthServerMetadata serves
 // /.well-known/oauth-authorization-server/x/mcp/{mcpSlug}.
@@ -59,9 +48,9 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
 
-	endpoint, mcpServer, err := s.resolveMCPEndpointAndServer(ctx, logger, slug)
+	endpoint, mcpServer, err := s.mcpService.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve mcp endpoint: %w", err)
 	}
 
 	// Issuer-gated mcp_servers (regardless of backend) get the Gram-hosted
@@ -70,9 +59,9 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 	// fallback for legacy oauth_proxy / external-oauth configurations
 	// surfaced through the toolsets row.
 	if mcpServer.UserSessionIssuerID.Valid {
-		resolvedEndpoint, err := s.buildResolvedMcpEndpoint(ctx, logger, endpoint, mcpServer)
+		resolvedEndpoint, err := s.mcpService.BuildResolvedMcpEndpointForServer(ctx, logger, endpoint, mcpServer, "x/mcp")
 		if err != nil {
-			return err
+			return fmt.Errorf("build resolved mcp endpoint: %w", err)
 		}
 		if err := s.mcpService.ServeGetAuthorizationServer(w, r, resolvedEndpoint); err != nil {
 			return fmt.Errorf("serve oauth authorization server metadata: %w", err)
@@ -107,7 +96,7 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 			return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 		}
 
-		baseURL := s.baseURLForRequest(r)
+		baseURL := s.mcpService.BaseURLForRequest(r)
 		result, err := wellknown.ResolveOAuthServerMetadataFromToolset(
 			ctx,
 			logger,
@@ -147,9 +136,9 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
 
-	endpoint, mcpServer, err := s.resolveMCPEndpointAndServer(ctx, logger, slug)
+	endpoint, mcpServer, err := s.mcpService.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve mcp endpoint: %w", err)
 	}
 
 	// Issuer-gated mcp_servers (regardless of backend) get the Gram-hosted
@@ -157,9 +146,9 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 	// toolset-backed branch below remains as a fallback for legacy
 	// oauth_proxy / external-oauth configurations.
 	if mcpServer.UserSessionIssuerID.Valid {
-		resolvedEndpoint, err := s.buildResolvedMcpEndpoint(ctx, logger, endpoint, mcpServer)
+		resolvedEndpoint, err := s.mcpService.BuildResolvedMcpEndpointForServer(ctx, logger, endpoint, mcpServer, "x/mcp")
 		if err != nil {
-			return err
+			return fmt.Errorf("build resolved mcp endpoint: %w", err)
 		}
 		if err := s.mcpService.ServeGetProtectedResource(w, r, resolvedEndpoint); err != nil {
 			return fmt.Errorf("serve oauth protected resource metadata: %w", err)
@@ -184,7 +173,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 			return oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, logger)
 		}
 
-		resourceURL := s.baseURLForRequest(r) + "/x/mcp/" + endpoint.Slug
+		resourceURL := s.mcpService.BaseURLForRequest(r) + "/x/mcp/" + endpoint.Slug
 		metadata, err := wellknown.ResolveOAuthProtectedResourceFromToolset(
 			ctx,
 			logger,

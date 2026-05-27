@@ -63,6 +63,7 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -125,6 +126,12 @@ type Service struct {
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
+	// remoteProxyManager builds configured remotemcp proxies wired with the
+	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
+	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
+	// Temporal worker, which constructs *Service for its programmatic
+	// helpers but never serves a runtime request).
+	remoteProxyManager *remotemcp.ProxyManager
 }
 
 type oauthTokenInputs struct {
@@ -179,6 +186,7 @@ func NewService(
 	identityResolver IdentityResolver,
 	userSessionSigner *usersessions.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
+	remoteProxyManager *remotemcp.ProxyManager,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -252,6 +260,7 @@ func NewService(
 		identityResolver:   identityResolver,
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
+		remoteProxyManager: remoteProxyManager,
 	}
 }
 
