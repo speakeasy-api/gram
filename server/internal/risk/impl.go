@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/risk/server"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -35,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -67,8 +68,8 @@ type Service struct {
 	signaler         RiskAnalysisSignaler
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
+	accessStore      accesscontrol.Store
 	audit            *audit.Logger
-	cache            cache.Cache
 	piClassifier     bool
 	// Scanners reused by the rule-playground endpoint (testDetectionRule)
 	// so the dashboard sees the exact same matcher output the worker
@@ -101,8 +102,8 @@ func NewObserver(
 		signaler:         signaler,
 		completionClient: nil,
 		shadowMCPClient:  nil,
+		accessStore:      nil,
 		audit:            auditLogger,
-		cache:            nil,
 		piClassifier:     false,
 		piiScanner:       nil,
 		piScanner:        nil,
@@ -118,8 +119,8 @@ func NewService(
 	signaler RiskAnalysisSignaler,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
+	accessStore accesscontrol.Store,
 	auditLogger *audit.Logger,
-	redisCache cache.Cache,
 	piClassifier bool,
 	piiScanner ra.PIIScanner,
 	piScanner *ra.PromptInjectionScanner,
@@ -136,8 +137,8 @@ func NewService(
 		signaler:         signaler,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
+		accessStore:      accessStore,
 		audit:            auditLogger,
-		cache:            redisCache,
 		piClassifier:     piClassifier,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
@@ -2256,6 +2257,18 @@ func (s *Service) ensureApprovalPolicy(ctx context.Context, authCtx *contextvalu
 	return policyID, nil
 }
 
+func shadowMCPApprovalMatch(raw string) (string, string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", "", oops.E(oops.CodeInvalid, nil, "approval match is empty")
+	}
+	if u, err := url.Parse(trimmed); err == nil && u.Scheme != "" && u.Host != "" {
+		return accesscontrol.MatchKindFullURL, accesscontrol.CanonicalizeMatchValue(accesscontrol.MatchKindFullURL, trimmed), nil
+	}
+	serverIdentity := strings.Join(strings.Fields(trimmed), " ")
+	return accesscontrol.MatchKindServerIdentity, accesscontrol.CanonicalizeMatchValue(accesscontrol.MatchKindServerIdentity, serverIdentity), nil
+}
+
 func (s *Service) ListShadowMCPApprovals(ctx context.Context, payload *gen.ListShadowMCPApprovalsPayload) (*gen.ListShadowMCPApprovalsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -2270,14 +2283,25 @@ func (s *Service) ListShadowMCPApprovals(ctx context.Context, payload *gen.ListS
 		return nil, err
 	}
 
-	rows, err := shadowmcp.ListShadowMCPApprovals(ctx, s.cache, authCtx.ProjectID.String(), policyID.String())
+	result, err := s.accessStore.ListRules(ctx, accesscontrol.RuleFilters{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      authCtx.ProjectID.String(),
+		AccessScope:    accesscontrol.AccessScopeProject,
+		ResourceType:   accesscontrol.ResourceTypeShadowMCP,
+		Disposition:    accesscontrol.DispositionAllowed,
+		Limit:          1000,
+		Cursor:         "",
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list shadow-mcp approvals").Log(ctx, s.logger)
 	}
 
-	out := make([]*types.ShadowMCPApproval, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, shadowMCPApprovalToType(policyID, r))
+	out := make([]*types.ShadowMCPApproval, 0, len(result.Rules))
+	for _, rule := range result.Rules {
+		if rule.ObservedSummary.RiskPolicyID == nil || *rule.ObservedSummary.RiskPolicyID != policyID.String() {
+			continue
+		}
+		out = append(out, shadowMCPAccessRuleToApproval(policyID, rule))
 	}
 	return &gen.ListShadowMCPApprovalsResult{Approvals: out}, nil
 }
@@ -2296,21 +2320,45 @@ func (s *Service) ApproveShadowMCP(ctx context.Context, payload *gen.ApproveShad
 		return nil, err
 	}
 
-	canonical := shadowmcp.CanonicalizeMatch(payload.Match)
-	if canonical == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "approval match is empty")
+	matchKind, matchValue, err := shadowMCPApprovalMatch(payload.Match)
+	if err != nil {
+		return nil, err
 	}
-
-	approval := shadowmcp.ShadowMCPApproval{
-		Match:      canonical,
-		ServerName: strings.TrimSpace(conv.PtrValOr(payload.ServerName, "")),
-		ApprovedBy: conv.PtrValOr(authCtx.Email, ""),
-		ApprovedAt: time.Now().UTC(),
-	}
-	if err := shadowmcp.AddShadowMCPApproval(ctx, s.cache, authCtx.ProjectID.String(), policyID.String(), approval); err != nil {
+	now := time.Now().UTC()
+	riskPolicyID := policyID.String()
+	serverName := strings.TrimSpace(conv.PtrValOr(payload.ServerName, ""))
+	rule, err := s.accessStore.CreateRule(ctx, accesscontrol.AccessRule{
+		ID:             "",
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      authCtx.ProjectID.String(),
+		AccessScope:    accesscontrol.AccessScopeProject,
+		ResourceType:   accesscontrol.ResourceTypeShadowMCP,
+		Disposition:    accesscontrol.DispositionAllowed,
+		MatchKind:      matchKind,
+		MatchValue:     matchValue,
+		DisplayName:    cmp.Or(serverName, matchValue),
+		ObservedSummary: accesscontrol.ObservedSummary{
+			Name:           stringPtrIfNonEmpty(serverName),
+			FullURL:        stringPtrIf(matchKind == accesscontrol.MatchKindFullURL, matchValue),
+			URLHost:        nil,
+			ServerIdentity: stringPtrIf(matchKind == accesscontrol.MatchKindServerIdentity, matchValue),
+			ToolName:       nil,
+			ToolCall:       nil,
+			BlockReason:    nil,
+			RiskPolicyID:   &riskPolicyID,
+			RiskResultID:   nil,
+		},
+		SourceRequestID: "",
+		CreatedBy:       authCtx.UserID,
+		UpdatedBy:       authCtx.UserID,
+		Reason:          "",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "store shadow-mcp approval").Log(ctx, s.logger)
 	}
-	return shadowMCPApprovalToType(policyID, approval), nil
+	return shadowMCPAccessRuleToApproval(policyID, rule), nil
 }
 
 func (s *Service) RevokeShadowMCPApproval(ctx context.Context, payload *gen.RevokeShadowMCPApprovalPayload) error {
@@ -2327,27 +2375,46 @@ func (s *Service) RevokeShadowMCPApproval(ctx context.Context, payload *gen.Revo
 		return err
 	}
 
-	if err := shadowmcp.RemoveShadowMCPApproval(ctx, s.cache, authCtx.ProjectID.String(), policyID.String(), payload.Match); err != nil {
+	matchKind, matchValue, err := shadowMCPApprovalMatch(payload.Match)
+	if err != nil {
+		return err
+	}
+	rule, err := s.accessStore.GetRuleByMatch(ctx, authCtx.ActiveOrganizationID, accesscontrol.ResourceTypeShadowMCP, accesscontrol.AccessScopeProject, authCtx.ProjectID.String(), matchKind, matchValue)
+	if err != nil {
+		if errors.Is(err, accesscontrol.ErrNotFound) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "get shadow-mcp approval").Log(ctx, s.logger)
+	}
+	if rule.ObservedSummary.RiskPolicyID != nil && *rule.ObservedSummary.RiskPolicyID != policyID.String() {
+		return nil
+	}
+	if _, err := s.accessStore.DeleteRule(ctx, authCtx.ActiveOrganizationID, accesscontrol.ResourceTypeShadowMCP, rule.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove shadow-mcp approval").Log(ctx, s.logger)
 	}
 	return nil
 }
 
-func shadowMCPApprovalToType(policyID uuid.UUID, a shadowmcp.ShadowMCPApproval) *types.ShadowMCPApproval {
-	var serverName, approvedBy *string
-	if a.ServerName != "" {
-		s := a.ServerName
-		serverName = &s
-	}
-	if a.ApprovedBy != "" {
-		s := a.ApprovedBy
-		approvedBy = &s
-	}
+func shadowMCPAccessRuleToApproval(policyID uuid.UUID, rule accesscontrol.AccessRule) *types.ShadowMCPApproval {
 	return &types.ShadowMCPApproval{
 		PolicyID:   policyID.String(),
-		Match:      a.Match,
-		ServerName: serverName,
-		ApprovedBy: approvedBy,
-		ApprovedAt: a.ApprovedAt.UTC().Format(time.RFC3339),
+		Match:      rule.MatchValue,
+		ServerName: rule.ObservedSummary.Name,
+		ApprovedBy: stringPtrIfNonEmpty(rule.CreatedBy),
+		ApprovedAt: rule.CreatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func stringPtrIf(ok bool, value string) *string {
+	if !ok || value == "" {
+		return nil
+	}
+	return &value
+}
+
+func stringPtrIfNonEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
