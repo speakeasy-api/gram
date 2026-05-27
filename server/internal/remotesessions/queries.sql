@@ -54,14 +54,32 @@ ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: UpdateRemoteSessionIssuer :one
+-- Three-state semantics on the nullable endpoint columns: an omitted narg
+-- (NULL) keeps the existing value, an explicit empty string clears the
+-- column to NULL, any other value sets it. Operators need the clear path
+-- to disable DCR or remove stale discovery results on already-saved
+-- issuers. slug and issuer are NOT NULL; the handler rejects an explicit
+-- empty for those before reaching this query.
 UPDATE remote_session_issuers
 SET
     slug = COALESCE(sqlc.narg('slug'), slug),
     issuer = COALESCE(sqlc.narg('issuer'), issuer),
-    authorization_endpoint = COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint),
-    token_endpoint = COALESCE(sqlc.narg('token_endpoint'), token_endpoint),
-    registration_endpoint = COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint),
-    jwks_uri = COALESCE(sqlc.narg('jwks_uri'), jwks_uri),
+    authorization_endpoint = CASE
+        WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
+    END,
+    token_endpoint = CASE
+        WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    registration_endpoint = CASE
+        WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
+    END,
+    jwks_uri = CASE
+        WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
