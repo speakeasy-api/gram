@@ -34,7 +34,8 @@ RETURNING id;
 
 -- name: CreateChatMessage :copyfrom
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -59,7 +60,8 @@ INSERT INTO chat_messages (
   , generation
 )
 VALUES (
-    @chat_id
+    @id::uuid
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content

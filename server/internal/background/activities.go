@@ -76,6 +76,7 @@ type Activities struct {
 	analyzeSegment                  *resolution_activities.AnalyzeSegment
 	getUserFeedbackForChat          *resolution_activities.GetUserFeedbackForChat
 	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
+	getRiskPolicyMetadata           *risk_analysis.GetRiskPolicyMetadata
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
@@ -167,6 +168,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
+		getRiskPolicyMetadata:           risk_analysis.NewGetRiskPolicyMetadata(logger, tracerProvider, db),
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn)),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
@@ -358,6 +360,14 @@ func (a *Activities) FetchUnanalyzedMessages(ctx context.Context, input risk_ana
 	result, err := a.fetchUnanalyzedMessages.Do(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed messages: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) GetRiskPolicyMetadata(ctx context.Context, input risk_analysis.GetRiskPolicyMetadataArgs) (*risk_analysis.GetRiskPolicyMetadataResult, error) {
+	result, err := a.getRiskPolicyMetadata.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("get risk policy metadata: %w", err)
 	}
 	return result, nil
 }

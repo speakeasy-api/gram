@@ -254,6 +254,7 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -299,6 +300,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -345,6 +347,7 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 	chatID := sessionIDToUUID(metadata.SessionID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "user",

@@ -209,6 +209,7 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 }
 
 type CreateChatMessageParams struct {
+	ID               uuid.UUID
 	ChatID           uuid.UUID
 	Role             string
 	ProjectID        uuid.UUID

@@ -1153,9 +1153,9 @@ const (
 	maxConcurrentChatAssetWork = 32
 )
 
-func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, assetStorage assets.BlobStore, rows []chatMessageRow) error {
+func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, assetStorage assets.BlobStore, rows []chatMessageRow) ([]uuid.UUID, error) {
 	if len(rows) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// uploadResult holds the result of uploading a single message to asset storage.
@@ -1293,6 +1293,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 		}
 
 		dbrows[i] = repo.CreateChatMessageParams{
+			ID:               uuid.Nil,
 			ChatID:           row.chatID,
 			ProjectID:        row.projectID,
 			Role:             row.role,
@@ -1319,13 +1320,18 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 		}
 	}
 
+	ids, err := assignMessageIDs(dbrows)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to assign chat message ids").Log(ctx, logger)
+	}
+
 	// Batch insert all messages.
 	crepo := repo.New(tx)
 	if _, err := crepo.CreateChatMessage(ctx, dbrows); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").Log(ctx, logger)
 	}
 
-	return nil
+	return ids, nil
 }
 
 // enrichChatsWithMetrics fetches token and cost metrics from ClickHouse and adds them to chat overviews.

@@ -53,47 +53,58 @@ type RiskAnalysisSignaler interface {
 	SignalNewMessages(ctx context.Context, params background.DrainRiskAnalysisParams) error
 }
 
+// AnalyzeNewMessageSignaler delivers a per-message signal to the event-driven
+// analyze workflow. Indirected through this interface so tests can stub it.
+type AnalyzeNewMessageSignaler interface {
+	SignalNewMessage(ctx context.Context, params background.AnalyzeNewMessageParams, messageID uuid.UUID) error
+}
+
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	db               *pgxpool.Pool
-	repo             *repo.Queries
-	auth             *auth.Auth
-	authz            *authz.Engine
-	signaler         RiskAnalysisSignaler
-	completionClient openrouter.CompletionClient
-	shadowMCPClient  *shadowmcp.Client
-	audit            *audit.Logger
-	cache            cache.Cache
-	piClassifier     bool
+	tracer                trace.Tracer
+	logger                *slog.Logger
+	db                    *pgxpool.Pool
+	repo                  *repo.Queries
+	auth                  *auth.Auth
+	authz                 *authz.Engine
+	signaler              RiskAnalysisSignaler
+	analyzeNewMsgSignaler AnalyzeNewMessageSignaler
+	completionClient      openrouter.CompletionClient
+	shadowMCPClient       *shadowmcp.Client
+	audit                 *audit.Logger
+	cache                 cache.Cache
+	piClassifier          bool
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
 
-// NewObserver creates a lightweight chat.MessageObserver that signals the risk
-// drain workflow when new messages are stored. Use this in contexts (e.g. the
-// worker process) where the full risk Service is not needed.
+// NewObserver creates a lightweight chat.MessageObserver that signals the
+// event-driven analyze workflow per stored message. Use this in contexts
+// (e.g. the worker process) where the full risk Service is not needed. The
+// drain signaler stays available so explicit backfill paths (policy
+// create/update, manual retro) can still kick the drain workflow.
 func NewObserver(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	signaler RiskAnalysisSignaler,
+	analyzeNewMsgSignaler AnalyzeNewMessageSignaler,
 	auditLogger *audit.Logger,
 ) chat.MessageObserver {
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 
-		logger:           logger.With(attr.SlogComponent("risk")),
-		db:               db,
-		repo:             repo.New(db),
-		auth:             nil,
-		authz:            nil,
-		signaler:         signaler,
-		completionClient: nil,
-		shadowMCPClient:  nil,
-		audit:            auditLogger,
-		cache:            nil,
-		piClassifier:     false,
+		logger:                logger.With(attr.SlogComponent("risk")),
+		db:                    db,
+		repo:                  repo.New(db),
+		auth:                  nil,
+		authz:                 nil,
+		signaler:              signaler,
+		analyzeNewMsgSignaler: analyzeNewMsgSignaler,
+		completionClient:      nil,
+		shadowMCPClient:       nil,
+		audit:                 auditLogger,
+		cache:                 nil,
+		piClassifier:          false,
 	}
 }
 
@@ -104,6 +115,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
+	analyzeNewMsgSignaler AnalyzeNewMessageSignaler,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
@@ -113,18 +125,19 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("risk"))
 
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger:           logger,
-		db:               db,
-		repo:             repo.New(db),
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		signaler:         signaler,
-		completionClient: completionClient,
-		shadowMCPClient:  shadowMCPClient,
-		audit:            auditLogger,
-		cache:            redisCache,
-		piClassifier:     piClassifier,
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:                logger,
+		db:                    db,
+		repo:                  repo.New(db),
+		auth:                  auth.New(logger, db, sessions, authzEngine),
+		authz:                 authzEngine,
+		signaler:              signaler,
+		analyzeNewMsgSignaler: analyzeNewMsgSignaler,
+		completionClient:      completionClient,
+		shadowMCPClient:       shadowMCPClient,
+		audit:                 auditLogger,
+		cache:                 redisCache,
+		piClassifier:          piClassifier,
 	}
 }
 
@@ -160,10 +173,21 @@ func (s *Service) GetRiskCapabilities(ctx context.Context, payload *gen.GetRiskC
 // OnMessagesStored implements chat.MessageObserver. The caller
 // (notifyObservers) already dispatches this in a goroutine with a
 // detached context, so this method can safely perform I/O.
-func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
+//
+// Each enabled policy gets one SignalWithStart per stored message. The
+// drain workflow is intentionally NOT signaled here; it remains reserved
+// for explicit backfill (policy create/update, manual retro trigger).
+func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID, messageIDs []uuid.UUID) {
+	if len(messageIDs) == 0 {
+		return
+	}
+
 	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "list enabled risk policies for observer", attr.SlogError(err))
+		return
+	}
+	if len(policies) == 0 {
 		return
 	}
 
@@ -172,25 +196,27 @@ func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
 		attr.SlogRiskPolicyCount(len(policies)),
 	)
 
-	// Each SignalNewMessages call round-trips to Temporal (~20ms),
-	// and this runs on the chat-message hot path. Fan out so total
-	// latency is the slowest signal, not the sum of all signals.
+	// Each SignalWithStartWorkflow round-trips to Temporal (~20 ms) and
+	// runs on the chat-message hot path. Fan out across (policy, message)
+	// so total latency is the slowest signal, not the sum.
 	var wg sync.WaitGroup
-	wg.Add(len(policies))
+	wg.Add(len(policies) * len(messageIDs))
 	for _, p := range policies {
-		go func(p repo.RiskPolicy) {
-			defer wg.Done()
-			if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-				ProjectID:    p.ProjectID,
-				RiskPolicyID: p.ID,
-				MaxMessages:  background.DefaultRecentMessagesBudget,
-			}); err != nil {
-				s.logger.ErrorContext(ctx, "signal risk drain workflow",
-					attr.SlogError(err),
-					attr.SlogRiskPolicyID(p.ID.String()),
-				)
-			}
-		}(p)
+		params := background.AnalyzeNewMessageParams{
+			ProjectID:    p.ProjectID,
+			RiskPolicyID: p.ID,
+		}
+		for _, msgID := range messageIDs {
+			go func(params background.AnalyzeNewMessageParams, msgID uuid.UUID) {
+				defer wg.Done()
+				if err := s.analyzeNewMsgSignaler.SignalNewMessage(ctx, params, msgID); err != nil {
+					s.logger.ErrorContext(ctx, "signal analyze workflow",
+						attr.SlogError(err),
+						attr.SlogRiskPolicyID(params.RiskPolicyID.String()),
+					)
+				}
+			}(params, msgID)
+		}
 	}
 	wg.Wait()
 }

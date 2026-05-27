@@ -50,13 +50,19 @@ func (w *ChatMessageWriter) AddObserver(obs MessageObserver) {
 }
 
 // Write inserts messages via the pool and notifies observers on success.
+// Any params with a nil ID receive a freshly-generated UUIDv7 so downstream
+// observers always see the primary keys that were just persisted.
 func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) (int64, error) {
+	ids, err := assignMessageIDs(params)
+	if err != nil {
+		return 0, fmt.Errorf("assign chat message ids: %w", err)
+	}
 	n, err := repo.New(w.db).CreateChatMessage(ctx, params)
 	if err != nil {
 		return 0, fmt.Errorf("create chat messages: %w", err)
 	}
 	if n > 0 {
-		w.notifyMessagesStored(ctx, projectID)
+		w.notifyMessagesStored(ctx, projectID, ids)
 	}
 	return n, nil
 }
@@ -77,10 +83,15 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	if err := w.storeMessages(ctx, tx, pending); err != nil {
+	pendingIDs, err := w.storeMessages(ctx, tx, pending)
+	if err != nil {
 		return fmt.Errorf("store pending chat messages: %w", err)
 	}
 
+	assistantIDs, err := assignMessageIDs(assistants)
+	if err != nil {
+		return fmt.Errorf("assign assistant chat message ids: %w", err)
+	}
 	n, err := repo.New(tx).CreateChatMessage(ctx, assistants)
 	if err != nil {
 		return fmt.Errorf("store assistant chat messages: %w", err)
@@ -91,7 +102,10 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	}
 
 	if int64(len(pending))+n > 0 {
-		w.notifyMessagesStored(ctx, projectID)
+		all := make([]uuid.UUID, 0, len(pendingIDs)+len(assistantIDs))
+		all = append(all, pendingIDs...)
+		all = append(all, assistantIDs...)
+		w.notifyMessagesStored(ctx, projectID, all)
 	}
 	return nil
 }
@@ -104,22 +118,24 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 	if len(rows) == 0 {
 		return nil
 	}
-	if err := w.storeMessages(ctx, w.db, rows); err != nil {
+	ids, err := w.storeMessages(ctx, w.db, rows)
+	if err != nil {
 		return err
 	}
-	w.notifyMessagesStored(ctx, projectID)
+	w.notifyMessagesStored(ctx, projectID, ids)
 	return nil
 }
 
 // storeMessages uploads message content to asset storage in parallel, then
 // batch-inserts the messages via the given DBTX. Used by WriteWithAssets
-// (with the pool) and WriteTurn (with a transaction).
-func (w *ChatMessageWriter) storeMessages(ctx context.Context, tx repo.DBTX, rows []chatMessageRow) error {
+// (with the pool) and WriteTurn (with a transaction). Returns the IDs of the
+// inserted rows in the order they were written.
+func (w *ChatMessageWriter) storeMessages(ctx context.Context, tx repo.DBTX, rows []chatMessageRow) ([]uuid.UUID, error) {
 	return storeMessages(ctx, w.logger, tx, w.assetStorage, rows)
 }
 
 // notifyMessagesStored fires all registered observers asynchronously.
-func (w *ChatMessageWriter) notifyMessagesStored(ctx context.Context, projectID uuid.UUID) {
+func (w *ChatMessageWriter) notifyMessagesStored(ctx context.Context, projectID uuid.UUID, messageIDs []uuid.UUID) {
 	if w == nil || len(w.observers) == 0 {
 		return
 	}
@@ -135,7 +151,26 @@ func (w *ChatMessageWriter) notifyMessagesStored(ctx context.Context, projectID 
 		)
 
 		for _, obs := range w.observers {
-			obs.OnMessagesStored(ctx, projectID)
+			obs.OnMessagesStored(ctx, projectID, messageIDs)
 		}
 	}()
+}
+
+// assignMessageIDs walks params, generating a UUIDv7 for any row whose ID is
+// nil, and returns the resulting IDs in order. Time-ordered v7s preserve the
+// insertion ordering the chat_messages.id default (generate_uuidv7()) relies
+// on for replay determinism.
+func assignMessageIDs(params []repo.CreateChatMessageParams) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, len(params))
+	for i := range params {
+		if params[i].ID == uuid.Nil {
+			id, err := uuid.NewV7()
+			if err != nil {
+				return nil, fmt.Errorf("generate uuid v7: %w", err)
+			}
+			params[i].ID = id
+		}
+		ids[i] = params[i].ID
+	}
+	return ids, nil
 }
