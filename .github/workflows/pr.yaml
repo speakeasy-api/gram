@@ -1150,7 +1150,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Regenerate SDK
-        run: mise run gen:sdk --skip-upload-spec
+        run: mise run gen:sdk
 
       # Prevent perpetual failure for code samples digest.
       - name: Restore .speakeasy/workflow.lock
