@@ -31,6 +31,7 @@ import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
+import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
@@ -245,6 +246,9 @@ const RouteProvider = () => {
         {routesWithSubroutes(unauthenticatedRoutes)}
         <Route path="/slack/register" element={<LoginCheck />}>
           <Route index element={<SlackRegister />} />
+        </Route>
+        <Route path="/switch-org" element={<LoginCheck />}>
+          <Route index element={<SwitchOrg />} />
         </Route>
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
