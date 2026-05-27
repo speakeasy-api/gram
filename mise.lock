@@ -652,6 +652,10 @@ url = "https://nodejs.org/dist/v24.13.1/node-v24.13.1-darwin-x64.tar.gz"
 checksum = "sha256:fba577c4bb87df04d54dd87bbdaa5a2272f1f99a2acbf9152e1a91b8b5f0b279"
 url = "https://nodejs.org/dist/v24.13.1/node-v24.13.1-win-x64.zip"
 
+[[tools."pipx:pgcli"]]
+version = "4.4.0"
+backend = "pipx:pgcli"
+
 [[tools.pkl]]
 version = "0.31.0"
 backend = "aqua:apple/pkl"
