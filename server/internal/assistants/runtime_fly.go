@@ -636,7 +636,7 @@ func (f *FlyRuntimeBackend) maybeRecycleImage(
 // desiredImageRef returns the configured runtime image reference in the same
 // "<repo>:<tag>" form fly's MachineImageRef serialises into.
 func (f *FlyRuntimeBackend) desiredImageRef() string {
-	return fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageVersion)
+	return fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageTag)
 }
 
 // machineImageRef rebuilds the "<registry>/<repo>:<tag>" form from a fly
@@ -927,7 +927,7 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 		flyMachineMetadataRole:                         flyMachineMetadataRoleAssistant,
 	}
 	return &fly.MachineConfig{
-		Image: fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageVersion),
+		Image: fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageTag),
 		Env:   env,
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",

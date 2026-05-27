@@ -15,13 +15,14 @@ fi
 arch="${arch/aarch64/arm64}"
 arch="${arch/x86_64/amd64}"
 
-image="gram-assistant-runtime:dev"
+runtime_image_hash="$(mise run hash:assistant-runtime-image)"
+image="gram-assistant-runtime:${runtime_image_hash}"
 
 echo "Building assistant runtime image for architecture(s): $arch"
 docker build --platform "linux/${arch}" -f ./agents/runtime-image/Dockerfile -t "${image}" .
 
-if [ -n "${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE:-}" ] && [ "${GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION:-dev}" = "dev" ] && [ "$arch" = "amd64" ]; then
-  fly_image="${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE}:${GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION:-dev}"
+if [ -n "${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE:-}" ] && [ "$arch" = "amd64" ]; then
+  fly_image="${GRAM_ASSISTANT_RUNTIME_OCI_IMAGE}:${runtime_image_hash}"
   docker rmi "$fly_image" || true
   docker tag "${image}" "$fly_image"
   docker push "$fly_image"

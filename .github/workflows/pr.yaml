@@ -299,6 +299,11 @@ jobs:
             echo "enabled=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: echo "hash=$(mise run hash:assistant-runtime-image)" >> "$GITHUB_OUTPUT"
+
       - name: "[DEV] Create fly app"
         id: assistantFlyCreateDev
         shell: bash
@@ -341,6 +346,7 @@ jobs:
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
             type=schedule,pattern=nightly
             type=sha
             type=sha,format=long
@@ -370,6 +376,7 @@ jobs:
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
             type=schedule,pattern=nightly
             type=sha
             type=sha,format=long

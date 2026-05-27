@@ -832,7 +832,7 @@ func TestFlyRuntimeConfigValidateRequiresServerURL(t *testing.T) {
 		DefaultFlyOrg:    "speakeasy-lab",
 		DefaultFlyRegion: "iad",
 		OCIImage:         "registry.fly.io/assistant-runtime",
-		ImageVersion:     "dev",
+		ImageTag:         "dev",
 	}
 	err := cfg.Validate()
 	require.Error(t, err)
@@ -1043,7 +1043,7 @@ func newTestFlyRuntimeBackend(t *testing.T, server *httptest.Server) (*FlyRuntim
 			DefaultFlyOrg:    "speakeasy-lab",
 			DefaultFlyRegion: "iad",
 			OCIImage:         "registry.fly.io/assistant-runtime",
-			ImageVersion:     "dev",
+			ImageTag:         "dev",
 			AppNamePrefix:    "gram-asst",
 			ServerURL:        mustParseURL(t, "https://gram.example.com"),
 		},
