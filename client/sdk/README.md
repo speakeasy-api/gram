@@ -147,6 +147,14 @@ run();
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
 * [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
+* [approveShadowMCPApprovalRequest](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
+* [createShadowMCPApprovalRequest](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
+* [denyShadowMCPApprovalRequest](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
+* [listShadowMCPApprovalRequests](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
+* [createShadowMCPAccessRule](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
+* [deleteShadowMCPAccessRule](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
+* [listShadowMCPAccessRules](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
+* [updateShadowMCPAccessRule](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
 * [updateMemberRoles](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
 
@@ -589,8 +597,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`accessApproveShadowMCPApprovalRequest`](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
 - [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
+- [`accessCreateShadowMCPAccessRule`](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
+- [`accessCreateShadowMCPApprovalRequest`](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
 - [`accessDeleteRole`](docs/sdks/access/README.md#deleterole) - deleteRole access
+- [`accessDeleteShadowMCPAccessRule`](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
+- [`accessDenyShadowMCPApprovalRequest`](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 - [`accessDisableRBAC`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
 - [`accessEnableRBAC`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`accessGetRBACStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
@@ -601,9 +614,12 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
+- [`accessListShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
+- [`accessListShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 - [`accessResolveChallenge`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`accessUpdateMemberRoles`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
+- [`accessUpdateShadowMCPAccessRule`](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
 - [`aiIntegrationsDeleteConfig`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
 - [`aiIntegrationsGetConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
 - [`aiIntegrationsUpsertConfig`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertConfig aiIntegrations
@@ -897,6 +913,7 @@ To learn about this feature and how to get started, check
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 - [`useAiIntegrationConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
+- [`useApproveShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
 - [`useAssistantMemoriesDeleteMutation`](docs/sdks/assistantmemories/README.md#delete) - deleteAssistantMemory assistantMemories
 - [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`useAssistantsDeleteMutation`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
@@ -939,6 +956,8 @@ To learn about this feature and how to get started, check
 - [`useCreateRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
 - [`useCreateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#create) - createRemoteSessionIssuer remoteSessionIssuers
 - [`useCreateRoleMutation`](docs/sdks/access/README.md#createrole) - createRole access
+- [`useCreateShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
+- [`useCreateShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
@@ -960,6 +979,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
 - [`useDeleteRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#delete) - deleteRemoteSessionIssuer remoteSessionIssuers
 - [`useDeleteRoleMutation`](docs/sdks/access/README.md#deleterole) - deleteRole access
+- [`useDeleteShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
 - [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
@@ -967,6 +987,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
 - [`useDeleteUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
+- [`useDenyShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useDisableRBACMutation`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
@@ -1124,6 +1145,8 @@ To learn about this feature and how to get started, check
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSetToolsetUserSessionIssuerMutation`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
+- [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
+- [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
@@ -1145,6 +1168,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#update) - updateRemoteSessionClient remoteSessionClients
 - [`useUpdateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 - [`useUpdateRoleMutation`](docs/sdks/access/README.md#updaterole) - updateRole access
+- [`useUpdateShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
 - [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets

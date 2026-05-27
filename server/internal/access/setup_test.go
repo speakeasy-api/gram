@@ -2,11 +2,14 @@ package access
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -90,9 +93,15 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
-	accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
+	accessCache := prefixedTestCache{
+		prefix: "access-test:" + uuid.NewString() + ":",
+		cache:  cache.NewRedisCacheAdapter(redisClient),
+	}
+	accessStore := accesscontrol.NewRedisStore(accessCache, accesscontrol.AlphaTTL)
 
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roles, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{}, auditLogger, "test-jwt-secret", accessStore)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopFeatureCacheWriter{}, auditLogger, "test-jwt-secret", accessStore)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -100,6 +109,61 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 		chConn:  chConn,
 		roles:   roles,
 	}
+}
+
+type prefixedTestCache struct {
+	prefix string
+	cache  cache.Cache
+}
+
+func (p prefixedTestCache) key(key string) string {
+	return p.prefix + key
+}
+
+func (p prefixedTestCache) Get(ctx context.Context, key string, value any) error {
+	return p.cache.Get(ctx, p.key(key), value)
+}
+
+func (p prefixedTestCache) GetAndDelete(ctx context.Context, key string, value any) error {
+	return p.cache.GetAndDelete(ctx, p.key(key), value)
+}
+
+func (p prefixedTestCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	return p.cache.Set(ctx, p.key(key), value, ttl)
+}
+
+func (p prefixedTestCache) Update(ctx context.Context, key string, value any) error {
+	return p.cache.Update(ctx, p.key(key), value)
+}
+
+func (p prefixedTestCache) Delete(ctx context.Context, key string) error {
+	return p.cache.Delete(ctx, p.key(key))
+}
+
+func (p prefixedTestCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	return p.cache.Expire(ctx, p.key(key), ttl)
+}
+
+func (p prefixedTestCache) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
+	return p.cache.ListAppend(ctx, p.key(key), value, ttl)
+}
+
+func (p prefixedTestCache) ListRange(ctx context.Context, key string, start, stop int64, value any) error {
+	return p.cache.ListRange(ctx, p.key(key), start, stop, value)
+}
+
+func (p prefixedTestCache) DeleteByPrefix(ctx context.Context, prefix string) error {
+	return p.cache.DeleteByPrefix(ctx, p.key(prefix))
+}
+
+func (p prefixedTestCache) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
+	mutating, ok := p.cache.(interface {
+		Mutate(context.Context, string, any, time.Duration, func(bool) error) error
+	})
+	if !ok {
+		return fmt.Errorf("prefixed test cache does not support mutation")
+	}
+	return mutating.Mutate(ctx, p.key(key), value, ttl, fn)
 }
 
 func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {
@@ -139,6 +203,87 @@ func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	require.NoError(t, err)
 
 	return grants
+}
+
+func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, role workos.Role) string {
+	t.Helper()
+
+	createdAt, err := time.Parse(time.RFC3339, role.CreatedAt)
+	require.NoError(t, err)
+	updatedAt, err := time.Parse(time.RFC3339, role.UpdatedAt)
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        role.Slug,
+		WorkosName:        role.Name,
+		WorkosDescription: conv.ToPGTextEmpty(role.Description),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(createdAt),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	row, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     role.Slug,
+	})
+	require.NoError(t, err)
+
+	return row.ID.String()
+}
+
+func seedGlobalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, role workos.Role) string {
+	t.Helper()
+
+	createdAt, err := time.Parse(time.RFC3339, role.CreatedAt)
+	require.NoError(t, err)
+	updatedAt, err := time.Parse(time.RFC3339, role.UpdatedAt)
+	require.NoError(t, err)
+
+	err = accessrepo.New(conn).UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
+		WorkosSlug:        role.Slug,
+		WorkosName:        role.Name,
+		WorkosDescription: conv.ToPGTextEmpty(role.Description),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(createdAt),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	row, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, role.Slug)
+	require.NoError(t, err)
+
+	return row.ID.String()
+}
+
+func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID string, member workos.Member) {
+	t.Helper()
+
+	updatedAt := time.Now().UTC()
+	if member.UpdatedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, member.UpdatedAt)
+		require.NoError(t, err)
+		updatedAt = parsed
+	} else if member.CreatedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, member.CreatedAt)
+		require.NoError(t, err)
+		updatedAt = parsed
+	}
+
+	for _, slug := range member.RoleSlugs {
+		inserted, err := accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+			OrganizationID:     organizationID,
+			WorkosUserID:       member.UserID,
+			WorkosRoleSlug:     slug,
+			UserID:             conv.ToPGTextEmpty(userID),
+			WorkosMembershipID: conv.ToPGTextEmpty(member.ID),
+			WorkosUpdatedAt:    conv.ToPGTimestamptz(updatedAt),
+			WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), inserted)
+	}
 }
 
 // seedDisconnectedUser creates a user in the users table with a workos_id but

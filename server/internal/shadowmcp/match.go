@@ -1,11 +1,6 @@
 package shadowmcp
 
-import (
-	"net/url"
-	"strings"
-
-	"github.com/speakeasy-api/gram/server/internal/matchvalue"
-)
+import "github.com/speakeasy-api/gram/server/internal/matchvalue"
 
 const (
 	MatchBreadthFullURL        = "full_url"
