@@ -45,6 +45,27 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 		return err
 	}
 
+	return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, slug, mcpRouteBase)
+}
+
+// serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,
+// mcp_server) pair: it runs the issuer gate when the mcp_server is
+// issuer-gated and then dispatches to the appropriate backend.
+//
+// Split from ServeMCPEndpoint so ServePublic can avoid a redundant
+// resolve+lookup when it already has the rows in hand (ServePublic tries
+// mcp_endpoints first and falls back to the legacy toolsets lookup on
+// miss; only the hit case needs dispatch).
+func (s *Service) serveResolvedMCPEndpoint(
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
+	mcpServer *mcpserversrepo.McpServer,
+	slug, mcpRouteBase string,
+) error {
+	ctx := r.Context()
+
 	// Issuer-gated mcp_servers run the JWT-validation branch here, before
 	// backend dispatch. ServeToolsetResolved then skips its in-toolset
 	// gate (skipIssuerGate=true) so the same request isn't gated twice;

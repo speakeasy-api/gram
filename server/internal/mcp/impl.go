@@ -384,6 +384,24 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 	return nil
 }
 
+// ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
+// first — a slug bound to a custom-domain request resolves only against
+// that domain; a slug arriving on the platform domain resolves only
+// against (custom_domain_id IS NULL) endpoints. On a hit, dispatch
+// matches /x/mcp: issuer-gated mcp_servers run the JWT gate before
+// backend dispatch, then RemoteMcpServerID-backed rows proxy via
+// remotemcp and ToolsetID-backed rows delegate to ServeToolsetResolved.
+//
+// On any not-found from endpoint resolution — no matching mcp_endpoint,
+// dangling mcp_endpoint.mcp_server_id FK, or an mcp_server with
+// visibility="disabled" — ServePublic falls back to the legacy
+// toolsets.mcp_slug lookup. The fallback's loadToolset has
+// platform/custom-domain handling distinct from mcp_endpoints'
+// scoping: a platform-context lookup may resolve a toolset bound to a
+// custom domain when no platform-scoped row exists. This asymmetry is
+// load-bearing for customers that attached a custom domain to a
+// pre-existing toolset without retiring the platform URL — see
+// loadToolset's docstring and TestServePublic_CustomDomain_PlatformDomainStillWorks.
 func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
@@ -393,6 +411,22 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
+	}
+
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+
+	// Try mcp_endpoints → mcp_servers first. On hit, dispatch through the
+	// unified backend switch (remote proxy / toolset). On 404, fall through
+	// to the legacy toolset-by-slug path below.
+	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		// Fall through to legacy toolset lookup.
+	default:
+		return err
 	}
 
 	var customDomainID uuid.NullUUID
