@@ -1166,38 +1166,42 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 const setSCIMEnabled = `-- name: SetSCIMEnabled :exec
 UPDATE organization_metadata
 SET scim_enabled = $1,
+    workos_last_event_id = $2,
     updated_at = clock_timestamp()
-WHERE workos_id = $2
+WHERE workos_id = $3
 `
 
 type SetSCIMEnabledParams struct {
-	Enabled  pgtype.Bool
-	WorkosID pgtype.Text
+	Enabled           pgtype.Bool
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
 }
 
 // Update the SCIM/directory sync enabled flag on an organization. Called when
 // a WorkOS dsync.activated or dsync.deactivated event is processed.
 func (q *Queries) SetSCIMEnabled(ctx context.Context, arg SetSCIMEnabledParams) error {
-	_, err := q.db.Exec(ctx, setSCIMEnabled, arg.Enabled, arg.WorkosID)
+	_, err := q.db.Exec(ctx, setSCIMEnabled, arg.Enabled, arg.WorkosLastEventID, arg.WorkosID)
 	return err
 }
 
 const setSSOEnabled = `-- name: SetSSOEnabled :exec
 UPDATE organization_metadata
 SET sso_enabled = $1,
+    workos_last_event_id = $2,
     updated_at = clock_timestamp()
-WHERE workos_id = $2
+WHERE workos_id = $3
 `
 
 type SetSSOEnabledParams struct {
-	Enabled  pgtype.Bool
-	WorkosID pgtype.Text
+	Enabled           pgtype.Bool
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
 }
 
 // Update the SSO enabled flag on an organization. Called when a WorkOS
 // connection.activated or connection.deactivated/deleted event is processed.
 func (q *Queries) SetSSOEnabled(ctx context.Context, arg SetSSOEnabledParams) error {
-	_, err := q.db.Exec(ctx, setSSOEnabled, arg.Enabled, arg.WorkosID)
+	_, err := q.db.Exec(ctx, setSSOEnabled, arg.Enabled, arg.WorkosLastEventID, arg.WorkosID)
 	return err
 }
 

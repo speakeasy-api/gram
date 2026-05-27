@@ -639,6 +639,7 @@ WHERE id = @id AND svix_app_id IS NOT NULL;
 -- connection.activated or connection.deactivated/deleted event is processed.
 UPDATE organization_metadata
 SET sso_enabled = @enabled,
+    workos_last_event_id = @workos_last_event_id,
     updated_at = clock_timestamp()
 WHERE workos_id = @workos_id;
 
@@ -647,6 +648,7 @@ WHERE workos_id = @workos_id;
 -- a WorkOS dsync.activated or dsync.deactivated event is processed.
 UPDATE organization_metadata
 SET scim_enabled = @enabled,
+    workos_last_event_id = @workos_last_event_id,
     updated_at = clock_timestamp()
 WHERE workos_id = @workos_id;
 

@@ -602,9 +602,32 @@ func handleSSOConnectionChange(ctx context.Context, logger *slog.Logger, dbtx da
 		return nil
 	}
 
-	if err := orgrepo.New(dbtx).SetSSOEnabled(ctx, orgrepo.SetSSOEnabledParams{
-		Enabled:  pgtype.Bool{Bool: enabled, Valid: true},
-		WorkosID: conv.ToPGText(payload.OrganizationID),
+	repo := orgrepo.New(dbtx)
+	org, err := repo.GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping connection event for unknown organization", attr.SlogWorkOSOrganizationID(payload.OrganizationID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
+	}
+
+	var lastEventID *string
+	if org.WorkosLastEventID.Valid {
+		lastEventID = &org.WorkosLastEventID.String
+	}
+	var rowUpdatedAt *time.Time
+	if org.WorkosUpdatedAt.Valid {
+		rowUpdatedAt = &org.WorkosUpdatedAt.Time
+	}
+	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, event.CreatedAt) {
+		return nil
+	}
+
+	if err := repo.SetSSOEnabled(ctx, orgrepo.SetSSOEnabledParams{
+		Enabled:           pgtype.Bool{Bool: enabled, Valid: true},
+		WorkosID:          conv.ToPGText(payload.OrganizationID),
+		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
 		return fmt.Errorf("set sso_enabled=%v for workos org %q: %w", enabled, payload.OrganizationID, err)
 	}
@@ -634,9 +657,32 @@ func handleDSyncChange(ctx context.Context, logger *slog.Logger, dbtx database.D
 		return nil
 	}
 
-	if err := orgrepo.New(dbtx).SetSCIMEnabled(ctx, orgrepo.SetSCIMEnabledParams{
-		Enabled:  pgtype.Bool{Bool: enabled, Valid: true},
-		WorkosID: conv.ToPGText(payload.OrganizationID),
+	repo := orgrepo.New(dbtx)
+	org, err := repo.GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping dsync event for unknown organization", attr.SlogWorkOSOrganizationID(payload.OrganizationID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
+	}
+
+	var lastEventID *string
+	if org.WorkosLastEventID.Valid {
+		lastEventID = &org.WorkosLastEventID.String
+	}
+	var rowUpdatedAt *time.Time
+	if org.WorkosUpdatedAt.Valid {
+		rowUpdatedAt = &org.WorkosUpdatedAt.Time
+	}
+	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, event.CreatedAt) {
+		return nil
+	}
+
+	if err := repo.SetSCIMEnabled(ctx, orgrepo.SetSCIMEnabledParams{
+		Enabled:           pgtype.Bool{Bool: enabled, Valid: true},
+		WorkosID:          conv.ToPGText(payload.OrganizationID),
+		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
 		return fmt.Errorf("set scim_enabled=%v for workos org %q: %w", enabled, payload.OrganizationID, err)
 	}

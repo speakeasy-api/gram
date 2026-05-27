@@ -1742,6 +1742,76 @@ func TestProcessWorkOSOrganizationEvents_SSOAndSCIMFullLifecycle(t *testing.T) {
 	require.False(t, row.ScimEnabled.Bool, "SCIM should be disabled after dsync.deleted")
 }
 
+func TestProcessWorkOSOrganizationEvents_StaleConnectionEventSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_conn_stale")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_sso_stale"
+	const workosOrgID = "org_01HZSSOSTALE"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	// Deliver activation with a high event ID, then a stale deactivation
+	// with a lower event ID (simulating out-of-order delivery).
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOSTALE2", workosOrgID),
+			newWorkOSConnectionEvent(t, "connection.deactivated", "event_01HZSSOSTALE1", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	// LastEventID tracks the last event processed by the loop (including
+	// skipped stale events), so it advances to the final event in the batch.
+	require.Equal(t, "event_01HZSSOSTALE1", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.SsoEnabled.Valid)
+	require.True(t, row.SsoEnabled.Bool, "SSO should remain enabled — stale deactivation must be skipped")
+	// The DB cursor should reflect the newer event that was actually applied,
+	// not the stale event that was skipped.
+	require.Equal(t, "event_01HZSSOSTALE2", row.WorkosLastEventID.String)
+}
+
+func TestProcessWorkOSOrganizationEvents_StaleDSyncEventSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_dsync_stale")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_scim_stale"
+	const workosOrgID = "org_01HZSCIMSTALE"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	// Deliver activation with a high event ID, then a stale deactivation
+	// with a lower event ID (simulating out-of-order delivery).
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMSTALE2", workosOrgID),
+			newWorkOSDSyncEvent(t, "dsync.deactivated", "event_01HZSCIMSTALE1", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSCIMSTALE1", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.ScimEnabled.Valid)
+	require.True(t, row.ScimEnabled.Bool, "SCIM should remain enabled — stale deactivation must be skipped")
+	require.Equal(t, "event_01HZSCIMSTALE2", row.WorkosLastEventID.String)
+}
+
 func TestProcessWorkOSOrganizationEvents_ConnectionEventUnknownOrgNoError(t *testing.T) {
 	t.Parallel()
 
