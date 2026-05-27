@@ -1045,10 +1045,22 @@ UPDATE remote_session_issuers
 SET
     slug = COALESCE($1, slug),
     issuer = COALESCE($2, issuer),
-    authorization_endpoint = COALESCE($3, authorization_endpoint),
-    token_endpoint = COALESCE($4, token_endpoint),
-    registration_endpoint = COALESCE($5, registration_endpoint),
-    jwks_uri = COALESCE($6, jwks_uri),
+    authorization_endpoint = CASE
+        WHEN $3::text = '' THEN NULL
+        ELSE COALESCE($3, authorization_endpoint)
+    END,
+    token_endpoint = CASE
+        WHEN $4::text = '' THEN NULL
+        ELSE COALESCE($4, token_endpoint)
+    END,
+    registration_endpoint = CASE
+        WHEN $5::text = '' THEN NULL
+        ELSE COALESCE($5, registration_endpoint)
+    END,
+    jwks_uri = CASE
+        WHEN $6::text = '' THEN NULL
+        ELSE COALESCE($6, jwks_uri)
+    END,
     scopes_supported = COALESCE($7::text[], scopes_supported),
     grant_types_supported = COALESCE($8::text[], grant_types_supported),
     response_types_supported = COALESCE($9::text[], response_types_supported),
@@ -1077,6 +1089,12 @@ type UpdateRemoteSessionIssuerParams struct {
 	ProjectID                         uuid.UUID
 }
 
+// Three-state semantics on the nullable endpoint columns: an omitted narg
+// (NULL) keeps the existing value, an explicit empty string clears the
+// column to NULL, any other value sets it. Operators need the clear path
+// to disable DCR or remove stale discovery results on already-saved
+// issuers. slug and issuer are NOT NULL; the handler rejects an explicit
+// empty for those before reaching this query.
 func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, updateRemoteSessionIssuer,
 		arg.Slug,

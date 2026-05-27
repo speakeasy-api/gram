@@ -5,7 +5,6 @@ import type {
   RemoteSessionIssuer,
 } from "@gram/client/models/components";
 import {
-  useRemoteSessionClients,
   useRemoteSessionIssuers,
   useUserSessionIssuer,
 } from "@gram/client/react-query/index.js";
@@ -16,6 +15,7 @@ import { EmptyAuthenticationState } from "./EmptyAuthenticationState";
 import { UserSessionsSection } from "./UserSessionsSection";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersTable } from "./RemoteIdentityProvidersTable";
+import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "./useProtectedResourceMetadata";
 
 export function AuthenticationTab({ mcpServer }: { mcpServer: McpServer }) {
@@ -52,17 +52,16 @@ export function AuthenticationTab({ mcpServer }: { mcpServer: McpServer }) {
     [issuersResult],
   );
 
-  const { data: clientsResult, isLoading: isLoadingClients } =
-    useRemoteSessionClients({ userSessionIssuerId }, undefined, {
-      enabled: issuerConfigured,
-    });
-
-  const associatedIssuerIds = useMemo(() => {
-    if (!clientsResult) return new Set<string>();
-    return new Set(
-      clientsResult.result.items.map((client) => client.remoteSessionIssuerId),
+  const { items: allClients, isLoading: isLoadingClients } =
+    useAllRemoteSessionClients(
+      { userSessionIssuerId },
+      { enabled: issuerConfigured },
     );
-  }, [clientsResult]);
+
+  const associatedIssuerIds = useMemo(
+    () => new Set(allClients.map((client) => client.remoteSessionIssuerId)),
+    [allClients],
+  );
 
   const associatedIssuers = useMemo<RemoteSessionIssuer[]>(
     () => allIssuers.filter((issuer) => associatedIssuerIds.has(issuer.id)),
@@ -137,6 +136,16 @@ export function AuthenticationTab({ mcpServer }: { mcpServer: McpServer }) {
             onAdd={() => openSheet(undefined)}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            // TODO(AGE-2554): remove this gate when the runtime resolver
+            // supports multiple remote_session_clients per
+            // user_session_issuer. Today ResolveOneAccessToken enforces
+            // len(clients) == 1 as an invariant; a second attach reaches a
+            // state where MCP requests fail with CodeUnexpected.
+            attachDisabledReason={
+              associatedIssuers.length > 0
+                ? "Multiple identity providers per server are not yet supported."
+                : undefined
+            }
           />
         </>
       )}

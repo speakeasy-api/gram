@@ -1,5 +1,10 @@
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import type { RemoteSessionIssuer } from "@gram/client/models/components";
 import { Button, Stack } from "@speakeasy-api/moonshine";
@@ -11,12 +16,17 @@ export function RemoteIdentityProvidersTable({
   onAdd,
   onEdit,
   onDelete,
+  attachDisabledReason,
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
   onAdd: () => void;
   onEdit: (issuer: RemoteSessionIssuer) => void;
   onDelete: (issuer: RemoteSessionIssuer) => void;
+  // When set, the Attach button renders disabled with this string as its
+  // tooltip. Used to surface the temporary single-provider constraint until
+  // multi-client support lands.
+  attachDisabledReason?: string;
 }) {
   return (
     <section>
@@ -52,12 +62,38 @@ export function RemoteIdentityProvidersTable({
           )}
           <div>
             <RequireScope scope="mcp:write" level="component">
-              <Button variant="secondary" onClick={onAdd}>
-                <Button.LeftIcon>
-                  <Plus className="size-4" />
-                </Button.LeftIcon>
-                <Button.Text>Attach Remote Identity Provider</Button.Text>
-              </Button>
+              {attachDisabledReason ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* Disabled native buttons don't fire pointer events, so
+                        the tooltip never opens on hover without a wrapper.
+                        Matches the EmptyAuthenticationState pattern. */}
+                    <span
+                      role="button"
+                      aria-disabled="true"
+                      tabIndex={0}
+                      aria-label={attachDisabledReason}
+                    >
+                      <Button variant="secondary" disabled>
+                        <Button.LeftIcon>
+                          <Plus className="size-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>
+                          Attach Remote Identity Provider
+                        </Button.Text>
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{attachDisabledReason}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button variant="secondary" onClick={onAdd}>
+                  <Button.LeftIcon>
+                    <Plus className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Attach Remote Identity Provider</Button.Text>
+                </Button>
+              )}
             </RequireScope>
           </div>
         </Stack>

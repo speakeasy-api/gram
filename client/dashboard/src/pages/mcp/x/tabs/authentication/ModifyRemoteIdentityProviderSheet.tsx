@@ -18,10 +18,9 @@ import {
   invalidateAllRemoteSessionClients,
   invalidateAllRemoteSessionIssuers,
   useMcpServers,
-  useRemoteSessionClients,
 } from "@gram/client/react-query/index.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -31,6 +30,7 @@ import {
   OverridesFields,
 } from "./IssuerFormFields";
 import { parseScopes } from "./issuerFormUtils";
+import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 
 export function ModifyRemoteIdentityProviderSheet({
@@ -45,19 +45,16 @@ export function ModifyRemoteIdentityProviderSheet({
   issuer: RemoteSessionIssuer;
 }) {
   // Fetch every remote_session_client tied to this issuer (across all
-  // user_session_issuers in the project). We need the unfiltered list to
-  // compute which OTHER MCP servers are also using this issuer so the
-  // operator gets a heads-up that issuer/endpoint edits will affect them.
-  const { data: clientsResult, isLoading: isLoadingClients } =
-    useRemoteSessionClients({ remoteSessionIssuerId: issuer.id }, undefined, {
-      enabled: open,
-    });
-  // Memoize so the empty-array fallback doesn't churn a new reference on
-  // every render, which would invalidate downstream useMemo dependencies.
-  const allClients = useMemo(
-    () => clientsResult?.result.items ?? [],
-    [clientsResult],
-  );
+  // user_session_issuers in the project), walking every page. We need the
+  // unfiltered list to compute which OTHER MCP servers are also using this
+  // issuer so the operator gets a heads-up that issuer/endpoint edits will
+  // affect them — a single-page fetch would silently undercount once a
+  // project crosses the default page size of 50.
+  const { items: allClients, isLoading: isLoadingClients } =
+    useAllRemoteSessionClients(
+      { remoteSessionIssuerId: issuer.id },
+      { enabled: open },
+    );
   const primaryClient: RemoteSessionClient | undefined = allClients.find(
     (clientRow) => clientRow.userSessionIssuerId === userSessionIssuer.id,
   );
@@ -158,7 +155,7 @@ function ModifyRemoteIdentityProviderSheetBody({
     discoveredSnapshot,
     discoverPending,
     discoverError,
-    setDiscoverError,
+    clearDiscoverError,
     runDiscover,
     handleResetEndpoints,
     resetEndpointState,
@@ -177,46 +174,28 @@ function ModifyRemoteIdentityProviderSheetBody({
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
 
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // Seed client-derived fields exactly once per sheet open, the first time
-  // the client lookup resolves. The sheet body remounts on close (the
-  // `{open && <Body />}` pattern in the parent), so the ref resets naturally
-  // on the next open — no need to wire it to the open prop. Guarding via a
-  // ref instead of a narrow useEffect dependency keeps the linter happy AND
-  // prevents subsequent refetches from clobbering in-progress edits.
-  const clientFieldsInitializedRef = useRef(false);
-  useEffect(() => {
-    if (!primaryClient || clientFieldsInitializedRef.current) return;
-    setTokenEndpointAuthMethod(primaryClient.tokenEndpointAuthMethod ?? "");
-    setScopeOverride((primaryClient.scope ?? []).join(", "));
-    setAudienceOverride(primaryClient.audience ?? "");
-    clientFieldsInitializedRef.current = true;
-  }, [primaryClient]);
-
-  const submittable = !!primaryClient && issuerUrl.trim().length > 0;
-
-  const handleSubmit = async () => {
-    if (!submittable || submitting || !primaryClient) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
+  const modifyMutation = useMutation({
+    mutationFn: async () => {
+      if (!primaryClient) {
+        throw new Error("No primary remote session client to update.");
+      }
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
 
-      // Update the remote_session_issuer. The backend UPDATE uses COALESCE on
-      // each field — omitting a value keeps it as-is. We send the current
-      // form state for every field so the saved record matches what the
-      // operator sees.
+      // Update the remote_session_issuer. The backend now reads an explicit
+      // empty string on the four nullable endpoint fields as "clear to
+      // NULL"; an omitted field keeps the existing value. Send the trimmed
+      // input directly (including "") so blanking out a field in the UI
+      // actually clears the saved record — especially registration_endpoint,
+      // which is the signal Gram uses for "DCR is supported on this issuer".
       await client.remoteSessionIssuers.update({
         updateRemoteSessionIssuerForm: {
           id: issuer.id,
           issuer: issuerUrl.trim(),
-          authorizationEndpoint: authorizationEndpoint.trim() || undefined,
-          tokenEndpoint: tokenEndpoint.trim() || undefined,
-          registrationEndpoint: registrationEndpoint.trim() || undefined,
-          jwksUri: jwksUri.trim() || undefined,
+          authorizationEndpoint: authorizationEndpoint.trim(),
+          tokenEndpoint: tokenEndpoint.trim(),
+          registrationEndpoint: registrationEndpoint.trim(),
+          jwksUri: jwksUri.trim(),
           scopesSupported: discoveredSnapshot?.scopesSupported,
           grantTypesSupported: discoveredSnapshot?.grantTypesSupported,
           responseTypesSupported: discoveredSnapshot?.responseTypesSupported,
@@ -243,24 +222,47 @@ function ModifyRemoteIdentityProviderSheetBody({
           audience: trimmedAudience || undefined,
         },
       });
-
+    },
+    onSuccess: async () => {
       await Promise.all([
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
       ]);
-
       toast.success("Identity provider updated");
       onClose();
-    } catch (error) {
+    },
+    onError: (error) => {
       console.error("Modify identity provider failed", error);
-      setSubmitError(
-        error instanceof Error && error.message
-          ? error.message
-          : "An unexpected error occurred. Please try again.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    },
+  });
+
+  const submitting = modifyMutation.isPending;
+  const submitError = modifyMutation.error
+    ? modifyMutation.error instanceof Error && modifyMutation.error.message
+      ? modifyMutation.error.message
+      : "An unexpected error occurred. Please try again."
+    : null;
+
+  // Seed client-derived fields exactly once per sheet open, the first time
+  // the client lookup resolves. The sheet body remounts on close (the
+  // `{open && <Body />}` pattern in the parent), so the ref resets naturally
+  // on the next open — no need to wire it to the open prop. Guarding via a
+  // ref instead of a narrow useEffect dependency keeps the linter happy AND
+  // prevents subsequent refetches from clobbering in-progress edits.
+  const clientFieldsInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!primaryClient || clientFieldsInitializedRef.current) return;
+    setTokenEndpointAuthMethod(primaryClient.tokenEndpointAuthMethod ?? "");
+    setScopeOverride((primaryClient.scope ?? []).join(", "));
+    setAudienceOverride(primaryClient.audience ?? "");
+    clientFieldsInitializedRef.current = true;
+  }, [primaryClient]);
+
+  const submittable = !!primaryClient && issuerUrl.trim().length > 0;
+
+  const handleSubmit = () => {
+    if (!submittable || submitting || !primaryClient) return;
+    modifyMutation.mutate();
   };
 
   return (
@@ -294,7 +296,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           issuerUrl={issuerUrl}
           onIssuerUrlChange={(value) => {
             setIssuerUrl(value);
-            setDiscoverError(null);
+            clearDiscoverError();
             // Same reset semantics as Attach: when the URL diverges from the
             // settled state, every downstream field was tied to that prior
             // URL. Clear them so re-Discover (or manual re-entry) produces a

@@ -182,6 +182,18 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, logger)
 	}
 
+	// slug and issuer are NOT NULL on the row. The SQL update treats an
+	// explicit empty string as "clear to NULL" for the four nullable
+	// endpoint columns, but applying that to slug/issuer would violate the
+	// constraint, so reject empty here with an actionable error before the
+	// query runs.
+	if payload.Slug != nil && *payload.Slug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "slug cannot be set to empty").Log(ctx, logger)
+	}
+	if payload.Issuer != nil && *payload.Issuer == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").Log(ctx, logger)
+	}
+
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}

@@ -1,4 +1,5 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { DiscoveredEndpoints } from "./issuerFormUtils";
 
@@ -54,9 +55,46 @@ export function useIssuerDiscovery(initial: UseIssuerDiscoveryInitial) {
           }
         : null,
     );
-  const [discoverPending, setDiscoverPending] = useState(false);
-  const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [discoverRan, setDiscoverRan] = useState(false);
+
+  const discoverMutation = useMutation({
+    mutationFn: async (url: string): Promise<DiscoveredEndpoints> => {
+      const draft = await client.remoteSessionIssuers.discover({
+        discoverRemoteSessionIssuerRequestBody: { issuer: url },
+      });
+      return {
+        url,
+        authorizationEndpoint: draft.authorizationEndpoint ?? "",
+        tokenEndpoint: draft.tokenEndpoint ?? "",
+        registrationEndpoint: draft.registrationEndpoint ?? "",
+        jwksUri: draft.jwksUri ?? "",
+        scopesSupported: draft.scopesSupported ?? [],
+        grantTypesSupported: draft.grantTypesSupported ?? [],
+        responseTypesSupported: draft.responseTypesSupported ?? [],
+        tokenEndpointAuthMethodsSupported:
+          draft.tokenEndpointAuthMethodsSupported ?? [],
+      };
+    },
+    onSuccess: (snapshot) => {
+      setAuthorizationEndpoint(snapshot.authorizationEndpoint);
+      setTokenEndpoint(snapshot.tokenEndpoint);
+      setRegistrationEndpoint(snapshot.registrationEndpoint);
+      setJwksUri(snapshot.jwksUri);
+      setDiscoveredSnapshot(snapshot);
+      setDiscoverRan(true);
+    },
+  });
+
+  const discoverPending = discoverMutation.isPending;
+  const discoverError = discoverMutation.error
+    ? discoverMutation.error instanceof Error
+      ? discoverMutation.error.message
+      : "Discovery failed against this issuer URL."
+    : null;
+  const { reset: resetDiscoverMutation } = discoverMutation;
+  const clearDiscoverError = useCallback(() => {
+    resetDiscoverMutation();
+  }, [resetDiscoverMutation]);
 
   const urlMatchesLastDiscovery =
     discoveredSnapshot != null && issuerUrl.trim() === discoveredSnapshot.url;
@@ -94,45 +132,14 @@ export function useIssuerDiscovery(initial: UseIssuerDiscoveryInitial) {
     return warnings;
   }, [discoverRan, authorizationEndpoint, tokenEndpoint]);
 
+  const { mutate: triggerDiscover } = discoverMutation;
   const runDiscover = useCallback(
-    async (url: string) => {
+    (url: string) => {
       const trimmed = url.trim();
       if (!trimmed) return;
-      setDiscoverPending(true);
-      setDiscoverError(null);
-      try {
-        const draft = await client.remoteSessionIssuers.discover({
-          discoverRemoteSessionIssuerRequestBody: { issuer: trimmed },
-        });
-        const snapshot: DiscoveredEndpoints = {
-          url: trimmed,
-          authorizationEndpoint: draft.authorizationEndpoint ?? "",
-          tokenEndpoint: draft.tokenEndpoint ?? "",
-          registrationEndpoint: draft.registrationEndpoint ?? "",
-          jwksUri: draft.jwksUri ?? "",
-          scopesSupported: draft.scopesSupported ?? [],
-          grantTypesSupported: draft.grantTypesSupported ?? [],
-          responseTypesSupported: draft.responseTypesSupported ?? [],
-          tokenEndpointAuthMethodsSupported:
-            draft.tokenEndpointAuthMethodsSupported ?? [],
-        };
-        setAuthorizationEndpoint(snapshot.authorizationEndpoint);
-        setTokenEndpoint(snapshot.tokenEndpoint);
-        setRegistrationEndpoint(snapshot.registrationEndpoint);
-        setJwksUri(snapshot.jwksUri);
-        setDiscoveredSnapshot(snapshot);
-        setDiscoverRan(true);
-      } catch (error) {
-        setDiscoverError(
-          error instanceof Error
-            ? error.message
-            : "Discovery failed against this issuer URL.",
-        );
-      } finally {
-        setDiscoverPending(false);
-      }
+      triggerDiscover(trimmed);
     },
-    [client],
+    [triggerDiscover],
   );
 
   // Restore only the fields discovery actually returned. User additions to
@@ -184,7 +191,7 @@ export function useIssuerDiscovery(initial: UseIssuerDiscoveryInitial) {
     discoveredSnapshot,
     discoverPending,
     discoverError,
-    setDiscoverError,
+    clearDiscoverError,
     runDiscover,
     handleResetEndpoints,
     resetEndpointState,

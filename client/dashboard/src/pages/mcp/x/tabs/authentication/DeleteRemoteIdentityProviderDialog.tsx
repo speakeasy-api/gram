@@ -64,7 +64,7 @@ function DeleteRemoteIdentityProviderDialogBody({
     setError(null);
   }, [issuer.id]);
 
-  const inputMatches = confirmation === issuer.issuer;
+  const inputMatches = confirmation.trim() === issuer.issuer;
 
   const handleConfirm = async () => {
     if (!inputMatches || submitting) return;

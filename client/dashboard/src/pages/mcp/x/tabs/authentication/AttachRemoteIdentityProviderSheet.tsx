@@ -36,7 +36,7 @@ import {
   invalidateAllUserSessionIssuers,
 } from "@gram/client/react-query/index.js";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -111,7 +111,7 @@ export function AttachRemoteIdentityProviderSheet({
     discoveredSnapshot,
     discoverPending,
     discoverError,
-    setDiscoverError,
+    clearDiscoverError,
     runDiscover,
     handleResetEndpoints,
     resetEndpointState,
@@ -133,83 +133,10 @@ export function AttachRemoteIdentityProviderSheet({
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
 
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // Reset transient state whenever the sheet is reopened. The mcpServer slug
-  // seeds the default new-issuer slug so most operators can submit without
-  // touching the field, but we still allow editing.
-  useEffect(() => {
-    if (!open) return;
-    setMode(initialIssuerUrl || !hasSelectable ? "new" : "select");
-    setSelectedIssuerId("");
-    // Seed the slug from the Issuer URL when we have one (the "Start With
-    // Discovered Configuration" path). Otherwise fall back to the
-    // mcpServer-based default. Either way slugDirty resets to false so the
-    // operator's first keystroke in the field starts locking it in.
-    setSlug(
-      deriveSlugFromUrl(initialIssuerUrl ?? "") ??
-        buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
-    );
-    setSlugDirty(false);
-    setIssuerUrl(initialIssuerUrl ?? "");
-    resetEndpointState();
-    setDiscoverError(null);
-    setClientId("");
-    setClientSecret("");
-    setTokenEndpointAuthMethod("");
-    setScopeOverride("");
-    setAudienceOverride("");
-    setSubmitting(false);
-    setSubmitError(null);
-  }, [
-    open,
-    mcpServer.slug,
-    initialIssuerUrl,
-    hasSelectable,
-    setIssuerUrl,
-    resetEndpointState,
-    setDiscoverError,
-  ]);
-
-  // Auto-run discovery when the sheet opens with a seeded URL (came in via
-  // "Start With Discovered Configuration"). Manual configure leaves this to the
-  // explicit "Discover" button in the Endpoints section.
-  useEffect(() => {
-    if (!open || !initialIssuerUrl) return;
-    void runDiscover(initialIssuerUrl);
-  }, [open, initialIssuerUrl, runDiscover]);
-
-  // Resolve the issuer record the operator picked in Select-existing mode.
-  // We need it to know whether the picked issuer supports DCR and to pull
-  // its registration_endpoint at submit time.
-  const selectedIssuer =
-    mode === "select"
-      ? selectableIssuers.find((issuer) => issuer.id === selectedIssuerId)
-      : undefined;
-
-  // DCR is offered automatically when a registration_endpoint is present.
-  // In Add-new the value comes from the form (filled by discovery or typed);
-  // in Select-existing it comes from the picked issuer record. Either way we
-  // hide the manual client_id / client_secret form and call proxy-register
-  // on submit.
-  const dcrAvailable =
-    mode === "new"
-      ? registrationEndpoint.trim().length > 0
-      : !!selectedIssuer?.registrationEndpoint;
-
-  const submittable = useMemo(() => {
-    if (mode === "select") return !!selectedIssuerId;
-    if (!slug.trim() || !issuerUrl.trim()) return false;
-    if (!dcrAvailable && !clientId.trim()) return false;
-    return true;
-  }, [mode, selectedIssuerId, slug, issuerUrl, dcrAvailable, clientId]);
-
-  const handleSubmit = async () => {
-    if (!submittable || submitting) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
+  const attachMutation = useMutation({
+    mutationFn: async (): Promise<{
+      unsupportedDcrAuthMethod: string | null;
+    }> => {
       // Step 1: ensure a user_session_issuer exists. First-add auto-creates
       // one with the conservative interactive challenge mode and a 2-week
       // session lifetime — these match the wire-user-session-issuer defaults.
@@ -350,6 +277,9 @@ export function AttachRemoteIdentityProviderSheet({
         });
       }
 
+      return { unsupportedDcrAuthMethod };
+    },
+    onSuccess: async ({ unsupportedDcrAuthMethod }) => {
       await Promise.all([
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
@@ -365,21 +295,97 @@ export function AttachRemoteIdentityProviderSheet({
         );
       }
       onOpenChange(false);
-    } catch (error) {
+    },
+    onError: (error) => {
       // Backend Create messages aren't always actionable (e.g. the generic
       // "create remote session issuer" fallback) but specific ones like
       // "an identity provider with slug already exists" or 4xx validation
-      // errors absolutely are — surface error.message when present and only
-      // fall back to a friendly default when we have nothing better.
+      // errors absolutely are — useMutation surfaces error.message via
+      // attachMutation.error so we only need to log here.
       console.error("Attach identity provider failed", error);
-      setSubmitError(
-        error instanceof Error && error.message
-          ? error.message
-          : "An unexpected error occurred. Please try again.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    },
+  });
+
+  const submitting = attachMutation.isPending;
+  const submitError = attachMutation.error
+    ? attachMutation.error instanceof Error && attachMutation.error.message
+      ? attachMutation.error.message
+      : "An unexpected error occurred. Please try again."
+    : null;
+  const { reset: resetAttachMutation } = attachMutation;
+
+  // Reset transient state whenever the sheet is reopened. The mcpServer slug
+  // seeds the default new-issuer slug so most operators can submit without
+  // touching the field, but we still allow editing.
+  useEffect(() => {
+    if (!open) return;
+    setMode(initialIssuerUrl || !hasSelectable ? "new" : "select");
+    setSelectedIssuerId("");
+    // Seed the slug from the Issuer URL when we have one (the "Start With
+    // Discovered Configuration" path). Otherwise fall back to the
+    // mcpServer-based default. Either way slugDirty resets to false so the
+    // operator's first keystroke in the field starts locking it in.
+    setSlug(
+      deriveSlugFromUrl(initialIssuerUrl ?? "") ??
+        buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+    );
+    setSlugDirty(false);
+    setIssuerUrl(initialIssuerUrl ?? "");
+    resetEndpointState();
+    clearDiscoverError();
+    setClientId("");
+    setClientSecret("");
+    setTokenEndpointAuthMethod("");
+    setScopeOverride("");
+    setAudienceOverride("");
+    resetAttachMutation();
+  }, [
+    open,
+    mcpServer.slug,
+    initialIssuerUrl,
+    hasSelectable,
+    setIssuerUrl,
+    resetEndpointState,
+    clearDiscoverError,
+    resetAttachMutation,
+  ]);
+
+  // Auto-run discovery when the sheet opens with a seeded URL (came in via
+  // "Start With Discovered Configuration"). Manual configure leaves this to the
+  // explicit "Discover" button in the Endpoints section.
+  useEffect(() => {
+    if (!open || !initialIssuerUrl) return;
+    void runDiscover(initialIssuerUrl);
+  }, [open, initialIssuerUrl, runDiscover]);
+
+  // Resolve the issuer record the operator picked in Select-existing mode.
+  // We need it to know whether the picked issuer supports DCR and to pull
+  // its registration_endpoint at submit time.
+  const selectedIssuer =
+    mode === "select"
+      ? selectableIssuers.find((issuer) => issuer.id === selectedIssuerId)
+      : undefined;
+
+  // DCR is offered automatically when a registration_endpoint is present.
+  // In Add-new the value comes from the form (filled by discovery or typed);
+  // in Select-existing it comes from the picked issuer record. Either way we
+  // hide the manual client_id / client_secret form and call proxy-register
+  // on submit.
+  const dcrAvailable =
+    mode === "new"
+      ? registrationEndpoint.trim().length > 0
+      : !!selectedIssuer?.registrationEndpoint;
+
+  const submittable = useMemo(() => {
+    if (mode === "select") return !!selectedIssuerId;
+    if (!slug.trim() || !issuerUrl.trim()) return false;
+    if (!dcrAvailable && !clientId.trim()) return false;
+    return true;
+  }, [mode, selectedIssuerId, slug, issuerUrl, dcrAvailable, clientId]);
+
+  const handleSubmit = () => {
+    if (!submittable || submitting) return;
+    attachMutation.mutate();
   };
 
   return (
@@ -412,7 +418,7 @@ export function AttachRemoteIdentityProviderSheet({
                   // A stale error from a previous URL would be misleading once
                   // the operator starts typing a new target; clear it so the
                   // next Discover click starts fresh.
-                  setDiscoverError(null);
+                  clearDiscoverError();
                   // Auto-derive the slug from the hostname while the operator
                   // hasn't customized it. We swallow URL parse failures so the
                   // slug stays stable while a partial URL is being typed.
