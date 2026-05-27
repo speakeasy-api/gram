@@ -68,7 +68,7 @@ function SetupTab({
   return (
     <TabsTrigger
       value={value}
-      className="border-border data-[state=active]:border-primary data-[state=active]:ring-primary h-auto flex-col items-start gap-1 rounded-lg p-4 text-left whitespace-normal data-[state=active]:ring-1"
+      className="border-border data-[state=active]:border-primary data-[state=active]:ring-primary h-auto flex-col items-start justify-start gap-1 rounded-lg p-4 text-left whitespace-normal data-[state=active]:ring-1"
     >
       <div className="flex items-center gap-2">
         <Icon name={icon} className="h-4 w-4" />
