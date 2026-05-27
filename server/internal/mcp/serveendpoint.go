@@ -65,6 +65,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	slug, mcpRouteBase string,
 ) error {
 	ctx := r.Context()
+	issuerGated := mcpServer.UserSessionIssuerID.Valid
 
 	// Issuer-gated mcp_servers run the JWT-validation branch here, before
 	// backend dispatch. ServeToolsetResolved then skips its in-toolset
@@ -72,7 +73,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// remote-backed proxying forwards the upstream remote-session token
 	// via AuthorizationOverride.
 	var upstreamToken string
-	if mcpServer.UserSessionIssuerID.Valid {
+	if issuerGated {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 		if err != nil {
 			return err
@@ -107,7 +108,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, logger)
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, mcpServer.UserSessionIssuerID.Valid, upstreamToken); err != nil {
+		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamToken); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
