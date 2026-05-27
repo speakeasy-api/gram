@@ -1723,20 +1723,35 @@ function buildAssistantTools(deps: ToolDeps) {
 
             let toolsetSlug: string | undefined;
             if (toolUrns.length > 0) {
-              const toolset = await sdk.toolsets.create({
-                createToolsetRequestBody: {
-                  name: `${a.name} Slack`,
-                  description: `Slack capabilities for ${a.name}.`,
-                  toolUrns,
-                  defaultEnvironmentSlug: envResult.env.slug,
-                },
-              });
-              toolsetSlug = toolset.slug;
+              const toolsetName = `${a.name} Slack`;
+              const existingToolsets = await sdk.toolsets
+                .list()
+                .catch(() => null);
+              const attachedSlugs = new Set(
+                a.toolsets.map((t) => t.toolsetSlug),
+              );
+              const existing = existingToolsets?.toolsets.find(
+                (t) => attachedSlugs.has(t.slug) && t.name === toolsetName,
+              );
+              const upserted = existing
+                ? await sdk.toolsets.updateBySlug({
+                    slug: existing.slug,
+                    updateToolsetRequestBody: { toolUrns },
+                  })
+                : await sdk.toolsets.create({
+                    createToolsetRequestBody: {
+                      name: toolsetName,
+                      description: `Slack capabilities for ${a.name}.`,
+                      toolUrns,
+                      defaultEnvironmentSlug: envResult.env.slug,
+                    },
+                  });
+              toolsetSlug = upserted.slug;
               const next = a.toolsets
-                .filter((t) => t.toolsetSlug !== toolset.slug)
+                .filter((t) => t.toolsetSlug !== upserted.slug)
                 .concat([
                   {
-                    toolsetSlug: toolset.slug,
+                    toolsetSlug: upserted.slug,
                     environmentSlug: envResult.env.slug,
                   },
                 ]);
