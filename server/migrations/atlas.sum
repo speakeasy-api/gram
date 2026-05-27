@@ -1,4 +1,4 @@
-h1:b/D2cAQF3TsJEUM808uQuoEdVlgHEABdlvInKPMYmnI=
+h1:W20Meo8mAA3dajBbZmYXmh0tMsq27/Yu35Tu6ypNctA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -189,4 +189,4 @@ h1:b/D2cAQF3TsJEUM808uQuoEdVlgHEABdlvInKPMYmnI=
 20260522040618_add_legacy_callback_url_to_remote_session_clients.sql h1:LrHAK7LBxV+2oO4pYEz7dImXUpI0C9b3+0Q0as7GthA=
 20260522194835_add_function_tool_definitions_tags.sql h1:zNH0ilgmHU+szGwhIBKT3xSSrj0+ayoUk5nhCsgPFtU=
 20260526132630_add_custom_domain_provisioner_kind.sql h1:XoZWJ1F8RtKzAlz18m9242K03La7QV3hDlDRfWO5wQM=
-20260526151746_org-metadata-add-scim-sso-enabled.sql h1:U7SMf6OtMUCikizzmyY89VtXDx/5RhjkKQZI4f/D4qQ=
+20260527092931_org-metadata-scim-sso-default-false.sql h1:cb02s1lpB/fpWH+8vHCcNVw6ytqE3Zd3e5LDw8UGPS8=
