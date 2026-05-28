@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -148,7 +149,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)

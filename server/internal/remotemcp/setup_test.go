@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -110,7 +111,9 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 
 	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
 
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 
 	return ctx, &testInstance{
 		service:         svc,
