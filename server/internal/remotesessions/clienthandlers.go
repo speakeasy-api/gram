@@ -72,6 +72,9 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
+	// The join table has a global one-client-per-user-issuer unique index.
+	// Validate project ownership before inserting so this project cannot consume
+	// another project's issuer binding slot.
 	if _, err = txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
 		ID:        userIssuerID,
 		ProjectID: *authCtx.ProjectID,
