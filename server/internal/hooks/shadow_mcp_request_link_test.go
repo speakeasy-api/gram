@@ -72,6 +72,20 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 		ToolName:        "list_issues",
 	})
 	require.False(t, ok)
+
+	_, ok = service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+		OrganizationID:  "org_test",
+		ProjectID:       "00000000-0000-0000-0000-000000000001",
+		RequesterUserID: "user_test",
+		AuditReason:     "blocked",
+		Evidence: shadowmcp.AccessEvidence{
+			FullURL:        "",
+			URLHost:        "",
+			ServerIdentity: "github",
+		},
+		ToolName: "search",
+	})
+	require.False(t, ok)
 }
 
 func TestObservedShadowMCPName_HumanizesServerIdentity(t *testing.T) {
@@ -85,4 +99,17 @@ func TestObservedShadowMCPName_HumanizesServerIdentity(t *testing.T) {
 
 	require.NotNil(t, name)
 	require.Equal(t, "Claude AI Calendly", *name)
+}
+
+func TestObservedShadowMCPName_PrefersURLHostOverServerIdentity(t *testing.T) {
+	t.Parallel()
+
+	name := observedShadowMCPName(shadowmcp.AccessEvidence{
+		FullURL:        "https://mcp.calendly.com/sse",
+		URLHost:        "mcp.calendly.com",
+		ServerIdentity: "claude_ai_calendly",
+	}, "authenticate")
+
+	require.NotNil(t, name)
+	require.Equal(t, "mcp.calendly.com", *name)
 }

@@ -81,11 +81,11 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 
 func observedShadowMCPName(evidence shadowmcp.AccessEvidence, toolName string) *string {
 	switch {
+	case evidence.URLHost != "":
+		return &evidence.URLHost
 	case evidence.ServerIdentity != "":
 		name := humanizeShadowMCPServerIdentity(evidence.ServerIdentity)
 		return &name
-	case evidence.URLHost != "":
-		return &evidence.URLHost
 	case toolName != "":
 		return &toolName
 	default:

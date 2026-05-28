@@ -8,7 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
 
-func TestCodex_PreToolUse_ShadowMCPBlockIncludesRequestLink(t *testing.T) {
+func TestCodex_PreToolUse_ShadowMCPBlockWithoutURLEvidenceOmitsRequestLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
@@ -27,7 +27,6 @@ func TestCodex_PreToolUse_ShadowMCPBlockIncludesRequestLink(t *testing.T) {
 	require.NotNil(t, result.Decision)
 	require.Equal(t, "deny", *result.Decision)
 	require.NotNil(t, result.Reason)
-	require.Contains(t, *result.Reason, "Request access:\nhttps://app.example.test/shadow-mcp/request#request_token=smar1.",
-		"shadow-MCP deny messages should include a signed approval request link")
-	require.Contains(t, *result.Reason, shadowMCPApprovalRequestPrompt)
+	require.NotContains(t, *result.Reason, "Request access:")
+	require.NotContains(t, *result.Reason, shadowMCPApprovalRequestPrompt)
 }
