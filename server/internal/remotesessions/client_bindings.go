@@ -185,6 +185,11 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 	return legacyRows, nil
 }
 
+// listRemoteSessionClientRowsForUserSessionIssuer is the runtime counterpart to
+// listRemoteSessionClientsByProjectID: it prefers join-table bindings but falls
+// back to legacy-column rows created before AGE-2520 dual-write. When fallback
+// rows are usable, it opportunistically backfills the join table so consent and
+// token-resolution reads converge on the new relationship table.
 func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 	ctx context.Context,
 	projectID uuid.UUID,
