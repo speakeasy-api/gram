@@ -89,12 +89,10 @@ func TestService_SendInvite_WithRoleID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
-	roleID := "test-role"
-
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "test-role", Slug: "member", Name: "Member"},
-	}, nil).Once()
+	roleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "member", "Member")
 
 	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
 		Email:  "test@example.com",
@@ -111,11 +109,10 @@ func TestService_SendInvite_AuditLog(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
-	roleID := "role-member"
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "role-member", Slug: "member", Name: "Member"},
-	}, nil).Once()
+	roleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "member", "Member")
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationInviteCreate)
 	require.NoError(t, err)
@@ -217,11 +214,8 @@ func TestService_SendInvite_UnknownRoleID(t *testing.T) {
 
 	ctx, ti := newTestOrganizationsService(t)
 
-	roleID := "nonexistent-role"
-
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "some-other-role", Slug: "member", Name: "Member"},
-	}, nil).Once()
+	// A well-formed UUID that does not correspond to any role in this org.
+	roleID := "00000000-0000-0000-0000-000000000000"
 
 	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
 		Email:  "test@example.com",
