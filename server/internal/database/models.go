@@ -1184,6 +1184,21 @@ type RemoteSessionIssuer struct {
 	Deleted                           bool
 }
 
+type RiskCustomDetectionRule struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RuleID         string
+	Title          string
+	Description    string
+	Regex          pgtype.Text
+	Severity       string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
@@ -1194,6 +1209,7 @@ type RiskPolicy struct {
 	PresidioEntities     []string
 	PromptInjectionRules []string
 	DisabledRules        []string
+	CustomRuleIds        []string
 	Action               string
 	AutoName             bool
 	UserMessage          pgtype.Text

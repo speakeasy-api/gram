@@ -2683,6 +2683,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- Empty/NULL means every rule in the selected categories runs. Scanner
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
+  custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
   action TEXT NOT NULL DEFAULT 'flag',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
@@ -2700,6 +2701,30 @@ CREATE TABLE IF NOT EXISTS risk_policies (
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  regex TEXT,
+  severity TEXT NOT NULL DEFAULT 'medium',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_custom_detection_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_custom_detection_rules_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_custom_detection_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_custom_detection_rules_project_rule_id_key
+ON risk_custom_detection_rules (project_id, rule_id)
 WHERE deleted IS FALSE;
 
 -- Individual findings produced by scanning a chat message against a risk policy.
