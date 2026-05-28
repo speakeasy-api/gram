@@ -193,7 +193,8 @@ func TestCoordinatorWorkflow_AnalyzeFailureStillMarksAnalyzed(t *testing.T) {
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.Equal(t, 1, markCallCount, "messages must be marked analyzed even when batch fails (best-effort)")
+	require.NoError(t, env.GetWorkflowError(), "best-effort: workflow must return nil even when batch activity fails")
+	require.Equal(t, 1, markCallCount, "messages must be marked analyzed even when batch fails")
 }
 
 func TestChunkUUIDs(t *testing.T) {
