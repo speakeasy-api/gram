@@ -519,10 +519,11 @@ export function CollapsibleNavGroup({
             <span className="flex-1 truncate transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
               {label}
             </span>
-            {stage && (
+            {stage && isOpen && (
               <ReleaseStageBadge
                 stage={stage}
-                className="transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
+                noTooltip
+                className="-my-1 origin-left scale-75 transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
               />
             )}
           </Link>
