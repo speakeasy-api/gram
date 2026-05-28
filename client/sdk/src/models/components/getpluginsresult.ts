@@ -6,15 +6,23 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AgentMarketplace,
+  AgentMarketplace$inboundSchema,
+} from "./agentmarketplace.js";
 import { AgentPlugin, AgentPlugin$inboundSchema } from "./agentplugin.js";
 
 export type GetPluginsResult = {
   /**
-   * Opaque revision identifier covering the plugin set. The agent stores this and can use it to detect whether a re-fetch produced any changes.
+   * Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.
    */
   etag: string;
   /**
-   * Plugins assigned to the resolved principal set, sorted by slug.
+   * Marketplaces the agent should register in Claude Code's `extraKnownMarketplaces`. Sorted by name.
+   */
+  marketplaces: Array<AgentMarketplace>;
+  /**
+   * Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry references one of the marketplaces above by name.
    */
   plugins: Array<AgentPlugin>;
 };
@@ -25,6 +33,7 @@ export const GetPluginsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   etag: z.string(),
+  marketplaces: z.array(AgentMarketplace$inboundSchema),
   plugins: z.array(AgentPlugin$inboundSchema),
 });
 

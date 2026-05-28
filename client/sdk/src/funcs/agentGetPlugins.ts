@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * getPlugins agent
  *
  * @remarks
- * Resolve the set of plugins assigned to the enrolled user and return them as a plain description the agent can render into local AI-tool configs (Claude Code, etc.).
+ * Resolve the set of plugins assigned to the enrolled user and return them as Claude Code marketplace + plugin references. The agent merges these into the local Claude Code settings so Claude Code's own plugin manager fetches and installs the bundles.
  */
 export function agentGetPlugins(
   client: GramCore,

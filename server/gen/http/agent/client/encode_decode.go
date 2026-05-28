@@ -251,36 +251,25 @@ func DecodeGetPluginsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
-// unmarshalAgentPluginResponseBodyToAgentAgentPlugin builds a value of type
-// *agent.AgentPlugin from a value of type *AgentPluginResponseBody.
-func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBody) *agent.AgentPlugin {
-	res := &agent.AgentPlugin{
-		ID:          *v.ID,
-		Slug:        *v.Slug,
-		Name:        *v.Name,
-		Description: v.Description,
-	}
-	res.Servers = make([]*agent.AgentPluginServer, len(v.Servers))
-	for i, val := range v.Servers {
-		if val == nil {
-			res.Servers[i] = nil
-			continue
-		}
-		res.Servers[i] = unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(val)
+// unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace builds a value
+// of type *agent.AgentMarketplace from a value of type
+// *AgentMarketplaceResponseBody.
+func unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace(v *AgentMarketplaceResponseBody) *agent.AgentMarketplace {
+	res := &agent.AgentMarketplace{
+		Name:       *v.Name,
+		URL:        *v.URL,
+		AutoUpdate: *v.AutoUpdate,
 	}
 
 	return res
 }
 
-// unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer builds a
-// value of type *agent.AgentPluginServer from a value of type
-// *AgentPluginServerResponseBody.
-func unmarshalAgentPluginServerResponseBodyToAgentAgentPluginServer(v *AgentPluginServerResponseBody) *agent.AgentPluginServer {
-	res := &agent.AgentPluginServer{
-		DisplayName: *v.DisplayName,
-		Policy:      *v.Policy,
-		McpURL:      *v.McpURL,
-		IsPublic:    *v.IsPublic,
+// unmarshalAgentPluginResponseBodyToAgentAgentPlugin builds a value of type
+// *agent.AgentPlugin from a value of type *AgentPluginResponseBody.
+func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBody) *agent.AgentPlugin {
+	res := &agent.AgentPlugin{
+		Slug:            *v.Slug,
+		MarketplaceName: *v.MarketplaceName,
 	}
 
 	return res

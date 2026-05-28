@@ -3,46 +3,35 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import {
-  AgentPluginServer,
-  AgentPluginServer$inboundSchema,
-} from "./agentpluginserver.js";
 
 export type AgentPlugin = {
   /**
-   * Optional description.
+   * Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.
    */
-  description?: string | undefined;
+  marketplaceName: string;
   /**
-   * Plugin id.
-   */
-  id: string;
-  /**
-   * Display name.
-   */
-  name: string;
-  /**
-   * MCP servers bundled in this plugin, ordered by sort_order.
-   */
-  servers: Array<AgentPluginServer>;
-  /**
-   * URL-safe identifier, unique per (org, project).
+   * Plugin slug. Combined with marketplace_name this is what goes into Claude Code's `enabledPlugins` entries.
    */
   slug: string;
 };
 
 /** @internal */
 export const AgentPlugin$inboundSchema: z.ZodMiniType<AgentPlugin, unknown> = z
-  .object({
-    description: z.optional(z.string()),
-    id: z.string(),
-    name: z.string(),
-    servers: z.array(AgentPluginServer$inboundSchema),
-    slug: z.string(),
-  });
+  .pipe(
+    z.object({
+      marketplace_name: z.string(),
+      slug: z.string(),
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        "marketplace_name": "marketplaceName",
+      });
+    }),
+  );
 
 export function agentPluginFromJSON(
   jsonString: string,

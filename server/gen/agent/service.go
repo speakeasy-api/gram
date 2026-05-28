@@ -18,8 +18,9 @@ import (
 // machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
 type Service interface {
 	// Resolve the set of plugins assigned to the enrolled user and return them as
-	// a plain description the agent can render into local AI-tool configs (Claude
-	// Code, etc.).
+	// Claude Code marketplace + plugin references. The agent merges these into the
+	// local Claude Code settings so Claude Code's own plugin manager fetches and
+	// installs the bundles.
 	GetPlugins(context.Context, *GetPluginsPayload) (res *GetPluginsResult, err error)
 }
 
@@ -45,29 +46,24 @@ const ServiceName = "agent"
 // MethodKey key.
 var MethodNames = [1]string{"getPlugins"}
 
-type AgentPlugin struct {
-	// Plugin id.
-	ID string
-	// URL-safe identifier, unique per (org, project).
-	Slug string
-	// Display name.
+type AgentMarketplace struct {
+	// Stable identifier used as the key in Claude Code's `extraKnownMarketplaces`
+	// map. Derived as `speakeasy-<org-slug>-<project-slug>` so it round-trips
+	// deterministically across polls.
 	Name string
-	// Optional description.
-	Description *string
-	// MCP servers bundled in this plugin, ordered by sort_order.
-	Servers []*AgentPluginServer
+	// Git URL for the marketplace, served by Gram's marketplace proxy.
+	URL string
+	// Whether Claude Code should auto-update the marketplace.
+	AutoUpdate bool
 }
 
-type AgentPluginServer struct {
-	// Display name shown in the generated AI-tool config.
-	DisplayName string
-	// Whether the agent should treat this server as required or optional.
-	Policy string
-	// Gram-hosted MCP URL the AI tool should connect to.
-	McpURL string
-	// True when the MCP server is publicly accessible and does not require a Gram
-	// credential.
-	IsPublic bool
+type AgentPlugin struct {
+	// Plugin slug. Combined with marketplace_name this is what goes into Claude
+	// Code's `enabledPlugins` entries.
+	Slug string
+	// Name of the marketplace this plugin lives in. Always equals the `name` of
+	// one of the marketplaces in the same response.
+	MarketplaceName string
 }
 
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
@@ -80,10 +76,14 @@ type GetPluginsPayload struct {
 
 // GetPluginsResult is the result type of the agent service getPlugins method.
 type GetPluginsResult struct {
-	// Opaque revision identifier covering the plugin set. The agent stores this
-	// and can use it to detect whether a re-fetch produced any changes.
+	// Opaque revision identifier covering the marketplace + plugin set. The agent
+	// stores this to detect changes between polls.
 	Etag string
-	// Plugins assigned to the resolved principal set, sorted by slug.
+	// Marketplaces the agent should register in Claude Code's
+	// `extraKnownMarketplaces`. Sorted by name.
+	Marketplaces []*AgentMarketplace
+	// Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry
+	// references one of the marketplaces above by name.
 	Plugins []*AgentPlugin
 }
 

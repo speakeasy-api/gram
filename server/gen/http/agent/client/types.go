@@ -15,10 +15,14 @@ import (
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
-	// Opaque revision identifier covering the plugin set. The agent stores this
-	// and can use it to detect whether a re-fetch produced any changes.
+	// Opaque revision identifier covering the marketplace + plugin set. The agent
+	// stores this to detect changes between polls.
 	Etag *string `form:"etag,omitempty" json:"etag,omitempty" xml:"etag,omitempty"`
-	// Plugins assigned to the resolved principal set, sorted by slug.
+	// Marketplaces the agent should register in Claude Code's
+	// `extraKnownMarketplaces`. Sorted by name.
+	Marketplaces []*AgentMarketplaceResponseBody `form:"marketplaces,omitempty" json:"marketplaces,omitempty" xml:"marketplaces,omitempty"`
+	// Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry
+	// references one of the marketplaces above by name.
 	Plugins []*AgentPluginResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 }
 
@@ -202,32 +206,26 @@ type GetPluginsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// AgentPluginResponseBody is used to define fields on response body types.
-type AgentPluginResponseBody struct {
-	// Plugin id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// URL-safe identifier, unique per (org, project).
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// Display name.
+// AgentMarketplaceResponseBody is used to define fields on response body types.
+type AgentMarketplaceResponseBody struct {
+	// Stable identifier used as the key in Claude Code's `extraKnownMarketplaces`
+	// map. Derived as `speakeasy-<org-slug>-<project-slug>` so it round-trips
+	// deterministically across polls.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional description.
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// MCP servers bundled in this plugin, ordered by sort_order.
-	Servers []*AgentPluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Git URL for the marketplace, served by Gram's marketplace proxy.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Whether Claude Code should auto-update the marketplace.
+	AutoUpdate *bool `form:"auto_update,omitempty" json:"auto_update,omitempty" xml:"auto_update,omitempty"`
 }
 
-// AgentPluginServerResponseBody is used to define fields on response body
-// types.
-type AgentPluginServerResponseBody struct {
-	// Display name shown in the generated AI-tool config.
-	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	// Whether the agent should treat this server as required or optional.
-	Policy *string `form:"policy,omitempty" json:"policy,omitempty" xml:"policy,omitempty"`
-	// Gram-hosted MCP URL the AI tool should connect to.
-	McpURL *string `form:"mcp_url,omitempty" json:"mcp_url,omitempty" xml:"mcp_url,omitempty"`
-	// True when the MCP server is publicly accessible and does not require a Gram
-	// credential.
-	IsPublic *bool `form:"is_public,omitempty" json:"is_public,omitempty" xml:"is_public,omitempty"`
+// AgentPluginResponseBody is used to define fields on response body types.
+type AgentPluginResponseBody struct {
+	// Plugin slug. Combined with marketplace_name this is what goes into Claude
+	// Code's `enabledPlugins` entries.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Name of the marketplace this plugin lives in. Always equals the `name` of
+	// one of the marketplaces in the same response.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
 }
 
 // NewGetPluginsResultOK builds a "agent" service "getPlugins" endpoint result
@@ -235,6 +233,14 @@ type AgentPluginServerResponseBody struct {
 func NewGetPluginsResultOK(body *GetPluginsResponseBody) *agent.GetPluginsResult {
 	v := &agent.GetPluginsResult{
 		Etag: *body.Etag,
+	}
+	v.Marketplaces = make([]*agent.AgentMarketplace, len(body.Marketplaces))
+	for i, val := range body.Marketplaces {
+		if val == nil {
+			v.Marketplaces[i] = nil
+			continue
+		}
+		v.Marketplaces[i] = unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace(val)
 	}
 	v.Plugins = make([]*agent.AgentPlugin, len(body.Plugins))
 	for i, val := range body.Plugins {
@@ -404,8 +410,18 @@ func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
 	if body.Etag == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("etag", "body"))
 	}
+	if body.Marketplaces == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("marketplaces", "body"))
+	}
 	if body.Plugins == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("plugins", "body"))
+	}
+	for _, e := range body.Marketplaces {
+		if e != nil {
+			if err2 := ValidateAgentMarketplaceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	for _, e := range body.Plugins {
 		if e != nil {
@@ -657,53 +673,29 @@ func ValidateGetPluginsGatewayErrorResponseBody(body *GetPluginsGatewayErrorResp
 	return
 }
 
-// ValidateAgentPluginResponseBody runs the validations defined on
-// AgentPluginResponseBody
-func ValidateAgentPluginResponseBody(body *AgentPluginResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
+// ValidateAgentMarketplaceResponseBody runs the validations defined on
+// AgentMarketplaceResponseBody
+func ValidateAgentMarketplaceResponseBody(body *AgentMarketplaceResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.Servers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	for _, e := range body.Servers {
-		if e != nil {
-			if err2 := ValidateAgentPluginServerResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
+	if body.AutoUpdate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_update", "body"))
 	}
 	return
 }
 
-// ValidateAgentPluginServerResponseBody runs the validations defined on
-// AgentPluginServerResponseBody
-func ValidateAgentPluginServerResponseBody(body *AgentPluginServerResponseBody) (err error) {
-	if body.DisplayName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+// ValidateAgentPluginResponseBody runs the validations defined on
+// AgentPluginResponseBody
+func ValidateAgentPluginResponseBody(body *AgentPluginResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.Policy == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("policy", "body"))
-	}
-	if body.McpURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_url", "body"))
-	}
-	if body.IsPublic == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("is_public", "body"))
-	}
-	if body.Policy != nil {
-		if !(*body.Policy == "required" || *body.Policy == "optional") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", *body.Policy, []any{"required", "optional"}))
-		}
+	if body.MarketplaceName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_name", "body"))
 	}
 	return
 }

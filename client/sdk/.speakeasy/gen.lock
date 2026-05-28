@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 773b332b9afa7a86dd2d0d8961573c64
+  docChecksum: 0ee07501f698d0fe46d9595c55bec278
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -69,13 +69,11 @@ trackedFiles:
   docs/models/components/addpackageform.md:
     last_write_checksum: sha1:331ddbc24f5b29df56a4bd3fb3299f1f0f7b128f
   docs/models/components/addpluginserverform.md:
-    last_write_checksum: sha1:e717cfe7389889155b5c87c0a5cbeb7da9defcad
-  docs/models/components/addpluginserverformpolicy.md:
-    last_write_checksum: sha1:449f4764cba4b65edf903ec6aa31f7b8f515b098
+    last_write_checksum: sha1:a2726c1edb39bdb417e5a9e65fc695f7a5abb9f2
+  docs/models/components/agentmarketplace.md:
+    last_write_checksum: sha1:c27612c7509bef0987c1d3859e158e23ff2a0068
   docs/models/components/agentplugin.md:
-    last_write_checksum: sha1:b113b78953456bb518793e69643d05bc1875b9e9
-  docs/models/components/agentpluginserver.md:
-    last_write_checksum: sha1:28fa6048b5dd76be8940d3d671ac74178feb07bd
+    last_write_checksum: sha1:2bdcfd57ad5c50bf44d45ed8d8e35139ad516fa5
   docs/models/components/aiintegrationconfig.md:
     last_write_checksum: sha1:6fd07c709c59d79aacdf82600a23adf69dbb6158
   docs/models/components/allowedorigin.md:
@@ -345,7 +343,7 @@ trackedFiles:
   docs/models/components/getobservabilityoverviewresult.md:
     last_write_checksum: sha1:0a0b5e2c3e4fb403705fe952952431992e172785
   docs/models/components/getpluginsresult.md:
-    last_write_checksum: sha1:4e64caa73c1aa9522b7567a9079a11418477b795
+    last_write_checksum: sha1:2b5aa44cc176a8967da28cf19f29f5211e4a70db
   docs/models/components/getproductfeaturesresponsebody.md:
     last_write_checksum: sha1:d92e84a1b65e679d39db2987deb0af2af2235a68
   docs/models/components/getprojectmetricssummarypayload.md:
@@ -649,7 +647,7 @@ trackedFiles:
   docs/models/components/pluginserverpolicy.md:
     last_write_checksum: sha1:8a2bc1a476e55d66c0fa67b222371171ce935f53
   docs/models/components/policy.md:
-    last_write_checksum: sha1:1ff2f841eb0969bd65d9dc6dc5a450a9be964083
+    last_write_checksum: sha1:4f61847539866024b0d616f84b41de6dc9c64b2d
   docs/models/components/principaltype.md:
     last_write_checksum: sha1:0b369f84dc15c71aaa2b290aa3a7dcffa514dfd6
   docs/models/components/project.md:
@@ -2757,7 +2755,7 @@ trackedFiles:
   docs/sdks/access/README.md:
     last_write_checksum: sha1:33a50bedf63a6028b2e7b07d3ac8abc6e0d04db4
   docs/sdks/agent/README.md:
-    last_write_checksum: sha1:cf8893e6db7bf51463f9c17c45b24ea39ad1fcc1
+    last_write_checksum: sha1:e3d861e9a2b686ab9f5a5d1243a525ac5cd1e831
   docs/sdks/aiintegrations/README.md:
     last_write_checksum: sha1:6ef8202846ce72d507a3589e4f983caef978b809
   docs/sdks/approvals/README.md:
@@ -2907,7 +2905,7 @@ trackedFiles:
   src/funcs/accessUpdateRole.ts:
     last_write_checksum: sha1:193098018d2aeb87f22b9fc4df35fa5465244b29
   src/funcs/agentGetPlugins.ts:
-    last_write_checksum: sha1:4c649dbd71b0127a533952a24308be41760f144c
+    last_write_checksum: sha1:793033d33eb1bd54a5894c944cd5b21c50bfdd6d
   src/funcs/aiIntegrationsDeleteConfig.ts:
     last_write_checksum: sha1:1ea838e6b36b309892cef9c5190d33b87af9304c
   src/funcs/aiIntegrationsGetConfig.ts:
@@ -3475,11 +3473,11 @@ trackedFiles:
   src/models/components/addpackageform.ts:
     last_write_checksum: sha1:a6396b9be113de8bf4c785a231021cc3b5a47c62
   src/models/components/addpluginserverform.ts:
-    last_write_checksum: sha1:f721e14b8bf4aae9c2e09fcc31453f3e81e4724b
+    last_write_checksum: sha1:6af5998e0f14002028123f6a8c26896c1d1f4ed8
+  src/models/components/agentmarketplace.ts:
+    last_write_checksum: sha1:e404ec1b385b39050f92ca73b4cf9a3540a274a2
   src/models/components/agentplugin.ts:
-    last_write_checksum: sha1:3c493db7bf025d5523d36dae5a280fe8e8f49110
-  src/models/components/agentpluginserver.ts:
-    last_write_checksum: sha1:bd9d6cf713c3b7007d3a514d7ce6dde4521f1219
+    last_write_checksum: sha1:c8625465af268540573e3063b01e82cbe07f9424
   src/models/components/aiintegrationconfig.ts:
     last_write_checksum: sha1:cfbccc1b3a3aa4738c2f052324df032d1b1882f6
   src/models/components/allowedorigin.ts:
@@ -3700,7 +3698,7 @@ trackedFiles:
   src/models/components/getobservabilityoverviewresult.ts:
     last_write_checksum: sha1:0dbfa9a9afa50661ca0f7406e2ddc5e59aab954e
   src/models/components/getpluginsresult.ts:
-    last_write_checksum: sha1:587ee3da7d51c94bdecdea394f068148cc830afe
+    last_write_checksum: sha1:a64a2d0fbcfdd8b6bf35fa6492d9b53d917744cf
   src/models/components/getproductfeaturesresponsebody.ts:
     last_write_checksum: sha1:9f758037adb46a3b2a03a7171c9c7a443d588caa
   src/models/components/getprojectmetricssummarypayload.ts:
@@ -3735,7 +3733,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:2dc357948a663bfdc8a38576ce8515c9dca460cc
+    last_write_checksum: sha1:10af48ebdd4e08779ad761156f771c5497c3a094
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4853,7 +4851,7 @@ trackedFiles:
   src/react-query/agentPlugins.core.ts:
     last_write_checksum: sha1:350356a0aa02a4a714ac30c61506c79a7158af14
   src/react-query/agentPlugins.ts:
-    last_write_checksum: sha1:bf8fc8c92c1d93242f29f391efab685ae305fa43
+    last_write_checksum: sha1:d1a91ce3d480233d7aa60ad9b3be6c6f54bab650
   src/react-query/aiIntegrationConfig.core.ts:
     last_write_checksum: sha1:8e5a3952bc3754bbe88360fe8e27fa8c48a0a484
   src/react-query/aiIntegrationConfig.ts:
@@ -5627,7 +5625,7 @@ trackedFiles:
   src/sdk/access.ts:
     last_write_checksum: sha1:77bfd863736f3e16159ae78bf748a6b284eb19ff
   src/sdk/agent.ts:
-    last_write_checksum: sha1:875d8b991c7e47460f2ad302724b4288beae8f2e
+    last_write_checksum: sha1:3234df5ce753187a8a87266b6f8067b2cfd78b41
   src/sdk/aiintegrations.ts:
     last_write_checksum: sha1:3e48a983553920eb58c08bb83e89f01b28d95e1a
   src/sdk/approvals.ts:
@@ -8588,7 +8586,7 @@ examples:
           email: "dev@acme.corp"
       responses:
         "200":
-          application/json: {"etag": "<value>", "plugins": []}
+          application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

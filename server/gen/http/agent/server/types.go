@@ -15,10 +15,14 @@ import (
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
-	// Opaque revision identifier covering the plugin set. The agent stores this
-	// and can use it to detect whether a re-fetch produced any changes.
+	// Opaque revision identifier covering the marketplace + plugin set. The agent
+	// stores this to detect changes between polls.
 	Etag string `form:"etag" json:"etag" xml:"etag"`
-	// Plugins assigned to the resolved principal set, sorted by slug.
+	// Marketplaces the agent should register in Claude Code's
+	// `extraKnownMarketplaces`. Sorted by name.
+	Marketplaces []*AgentMarketplaceResponseBody `form:"marketplaces" json:"marketplaces" xml:"marketplaces"`
+	// Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry
+	// references one of the marketplaces above by name.
 	Plugins []*AgentPluginResponseBody `form:"plugins" json:"plugins" xml:"plugins"`
 }
 
@@ -202,32 +206,26 @@ type GetPluginsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AgentPluginResponseBody is used to define fields on response body types.
-type AgentPluginResponseBody struct {
-	// Plugin id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// URL-safe identifier, unique per (org, project).
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Display name.
+// AgentMarketplaceResponseBody is used to define fields on response body types.
+type AgentMarketplaceResponseBody struct {
+	// Stable identifier used as the key in Claude Code's `extraKnownMarketplaces`
+	// map. Derived as `speakeasy-<org-slug>-<project-slug>` so it round-trips
+	// deterministically across polls.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Optional description.
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// MCP servers bundled in this plugin, ordered by sort_order.
-	Servers []*AgentPluginServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// Git URL for the marketplace, served by Gram's marketplace proxy.
+	URL string `form:"url" json:"url" xml:"url"`
+	// Whether Claude Code should auto-update the marketplace.
+	AutoUpdate bool `form:"auto_update" json:"auto_update" xml:"auto_update"`
 }
 
-// AgentPluginServerResponseBody is used to define fields on response body
-// types.
-type AgentPluginServerResponseBody struct {
-	// Display name shown in the generated AI-tool config.
-	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
-	// Whether the agent should treat this server as required or optional.
-	Policy string `form:"policy" json:"policy" xml:"policy"`
-	// Gram-hosted MCP URL the AI tool should connect to.
-	McpURL string `form:"mcp_url" json:"mcp_url" xml:"mcp_url"`
-	// True when the MCP server is publicly accessible and does not require a Gram
-	// credential.
-	IsPublic bool `form:"is_public" json:"is_public" xml:"is_public"`
+// AgentPluginResponseBody is used to define fields on response body types.
+type AgentPluginResponseBody struct {
+	// Plugin slug. Combined with marketplace_name this is what goes into Claude
+	// Code's `enabledPlugins` entries.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Name of the marketplace this plugin lives in. Always equals the `name` of
+	// one of the marketplaces in the same response.
+	MarketplaceName string `form:"marketplace_name" json:"marketplace_name" xml:"marketplace_name"`
 }
 
 // NewGetPluginsResponseBody builds the HTTP response body from the result of
@@ -235,6 +233,18 @@ type AgentPluginServerResponseBody struct {
 func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseBody {
 	body := &GetPluginsResponseBody{
 		Etag: res.Etag,
+	}
+	if res.Marketplaces != nil {
+		body.Marketplaces = make([]*AgentMarketplaceResponseBody, len(res.Marketplaces))
+		for i, val := range res.Marketplaces {
+			if val == nil {
+				body.Marketplaces[i] = nil
+				continue
+			}
+			body.Marketplaces[i] = marshalAgentAgentMarketplaceToAgentMarketplaceResponseBody(val)
+		}
+	} else {
+		body.Marketplaces = []*AgentMarketplaceResponseBody{}
 	}
 	if res.Plugins != nil {
 		body.Plugins = make([]*AgentPluginResponseBody, len(res.Plugins))

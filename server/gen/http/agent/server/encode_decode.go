@@ -220,40 +220,25 @@ func EncodeGetPluginsError(encoder func(context.Context, http.ResponseWriter) go
 	}
 }
 
-// marshalAgentAgentPluginToAgentPluginResponseBody builds a value of type
-// *AgentPluginResponseBody from a value of type *agent.AgentPlugin.
-func marshalAgentAgentPluginToAgentPluginResponseBody(v *agent.AgentPlugin) *AgentPluginResponseBody {
-	res := &AgentPluginResponseBody{
-		ID:          v.ID,
-		Slug:        v.Slug,
-		Name:        v.Name,
-		Description: v.Description,
-	}
-	if v.Servers != nil {
-		res.Servers = make([]*AgentPluginServerResponseBody, len(v.Servers))
-		for i, val := range v.Servers {
-			if val == nil {
-				res.Servers[i] = nil
-				continue
-			}
-			res.Servers[i] = marshalAgentAgentPluginServerToAgentPluginServerResponseBody(val)
-		}
-	} else {
-		res.Servers = []*AgentPluginServerResponseBody{}
+// marshalAgentAgentMarketplaceToAgentMarketplaceResponseBody builds a value of
+// type *AgentMarketplaceResponseBody from a value of type
+// *agent.AgentMarketplace.
+func marshalAgentAgentMarketplaceToAgentMarketplaceResponseBody(v *agent.AgentMarketplace) *AgentMarketplaceResponseBody {
+	res := &AgentMarketplaceResponseBody{
+		Name:       v.Name,
+		URL:        v.URL,
+		AutoUpdate: v.AutoUpdate,
 	}
 
 	return res
 }
 
-// marshalAgentAgentPluginServerToAgentPluginServerResponseBody builds a value
-// of type *AgentPluginServerResponseBody from a value of type
-// *agent.AgentPluginServer.
-func marshalAgentAgentPluginServerToAgentPluginServerResponseBody(v *agent.AgentPluginServer) *AgentPluginServerResponseBody {
-	res := &AgentPluginServerResponseBody{
-		DisplayName: v.DisplayName,
-		Policy:      v.Policy,
-		McpURL:      v.McpURL,
-		IsPublic:    v.IsPublic,
+// marshalAgentAgentPluginToAgentPluginResponseBody builds a value of type
+// *AgentPluginResponseBody from a value of type *agent.AgentPlugin.
+func marshalAgentAgentPluginToAgentPluginResponseBody(v *agent.AgentPlugin) *AgentPluginResponseBody {
+	res := &AgentPluginResponseBody{
+		Slug:            v.Slug,
+		MarketplaceName: v.MarketplaceName,
 	}
 
 	return res

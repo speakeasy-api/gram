@@ -17,7 +17,7 @@ var _ = Service("agent", func() {
 	shared.DeclareErrorResponses()
 
 	Method("getPlugins", func() {
-		Description("Resolve the set of plugins assigned to the enrolled user and return them as a plain description the agent can render into local AI-tool configs (Claude Code, etc.).")
+		Description("Resolve the set of plugins assigned to the enrolled user and return them as Claude Code marketplace + plugin references. The agent merges these into the local Claude Code settings so Claude Code's own plugin manager fetches and installs the bundles.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -45,32 +45,21 @@ var _ = Service("agent", func() {
 // --- Types ---
 
 var GetPluginsResult = Type("GetPluginsResult", func() {
-	Required("etag", "plugins")
-	Attribute("etag", String, "Opaque revision identifier covering the plugin set. The agent stores this and can use it to detect whether a re-fetch produced any changes.")
-	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins assigned to the resolved principal set, sorted by slug.")
+	Required("etag", "marketplaces", "plugins")
+	Attribute("etag", String, "Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.")
+	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Marketplaces the agent should register in Claude Code's `extraKnownMarketplaces`. Sorted by name.")
+	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry references one of the marketplaces above by name.")
+})
+
+var AgentMarketplaceModel = Type("AgentMarketplace", func() {
+	Required("name", "url", "auto_update")
+	Attribute("name", String, "Stable identifier used as the key in Claude Code's `extraKnownMarketplaces` map. Derived as `speakeasy-<org-slug>-<project-slug>` so it round-trips deterministically across polls.")
+	Attribute("url", String, "Git URL for the marketplace, served by Gram's marketplace proxy.")
+	Attribute("auto_update", Boolean, "Whether Claude Code should auto-update the marketplace.")
 })
 
 var AgentPluginModel = Type("AgentPlugin", func() {
-	Required("id", "slug", "name", "servers")
-
-	Attribute("id", String, func() {
-		Description("Plugin id.")
-		Format(FormatUUID)
-	})
-	Attribute("slug", String, "URL-safe identifier, unique per (org, project).")
-	Attribute("name", String, "Display name.")
-	Attribute("description", String, "Optional description.")
-	Attribute("servers", ArrayOf(AgentPluginServerModel), "MCP servers bundled in this plugin, ordered by sort_order.")
-})
-
-var AgentPluginServerModel = Type("AgentPluginServer", func() {
-	Required("display_name", "policy", "mcp_url", "is_public")
-
-	Attribute("display_name", String, "Display name shown in the generated AI-tool config.")
-	Attribute("policy", String, func() {
-		Description("Whether the agent should treat this server as required or optional.")
-		Enum("required", "optional")
-	})
-	Attribute("mcp_url", String, "Gram-hosted MCP URL the AI tool should connect to.")
-	Attribute("is_public", Boolean, "True when the MCP server is publicly accessible and does not require a Gram credential.")
+	Required("slug", "marketplace_name")
+	Attribute("slug", String, "Plugin slug. Combined with marketplace_name this is what goes into Claude Code's `enabledPlugins` entries.")
+	Attribute("marketplace_name", String, "Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.")
 })

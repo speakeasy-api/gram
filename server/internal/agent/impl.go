@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -92,7 +93,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		urn.PrincipalWildcard,
 	}
 
-	rows, err := s.repo.GetAssignedPluginsWithServers(ctx, repo.GetAssignedPluginsWithServersParams{
+	rows, err := s.repo.GetAssignedPluginsForAgent(ctx, repo.GetAssignedPluginsForAgentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrns:  principals,
 	})
@@ -101,7 +102,9 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	}
 
 	base := strings.TrimRight(s.serverURL, "/")
-	mcpURL := func(slug string) string { return base + "/mcp/" + slug }
+	marketplaceURL := func(token string) string {
+		return base + marketplace.RoutePrefix + token + ".git"
+	}
 
-	return mv.BuildAgentPluginsView(rows, mcpURL), nil
+	return mv.BuildAgentPluginsView(rows, marketplaceURL), nil
 }

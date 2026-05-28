@@ -2252,7 +2252,7 @@ paths:
                 name: UpdateRole
     /rpc/agent.getPlugins:
         get:
-            description: Resolve the set of plugins assigned to the enrolled user and return them as a plain description the agent can render into local AI-tool configs (Claude Code, etc.).
+            description: Resolve the set of plugins assigned to the enrolled user and return them as Claude Code marketplace + plugin references. The agent merges these into the local Claude Code settings so Claude Code's own plugin manager fetches and installs the bundles.
             operationId: getAgentPlugins
             parameters:
                 - allowEmptyValue: true
@@ -28695,55 +28695,34 @@ components:
                 - assistant_count
                 - created_at
                 - updated_at
+        AgentMarketplace:
+            type: object
+            properties:
+                auto_update:
+                    type: boolean
+                    description: Whether Claude Code should auto-update the marketplace.
+                name:
+                    type: string
+                    description: Stable identifier used as the key in Claude Code's `extraKnownMarketplaces` map. Derived as `speakeasy-<org-slug>-<project-slug>` so it round-trips deterministically across polls.
+                url:
+                    type: string
+                    description: Git URL for the marketplace, served by Gram's marketplace proxy.
+            required:
+                - name
+                - url
+                - auto_update
         AgentPlugin:
             type: object
             properties:
-                description:
+                marketplace_name:
                     type: string
-                    description: Optional description.
-                id:
-                    type: string
-                    description: Plugin id.
-                    format: uuid
-                name:
-                    type: string
-                    description: Display name.
-                servers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AgentPluginServer'
-                    description: MCP servers bundled in this plugin, ordered by sort_order.
+                    description: Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.
                 slug:
                     type: string
-                    description: URL-safe identifier, unique per (org, project).
+                    description: Plugin slug. Combined with marketplace_name this is what goes into Claude Code's `enabledPlugins` entries.
             required:
-                - id
                 - slug
-                - name
-                - servers
-        AgentPluginServer:
-            type: object
-            properties:
-                display_name:
-                    type: string
-                    description: Display name shown in the generated AI-tool config.
-                is_public:
-                    type: boolean
-                    description: True when the MCP server is publicly accessible and does not require a Gram credential.
-                mcp_url:
-                    type: string
-                    description: Gram-hosted MCP URL the AI tool should connect to.
-                policy:
-                    type: string
-                    description: Whether the agent should treat this server as required or optional.
-                    enum:
-                        - required
-                        - optional
-            required:
-                - display_name
-                - policy
-                - mcp_url
-                - is_public
+                - marketplace_name
         AllowedOrigin:
             type: object
             properties:
@@ -32460,14 +32439,20 @@ components:
             properties:
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the plugin set. The agent stores this and can use it to detect whether a re-fetch produced any changes.
+                    description: Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.
+                marketplaces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentMarketplace'
+                    description: Marketplaces the agent should register in Claude Code's `extraKnownMarketplaces`. Sorted by name.
                 plugins:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentPlugin'
-                    description: Plugins assigned to the resolved principal set, sorted by slug.
+                    description: Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry references one of the marketplaces above by name.
             required:
                 - etag
+                - marketplaces
                 - plugins
         GetProductFeaturesResponseBody:
             type: object
