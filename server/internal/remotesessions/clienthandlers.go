@@ -72,16 +72,6 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	if _, err = txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:        issuerID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").Log(ctx, logger)
-	}
-
 	if _, err = txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
 		ID:        userIssuerID,
 		ProjectID: *authCtx.ProjectID,
