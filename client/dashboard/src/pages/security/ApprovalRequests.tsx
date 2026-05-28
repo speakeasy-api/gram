@@ -12,7 +12,7 @@ export default function ApprovalRequests() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["project:read", "project:write"]} level="page">
+        <RequireScope scope="org:admin" level="page">
           <Page.Section>
             <Page.Section.Title stage="beta">
               Approval Requests

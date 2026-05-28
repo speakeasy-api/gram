@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import ApprovalRequests from "./ApprovalRequests";
 
 const mocks = vi.hoisted(() => ({
@@ -66,14 +66,19 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 
 describe("ApprovalRequests", () => {
-  it("renders the project-scoped content in the page section body", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("renders the org-admin content in the page section body", () => {
     mocks.useProject.mockReturnValue({
       id: "project-1",
       name: "Demo",
       slug: "demo",
     });
     mocks.useRBAC.mockReturnValue({
-      hasAnyScope: (scopes: string[]) => scopes.includes("project:read"),
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
       hasAllScopes: () => true,
       isLoading: false,
     });
@@ -83,5 +88,28 @@ describe("ApprovalRequests", () => {
     expect(
       screen.getByText("Approval Requests Content for project-1"),
     ).toBeTruthy();
+  });
+
+  it("requires org admin access", () => {
+    mocks.useProject.mockReturnValue({
+      id: "project-1",
+      name: "Demo",
+      slug: "demo",
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasAnyScope: (scopes: string[]) =>
+        scopes.some(
+          (scope) => scope === "project:read" || scope === "project:write",
+        ),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    render(<ApprovalRequests />);
+
+    expect(
+      screen.queryByText("Approval Requests Content for project-1"),
+    ).toBeNull();
+    expect(screen.getByText("Access restricted")).toBeTruthy();
   });
 });
