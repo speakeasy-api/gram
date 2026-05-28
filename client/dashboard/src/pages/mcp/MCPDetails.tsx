@@ -640,7 +640,7 @@ const STATUS_OPTIONS: {
     value: "private",
     label: "Private",
     description:
-      "Only users with a Gram API Key from this project can read the tools hosted by this server.",
+      "Only users with a platform API Key from this project can read the tools hosted by this server.",
     dotClass: "bg-blue-400",
     hoverDotClass: "group-hover:bg-blue-400",
   },
@@ -2070,8 +2070,8 @@ export function MCPJson({
               }
             >
               {requiresGramKey
-                ? "Requires a Gram API key."
-                : "No Gram API key required."}
+                ? "Requires a platform API key."
+                : "No platform API key required."}
             </span>
           </Type>
           <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
@@ -2081,9 +2081,9 @@ export function MCPJson({
               <Grid.Item key="managed">
                 <Type className="font-medium">Managed Authentication</Type>
                 <Type muted small className="mb-2! max-w-3xl">
-                  Manage API authentication with Gram environments.
+                  Manage API authentication with platform environments.
                   <br />
-                  Users need a single Gram API Key rather than bringing their
+                  Users need a single platform API Key rather than bringing their
                   own keys.
                 </Type>
                 <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
@@ -2127,7 +2127,7 @@ export function OAuthDetailsModal({
             {toolset.externalOauthServer
               ? "External OAuth Configuration"
               : isGramOAuth
-                ? "Gram OAuth Configuration"
+                ? "Platform OAuth Configuration"
                 : "OAuth Proxy Configuration"}
           </Dialog.Title>
         </Dialog.Header>
@@ -2136,11 +2136,11 @@ export function OAuthDetailsModal({
             {toolset.oauthProxyServer && isGramOAuth && (
               <>
                 <div>
-                  <Type className="font-medium">Gram OAuth is Active</Type>
+                  <Type className="font-medium">Platform OAuth is Active</Type>
                 </div>
                 <Stack gap={2} className="">
                   <Type className="mb-2">
-                    Gram users with access to your organization can use this MCP
+                    Platform users with access to your organization can use this MCP
                     server.
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
@@ -2386,7 +2386,7 @@ export function GramOAuthProxyModal({
   const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
     onSuccess: () => {
       invalidateAllToolset(queryClient);
-      toast.success("Gram OAuth configured successfully");
+      toast.success("Platform OAuth configured successfully");
       telemetry.capture("mcp_event", {
         action: "gram_oauth_proxy_configured",
         slug: toolset.slug,
@@ -2394,11 +2394,11 @@ export function GramOAuthProxyModal({
       onClose();
     },
     onError: (error) => {
-      console.error("Failed to configure Gram OAuth:", error);
+      console.error("Failed to configure Platform OAuth:", error);
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to configure Gram OAuth",
+          : "Failed to configure Platform OAuth",
       );
     },
   });
@@ -2421,15 +2421,15 @@ export function GramOAuthProxyModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-h-[90vh] max-w-2xl overflow-hidden">
         <Dialog.Header>
-          <Dialog.Title>Gram OAuth</Dialog.Title>
+          <Dialog.Title>Platform OAuth</Dialog.Title>
         </Dialog.Header>
 
         <div className="max-h-[60vh] space-y-4 overflow-auto">
           <div>
-            <Type className="mb-2 font-medium">Gram OAuth Configuration</Type>
+            <Type className="mb-2 font-medium">Platform OAuth Configuration</Type>
             <Type small className="mb-4">
-              Configure Gram OAuth to let users with access to your organization
-              use this MCP server. Users will authenticate using their Gram
+              Configure Platform OAuth to let users with access to your organization
+              use this MCP server. Users will authenticate using their platform
               credentials.
             </Type>
           </div>
@@ -2442,7 +2442,7 @@ export function GramOAuthProxyModal({
           >
             {addOAuthProxyMutation.isPending
               ? "Enabling..."
-              : "Enable Gram OAuth"}
+              : "Enable Platform OAuth"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

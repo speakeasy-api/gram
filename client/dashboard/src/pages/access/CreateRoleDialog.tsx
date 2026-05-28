@@ -685,7 +685,7 @@ export function CreateRoleDialog({
                     {isSystemRole && (
                       <div className="bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-2 text-xs">
                         <Info className="h-3.5 w-3.5 shrink-0" />
-                        System role permissions are managed by Gram and cannot
+                        System role permissions are managed by the platform and cannot
                         be changed.
                       </div>
                     )}

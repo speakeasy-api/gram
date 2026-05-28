@@ -288,7 +288,7 @@ const FreeTierExceededNotification = () => {
         <Stack direction="vertical" gap={3} className="h-full">
           <Type variant="subheading">Limits exceeded</Type>
           <Type small>
-            Free tier limits exceeded. Upgrade to continue using Gram.
+            Free tier limits exceeded. Upgrade to continue using the platform.
           </Type>
           <orgRoutes.billing.Link className="mt-auto w-full">
             <Button size="sm" className="w-full">

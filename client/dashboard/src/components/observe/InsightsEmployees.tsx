@@ -350,7 +350,7 @@ export function InsightsEmployeesContent() {
   const enrollmentRate =
     totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;
   const prompt =
-    "Using the Employees tab context, summarize who is enrolled in this project based on whether they have any Gram token usage.";
+    "Using the Employees tab context, summarize who is enrolled in this project based on whether they have any platform token usage.";
 
   const handleFilterDimensionChange = (next: EmployeeFilterDimension) => {
     setFilterDimension(next);
@@ -379,8 +379,8 @@ export function InsightsEmployeesContent() {
       <InsightsConfig
         mcpConfig={mcpConfig}
         title="What would you like to know about employee enrollment?"
-        subtitle="Ask who is enrolled, who still needs setup, and how Gram adoption is tracking across the team"
-        contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have Gram Hooks activity in ${rangeLabel} and are enrolled; ${notEnrolledEmployees} employees have no Gram Hooks activity and are not enrolled.`}
+        subtitle="Ask who is enrolled, who still needs setup, and how platform adoption is tracking across the team"
+        contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have platform hooks activity in ${rangeLabel} and are enrolled; ${notEnrolledEmployees} employees have no platform hooks activity and are not enrolled.`}
         suggestions={[
           {
             title: "Enrollment Coverage",
@@ -391,19 +391,19 @@ export function InsightsEmployeesContent() {
             title: "Not Enrolled",
             label: "Who is not enrolled?",
             prompt:
-              "Which employees are not enrolled because they have no Gram token usage in this project?",
+              "Which employees are not enrolled because they have no platform token usage in this project?",
           },
           {
             title: "Enrollment Summary",
             label: "Summarize enrollment",
             prompt:
-              "Summarize project employee enrollment based on whether each employee has Gram token usage.",
+              "Summarize project employee enrollment based on whether each employee has platform token usage.",
           },
           {
             title: "User Usage",
             label: "Show user usage",
             prompt:
-              "Show me a table of organization users' Gram usage for the last 30 days, including token counts, last activity, and hook source breakdowns.",
+              "Show me a table of organization users' platform usage for the last 30 days, including token counts, last activity, and hook source breakdowns.",
           },
         ]}
       />
@@ -485,14 +485,14 @@ export function InsightsEmployeesContent() {
                   value={enrolledEmployees}
                   icon="circle-check"
                   accentColor="green"
-                  subtext="Gram activity present"
+                  subtext="Platform activity present"
                 />
                 <MetricCard
                   title="Not Enrolled"
                   value={notEnrolledEmployees}
                   icon="triangle-alert"
                   accentColor="orange"
-                  subtext="No Gram activity found"
+                  subtext="No platform activity found"
                 />
                 <MetricCard
                   title="Token Count"
@@ -542,7 +542,7 @@ function EmployeeTable({
         header: (
           <span className="flex items-center gap-1">
             Employee
-            <SimpleTooltip tooltip="Enrollment is inferred by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as enrolled until they sign up or directory sync is configured.">
+            <SimpleTooltip tooltip="Enrollment is inferred by matching the email reported by each AI coding tool to the member's platform account. Members without a platform account won't appear as enrolled until they sign up or directory sync is configured.">
               <Info className="text-muted-foreground size-3 shrink-0" />
             </SimpleTooltip>
           </span>

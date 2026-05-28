@@ -138,8 +138,8 @@ function SetupRequiredModal({
             Get Started with Insights
           </Dialog.Title>
           <Dialog.Description className="text-center">
-            Start capturing agent sessions and tool metrics by integrating Gram
-            Elements into your application.
+            Start capturing agent sessions and tool metrics by integrating
+            platform Elements into your application.
           </Dialog.Description>
         </Dialog.Header>
         <div className="space-y-4 pt-2">

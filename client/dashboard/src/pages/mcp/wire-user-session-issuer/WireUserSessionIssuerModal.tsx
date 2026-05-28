@@ -358,8 +358,8 @@ function ParadigmSummary({ paradigm }: { paradigm: MigrationParadigm }) {
   if (paradigm === "gram") {
     return (
       <Callout tone="info">
-        This toolset is on the <strong>Gram-managed</strong> OAuth paradigm.
-        Gram is itself the upstream identity provider, so the migration produces
+        This toolset is on the <strong>platform-managed</strong> OAuth paradigm.
+        The platform is itself the upstream identity provider, so the migration produces
         a single resource: a user session issuer. No remote session issuer or
         client is created — there is no external authorization server to be a
         client of.
@@ -521,9 +521,9 @@ function CurrentStepBody({
             />
           </FieldLabel>
           <Type small className="text-muted-foreground">
-            Gram hits this URL's RFC 8414 well-known document to prefill the
+            The platform hits this URL's RFC 8414 well-known document to prefill the
             authorization, token, registration, and JWKS endpoints. If the
-            upstream does not publish one, Gram falls back to the endpoints
+            upstream does not publish one, the platform falls back to the endpoints
             already stored on the OAuth proxy provider.
           </Type>
         </Stack>
@@ -605,7 +605,7 @@ const STRATEGY_OPTIONS: ReadonlyArray<{
     key: "register",
     title: "Register",
     blurb:
-      "Mint a fresh client via RFC 7591 Dynamic Client Registration against the issuer's registration_endpoint. Best when the upstream IdP supports DCR and you want Gram to manage credentials end-to-end.",
+      "Mint a fresh client via RFC 7591 Dynamic Client Registration against the issuer's registration_endpoint. Best when the upstream IdP supports DCR and you want the platform to manage credentials end-to-end.",
   },
   {
     key: "manual",
@@ -688,7 +688,7 @@ function ClonePane({
       <StrategyHeader title="Clone" onBack={onBack} />
       <Callout tone="warn">
         Before cloning, update the upstream IdP's registered redirect URIs to
-        include Gram's user-session callback. The existing client_id stays the
+        include the platform's user-session callback. The existing client_id stays the
         same, so any redirect URIs you have registered already keep working —
         but the user-session flow lands on a different callback than the OAuth
         proxy did, so the new URL has to be added.
@@ -748,9 +748,9 @@ function RegisterPane({
         onBack={onBack}
       />
       <Type small className="text-muted-foreground">
-        Gram sends an RFC 7591 Dynamic Client Registration request to the
+        The platform sends an RFC 7591 Dynamic Client Registration request to the
         issuer's registration_endpoint. The issuer mints a new client_id and
-        client_secret; Gram persists both as a remote_session_client. Use this
+        client_secret; the platform persists both as a remote_session_client. Use this
         when the upstream IdP supports DCR.
       </Type>
       <FieldReadOnly
@@ -759,7 +759,7 @@ function RegisterPane({
         mono
       />
       <FieldReadOnly
-        label="Callback URL Gram will request"
+        label="Callback URL the platform will request"
         value={remoteLoginCallbackURL()}
         hint="Sent as redirect_uris on the RFC 7591 registration request so the issued client is usable from the start."
         mono
@@ -788,7 +788,7 @@ function ManualPane({
       <StrategyHeader title="Manual" onBack={onBack} />
       <Type small className="text-muted-foreground">
         Paste a client_id and client_secret you registered with the upstream
-        authorization server. Gram encrypts the secret before persisting it.
+        authorization server. The platform encrypts the secret before persisting it.
       </Type>
       <FieldLabel label="Client ID">
         <Input

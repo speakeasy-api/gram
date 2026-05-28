@@ -49,7 +49,7 @@ export default function Integrations() {
         <Page.Section>
           <Page.Section.Title>Integrations</Page.Section.Title>
           <Page.Section.Description>
-            Distribute Gram toolsets as installable packages your customers can
+            Distribute platform toolsets as installable packages your customers can
             pull from npm.
           </Page.Section.Description>
           {isAdmin ? (
@@ -196,7 +196,7 @@ function CreateIntegrationDialog({
           label: "Integration Summary",
           value: summary,
           onChange: setSummary,
-          placeholder: "Access your Hubspot data in Gram.",
+          placeholder: "Access your Hubspot data in the platform.",
         },
         {
           label: "Integration Keywords",

@@ -202,7 +202,7 @@ export function LogsTools() {
       <InsightsConfig
         mcpConfig={mcpConfig}
         title="Explore Tool Logs"
-        subtitle="Ask me about your tool logs! Powered by Elements + Gram MCP"
+        subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
         hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (

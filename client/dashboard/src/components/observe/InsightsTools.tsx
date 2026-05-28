@@ -300,7 +300,7 @@ export function InsightsToolsContent() {
       <InsightsConfig
         mcpConfig={mcpConfig}
         title="Explore Tools"
-        subtitle="Ask me about your tools! Powered by Elements + Gram MCP"
+        subtitle="Ask me about your tools! Powered by Elements + platform MCP"
         hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (

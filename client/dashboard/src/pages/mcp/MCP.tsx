@@ -187,7 +187,7 @@ export function MCPOverview() {
     <Page.Section>
       <Page.Section.Title>Built-in MCP Servers</Page.Section.Title>
       <Page.Section.Description>
-        Pre-configured MCP servers provided by Gram for your project. Connect
+        Pre-configured MCP servers provided by the platform for your project. Connect
         from Claude Desktop, Cursor, or any MCP client.
       </Page.Section.Description>
       <Page.Section.Body>

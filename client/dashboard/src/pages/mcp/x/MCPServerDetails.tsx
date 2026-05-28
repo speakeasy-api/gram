@@ -221,7 +221,7 @@ const VISIBILITY_OPTIONS: {
   {
     value: "private",
     label: "Private",
-    description: "Requires Gram platform authentication.",
+    description: "Requires platform authentication.",
     dotClass: "bg-blue-400",
     hoverDotClass: "group-hover:bg-blue-400",
   },
