@@ -323,6 +323,15 @@ export function OrgApiKeysInner() {
                           integrations.
                         </Label>
                       </div>
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="agent" id="r5" />
+                        <Label className="leading-normal" htmlFor="r5">
+                          Agent: presents to the Speakeasy device agent endpoint
+                          to fetch the user's assigned plugins. Store in{" "}
+                          <code>managed.json</code> as <code>org_token</code> or
+                          hand to a dev for <code>speakeasy enroll</code>.
+                        </Label>
+                      </div>
                     </RadioGroup>
                   );
                 }}
