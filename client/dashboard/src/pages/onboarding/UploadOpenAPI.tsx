@@ -265,7 +265,8 @@ export function UploadOpenAPIContent({
       display: (
         <>
           <Type>
-            The platform is generating tools for your API. This may take a few seconds.
+            The platform is generating tools for your API. This may take a few
+            seconds.
           </Type>
           <Spinner />
         </>

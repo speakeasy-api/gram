@@ -49,8 +49,8 @@ export default function Integrations() {
         <Page.Section>
           <Page.Section.Title>Integrations</Page.Section.Title>
           <Page.Section.Description>
-            Distribute platform toolsets as installable packages your customers can
-            pull from npm.
+            Distribute platform toolsets as installable packages your customers
+            can pull from npm.
           </Page.Section.Description>
           {isAdmin ? (
             <Page.Section.CTA>

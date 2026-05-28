@@ -359,10 +359,10 @@ function ParadigmSummary({ paradigm }: { paradigm: MigrationParadigm }) {
     return (
       <Callout tone="info">
         This toolset is on the <strong>platform-managed</strong> OAuth paradigm.
-        The platform is itself the upstream identity provider, so the migration produces
-        a single resource: a user session issuer. No remote session issuer or
-        client is created — there is no external authorization server to be a
-        client of.
+        The platform is itself the upstream identity provider, so the migration
+        produces a single resource: a user session issuer. No remote session
+        issuer or client is created — there is no external authorization server
+        to be a client of.
       </Callout>
     );
   }
@@ -521,10 +521,10 @@ function CurrentStepBody({
             />
           </FieldLabel>
           <Type small className="text-muted-foreground">
-            The platform hits this URL's RFC 8414 well-known document to prefill the
-            authorization, token, registration, and JWKS endpoints. If the
-            upstream does not publish one, the platform falls back to the endpoints
-            already stored on the OAuth proxy provider.
+            The platform hits this URL's RFC 8414 well-known document to prefill
+            the authorization, token, registration, and JWKS endpoints. If the
+            upstream does not publish one, the platform falls back to the
+            endpoints already stored on the OAuth proxy provider.
           </Type>
         </Stack>
       );
@@ -688,10 +688,10 @@ function ClonePane({
       <StrategyHeader title="Clone" onBack={onBack} />
       <Callout tone="warn">
         Before cloning, update the upstream IdP's registered redirect URIs to
-        include the platform's user-session callback. The existing client_id stays the
-        same, so any redirect URIs you have registered already keep working —
-        but the user-session flow lands on a different callback than the OAuth
-        proxy did, so the new URL has to be added.
+        include the platform's user-session callback. The existing client_id
+        stays the same, so any redirect URIs you have registered already keep
+        working — but the user-session flow lands on a different callback than
+        the OAuth proxy did, so the new URL has to be added.
       </Callout>
       <Stack gap={2}>
         <FieldReadOnly
@@ -748,10 +748,10 @@ function RegisterPane({
         onBack={onBack}
       />
       <Type small className="text-muted-foreground">
-        The platform sends an RFC 7591 Dynamic Client Registration request to the
-        issuer's registration_endpoint. The issuer mints a new client_id and
-        client_secret; the platform persists both as a remote_session_client. Use this
-        when the upstream IdP supports DCR.
+        The platform sends an RFC 7591 Dynamic Client Registration request to
+        the issuer's registration_endpoint. The issuer mints a new client_id and
+        client_secret; the platform persists both as a remote_session_client.
+        Use this when the upstream IdP supports DCR.
       </Type>
       <FieldReadOnly
         label="Registration endpoint"
@@ -788,7 +788,8 @@ function ManualPane({
       <StrategyHeader title="Manual" onBack={onBack} />
       <Type small className="text-muted-foreground">
         Paste a client_id and client_secret you registered with the upstream
-        authorization server. The platform encrypts the secret before persisting it.
+        authorization server. The platform encrypts the secret before persisting
+        it.
       </Type>
       <FieldLabel label="Client ID">
         <Input

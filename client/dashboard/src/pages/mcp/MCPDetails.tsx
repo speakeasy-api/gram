@@ -2083,8 +2083,8 @@ export function MCPJson({
                 <Type muted small className="mb-2! max-w-3xl">
                   Manage API authentication with platform environments.
                   <br />
-                  Users need a single platform API Key rather than bringing their
-                  own keys.
+                  Users need a single platform API Key rather than bringing
+                  their own keys.
                 </Type>
                 <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
               </Grid.Item>,
@@ -2140,8 +2140,8 @@ export function OAuthDetailsModal({
                 </div>
                 <Stack gap={2} className="">
                   <Type className="mb-2">
-                    Platform users with access to your organization can use this MCP
-                    server.
+                    Platform users with access to your organization can use this
+                    MCP server.
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
@@ -2426,11 +2426,13 @@ export function GramOAuthProxyModal({
 
         <div className="max-h-[60vh] space-y-4 overflow-auto">
           <div>
-            <Type className="mb-2 font-medium">Platform OAuth Configuration</Type>
+            <Type className="mb-2 font-medium">
+              Platform OAuth Configuration
+            </Type>
             <Type small className="mb-4">
-              Configure Platform OAuth to let users with access to your organization
-              use this MCP server. Users will authenticate using their platform
-              credentials.
+              Configure Platform OAuth to let users with access to your
+              organization use this MCP server. Users will authenticate using
+              their platform credentials.
             </Type>
           </div>
         </div>

@@ -9,8 +9,8 @@ export function AutoConfigureLoader() {
         Setting up OAuth Proxy...
       </Type>
       <Type muted small className="max-w-md text-center">
-        Registering the platform with the upstream OAuth provider and storing the
-        returned credentials.
+        Registering the platform with the upstream OAuth provider and storing
+        the returned credentials.
       </Type>
     </div>
   );
