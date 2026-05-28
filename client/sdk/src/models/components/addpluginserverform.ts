@@ -6,11 +6,13 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
-export const Policy = {
+export const AddPluginServerFormPolicy = {
   Required: "required",
   Optional: "optional",
 } as const;
-export type Policy = ClosedEnum<typeof Policy>;
+export type AddPluginServerFormPolicy = ClosedEnum<
+  typeof AddPluginServerFormPolicy
+>;
 
 export type AddPluginServerForm = {
   /**
@@ -18,7 +20,7 @@ export type AddPluginServerForm = {
    */
   displayName: string;
   pluginId: string;
-  policy?: Policy | undefined;
+  policy?: AddPluginServerFormPolicy | undefined;
   sortOrder?: number | undefined;
   /**
    * Gram toolset ID for the MCP server.
@@ -27,9 +29,9 @@ export type AddPluginServerForm = {
 };
 
 /** @internal */
-export const Policy$outboundSchema: z.ZodMiniEnum<typeof Policy> = z.enum(
-  Policy,
-);
+export const AddPluginServerFormPolicy$outboundSchema: z.ZodMiniEnum<
+  typeof AddPluginServerFormPolicy
+> = z.enum(AddPluginServerFormPolicy);
 
 /** @internal */
 export type AddPluginServerForm$Outbound = {
@@ -48,7 +50,7 @@ export const AddPluginServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     displayName: z.string(),
     pluginId: z.string(),
-    policy: z._default(Policy$outboundSchema, "required"),
+    policy: z._default(AddPluginServerFormPolicy$outboundSchema, "required"),
     sortOrder: z._default(z.int(), 0),
     toolsetId: z.string(),
   }),

@@ -4,6 +4,7 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { Agent } from "./agent.js";
 import { AiIntegrations } from "./aiintegrations.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
@@ -55,6 +56,11 @@ export class Gram extends ClientSDK {
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));
+  }
+
+  private _agent?: Agent;
+  get agent(): Agent {
+    return (this._agent ??= new Agent(this._options));
   }
 
   private _aiIntegrations?: AiIntegrations;

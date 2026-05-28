@@ -83,7 +83,7 @@ func NewListRolesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -118,7 +118,7 @@ func NewGetRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -153,7 +153,7 @@ func NewCreateRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -188,7 +188,7 @@ func NewUpdateRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -223,7 +223,7 @@ func NewDeleteRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -258,7 +258,7 @@ func NewListScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -293,7 +293,7 @@ func NewListMembersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -328,7 +328,7 @@ func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -363,7 +363,7 @@ func NewUpdateMemberRolesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -467,7 +467,7 @@ func NewListChallengesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -502,7 +502,7 @@ func NewListChallengeBucketsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -537,7 +537,7 @@ func NewResolveChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string

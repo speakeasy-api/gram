@@ -16,6 +16,7 @@ import (
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
+	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	assistantmemoriesc "github.com/speakeasy-api/gram/server/gen/http/assistant_memories/client"
@@ -76,6 +77,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
+		"agent get-plugins",
 		"ai-integrations (get-config|upsert-config|delete-config)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
@@ -131,7 +133,7 @@ func UsageExamples() string {
 		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "admin login --return-to \"abc123\" --prompt \"abc123\"" + "\n" +
-		os.Args[0] + " " + "ai-integrations get-config --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "agent get-plugins --email \"dev@acme.corp\" --apikey-token \"abc123\"" + "\n" +
 		""
 }
 
@@ -278,6 +280,12 @@ func ParseEndpoint(
 		adminListOrganizationsCursorFlag            = adminListOrganizationsFlags.String("cursor", "", "")
 		adminListOrganizationsLimitFlag             = adminListOrganizationsFlags.String("limit", "", "")
 		adminListOrganizationsAdminSessionTokenFlag = adminListOrganizationsFlags.String("admin-session-token", "", "")
+
+		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
+
+		agentGetPluginsFlags           = flag.NewFlagSet("get-plugins", flag.ExitOnError)
+		agentGetPluginsEmailFlag       = agentGetPluginsFlags.String("email", "REQUIRED", "")
+		agentGetPluginsApikeyTokenFlag = agentGetPluginsFlags.String("apikey-token", "", "")
 
 		aiIntegrationsFlags = flag.NewFlagSet("ai-integrations", flag.ContinueOnError)
 
@@ -1838,6 +1846,9 @@ func ParseEndpoint(
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
 
+	agentFlags.Usage = agentUsage
+	agentGetPluginsFlags.Usage = agentGetPluginsUsage
+
 	aiIntegrationsFlags.Usage = aiIntegrationsUsage
 	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
 	aiIntegrationsUpsertConfigFlags.Usage = aiIntegrationsUpsertConfigUsage
@@ -2208,6 +2219,8 @@ func ParseEndpoint(
 			svcf = accessFlags
 		case "admin":
 			svcf = adminFlags
+		case "agent":
+			svcf = agentFlags
 		case "ai-integrations":
 			svcf = aiIntegrationsFlags
 		case "assets":
@@ -2406,6 +2419,13 @@ func ParseEndpoint(
 
 			case "list-organizations":
 				epf = adminListOrganizationsFlags
+
+			}
+
+		case "agent":
+			switch epn {
+			case "get-plugins":
+				epf = agentGetPluginsFlags
 
 			}
 
@@ -3473,6 +3493,13 @@ func ParseEndpoint(
 			case "list-organizations":
 				endpoint = c.ListOrganizations()
 				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsIncludeDisabledFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsAdminSessionTokenFlag)
+			}
+		case "agent":
+			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-plugins":
+				endpoint = c.GetPlugins()
+				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsEmailFlag, *agentGetPluginsApikeyTokenFlag)
 			}
 		case "ai-integrations":
 			c := aiintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5067,6 +5094,36 @@ func adminListOrganizationsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --include-disabled false --cursor \"abc123\" --limit 1 --admin-session-token \"abc123\"")
+}
+
+// agentUsage displays the usage of the agent command and its subcommands.
+func agentUsage() {
+	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agent COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the set of plugins assigned to the enrolled user and return them as a plain description the agent can render into local AI-tool configs (Claude Code, etc.).`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s agent COMMAND --help\n", os.Args[0])
+}
+func agentGetPluginsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent get-plugins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -email STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve the set of plugins assigned to the enrolled user and return them as a plain description the agent can render into local AI-tool configs (Claude Code, etc.).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --email \"dev@acme.corp\" --apikey-token \"abc123\"")
 }
 
 // aiIntegrationsUsage displays the usage of the ai-integrations command and

@@ -1487,6 +1487,98 @@ paths:
       x-speakeasy-name-override: updateRole
       x-speakeasy-react-hook:
         name: UpdateRole
+  /rpc/agent.getPlugins:
+    get:
+      description: Resolve the set of plugins assigned to the enrolled user and return them as a plain description the agent can render into local AI-tool configs (Claude Code, etc.).
+      operationId: getAgentPlugins
+      parameters:
+        - allowEmptyValue: true
+          description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+          example: dev@acme.corp
+          in: query
+          name: email
+          required: true
+          schema:
+            description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+            example: dev@acme.corp
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetPluginsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getPlugins agent
+      tags:
+        - agent
+      x-speakeasy-name-override: getPlugins
+      x-speakeasy-react-hook:
+        name: AgentPlugins
   /rpc/aiIntegrations.deleteConfig:
     post:
       description: Delete the org-wide AI integration config for a provider.
@@ -28110,6 +28202,55 @@ components:
         - assistant_count
         - created_at
         - updated_at
+    AgentPlugin:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Optional description.
+        id:
+          type: string
+          description: Plugin id.
+          format: uuid
+        name:
+          type: string
+          description: Display name.
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPluginServer'
+          description: MCP servers bundled in this plugin, ordered by sort_order.
+        slug:
+          type: string
+          description: URL-safe identifier, unique per (org, project).
+      required:
+        - id
+        - slug
+        - name
+        - servers
+    AgentPluginServer:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: Display name shown in the generated AI-tool config.
+        is_public:
+          type: boolean
+          description: True when the MCP server is publicly accessible and does not require a Gram credential.
+        mcp_url:
+          type: string
+          description: Gram-hosted MCP URL the AI tool should connect to.
+        policy:
+          type: string
+          description: Whether the agent should treat this server as required or optional.
+          enum:
+            - required
+            - optional
+      required:
+        - display_name
+        - policy
+        - mcp_url
+        - is_public
     AllowedOrigin:
       type: object
       properties:
@@ -31822,6 +31963,20 @@ components:
         - top_tools_by_count
         - top_tools_by_failure_rate
         - interval_seconds
+    GetPluginsResult:
+      type: object
+      properties:
+        etag:
+          type: string
+          description: Opaque revision identifier covering the plugin set. The agent stores this and can use it to detect whether a re-fetch produced any changes.
+        plugins:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPlugin'
+          description: Plugins assigned to the resolved principal set, sorted by slug.
+      required:
+        - etag
+        - plugins
     GetProductFeaturesResponseBody:
       type: object
       properties:
@@ -39661,6 +39816,8 @@ tags:
     description: Manage roles, team member access control, and authorization challenge events.
   - name: admin
     description: Operations supporting admin tasks, protected by Google workspace auth.
+  - name: agent
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
   - name: assets
