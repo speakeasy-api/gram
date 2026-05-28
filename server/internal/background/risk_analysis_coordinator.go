@@ -23,7 +23,7 @@ const (
 
 	// riskAnalysisLookback bounds FetchUnanalyzedMessageIDs to recent messages.
 	// Messages older than this are not (re-)analyzed after the initial pass.
-	riskAnalysisLookback = 30 * 24 * time.Hour
+	riskAnalysisLookback = 2 * time.Hour
 
 	riskCoordinatorFetchLimit int32 = 20_000
 	riskCoordinatorBatchSize  int   = 100
