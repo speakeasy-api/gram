@@ -57,6 +57,7 @@ import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
 import CreateCollection from "./pages/collections/CreateCollection";
 import OrgAdminSettings from "./pages/org/OrgAdminSettings";
+import AgentTokens from "./pages/device-agent/AgentTokens";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -782,6 +783,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
+  },
+  deviceAgentTokens: {
+    title: "Agent Tokens",
+    url: "device-agent-tokens",
+    icon: "key-round",
+    component: AgentTokens,
   },
   access: {
     title: "Roles & Permissions",
