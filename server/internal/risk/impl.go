@@ -1338,7 +1338,7 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 }
 
 func (s *Service) TriggerRiskAnalysis(_ context.Context, _ *gen.TriggerRiskAnalysisPayload) error {
-	return oops.E(oops.CodeBadRequest, nil, "operation not supported")
+	return oops.E(oops.CodeNotImplemented, nil, "operation not supported")
 }
 
 func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.CreateCustomDetectionRulePayload) (*types.RiskCustomDetectionRule, error) {

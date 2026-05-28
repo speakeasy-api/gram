@@ -151,5 +151,5 @@ func TestTriggerRiskAnalysis_NotSupported(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, oops.CodeNotImplemented, oopsErr.Code)
 }
