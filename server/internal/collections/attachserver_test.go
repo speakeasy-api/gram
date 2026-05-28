@@ -135,7 +135,7 @@ func TestCollectionsService_ListServers_IncludesUserProvidedEnvironmentHeaders(t
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID:                 toolsetID,
+		ToolsetID:                 uuid.NullUUID{UUID: toolsetID, Valid: true},
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
 		ExternalDocumentationText: pgtype.Text{Valid: false},
