@@ -38,7 +38,7 @@ export default function AddSourceDialogContent({
         <Dialog.Title>Add Source</Dialog.Title>
         <Dialog.Description>
           {isFunctionsEnabled || isExternalMCPEnabled
-            ? "Upload an OpenAPI document, add platform functions, or import an MCP server"
+            ? "Upload an OpenAPI document, add functions, or import an MCP server"
             : "Upload an OpenAPI document to create tools"}
         </Dialog.Description>
       </Dialog.Header>

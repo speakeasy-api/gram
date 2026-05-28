@@ -19,7 +19,7 @@ export function ResourcesEmptyState({
   return (
     <EmptyState
       heading="No resources yet"
-      description="MCP resources can be created through platform functions."
+      description="MCP resources can be created through functions."
       nonEmptyProjectCTA={cta}
       graphic={<ToolsetsGraphic />}
       graphicClassName="scale-90"
