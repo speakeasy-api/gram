@@ -235,7 +235,11 @@ export function NavGroupProvider({
 
   return (
     <NavGroupContext.Provider value={value}>
-      <div ref={containerRef} className="relative">
+      <div
+        ref={containerRef}
+        className="relative"
+        onMouseLeave={() => setHoveredItem(null)}
+      >
         {highlightRect && (
           <motion.div
             className="bg-card ring-border/50 pointer-events-none absolute rounded-lg ring-1"
@@ -331,8 +335,7 @@ function useNavItem(id: string) {
       clearInterval(s.intervalId);
       s.intervalId = null;
     }
-    setHoveredItem(null);
-  }, [setHoveredItem]);
+  }, []);
 
   React.useEffect(() => {
     const s = stateRef.current;
