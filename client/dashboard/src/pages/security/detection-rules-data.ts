@@ -249,18 +249,22 @@ export function useDetectionRulesStore() {
       patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
     ) => {
       const rule = customRules.find((r) => r.id === id);
-      if (!rule) return;
-      updateMutation.mutate({
-        request: {
-          updateCustomDetectionRuleRequestBody: {
-            id: rule.dbId,
-            title: patch.title ?? rule.title,
-            description: patch.description ?? rule.description,
-            regex: patch.regex ?? rule.regex,
-            severity: patch.severity ?? rule.severity,
+      if (!rule) {
+        return Promise.reject(new Error("Custom detection rule not found"));
+      }
+      return updateMutation
+        .mutateAsync({
+          request: {
+            updateCustomDetectionRuleRequestBody: {
+              id: rule.dbId,
+              title: patch.title ?? rule.title,
+              description: patch.description ?? rule.description,
+              regex: patch.regex ?? rule.regex,
+              severity: patch.severity ?? rule.severity,
+            },
           },
-        },
-      });
+        })
+        .then(() => undefined);
     },
     removeCustomRule: (id: string) => {
       const rule = customRules.find((r) => r.id === id);
@@ -284,8 +288,8 @@ export function validateCustomRuleId(
 ): string | null {
   const trimmed = id.trim();
   if (!trimmed) return "Rule ID is required";
-  if (!/^[a-z0-9_.-]+$/i.test(trimmed)) {
-    return "Use letters, digits, underscores, dots, or hyphens only";
+  if (!/^custom\.[a-z0-9_]+$/.test(trimmed)) {
+    return "Use lowercase letters, digits, or underscores after custom.";
   }
   if (BUILTIN_RULE_IDS.has(trimmed)) {
     return "This ID collides with a built-in rule";

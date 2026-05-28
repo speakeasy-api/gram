@@ -25,13 +25,14 @@ import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import {
   ArrowLeft,
+  Check,
   ChevronRight,
   Loader2,
   Plus,
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   useListChats,
@@ -74,6 +75,8 @@ const BUILTIN_CATEGORY_ORDER: RuleCategory[] = [
   "destructive_tool",
   "prompt_injection",
 ];
+
+const CUSTOM_RULE_ID_PREFIX = "custom.";
 
 type SelectedRule =
   | { kind: "builtin"; rule: BuiltinRule }
@@ -387,7 +390,7 @@ function RuleDetailSheet({
   onUpdateCustomRule: (
     id: string,
     patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
-  ) => void;
+  ) => Promise<void>;
   onDeleteCustomRule: (id: string) => void;
 }) {
   return (
@@ -448,18 +451,66 @@ function CustomRuleDetail({
   rule: CustomDetectionRule;
   onUpdate: (
     patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
-  ) => void;
+  ) => Promise<void>;
   onDelete: () => void;
 }) {
   const [title, setTitle] = useState(rule.title);
   const [description, setDescription] = useState(rule.description);
   const [regex, setRegex] = useState(rule.regex);
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const savedTimerRef = useRef<number | undefined>(undefined);
+  const savedValuesRef = useRef({
+    title: rule.title,
+    description: rule.description,
+    regex: rule.regex,
+  });
 
   const regexError = useMemo(() => validateRegex(regex), [regex]);
   const dirty =
-    title !== rule.title ||
-    description !== rule.description ||
-    regex !== rule.regex;
+    title !== savedValuesRef.current.title ||
+    description !== savedValuesRef.current.description ||
+    regex !== savedValuesRef.current.regex;
+
+  useEffect(() => {
+    if (dirty && saveState === "error") {
+      setSaveState("idle");
+    }
+  }, [dirty, saveState]);
+
+  useEffect(
+    () => () => {
+      if (savedTimerRef.current !== undefined) {
+        window.clearTimeout(savedTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleSave = async () => {
+    setSaveState("saving");
+    try {
+      await onUpdate({ title, description, regex });
+      savedValuesRef.current = { title, description, regex };
+      setSaveState("saved");
+      if (savedTimerRef.current !== undefined) {
+        window.clearTimeout(savedTimerRef.current);
+      }
+      savedTimerRef.current = window.setTimeout(() => {
+        setSaveState("idle");
+      }, 1800);
+    } catch {
+      setSaveState("error");
+    }
+  };
+
+  const saveLabel =
+    saveState === "saving"
+      ? "Saving..."
+      : saveState === "saved"
+        ? "Saved"
+        : "Save changes";
 
   return (
     <>
@@ -500,7 +551,7 @@ function CustomRuleDetail({
 
         <RulePlayground ruleId={rule.id} regex={regex} />
       </div>
-      <SheetFooter className="border-border flex-row justify-between border-t px-6 py-4">
+      <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         <Button
           variant="ghost"
           size="sm"
@@ -510,12 +561,23 @@ function CustomRuleDetail({
           <Trash2 className="mr-2 h-4 w-4" />
           Delete rule
         </Button>
-        <Button
-          disabled={!dirty || !!regexError || !title.trim()}
-          onClick={() => onUpdate({ title, description, regex })}
-        >
-          Save changes
-        </Button>
+        <div className="flex items-center gap-3">
+          {saveState === "error" && (
+            <span className="text-destructive text-xs">Could not save</span>
+          )}
+          <Button
+            disabled={
+              !dirty || !!regexError || !title.trim() || saveState === "saving"
+            }
+            onClick={handleSave}
+          >
+            {saveState === "saving" && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            {saveState === "saved" && <Check className="mr-2 h-4 w-4" />}
+            {saveLabel}
+          </Button>
+        </div>
       </SheetFooter>
     </>
   );
@@ -1051,6 +1113,18 @@ function formatTimestamp(ts: Date | string | undefined | null): string {
   });
 }
 
+function customRuleIDSuffix(ruleId: string): string {
+  const trimmed = ruleId.trim();
+  if (trimmed.startsWith(CUSTOM_RULE_ID_PREFIX)) {
+    return trimmed.slice(CUSTOM_RULE_ID_PREFIX.length);
+  }
+  return trimmed;
+}
+
+function customRuleIDFromSuffix(suffix: string): string {
+  return `${CUSTOM_RULE_ID_PREFIX}${suffix.trim()}`;
+}
+
 function DetailField({
   label,
   children,
@@ -1093,7 +1167,7 @@ function CreateCustomRuleSheet({
 }) {
   const [step, setStep] = useState<CreateStep>("prompt");
   const [askPrompt, setAskPrompt] = useState("");
-  const [id, setId] = useState("");
+  const [idSuffix, setIdSuffix] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [regex, setRegex] = useState("");
@@ -1102,7 +1176,7 @@ function CreateCustomRuleSheet({
   const reset = () => {
     setStep("prompt");
     setAskPrompt("");
-    setId("");
+    setIdSuffix("");
     setTitle("");
     setDescription("");
     setRegex("");
@@ -1112,7 +1186,7 @@ function CreateCustomRuleSheet({
   const suggestMutation = useRiskSuggestCustomRuleMutation({
     onSuccess: (data) => {
       const next = data;
-      setId(next.ruleId);
+      setIdSuffix(customRuleIDSuffix(next.ruleId));
       setTitle(next.title);
       setDescription(next.description);
       setRegex(next.regex);
@@ -1147,7 +1221,7 @@ function CreateCustomRuleSheet({
   };
 
   const handleManual = () => {
-    setId("");
+    setIdSuffix("");
     setTitle("");
     setDescription("");
     setRegex("");
@@ -1156,8 +1230,14 @@ function CreateCustomRuleSheet({
   };
 
   const idError = useMemo(
-    () => (id ? validateCustomRuleId(id, existingCustomIds) : null),
-    [id, existingCustomIds],
+    () =>
+      idSuffix
+        ? validateCustomRuleId(
+            customRuleIDFromSuffix(idSuffix),
+            existingCustomIds,
+          )
+        : null,
+    [idSuffix, existingCustomIds],
   );
   const regexError = useMemo(
     () => (regex ? validateRegex(regex) : null),
@@ -1165,10 +1245,11 @@ function CreateCustomRuleSheet({
   );
 
   const canSubmit =
-    id.trim() && title.trim() && regex.trim() && !idError && !regexError;
+    idSuffix.trim() && title.trim() && regex.trim() && !idError && !regexError;
 
   const handleSubmit = () => {
-    const finalIdError = validateCustomRuleId(id, existingCustomIds);
+    const finalRuleId = customRuleIDFromSuffix(idSuffix);
+    const finalIdError = validateCustomRuleId(finalRuleId, existingCustomIds);
     if (finalIdError) {
       toast.error(finalIdError);
       return;
@@ -1179,7 +1260,7 @@ function CreateCustomRuleSheet({
       return;
     }
     onCreate({
-      id: id.trim(),
+      id: finalRuleId,
       title: title.trim(),
       description: description.trim(),
       regex: regex.trim(),
@@ -1249,12 +1330,17 @@ function CreateCustomRuleSheet({
             <div className="flex-1 space-y-5 px-6 py-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Rule ID</Label>
-                <Input
-                  value={id}
-                  onChange={setId}
-                  placeholder="e.g. custom.internal_token"
-                  className="font-mono text-xs"
-                />
+                <div className="flex">
+                  <span className="border-input bg-muted text-muted-foreground inline-flex items-center rounded-l-md border border-r-0 px-3 font-mono text-xs">
+                    {CUSTOM_RULE_ID_PREFIX}
+                  </span>
+                  <Input
+                    value={idSuffix}
+                    onChange={setIdSuffix}
+                    placeholder="internal_token"
+                    className="rounded-l-none font-mono text-xs"
+                  />
+                </div>
                 {idError ? (
                   <p className="text-destructive text-xs">{idError}</p>
                 ) : (
