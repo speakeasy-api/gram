@@ -846,6 +846,12 @@ func validateShadowMCPEvidence(fullURL, urlHost, serverIdentity *string) error {
 }
 
 func normalizeShadowMCPMatchValue(matchBreadth string, matchValue string) (string, error) {
+	switch matchBreadth {
+	case shadowmcp.MatchBreadthFullURL, shadowmcp.MatchBreadthURLHost:
+	default:
+		return "", oops.E(oops.CodeBadRequest, nil, "invalid match_breadth")
+	}
+
 	value, err := shadowmcp.NormalizeMatchValue(matchBreadth, matchValue)
 	if err != nil {
 		return "", oops.E(oops.CodeBadRequest, err, "%s", err.Error())

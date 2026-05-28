@@ -29668,7 +29668,6 @@ components:
           enum:
             - full_url
             - url_host
-            - server_identity
         match_value:
           type: string
         observed_full_url:
@@ -31570,7 +31569,6 @@ components:
           enum:
             - full_url
             - url_host
-            - server_identity
         match_value:
           type: string
         observed_full_url:
@@ -32076,7 +32074,6 @@ components:
           enum:
             - full_url
             - url_host
-            - server_identity
         match_value:
           type: string
         observed_full_url:
@@ -38989,7 +38986,6 @@ components:
           enum:
             - full_url
             - url_host
-            - server_identity
         match_value:
           type: string
         observed_full_url:
@@ -39046,7 +39042,6 @@ components:
           enum:
             - full_url
             - url_host
-            - server_identity
         match_value:
           type: string
         observed_full_url:
@@ -41012,7 +41007,6 @@ components:
           enum:
             - full_url
             - url_host
-            - server_identity
         match_value:
           type: string
         observed_full_url:

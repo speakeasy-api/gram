@@ -9365,8 +9365,8 @@ func ValidateUpdateShadowMCPAccessRuleResponseBody(body *UpdateShadowMCPAccessRu
 		}
 	}
 	if body.MatchBreadth != nil {
-		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host" || *body.MatchBreadth == "server_identity") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host"}))
 		}
 	}
 	if body.SourceRequestID != nil {
@@ -15319,8 +15319,8 @@ func ValidateShadowMCPAccessRuleResponseBody(body *ShadowMCPAccessRuleResponseBo
 		}
 	}
 	if body.MatchBreadth != nil {
-		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host" || *body.MatchBreadth == "server_identity") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host"}))
 		}
 	}
 	if body.SourceRequestID != nil {

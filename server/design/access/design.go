@@ -897,7 +897,7 @@ var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
 		Enum("allowed", "denied")
 	})
 	Attribute("match_breadth", String, func() {
-		Enum("full_url", "url_host", "server_identity")
+		Enum("full_url", "url_host")
 	})
 	Attribute("match_value", String)
 	Attribute("display_name", String)
@@ -953,7 +953,7 @@ var ApproveShadowMCPApprovalRequestForm = Type("ApproveShadowMCPApprovalRequestF
 	})
 	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped rules for. Empty falls back to the request project.")
 	Attribute("match_breadth", String, func() {
-		Enum("full_url", "url_host", "server_identity")
+		Enum("full_url", "url_host")
 	})
 	Attribute("match_value", String)
 	Attribute("display_name", String)
@@ -972,7 +972,7 @@ var DenyShadowMCPApprovalRequestForm = Type("DenyShadowMCPApprovalRequestForm", 
 	Attribute("create_deny_rule", Boolean)
 	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped deny rules for. Empty falls back to the request project.")
 	Attribute("match_breadth", String, func() {
-		Enum("full_url", "url_host", "server_identity")
+		Enum("full_url", "url_host")
 	})
 	Attribute("match_value", String)
 	Attribute("display_name", String)
@@ -1000,7 +1000,7 @@ var ShadowMCPAccessRuleForm = Type("ShadowMCPAccessRuleForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("match_breadth", String, func() {
-		Enum("full_url", "url_host", "server_identity")
+		Enum("full_url", "url_host")
 	})
 	Attribute("match_value", String)
 	Attribute("display_name", String)

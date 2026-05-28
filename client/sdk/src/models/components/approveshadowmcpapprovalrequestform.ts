@@ -15,7 +15,6 @@ export type AccessScope = ClosedEnum<typeof AccessScope>;
 export const MatchBreadth = {
   FullUrl: "full_url",
   UrlHost: "url_host",
-  ServerIdentity: "server_identity",
 } as const;
 export type MatchBreadth = ClosedEnum<typeof MatchBreadth>;
 

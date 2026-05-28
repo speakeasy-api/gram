@@ -25,7 +25,6 @@ export type UpdateShadowMCPAccessRuleFormDisposition = ClosedEnum<
 export const UpdateShadowMCPAccessRuleFormMatchBreadth = {
   FullUrl: "full_url",
   UrlHost: "url_host",
-  ServerIdentity: "server_identity",
 } as const;
 export type UpdateShadowMCPAccessRuleFormMatchBreadth = ClosedEnum<
   typeof UpdateShadowMCPAccessRuleFormMatchBreadth

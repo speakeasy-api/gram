@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 7223b93e14569b8e5832ab0d94613189
+  docChecksum: 1970d811f445c3786407d8f9261d3403
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -221,7 +221,7 @@ trackedFiles:
   docs/models/components/createshadowmcpaccessruleformdisposition.md:
     last_write_checksum: sha1:d19e88d6c172c52e18bfc081f059314ea1d7a754
   docs/models/components/createshadowmcpaccessruleformmatchbreadth.md:
-    last_write_checksum: sha1:3e498eeeaaacd86e8484fb91e3750602ee635588
+    last_write_checksum: sha1:4c081cb61ec3cb890f2b7ef668cff648d15ee94d
   docs/models/components/createshadowmcpaccessruleresult.md:
     last_write_checksum: sha1:2b4767d277278b14fafcf933a7ab21141591abe2
   docs/models/components/createshadowmcpapprovalrequestform.md:
@@ -263,7 +263,7 @@ trackedFiles:
   docs/models/components/denyshadowmcpapprovalrequestform.md:
     last_write_checksum: sha1:5a9b2b38d7650d7200478ab82260086ce40d88cd
   docs/models/components/denyshadowmcpapprovalrequestformmatchbreadth.md:
-    last_write_checksum: sha1:77e4051a27544b6284ff29613561147c3925f15e
+    last_write_checksum: sha1:92a2cd96e78aac3e51678070656932780a24b2ed
   docs/models/components/deployment.md:
     last_write_checksum: sha1:c05444112c4ac42b41636bf63e232a8773a21d31
   docs/models/components/deploymentexternalmcp.md:
@@ -555,7 +555,7 @@ trackedFiles:
   docs/models/components/logfilter.md:
     last_write_checksum: sha1:75e4bc1e15c55b45ef8563219a13501c70b813f6
   docs/models/components/matchbreadth.md:
-    last_write_checksum: sha1:be0f68ac4c92bded655e0ce66340dcd0d17a4d6c
+    last_write_checksum: sha1:32d88a0c70901403a3b68b3464ea230a8d4208ac
   docs/models/components/mcpcollection.md:
     last_write_checksum: sha1:5d519bf3e0615f3acd1d6b303d8fc9fe62f2da75
   docs/models/components/mcpendpoint.md:
@@ -881,13 +881,13 @@ trackedFiles:
   docs/models/components/severitytext.md:
     last_write_checksum: sha1:15969d4a62e02ba012c6724258259371a0a81bbb
   docs/models/components/shadowmcpaccessrule.md:
-    last_write_checksum: sha1:8fb09a82bce557eeec32e499f99aced04ab62a02
+    last_write_checksum: sha1:1e91242c56e3d40fa2fb2f8ffb3e9f4105a2a5b3
   docs/models/components/shadowmcpaccessruleaccessscope.md:
     last_write_checksum: sha1:4df9ba762a2e251b5ca31d9e2f41d314e4d7c96d
   docs/models/components/shadowmcpaccessruledisposition.md:
     last_write_checksum: sha1:12b9b0e55570ce35f08d53d6603606b13dcb7ca5
   docs/models/components/shadowmcpaccessrulematchbreadth.md:
-    last_write_checksum: sha1:69a86d88e18394a1599d5069f89bdc4659f24bde
+    last_write_checksum: sha1:8e0d9ac3556f473667c144381282647130efdbad
   docs/models/components/shadowmcpapproval.md:
     last_write_checksum: sha1:57d85c033e341c25323dd480af4f00e8b9a8409f
   docs/models/components/shadowmcpapprovaldecisionresult.md:
@@ -1055,7 +1055,7 @@ trackedFiles:
   docs/models/components/updateshadowmcpaccessruleformdisposition.md:
     last_write_checksum: sha1:622390776d9340e648451cd6bda358543070458e
   docs/models/components/updateshadowmcpaccessruleformmatchbreadth.md:
-    last_write_checksum: sha1:c53fa0c1bb348b9f3aa07a762ca09d1c8c2155b2
+    last_write_checksum: sha1:c425936a2297e60d5b63c57b19d1049eeba15c00
   docs/models/components/updateslackapprequestbody.md:
     last_write_checksum: sha1:5a464bb3c9d5605bf21fe365b43fbe1fd73f8f4c
   docs/models/components/updatetoolsetrequestbody.md:
@@ -1147,7 +1147,7 @@ trackedFiles:
   docs/models/operations/addpluginserversecurity.md:
     last_write_checksum: sha1:5dc9e273ba9eab30b9edbb75fdeccd3fd4ec59ec
   docs/models/operations/approveshadowmcpapprovalrequestrequest.md:
-    last_write_checksum: sha1:c811c8762baced15d734c4d2bc1b81608b858147
+    last_write_checksum: sha1:36cd7b2ed590282992119b3573ea789c70355a2c
   docs/models/operations/approveshadowmcpapprovalrequestsecurity.md:
     last_write_checksum: sha1:fad30a3106bea8ff42e419e2835b2cc733ebb752
   docs/models/operations/approveshadowmcprequest.md:
@@ -1349,7 +1349,7 @@ trackedFiles:
   docs/models/operations/createrolesecurity.md:
     last_write_checksum: sha1:6c8d5c2f385a38401d2bed7a7eb437ba706aee59
   docs/models/operations/createshadowmcpaccessrulerequest.md:
-    last_write_checksum: sha1:e5fa97cd96755dfa679bab484f8b866b59d080b4
+    last_write_checksum: sha1:55371b6b57d7369c8c8ed092b5d3d6edb7a47e51
   docs/models/operations/createshadowmcpaccessrulesecurity.md:
     last_write_checksum: sha1:f24fd96a665fb3a32614d87cecffa88c5afecc2f
   docs/models/operations/createshadowmcpapprovalrequestrequest.md:
@@ -3669,7 +3669,7 @@ trackedFiles:
   src/models/components/allowedorigin.ts:
     last_write_checksum: sha1:09b19b8524236e2c90452d0539edff8f12f26872
   src/models/components/approveshadowmcpapprovalrequestform.ts:
-    last_write_checksum: sha1:3146c14baf93c3ca15872d7e47bc80af0238816e
+    last_write_checksum: sha1:acd649171acebf0b502b705016335792fe49dc85
   src/models/components/approveshadowmcprequestbody.ts:
     last_write_checksum: sha1:b2e6d64f3c1c5465e38753d318e694cb48100f06
   src/models/components/asset.ts:
@@ -3771,7 +3771,7 @@ trackedFiles:
   src/models/components/createserverform.ts:
     last_write_checksum: sha1:c164b51fca530c132093a75b1af4833097355817
   src/models/components/createshadowmcpaccessruleform.ts:
-    last_write_checksum: sha1:df76f15f3be4104d8f2882a317a35c7abb828ef8
+    last_write_checksum: sha1:9a57866c88f7c0e7236d65adc61cccd783efa992
   src/models/components/createshadowmcpaccessruleresult.ts:
     last_write_checksum: sha1:ac6ee1fa09b10ba0fe58eb0ff8a77b20b679f70c
   src/models/components/createshadowmcpapprovalrequestform.ts:
@@ -3809,7 +3809,7 @@ trackedFiles:
   src/models/components/deleterequestbody.ts:
     last_write_checksum: sha1:d043311bd57a1bb95c92c0ab9f62832eb1c573e5
   src/models/components/denyshadowmcpapprovalrequestform.ts:
-    last_write_checksum: sha1:9b1c88c05bd0f05629f4c7207319d17954fa7d67
+    last_write_checksum: sha1:d650da98c48e3f44b075452d637f9b4affa7ad99
   src/models/components/deployment.ts:
     last_write_checksum: sha1:d8ead7f1765ca6e06c8e7ad181c53d8bd6c8e6b9
   src/models/components/deploymentexternalmcp.ts:
@@ -4337,7 +4337,7 @@ trackedFiles:
   src/models/components/setusersessionissuerrequestbody.ts:
     last_write_checksum: sha1:7c356da0075d8d9895abaa7cd04b5d9b2d6d3cb8
   src/models/components/shadowmcpaccessrule.ts:
-    last_write_checksum: sha1:2e7e80265c187ac04d91b72af71dbade895b3020
+    last_write_checksum: sha1:ca476c15c2ba3a782898efa8f6f49dd121122f96
   src/models/components/shadowmcpapproval.ts:
     last_write_checksum: sha1:e46372f2c565a2dea072ed50685f681e9d653820
   src/models/components/shadowmcpapprovaldecisionresult.ts:
@@ -4449,7 +4449,7 @@ trackedFiles:
   src/models/components/updateserverform.ts:
     last_write_checksum: sha1:53dffc73708126ca2a78c9e2e1ca5b2e898907f8
   src/models/components/updateshadowmcpaccessruleform.ts:
-    last_write_checksum: sha1:da17800decbb0e5f7555015af090bae276233dee
+    last_write_checksum: sha1:2459a847bbe9290feac6e77a87caee2022530617
   src/models/components/updateslackapprequestbody.ts:
     last_write_checksum: sha1:e14d54c11f206f273fb529912d6684e14135aec7
   src/models/components/updatetoolsetrequestbody.ts:
@@ -8971,7 +8971,7 @@ examples:
         application/json: {"create_deny_rule": true, "id": "3be6c4bf-a350-4f31-b5c7-6008bf1bb80a"}
       responses:
         "200":
-          application/json: {"request": {"blocked_count": 949718, "created_at": "2026-05-06T09:57:36.921Z", "id": "31ffc4f9-7bab-4ebb-84ab-b4efc861adac", "organization_id": "<id>", "project_id": "b54042f0-758a-47ff-80d2-da01ef9e6380", "requested_at": "2024-05-30T23:20:20.940Z", "resource_type": "<value>", "status": "requested", "updated_at": "2025-09-27T12:24:51.852Z"}, "rules": [{"access_scope": "organization", "created_at": "2026-07-17T16:04:04.975Z", "display_name": "Rickie12", "disposition": "allowed", "id": "fc4c2c94-c6b7-4652-a545-4c2e8572831d", "match_breadth": "server_identity", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2026-04-22T20:46:34.139Z"}]}
+          application/json: {"request": {"blocked_count": 949718, "created_at": "2026-05-06T09:57:36.921Z", "id": "31ffc4f9-7bab-4ebb-84ab-b4efc861adac", "organization_id": "<id>", "project_id": "b54042f0-758a-47ff-80d2-da01ef9e6380", "requested_at": "2024-05-30T23:20:20.940Z", "resource_type": "<value>", "status": "requested", "updated_at": "2025-09-27T12:24:51.852Z"}, "rules": [{"access_scope": "organization", "created_at": "2026-07-17T16:04:04.975Z", "display_name": "Rickie12", "disposition": "allowed", "id": "fc4c2c94-c6b7-4652-a545-4c2e8572831d", "match_breadth": "full_url", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2026-04-22T20:46:34.139Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9027,7 +9027,7 @@ examples:
         application/json: {"access_scope": "project", "display_name": "Cecile_Bechtelar72", "disposition": "denied", "id": "013dc837-fd7a-4500-ac0e-c11de541d779", "match_breadth": "full_url", "match_value": "<value>"}
       responses:
         "200":
-          application/json: {"access_scope": "organization", "created_at": "2024-04-22T09:20:11.013Z", "display_name": "Shaina_Schmidt80", "disposition": "denied", "id": "ce1a95e1-fad1-45e7-a293-f4458397746f", "match_breadth": "server_identity", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2025-08-18T21:43:39.221Z"}
+          application/json: {"access_scope": "organization", "created_at": "2024-04-22T09:20:11.013Z", "display_name": "Shaina_Schmidt80", "disposition": "denied", "id": "ce1a95e1-fad1-45e7-a293-f4458397746f", "match_breadth": "url_host", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2025-08-18T21:43:39.221Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

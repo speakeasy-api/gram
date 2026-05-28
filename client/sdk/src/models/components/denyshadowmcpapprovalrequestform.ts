@@ -9,7 +9,6 @@ import { ClosedEnum } from "../../types/enums.js";
 export const DenyShadowMCPApprovalRequestFormMatchBreadth = {
   FullUrl: "full_url",
   UrlHost: "url_host",
-  ServerIdentity: "server_identity",
 } as const;
 export type DenyShadowMCPApprovalRequestFormMatchBreadth = ClosedEnum<
   typeof DenyShadowMCPApprovalRequestFormMatchBreadth

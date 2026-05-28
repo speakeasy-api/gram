@@ -28,7 +28,6 @@ export type ShadowMCPAccessRuleDisposition = ClosedEnum<
 export const ShadowMCPAccessRuleMatchBreadth = {
   FullUrl: "full_url",
   UrlHost: "url_host",
-  ServerIdentity: "server_identity",
 } as const;
 export type ShadowMCPAccessRuleMatchBreadth = ClosedEnum<
   typeof ShadowMCPAccessRuleMatchBreadth

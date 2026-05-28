@@ -490,6 +490,25 @@ func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
 }
 
+func TestService_CreateShadowMCPAccessRule_RejectsServerIdentityMatchBreadth(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	_, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleDenied,
+		AccessScope:  shadowMCPAccessScopeOrganization,
+		MatchBreadth: "server_identity",
+		MatchValue:   "github",
+		DisplayName:  "GitHub Shadow MCP",
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestService_UpdateShadowMCPAccessRule_ConflictsOnDuplicateMatch(t *testing.T) {
 	t.Parallel()
 
