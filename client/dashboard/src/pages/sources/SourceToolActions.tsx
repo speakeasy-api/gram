@@ -60,7 +60,7 @@ export function SourceToolActions({
 
   // Memoize so TagsVariationEditor's downstream memoization isn't invalidated
   // by a fresh `[]` reference on every render.
-  const baseTags = useMemo(() => tool.tags ?? [], [tool]);
+  const baseTags = useMemo(() => tool.tags ?? [], [tool.tags]);
 
   const openEditDialog = (mode: EditMode) => {
     setEditMode(mode);
