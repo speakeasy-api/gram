@@ -52,7 +52,7 @@ func TestEnforceShadowMCPToolAccess_DenyRuleOverridesValidToolsetCall(t *testing
 	require.NotNil(t, authCtx.ProjectID)
 
 	toolsetID := createHookToolsetWithHTTPTool(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "do_thing")
-	createHookAccessRule(t, ctx, ti, "", accesscontrol.AccessScopeOrganization, accesscontrol.DispositionDenied, shadowmcp.MatchBreadthServerIdentity, "blocked-server", "Blocked server")
+	createHookAccessRule(t, ctx, ti, "", accesscontrol.AccessScopeOrganization, accesscontrol.DispositionDenied, shadowmcp.MatchBreadthURLHost, "blocked.example.com", "Blocked server")
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(
 		ctx,
@@ -61,7 +61,7 @@ func TestEnforceShadowMCPToolAccess_DenyRuleOverridesValidToolsetCall(t *testing
 		authCtx.UserID,
 		map[string]any{shadowmcp.XGramToolsetIDField: toolsetID.String()},
 		"do_thing",
-		shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: "blocked-server"},
+		shadowmcp.AccessEvidence{FullURL: "https://blocked.example.com/mcp", URLHost: "", ServerIdentity: "blocked-server"},
 	)
 
 	require.True(t, denied)

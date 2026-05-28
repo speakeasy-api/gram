@@ -44,20 +44,20 @@ func TestEvaluateAccessRules_DenyRuleWins(t *testing.T) {
 	require.Equal(t, denied.ID, decision.RuleID)
 }
 
-func TestEvaluateAccessRules_ProjectRuleOnlyMatchesSameProject(t *testing.T) {
+func TestEvaluateAccessRules_IgnoresServerIdentityRules(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	otherProjectID := uuid.New()
-	rule := f.createProjectAccessRule(t, f.projectID, "allowed", "server_identity", "github")
+	rule := f.createProjectAccessRule(t, f.projectID, "allowed", accesscontrol.MatchKindServerIdentity, "github")
 
 	allowed := f.client.EvaluateAccessRules(t.Context(), f.orgID, f.projectID.String(), shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
 		ServerIdentity: "github",
 	})
-	require.Equal(t, shadowmcp.AccessRuleOutcomeAllowed, allowed.Outcome)
-	require.Equal(t, rule.ID, allowed.RuleID)
+	require.Equal(t, shadowmcp.AccessRuleOutcomeNoMatch, allowed.Outcome)
+	require.Empty(t, allowed.RuleID)
 
 	blocked := f.client.EvaluateAccessRules(t.Context(), f.orgID, otherProjectID.String(), shadowmcp.AccessEvidence{
 		FullURL:        "",
@@ -65,6 +65,8 @@ func TestEvaluateAccessRules_ProjectRuleOnlyMatchesSameProject(t *testing.T) {
 		ServerIdentity: "github",
 	})
 	require.Equal(t, shadowmcp.AccessRuleOutcomeNoMatch, blocked.Outcome)
+	require.Empty(t, blocked.RuleID)
+	require.NotEmpty(t, rule.ID)
 }
 
 func (f *fixture) createAccessRule(t *testing.T, disposition string, matchBreadth string, matchValue string) accesscontrol.AccessRule {

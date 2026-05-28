@@ -33,7 +33,7 @@ func (c *Client) EvaluateAccessRules(ctx context.Context, organizationID string,
 		return AccessRuleDecision{
 			Outcome: AccessRuleOutcomeNoMatch,
 			RuleID:  "",
-			Reason:  "no Shadow MCP server identity was available for Access Rule matching",
+			Reason:  "no Shadow MCP URL was available for Access Rule matching",
 		}
 	}
 	parsedProjectID, err := uuid.Parse(projectID)
@@ -100,8 +100,8 @@ func (c *Client) EvaluateAccessRules(ctx context.Context, organizationID string,
 }
 
 func accessRuleMatchCandidates(evidence AccessEvidence) ([]string, []string) {
-	kinds := make([]string, 0, 3)
-	values := make([]string, 0, 3)
+	kinds := make([]string, 0, 2)
+	values := make([]string, 0, 2)
 	if evidence.FullURL != "" {
 		kinds = append(kinds, MatchBreadthFullURL)
 		values = append(values, evidence.FullURL)
@@ -109,10 +109,6 @@ func accessRuleMatchCandidates(evidence AccessEvidence) ([]string, []string) {
 	if evidence.URLHost != "" {
 		kinds = append(kinds, MatchBreadthURLHost)
 		values = append(values, evidence.URLHost)
-	}
-	if evidence.ServerIdentity != "" {
-		kinds = append(kinds, MatchBreadthServerIdentity)
-		values = append(values, evidence.ServerIdentity)
 	}
 	return kinds, values
 }

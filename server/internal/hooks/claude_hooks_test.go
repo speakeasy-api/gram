@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // stubBlockingShadowMCPScanner is a RiskScanner that always reports a
@@ -181,10 +180,9 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	assert.Equal(t, "deny", *output.PermissionDecision)
 }
 
-// Once a stdio command is explicitly approved for the active policy, the
-// guard must let calls to that server through — verifying the
-// Command-keyed allowlist actually wires into PreToolUse.
-func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
+// Server identity rules are ignored for Shadow MCP access enforcement; local
+// stdio servers without URL evidence should still be governed by policy.
+func TestClaude_PreToolUse_DoesNotAllowLocalStdioServerByIdentityRule(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -202,7 +200,7 @@ func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
-	createHookAccessRule(t, ctx, ti, authCtx.ProjectID.String(), accesscontrol.AccessScopeProject, accesscontrol.DispositionAllowed, shadowmcp.MatchBreadthServerIdentity, "mise mcp", "mise")
+	createHookAccessRule(t, ctx, ti, authCtx.ProjectID.String(), accesscontrol.AccessScopeProject, accesscontrol.DispositionAllowed, accesscontrol.MatchKindServerIdentity, "mise mcp", "mise")
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
@@ -217,7 +215,7 @@ func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
 }
 
 func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testing.T) {
@@ -238,7 +236,7 @@ func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testi
 		[]MCPServerEntry{{Source: "local", Name: "linear", Command: "linear mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
-	createHookAccessRule(t, ctx, ti, authCtx.ProjectID.String(), accesscontrol.AccessScopeProject, accesscontrol.DispositionAllowed, shadowmcp.MatchBreadthServerIdentity, "github", "GitHub")
+	createHookAccessRule(t, ctx, ti, authCtx.ProjectID.String(), accesscontrol.AccessScopeProject, accesscontrol.DispositionAllowed, accesscontrol.MatchKindServerIdentity, "github", "GitHub")
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",

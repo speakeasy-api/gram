@@ -9,9 +9,8 @@ import (
 )
 
 const (
-	MatchBreadthFullURL        = "full_url"
-	MatchBreadthURLHost        = "url_host"
-	MatchBreadthServerIdentity = "server_identity"
+	MatchBreadthFullURL = "full_url"
+	MatchBreadthURLHost = "url_host"
 )
 
 type AccessEvidence struct {
@@ -48,17 +47,13 @@ func NormalizeAccessEvidence(evidence AccessEvidence) AccessEvidence {
 		}
 	}
 
-	if evidence.ServerIdentity != "" {
-		if value, err := NormalizeMatchValue(MatchBreadthServerIdentity, evidence.ServerIdentity); err == nil {
-			normalized.ServerIdentity = value
-		}
-	}
+	normalized.ServerIdentity = strings.TrimSpace(evidence.ServerIdentity)
 
 	return normalized
 }
 
 func (e AccessEvidence) Empty() bool {
-	return e.FullURL == "" && e.URLHost == "" && e.ServerIdentity == ""
+	return e.FullURL == "" && e.URLHost == ""
 }
 
 func NormalizeHost(host string) string {
