@@ -177,10 +177,7 @@ func (m *ChallengeManager) ListClients(
 	projectID uuid.UUID,
 	userSessionIssuerID uuid.UUID,
 ) ([]Client, error) {
-	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           conv.ToNullUUID(projectID),
-	})
+	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}

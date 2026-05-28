@@ -41,6 +41,19 @@ func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Po
 	return issuer.ID
 }
 
+func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {
+	t.Helper()
+
+	var count int
+	err := conn.QueryRow(ctx, `
+SELECT COUNT(remote_session_client_id)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+  AND user_session_issuer_id = $2`, clientID, userIssuerID).Scan(&count)
+	require.NoError(t, err)
+	return count
+}
+
 func createRemoteIssuer(t *testing.T, ctx context.Context, svc *remoteServiceUnderTest, slug, regEndpoint string) string {
 	t.Helper()
 	authEP := "https://idp.example.com/authorize"
@@ -95,6 +108,12 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	require.Equal(t, issuerID, result.RemoteSessionIssuerID)
 	require.Equal(t, userIssuerID, result.UserSessionIssuerID)
 	require.NotEmpty(t, result.ID)
+
+	clientUUID, err := uuid.Parse(result.ID)
+	require.NoError(t, err)
+	userIssuerUUID, err := uuid.Parse(userIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 	require.NoError(t, err)
@@ -274,6 +293,50 @@ func TestListRemoteSessionClients(t *testing.T) {
 	}
 }
 
+func TestListRemoteSessionClients_UserIssuerLegacyFallbackBackfills(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-list-legacy", "")
+	issuerUUID, err := uuid.Parse(issuerID)
+	require.NoError(t, err)
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list-legacy")
+
+	legacyClient, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		RemoteSessionIssuerID:   issuerUUID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                "legacy-list-client",
+		ClientSecretEncrypted:   pgtype.Text{},
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		TokenEndpointAuthMethod: pgtype.Text{},
+		Scope:                   nil,
+		Audience:                pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, legacyClient.ID, userIssuerID))
+
+	userIssuerIDString := userIssuerID.String()
+	result, err := ti.service.ListRemoteSessionClients(ctx, &clientsgen.ListRemoteSessionClientsPayload{
+		RemoteSessionIssuerID: nil,
+		UserSessionIssuerID:   &userIssuerIDString,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, legacyClient.ID.String(), result.Items[0].ID)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, legacyClient.ID, userIssuerID))
+}
+
 func TestListRemoteSessionClients_PaginationTraversal(t *testing.T) {
 	t.Parallel()
 
@@ -362,6 +425,15 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	oldUserIssuerUUID, err := uuid.Parse(userIssuerID)
+	require.NoError(t, err)
+	newUserIssuerUUID, err := uuid.Parse(otherUserIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, oldUserIssuerUUID))
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, newUserIssuerUUID))
 }
 
 func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
@@ -667,6 +739,7 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	activeSessions, err := repo.New(ti.conn).CountActiveRemoteSessionsByClientID(ctx, clientUUID)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), activeSessions)
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
 }
 
 // withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.

@@ -301,14 +301,17 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 
 	if err = txRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(
 		ctx,
-		deleted.ID,
+		repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+			UserSessionIssuerID: deleted.ID,
+			ProjectID:           *authCtx.ProjectID,
+		},
 	); err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
 			"failed to delete remote session client attachments for user session issuer %s",
 			deleted.ID,
-		)
+		).Log(ctx, logger)
 	}
 
 	if _, err := txRepo.SoftDeleteUserSessionsByIssuerID(ctx, deleted.ID); err != nil {
