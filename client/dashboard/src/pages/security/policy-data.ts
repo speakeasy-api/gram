@@ -24,6 +24,7 @@ export type DetectionRule = {
   id: string;
   title: string;
   source: "gitleaks" | "presidio" | "prompt_injection";
+  available?: boolean;
 };
 
 export type McpServerScope = {
@@ -1300,36 +1301,43 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       id: "pii.uk_nino",
       title: "UK National Insurance Number",
       source: "presidio",
+      available: false,
     },
     {
       id: "pii.uk_passport",
       title: "UK passport number",
       source: "presidio",
+      available: false,
     },
     {
       id: "pii.es_nif",
       title: "Spain personal tax ID (NIF)",
       source: "presidio",
+      available: false,
     },
     {
       id: "pii.it_fiscal_code",
       title: "Italy personal identification code",
       source: "presidio",
+      available: false,
     },
     {
       id: "pii.au_tfn",
       title: "Australia Tax File Number",
       source: "presidio",
+      available: false,
     },
     {
       id: "pii.in_pan",
       title: "India Permanent Account Number",
       source: "presidio",
+      available: false,
     },
     {
       id: "pii.in_aadhaar",
       title: "India Aadhaar (12-digit identity)",
       source: "presidio",
+      available: false,
     },
     {
       id: "pii.sg_nric_fin",

@@ -186,18 +186,54 @@ var presidioEntityBlacklist = map[string]struct{}{
 	"PERSON": {},
 }
 
-// filterEntities removes blacklisted entity types from the caller's list.
+// presidioSupportedEntities is the entity set we currently allow Gram to ask
+// Presidio for in production. Anything outside this allow-list is dropped
+// before the HTTP call so stale policy config cannot poison the entire batch.
+var presidioSupportedEntities = map[string]struct{}{
+	"CREDIT_CARD":       {},
+	"CRYPTO":            {},
+	"DATE_TIME":         {},
+	"DOMAIN_NAME":       {},
+	"EMAIL_ADDRESS":     {},
+	"IBAN_CODE":         {},
+	"IP_ADDRESS":        {},
+	"LOCATION":          {},
+	"MAC_ADDRESS":       {},
+	"MEDICAL_LICENSE":   {},
+	"NRP":               {},
+	"PERSON":            {},
+	"PHONE_NUMBER":      {},
+	"SG_NRIC_FIN":       {},
+	"UK_NHS":            {},
+	"URL":               {},
+	"US_BANK_NUMBER":    {},
+	"US_DRIVER_LICENSE": {},
+	"US_ITIN":           {},
+	"US_PASSPORT":       {},
+	"US_SSN":            {},
+}
+
+// filterEntities removes blacklisted entity types from the caller's list,
+// then drops anything outside the currently-supported Presidio allow-list.
 // Returns nil unchanged so Presidio's default entity set still applies for
 // callers that didn't pin a list. Returns an empty (non-nil) slice when the
-// caller pinned a list and every entry was blacklisted, so AnalyzeBatch can
+// caller pinned a list and every entry was filtered, so AnalyzeBatch can
 // short-circuit instead of falling back to the unbounded default scan.
-func filterEntities(entities []string) []string {
+func filterEntities(ctx context.Context, logger *slog.Logger, entities []string) []string {
 	if entities == nil {
 		return nil
 	}
 	out := make([]string, 0, len(entities))
 	for _, e := range entities {
 		if _, blocked := presidioEntityBlacklist[e]; blocked {
+			continue
+		}
+		if _, supported := presidioSupportedEntities[e]; !supported {
+			if logger != nil {
+				logger.WarnContext(ctx, "presidio: dropping unsupported entity from request",
+					attr.SlogValueString(e),
+				)
+			}
 			continue
 		}
 		out = append(out, e)
@@ -345,7 +381,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 
 	// Apply the entity blacklist at the lowest level so every caller (hook
 	// scanner + Temporal drain activity) inherits the same policy.
-	filtered := filterEntities(entities)
+	filtered := filterEntities(ctx, p.logger, entities)
 	if len(entities) > 0 && len(filtered) == 0 {
 		// Caller pinned only blacklisted entities; nothing to scan for.
 		return make([][]Finding, n), nil

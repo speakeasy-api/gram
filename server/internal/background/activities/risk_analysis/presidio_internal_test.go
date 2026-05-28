@@ -148,6 +148,40 @@ func TestAnalyzeOnceRequestPayload(t *testing.T) {
 	assert.Equal(t, "en", got.Language)
 }
 
+func TestPresidioClientShortCircuitsWhenOnlyUnsupportedEntitiesRequested(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestPresidioClient(t, srv.URL)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"alpha"}, []string{"UK_NINO"}, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Empty(t, results[0])
+	assert.Equal(t, int64(0), calls.Load(), "unsupported-only entity requests should short-circuit before /analyze")
+}
+
+func TestPresidioClientDropsUnsupportedEntitiesFromRequestPayload(t *testing.T) {
+	t.Parallel()
+
+	var got presidioRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&got))
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestPresidioClient(t, srv.URL)
+	_, err := client.AnalyzeBatch(t.Context(), []string{"alpha"}, []string{"EMAIL_ADDRESS", "UK_NINO"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"EMAIL_ADDRESS"}, got.Entities)
+}
+
 // TestPresidioClientThrottleFiresHeartbeatWhileBlocked drains the byte budget
 // before issuing the request so AnalyzeBatch must spin in the throttle wait
 // loop. The test asserts that onProgress fires before the request unblocks.

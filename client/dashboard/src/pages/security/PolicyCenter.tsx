@@ -53,6 +53,7 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
+  type DetectionRule,
   type RuleCategory,
   type PolicyAction,
 } from "./policy-data";
@@ -98,6 +99,10 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "cli_destructive",
 ]);
 
+function isRuleAvailable(rule: DetectionRule): boolean {
+  return rule.available !== false;
+}
+
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
  * DETECTION_RULES.id is the canonical `pii.<snake_case>` form; the wire format
@@ -114,9 +119,9 @@ function policyToCategories(
   if (sources.includes("cli_destructive")) cats.add("cli_destructive");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
-    const wireEntities = DETECTION_RULES[cat].map((r) =>
-      ruleIdToPresidioEntity(r.id),
-    );
+    const wireEntities = DETECTION_RULES[cat]
+      .filter(isRuleAvailable)
+      .map((r) => ruleIdToPresidioEntity(r.id));
     if (wireEntities.some((id) => presidioEntities?.includes(id))) {
       cats.add(cat);
     }
@@ -155,6 +160,7 @@ function categoriesToPayload(
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
+        if (!isRuleAvailable(rule)) continue;
         if (disabledRules.has(rule.id)) continue;
         presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
@@ -167,6 +173,7 @@ function categoriesToPayload(
   const persistedDisabled: string[] = [];
   for (const cat of cats) {
     for (const rule of DETECTION_RULES[cat] ?? []) {
+      if (!isRuleAvailable(rule)) continue;
       if (disabledRules.has(rule.id)) persistedDisabled.push(rule.id);
     }
   }
@@ -739,30 +746,31 @@ function PolicySheetBody({
             const isAvailable = AVAILABLE_CATEGORIES.has(cat);
             const isExpanded = expandedCategory === cat;
             const rules = DETECTION_RULES[cat];
+            const availableRules = rules.filter(isRuleAvailable);
             const isExpandable = isAvailable && rules.length > 0;
             const categorySelected = selectedCategories.has(cat);
             const enabledRuleCount = categorySelected
-              ? rules.filter((r) => !disabledRules.has(r.id)).length
+              ? availableRules.filter((r) => !disabledRules.has(r.id)).length
               : 0;
             const hasPartialSelection =
               categorySelected &&
-              rules.length > 0 &&
+              availableRules.length > 0 &&
               enabledRuleCount > 0 &&
-              enabledRuleCount < rules.length;
+              enabledRuleCount < availableRules.length;
             const headerChecked: boolean | "indeterminate" = hasPartialSelection
               ? "indeterminate"
               : categorySelected &&
-                (rules.length === 0 || enabledRuleCount > 0);
+                (availableRules.length === 0 || enabledRuleCount > 0);
 
             const toggleCategory = (checked: boolean) => {
               const nextCats = new Set(selectedCategories);
               const nextDisabled = new Set(disabledRules);
               if (checked) {
                 nextCats.add(cat);
-                for (const rule of rules) nextDisabled.delete(rule.id);
+                for (const rule of availableRules) nextDisabled.delete(rule.id);
               } else {
                 nextCats.delete(cat);
-                for (const rule of rules) nextDisabled.delete(rule.id);
+                for (const rule of availableRules) nextDisabled.delete(rule.id);
               }
               setSelectedCategories(nextCats);
               setDisabledRules(nextDisabled);
@@ -833,7 +841,7 @@ function PolicySheetBody({
                       )}
                       {isExpandable && categorySelected && (
                         <Badge variant="outline" className="text-[10px]">
-                          {enabledRuleCount}/{rules.length} on
+                          {enabledRuleCount}/{availableRules.length} on
                         </Badge>
                       )}
                     </div>
@@ -859,16 +867,19 @@ function PolicySheetBody({
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
                     <div className="flex items-center justify-between py-1">
                       <span className="text-muted-foreground text-xs">
-                        {enabledRuleCount} of {rules.length} rules enabled
+                        {enabledRuleCount} of {availableRules.length} available
+                        {" rules enabled"}
                       </span>
                       <div className="flex gap-3">
                         <button
                           type="button"
                           className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                          disabled={enabledRuleCount === rules.length}
+                          disabled={enabledRuleCount === availableRules.length}
                           onClick={() => {
                             const nextDisabled = new Set(disabledRules);
-                            for (const r of rules) nextDisabled.delete(r.id);
+                            for (const r of availableRules) {
+                              nextDisabled.delete(r.id);
+                            }
                             setDisabledRules(nextDisabled);
                             const nextCats = new Set(selectedCategories);
                             nextCats.add(cat);
@@ -883,7 +894,8 @@ function PolicySheetBody({
                           disabled={!categorySelected || enabledRuleCount === 0}
                           onClick={() => {
                             const nextDisabled = new Set(disabledRules);
-                            for (const r of rules) nextDisabled.add(r.id);
+                            for (const r of availableRules)
+                              nextDisabled.add(r.id);
                             setDisabledRules(nextDisabled);
                           }}
                         >
@@ -893,8 +905,11 @@ function PolicySheetBody({
                     </div>
                     <div className="space-y-2 py-1">
                       {rules.map((rule) => {
+                        const ruleAvailable = isRuleAvailable(rule);
                         const ruleEnabled =
-                          categorySelected && !disabledRules.has(rule.id);
+                          ruleAvailable &&
+                          categorySelected &&
+                          !disabledRules.has(rule.id);
                         return (
                           <div
                             key={rule.id}
@@ -903,13 +918,25 @@ function PolicySheetBody({
                             <Checkbox
                               id={rule.id}
                               checked={ruleEnabled}
+                              disabled={!ruleAvailable}
                               onCheckedChange={(checked) =>
                                 toggleRule(rule.id, !!checked)
                               }
                             />
-                            <label htmlFor={rule.id} className="text-xs">
+                            <label
+                              htmlFor={rule.id}
+                              className={cn(
+                                "text-xs",
+                                !ruleAvailable && "text-muted-foreground",
+                              )}
+                            >
                               {rule.title}
                             </label>
+                            {!ruleAvailable && (
+                              <Badge variant="outline" className="text-[10px]">
+                                Coming Soon
+                              </Badge>
+                            )}
                           </div>
                         );
                       })}
