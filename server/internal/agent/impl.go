@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -70,13 +71,10 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// GetPlugins resolves the principal set for the supplied email and returns
-// every plugin assigned to any of those principals within the caller's org.
-//
-// MVP principal resolution: `email:<addr>` (lowercased + trimmed) plus the
-// wildcard `*`. The followup ticket will add `user:<id>` (from Gram user
-// lookup) and `role:<name>` (from RBAC role membership) so admins can assign
-// plugins to existing users and roles in addition to raw emails.
+// GetPlugins returns every plugin assigned to the resolved principal set for
+// the supplied email within the caller's org. user: and role: resolution
+// lands in the follow-up ticket alongside email→user_id lookup and RBAC
+// role-membership reads.
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -84,13 +82,14 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	}
 
 	email := strings.TrimSpace(strings.ToLower(payload.Email))
-	if email == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "email is required")
+	emailPrincipal, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")
 	}
 
 	principals := []string{
-		"email:" + email,
-		"*",
+		emailPrincipal.String(),
+		urn.PrincipalWildcard,
 	}
 
 	rows, err := s.repo.GetAssignedPluginsWithServers(ctx, repo.GetAssignedPluginsWithServersParams{
@@ -101,5 +100,8 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving assigned plugins").Log(ctx, s.logger)
 	}
 
-	return mv.BuildAgentPluginsView(s.serverURL, rows), nil
+	base := strings.TrimRight(s.serverURL, "/")
+	mcpURL := func(slug string) string { return base + "/mcp/" + slug }
+
+	return mv.BuildAgentPluginsView(rows, mcpURL), nil
 }

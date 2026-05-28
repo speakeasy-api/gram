@@ -2578,6 +2578,11 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
   ON plugin_assignments (plugin_id, principal_urn);
 
+-- Read-side index for the device-agent endpoint, which resolves an
+-- organization to its assignments by principal URN on every poll.
+CREATE INDEX IF NOT EXISTS plugin_assignments_organization_id_principal_urn_idx
+  ON plugin_assignments (organization_id, principal_urn);
+
 -- Tracks the GitHub repository where plugin packages are published for a project.
 CREATE TABLE IF NOT EXISTS plugin_github_connections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

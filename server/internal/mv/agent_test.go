@@ -12,7 +12,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 )
 
-func TestBuildAgentPluginsView_GroupsRowsByPlugin(t *testing.T) {
+func testMcpURL(slug string) string {
+	return "https://app.getgram.ai/mcp/" + slug
+}
+
+func TestBuildAgentPluginsView_GroupsContiguousRowsByPlugin(t *testing.T) {
 	t.Parallel()
 
 	pluginA := uuid.New()
@@ -64,10 +68,9 @@ func TestBuildAgentPluginsView_GroupsRowsByPlugin(t *testing.T) {
 		},
 	}
 
-	result := mv.BuildAgentPluginsView("https://app.getgram.ai/", rows)
+	result := mv.BuildAgentPluginsView(rows, testMcpURL)
 
 	require.NotEmpty(t, result.Etag)
-	require.NotEqual(t, "empty", result.Etag)
 	require.Len(t, result.Plugins, 2)
 
 	require.Equal(t, pluginA.String(), result.Plugins[0].ID)
@@ -93,10 +96,12 @@ func TestBuildAgentPluginsView_GroupsRowsByPlugin(t *testing.T) {
 func TestBuildAgentPluginsView_EmptyRows(t *testing.T) {
 	t.Parallel()
 
-	result := mv.BuildAgentPluginsView("https://app.getgram.ai", nil)
+	result := mv.BuildAgentPluginsView(nil, testMcpURL)
 
-	require.Equal(t, "empty", result.Etag)
 	require.Empty(t, result.Plugins)
+	// sha256 of an empty input — same revision string every time, distinct
+	// from any populated set.
+	require.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", result.Etag)
 }
 
 func TestBuildAgentPluginsView_SkipsRowsWithMissingMcpSlug(t *testing.T) {
@@ -117,7 +122,7 @@ func TestBuildAgentPluginsView_SkipsRowsWithMissingMcpSlug(t *testing.T) {
 		},
 	}
 
-	result := mv.BuildAgentPluginsView("https://app.getgram.ai", rows)
+	result := mv.BuildAgentPluginsView(rows, testMcpURL)
 
 	require.Empty(t, result.Plugins, "row with missing mcp_slug should be filtered out")
 }
@@ -125,24 +130,10 @@ func TestBuildAgentPluginsView_SkipsRowsWithMissingMcpSlug(t *testing.T) {
 func TestBuildAgentPluginsView_ETagStableAcrossCalls(t *testing.T) {
 	t.Parallel()
 
-	pluginID := uuid.New()
-	serverID := uuid.New()
-	now := time.Date(2026, 5, 28, 12, 0, 0, 0, time.UTC)
+	row := makeAgentRow(uuid.New(), uuid.New(), time.Date(2026, 5, 28, 12, 0, 0, 0, time.UTC), "s")
 
-	row := repo.GetAssignedPluginsWithServersRow{
-		PluginID:          pluginID,
-		PluginName:        "P",
-		PluginSlug:        "p",
-		PluginUpdatedAt:   pgtype.Timestamptz{Time: now, Valid: true},
-		ServerID:          serverID,
-		ServerDisplayName: "s",
-		ServerPolicy:      "required",
-		ServerUpdatedAt:   pgtype.Timestamptz{Time: now, Valid: true},
-		ToolsetMcpSlug:    pgtype.Text{String: "s", Valid: true},
-	}
-
-	first := mv.BuildAgentPluginsView("https://app.getgram.ai", []repo.GetAssignedPluginsWithServersRow{row}).Etag
-	second := mv.BuildAgentPluginsView("https://app.getgram.ai", []repo.GetAssignedPluginsWithServersRow{row}).Etag
+	first := mv.BuildAgentPluginsView([]repo.GetAssignedPluginsWithServersRow{row}, testMcpURL).Etag
+	second := mv.BuildAgentPluginsView([]repo.GetAssignedPluginsWithServersRow{row}, testMcpURL).Etag
 
 	require.Equal(t, first, second)
 }
@@ -152,26 +143,38 @@ func TestBuildAgentPluginsView_ETagChangesWhenPluginUpdated(t *testing.T) {
 
 	pluginID := uuid.New()
 	serverID := uuid.New()
-
-	row := func(updatedAt time.Time) repo.GetAssignedPluginsWithServersRow {
-		return repo.GetAssignedPluginsWithServersRow{
-			PluginID:          pluginID,
-			PluginName:        "P",
-			PluginSlug:        "p",
-			PluginUpdatedAt:   pgtype.Timestamptz{Time: updatedAt, Valid: true},
-			ServerID:          serverID,
-			ServerDisplayName: "s",
-			ServerPolicy:      "required",
-			ServerUpdatedAt:   pgtype.Timestamptz{Time: updatedAt, Valid: true},
-			ToolsetMcpSlug:    pgtype.Text{String: "s", Valid: true},
-		}
-	}
-
 	t0 := time.Date(2026, 5, 28, 12, 0, 0, 0, time.UTC)
-	t1 := t0.Add(time.Second)
 
-	before := mv.BuildAgentPluginsView("https://app.getgram.ai", []repo.GetAssignedPluginsWithServersRow{row(t0)}).Etag
-	after := mv.BuildAgentPluginsView("https://app.getgram.ai", []repo.GetAssignedPluginsWithServersRow{row(t1)}).Etag
+	before := mv.BuildAgentPluginsView([]repo.GetAssignedPluginsWithServersRow{makeAgentRow(pluginID, serverID, t0, "s")}, testMcpURL).Etag
+	after := mv.BuildAgentPluginsView([]repo.GetAssignedPluginsWithServersRow{makeAgentRow(pluginID, serverID, t0.Add(time.Second), "s")}, testMcpURL).Etag
 
 	require.NotEqual(t, before, after)
+}
+
+func TestBuildAgentPluginsView_ETagIgnoresMcpURLPrefix(t *testing.T) {
+	t.Parallel()
+
+	row := makeAgentRow(uuid.New(), uuid.New(), time.Date(2026, 5, 28, 12, 0, 0, 0, time.UTC), "s")
+
+	prodURL := func(slug string) string { return "https://app.getgram.ai/mcp/" + slug }
+	stagingURL := func(slug string) string { return "https://staging.getgram.ai/mcp/" + slug }
+
+	prod := mv.BuildAgentPluginsView([]repo.GetAssignedPluginsWithServersRow{row}, prodURL).Etag
+	staging := mv.BuildAgentPluginsView([]repo.GetAssignedPluginsWithServersRow{row}, stagingURL).Etag
+
+	require.Equal(t, prod, staging, "ETag covers content, not deployment-config like serverURL")
+}
+
+func makeAgentRow(pluginID, serverID uuid.UUID, updatedAt time.Time, mcpSlug string) repo.GetAssignedPluginsWithServersRow {
+	return repo.GetAssignedPluginsWithServersRow{
+		PluginID:          pluginID,
+		PluginName:        "P",
+		PluginSlug:        "p",
+		PluginUpdatedAt:   pgtype.Timestamptz{Time: updatedAt, Valid: true},
+		ServerID:          serverID,
+		ServerDisplayName: "s",
+		ServerPolicy:      "required",
+		ServerUpdatedAt:   pgtype.Timestamptz{Time: updatedAt, Valid: true},
+		ToolsetMcpSlug:    pgtype.Text{String: mcpSlug, Valid: true},
+	}
 }

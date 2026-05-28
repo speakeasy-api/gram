@@ -453,6 +453,62 @@ func TestPrincipal_validationCaching(t *testing.T) {
 	require.Equal(t, err1.Error(), err2.Error())
 }
 
+func TestPrincipal_emailValidation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts canonical lowercase address", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "dev@acme.corp")
+		v, err := p.Value()
+		require.NoError(t, err)
+		require.Equal(t, "email:dev@acme.corp", v)
+	})
+
+	t.Run("accepts plus-addressing", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "dev+ops@acme.corp")
+		_, err := p.Value()
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects uppercase", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "Dev@Acme.Corp")
+		_, err := p.Value()
+		require.ErrorIs(t, err, urn.ErrInvalid)
+	})
+
+	t.Run("rejects display-name form", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, `"Dev" <dev@acme.corp>`)
+		_, err := p.Value()
+		require.ErrorIs(t, err, urn.ErrInvalid)
+	})
+
+	t.Run("rejects missing @", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "dev.acme.corp")
+		_, err := p.Value()
+		require.ErrorIs(t, err, urn.ErrInvalid)
+	})
+
+	t.Run("rejects empty id", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "")
+		_, err := p.Value()
+		require.ErrorIs(t, err, urn.ErrInvalid)
+	})
+
+	t.Run("roundtrips through Parse", func(t *testing.T) {
+		t.Parallel()
+		p, err := urn.ParsePrincipal("email:dev@acme.corp")
+		require.NoError(t, err)
+		require.Equal(t, urn.PrincipalTypeEmail, p.Type)
+		require.Equal(t, "dev@acme.corp", p.ID)
+		require.Equal(t, "email:dev@acme.corp", p.String())
+	})
+}
+
 func TestPrincipal_idPermissiveness(t *testing.T) {
 	t.Parallel()
 
