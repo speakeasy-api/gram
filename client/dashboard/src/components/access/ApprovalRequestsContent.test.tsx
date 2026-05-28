@@ -341,38 +341,44 @@ describe("ApprovalRequestsContent", () => {
   it("loads additional approval request pages with the next cursor", async () => {
     const listShadowMCPApprovalRequests = vi
       .fn()
-      .mockImplementation(({ cursor }: { cursor?: string }) => {
-        if (cursor === "next-requests") {
+      .mockImplementation(
+        ({ cursor, status }: { cursor?: string; status?: string }) => {
+          if (status !== "requested") {
+            return Promise.resolve({ requests: [] });
+          }
+
+          if (cursor === "next-requests") {
+            return Promise.resolve({
+              requests: [
+                {
+                  id: "request-2",
+                  observedName: "Second request",
+                  resourceType: "shadow_mcp",
+                  requesterEmail: "second@example.com",
+                  status: "requested",
+                  blockedCount: 1,
+                  lastBlockedAt: new Date("2026-01-02"),
+                },
+              ],
+            });
+          }
+
           return Promise.resolve({
+            nextCursor: "next-requests",
             requests: [
               {
-                id: "request-2",
-                observedName: "Second request",
+                id: "request-1",
+                observedName: "First request",
                 resourceType: "shadow_mcp",
-                requesterEmail: "second@example.com",
+                requesterEmail: "first@example.com",
                 status: "requested",
                 blockedCount: 1,
-                lastBlockedAt: new Date("2026-01-02"),
+                lastBlockedAt: new Date("2026-01-01"),
               },
             ],
           });
-        }
-
-        return Promise.resolve({
-          nextCursor: "next-requests",
-          requests: [
-            {
-              id: "request-1",
-              observedName: "First request",
-              resourceType: "shadow_mcp",
-              requesterEmail: "first@example.com",
-              status: "requested",
-              blockedCount: 1,
-              lastBlockedAt: new Date("2026-01-01"),
-            },
-          ],
-        });
-      });
+        },
+      );
     const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
       rules: [],
     });
@@ -394,14 +400,14 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(screen.getAllByText("First request").length).toBeGreaterThan(0);
     });
-    expect(
-      screen.getByRole("columnheader", { name: "Resource Type" }),
-    ).toBeTruthy();
-    expect(screen.getByText("Shadow MCP")).toBeTruthy();
     const requestsSection = screen
       .getByRole("heading", { name: "Approval Requests" })
       .closest("section");
     if (!requestsSection) throw new Error("Requests section not found");
+    expect(
+      within(requestsSection).getByRole("columnheader", { name: "Type" }),
+    ).toBeTruthy();
+    expect(within(requestsSection).getByText("Shadow MCP")).toBeTruthy();
     fireEvent.click(
       within(requestsSection).getByRole("button", { name: "Load more" }),
     );
@@ -415,6 +421,97 @@ describe("ApprovalRequestsContent", () => {
         status: "requested",
         cursor: "next-requests",
       });
+    });
+  });
+
+  it("renders approved and denied approval requests in approval history", async () => {
+    const listShadowMCPApprovalRequests = vi
+      .fn()
+      .mockImplementation(({ status }: { status?: string }) => {
+        if (status === "approved") {
+          return Promise.resolve({
+            requests: [
+              {
+                id: "request-approved",
+                observedName: "Approved server",
+                resourceType: "shadow_mcp",
+                requesterEmail: "approved@example.com",
+                status: "approved",
+                blockedCount: 2,
+                lastBlockedAt: new Date("2026-01-01"),
+                decidedAt: new Date("2026-01-03"),
+                updatedAt: new Date("2026-01-03"),
+              },
+            ],
+          });
+        }
+
+        if (status === "denied") {
+          return Promise.resolve({
+            requests: [
+              {
+                id: "request-denied",
+                observedName: "Denied server",
+                resourceType: "shadow_mcp",
+                requesterEmail: "denied@example.com",
+                status: "denied",
+                blockedCount: 1,
+                lastBlockedAt: new Date("2026-01-02"),
+                decidedAt: new Date("2026-01-04"),
+                updatedAt: new Date("2026-01-04"),
+              },
+            ],
+          });
+        }
+
+        return Promise.resolve({ requests: [] });
+      });
+    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
+      rules: [],
+    });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Approved server")).toBeTruthy();
+      expect(screen.getByText("Denied server")).toBeTruthy();
+    });
+
+    const historySection = screen
+      .getByRole("heading", { name: "Approval History" })
+      .closest("section");
+    if (!historySection) throw new Error("Approval History section not found");
+    expect(within(historySection).getByText("Approved")).toBeTruthy();
+    expect(within(historySection).getByText("Denied")).toBeTruthy();
+    expect(
+      within(historySection).queryByRole("button", { name: "Review" }),
+    ).toBeNull();
+    expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
+      limit: 100,
+      status: "requested",
+      cursor: undefined,
+    });
+    expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
+      limit: 100,
+      status: "approved",
+      cursor: undefined,
+    });
+    expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
+      limit: 100,
+      status: "denied",
+      cursor: undefined,
     });
   });
 
@@ -474,9 +571,7 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(screen.getAllByText("First rule").length).toBeGreaterThan(0);
     });
-    expect(
-      screen.getByRole("columnheader", { name: "Resource Type" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Type" })).toBeTruthy();
     expect(screen.getByText("Shadow MCP")).toBeTruthy();
     const accessRuleHeadings = screen.getAllByRole("heading", {
       name: "Access Rules",
@@ -495,9 +590,63 @@ describe("ApprovalRequestsContent", () => {
       expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
         limit: 100,
         disposition: undefined,
-        accessScope: "project",
         cursor: "next-rules",
       });
+    });
+  });
+
+  it("renders organization-scoped blocked access rules", async () => {
+    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
+      requests: [],
+    });
+    const listShadowMCPAccessRules = vi
+      .fn()
+      .mockImplementation(({ accessScope }: { accessScope?: string }) => {
+        if (accessScope === "project") {
+          return Promise.resolve({ rules: [] });
+        }
+
+        return Promise.resolve({
+          rules: [
+            {
+              id: "rule-blocked-org",
+              displayName: "Blocked org rule",
+              resourceType: "shadow_mcp",
+              disposition: "denied",
+              accessScope: "organization",
+              matchBreadth: "url_host",
+              matchValue: "blocked.example.com",
+              updatedAt: new Date("2026-01-01"),
+            },
+          ],
+        });
+      });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Blocked org rule")).toBeTruthy();
+    });
+    const blockedRuleRow = screen.getByText("Blocked org rule").closest("tr");
+    if (!blockedRuleRow) throw new Error("Blocked rule row not found");
+    expect(within(blockedRuleRow).getByText("Denied")).toBeTruthy();
+    expect(within(blockedRuleRow).getByText("Organization")).toBeTruthy();
+    expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
+      limit: 100,
+      disposition: undefined,
+      cursor: undefined,
     });
   });
 
@@ -560,7 +709,6 @@ describe("ApprovalRequestsContent", () => {
     expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
       limit: 100,
       disposition: "denied",
-      accessScope: "project",
       cursor: undefined,
     });
   });

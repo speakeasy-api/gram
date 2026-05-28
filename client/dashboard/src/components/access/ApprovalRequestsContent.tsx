@@ -216,6 +216,12 @@ function selectedProjectIds(projectSelection: string) {
   return projectSelection ? [projectSelection] : [];
 }
 
+function requestDecisionTime(request: ShadowMCPApprovalRequest) {
+  return new Date(
+    request.decidedAt ?? request.updatedAt ?? request.requestedAt,
+  ).getTime();
+}
+
 function ReviewRequestSheet({
   request,
   projects,
@@ -791,11 +797,35 @@ export function ApprovalRequestsContent() {
   const hasActiveRuleFilter = ruleDispositionFilter !== "all";
 
   const requestsQuery = useInfiniteQuery({
-    queryKey: APPROVAL_REQUESTS_QUERY_KEY,
+    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, "requested"],
     queryFn: ({ pageParam }) =>
       client.access.listShadowMCPApprovalRequests({
         limit: APPROVAL_REQUESTS_PAGE_SIZE,
         status: "requested",
+        cursor: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: canAdmin,
+  });
+  const approvedRequestsQuery = useInfiniteQuery({
+    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, "approved"],
+    queryFn: ({ pageParam }) =>
+      client.access.listShadowMCPApprovalRequests({
+        limit: APPROVAL_REQUESTS_PAGE_SIZE,
+        status: "approved",
+        cursor: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: canAdmin,
+  });
+  const deniedRequestsQuery = useInfiniteQuery({
+    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, "denied"],
+    queryFn: ({ pageParam }) =>
+      client.access.listShadowMCPApprovalRequests({
+        limit: APPROVAL_REQUESTS_PAGE_SIZE,
+        status: "denied",
         cursor: pageParam,
       }),
     initialPageParam: undefined as string | undefined,
@@ -808,7 +838,6 @@ export function ApprovalRequestsContent() {
       client.access.listShadowMCPAccessRules({
         limit: APPROVAL_REQUESTS_PAGE_SIZE,
         disposition: ruleDisposition,
-        accessScope: "project",
         cursor: pageParam,
       }),
     initialPageParam: undefined as string | undefined,
@@ -819,12 +848,26 @@ export function ApprovalRequestsContent() {
     () => requestsQuery.data?.pages.flatMap((page) => page.requests) ?? [],
     [requestsQuery.data?.pages],
   );
+  const resolvedRequests = useMemo(() => {
+    const approved =
+      approvedRequestsQuery.data?.pages.flatMap((page) => page.requests) ?? [];
+    const denied =
+      deniedRequestsQuery.data?.pages.flatMap((page) => page.requests) ?? [];
+
+    return [...approved, ...denied].sort(
+      (a, b) => requestDecisionTime(b) - requestDecisionTime(a),
+    );
+  }, [approvedRequestsQuery.data?.pages, deniedRequestsQuery.data?.pages]);
   const rules = useMemo(
     () => rulesQuery.data?.pages.flatMap((page) => page.rules) ?? [],
     [rulesQuery.data?.pages],
   );
   const requestsLoading = requestsQuery.isLoading;
   const requestsError = requestsQuery.error;
+  const resolvedRequestsLoading =
+    approvedRequestsQuery.isLoading || deniedRequestsQuery.isLoading;
+  const resolvedRequestsError =
+    approvedRequestsQuery.error || deniedRequestsQuery.error;
   const rulesLoading = rulesQuery.isLoading;
   const rulesError = rulesQuery.error;
 
@@ -950,17 +993,16 @@ export function ApprovalRequestsContent() {
         <Type variant="small">{formatShortDate(request.lastBlockedAt)}</Type>
       ),
     },
+  ];
+  const pendingRequestColumns: Column<ShadowMCPApprovalRequest>[] = [
+    ...requestColumns,
     {
       key: "actions",
       header: "",
       width: "0.5fr",
       render: (request) => (
         <RequireScope scope="org:admin" level="component">
-          <Button
-            size="sm"
-            disabled={request.status !== "requested"}
-            onClick={() => setReviewRequest(request)}
-          >
+          <Button size="sm" onClick={() => setReviewRequest(request)}>
             <Button.Text>Review</Button.Text>
           </Button>
         </RequireScope>
@@ -1225,7 +1267,7 @@ export function ApprovalRequestsContent() {
           ) : (
             <div className="overflow-hidden rounded-lg border">
               <Table
-                columns={requestColumns}
+                columns={pendingRequestColumns}
                 data={requests}
                 rowKey={(row) => row.id}
                 className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
@@ -1240,6 +1282,69 @@ export function ApprovalRequestsContent() {
                   void requestsQuery.fetchNextPage();
                 },
                 showEndMessage: (requestsQuery.data?.pages.length ?? 0) > 1,
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {canAdmin && (
+        <section className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Heading variant="h5">Approval History</Heading>
+              <Type muted small className="mt-1">
+                View approved and denied access requests.
+              </Type>
+            </div>
+          </div>
+
+          {resolvedRequestsLoading ? (
+            <SkeletonTable />
+          ) : resolvedRequestsError ? (
+            <TableEmptyState
+              title="Approval history could not be loaded"
+              description="Refresh the page or try again later."
+            />
+          ) : resolvedRequests.length === 0 ? (
+            <ApprovalSectionEmptyState
+              icon={Inbox}
+              title="No approval history"
+              description="Approved and denied requests will appear here after review."
+            />
+          ) : (
+            <div className="overflow-hidden rounded-lg border">
+              <Table
+                columns={requestColumns}
+                data={resolvedRequests}
+                rowKey={(row) => row.id}
+                className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+              />
+              {renderPaginationFooter({
+                count: resolvedRequests.length,
+                hasNextPage:
+                  approvedRequestsQuery.hasNextPage ||
+                  deniedRequestsQuery.hasNextPage,
+                isFetching:
+                  approvedRequestsQuery.isFetching ||
+                  deniedRequestsQuery.isFetching,
+                isFetchingNextPage:
+                  approvedRequestsQuery.isFetchingNextPage ||
+                  deniedRequestsQuery.isFetchingNextPage,
+                noun: "request",
+                onLoadMore: () => {
+                  void Promise.all([
+                    approvedRequestsQuery.hasNextPage
+                      ? approvedRequestsQuery.fetchNextPage()
+                      : Promise.resolve(),
+                    deniedRequestsQuery.hasNextPage
+                      ? deniedRequestsQuery.fetchNextPage()
+                      : Promise.resolve(),
+                  ]);
+                },
+                showEndMessage:
+                  (approvedRequestsQuery.data?.pages.length ?? 0) > 1 ||
+                  (deniedRequestsQuery.data?.pages.length ?? 0) > 1,
               })}
             </div>
           )}
