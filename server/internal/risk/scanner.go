@@ -254,10 +254,11 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
 func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string) (*ScanResult, error) {
+	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
 	for _, source := range policy.Sources {
 		switch source {
 		case "gitleaks":
-			findings := s.scanGitleaks(text)
+			findings := disabled.FilterFindings(s.scanGitleaks(text))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
@@ -277,23 +278,27 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			if err != nil {
 				return nil, fmt.Errorf("presidio scan: %w", err)
 			}
-			if len(batchResults) > 0 && len(batchResults[0]) > 0 {
-				f := batchResults[0][0]
-				return &ScanResult{
-					Action:      policy.Action,
-					PolicyID:    policy.ID.String(),
-					PolicyName:  policy.Name,
-					Source:      "presidio",
-					RuleID:      f.RuleID,
-					Description: f.Description,
-					UserMessage: conv.FromPGText[string](policy.UserMessage),
-				}, nil
+			if len(batchResults) > 0 {
+				filtered := disabled.FilterFindings(batchResults[0])
+				if len(filtered) > 0 {
+					f := filtered[0]
+					return &ScanResult{
+						Action:      policy.Action,
+						PolicyID:    policy.ID.String(),
+						PolicyName:  policy.Name,
+						Source:      "presidio",
+						RuleID:      f.RuleID,
+						Description: f.Description,
+						UserMessage: conv.FromPGText[string](policy.UserMessage),
+					}, nil
+				}
 			}
 		case ra.SourcePromptInjection:
 			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
+			findings = disabled.FilterFindings(findings)
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,

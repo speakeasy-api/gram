@@ -34,6 +34,10 @@ type GetProductFeaturesResponseBody struct {
 	AuthzChallengeLoggingEnabled *bool `form:"authz_challenge_logging_enabled,omitempty" json:"authz_challenge_logging_enabled,omitempty" xml:"authz_challenge_logging_enabled,omitempty"`
 	// Whether webhooks are enabled
 	Webhooks *bool `form:"webhooks,omitempty" json:"webhooks,omitempty" xml:"webhooks,omitempty"`
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled *bool `form:"scim_enabled,omitempty" json:"scim_enabled,omitempty" xml:"scim_enabled,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -428,6 +432,8 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		SessionCaptureEnabled:        *body.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: *body.AuthzChallengeLoggingEnabled,
 		Webhooks:                     *body.Webhooks,
+		SsoEnabled:                   *body.SsoEnabled,
+		ScimEnabled:                  *body.ScimEnabled,
 	}
 
 	return v
@@ -750,6 +756,12 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.Webhooks == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("webhooks", "body"))
+	}
+	if body.SsoEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sso_enabled", "body"))
+	}
+	if body.ScimEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scim_enabled", "body"))
 	}
 	return
 }

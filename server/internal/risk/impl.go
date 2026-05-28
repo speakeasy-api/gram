@@ -253,6 +253,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		Sources:              sources,
 		PresidioEntities:     payload.PresidioEntities,
 		PromptInjectionRules: payload.PromptInjectionRules,
+		DisabledRules:        payload.DisabledRules,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -388,6 +389,11 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		promptInjectionRules = payload.PromptInjectionRules
 	}
 
+	disabledRules := current.DisabledRules
+	if payload.DisabledRules != nil {
+		disabledRules = payload.DisabledRules
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -450,6 +456,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		Sources:              sources,
 		PresidioEntities:     presidioEntities,
 		PromptInjectionRules: promptInjectionRules,
+		DisabledRules:        disabledRules,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -1365,6 +1372,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Sources:              row.Sources,
 		PresidioEntities:     row.PresidioEntities,
 		PromptInjectionRules: row.PromptInjectionRules,
+		DisabledRules:        row.DisabledRules,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,
@@ -1389,6 +1397,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		Sources:              row.Sources,
 		PresidioEntities:     row.PresidioEntities,
 		PromptInjectionRules: row.PromptInjectionRules,
+		DisabledRules:        row.DisabledRules,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,

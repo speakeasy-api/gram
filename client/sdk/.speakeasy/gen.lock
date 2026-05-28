@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 6ebb0a5f3245b5039db7a193545cfe50
+  docChecksum: 84e63202b0dbc5f6345c3fdc50c4da6d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -201,7 +201,7 @@ trackedFiles:
   docs/models/components/createresponsebody.md:
     last_write_checksum: sha1:0c12f06a5d161fb9fa2c04fed3bb05965bd77b3d
   docs/models/components/createriskpolicyrequestbody.md:
-    last_write_checksum: sha1:397730db4622c823561ea5d44026f640ddfed1f3
+    last_write_checksum: sha1:dffbe586747101127a141788fa2c669de77c59e4
   docs/models/components/createroleform.md:
     last_write_checksum: sha1:7f66643a7003dd803ed47f17138bafe5db53d044
   docs/models/components/createserverform.md:
@@ -293,7 +293,7 @@ trackedFiles:
   docs/models/components/externaloauthserverform.md:
     last_write_checksum: sha1:2dfca2bf1f6cf89befb98dabc7e7db5d83523c65
   docs/models/components/featurename.md:
-    last_write_checksum: sha1:b2d8e8177ccf2ddb44fc6bc6414ccf8e28a68867
+    last_write_checksum: sha1:44619a0709785e1f446ca2cefe19acf8354fab87
   docs/models/components/feedback.md:
     last_write_checksum: sha1:ef93dc1781469531617f39432611ded991048862
   docs/models/components/fetchopenapiv3fromurlform2.md:
@@ -307,7 +307,7 @@ trackedFiles:
   docs/models/components/functionresourcedefinition.md:
     last_write_checksum: sha1:1df20aa88f01f3862e289bca08c3495efc00d523
   docs/models/components/functiontooldefinition.md:
-    last_write_checksum: sha1:c009199e05c8fa4216cea242dd224c2e7201e623
+    last_write_checksum: sha1:dadf68c76b2e0ed4d0205950f9b81504cab4d30c
   docs/models/components/generatetitleresponsebody.md:
     last_write_checksum: sha1:38ee2cf743b12e9ffa968731732b84116e7d4da8
   docs/models/components/generateworkosadminportallinkrequestbody.md:
@@ -339,7 +339,7 @@ trackedFiles:
   docs/models/components/getobservabilityoverviewresult.md:
     last_write_checksum: sha1:0a0b5e2c3e4fb403705fe952952431992e172785
   docs/models/components/getproductfeaturesresponsebody.md:
-    last_write_checksum: sha1:5b4b3198a4de7273890e2b6b504c0c43fbca3c0c
+    last_write_checksum: sha1:d92e84a1b65e679d39db2987deb0af2af2235a68
   docs/models/components/getprojectmetricssummarypayload.md:
     last_write_checksum: sha1:bab9f23a9d3f2b4b52743618c911a5e5d0a55c19
   docs/models/components/getprojectoverviewresult.md:
@@ -579,7 +579,7 @@ trackedFiles:
   docs/models/components/organization.md:
     last_write_checksum: sha1:66c352c06492ea3b63ce335fb63136ad0367082b
   docs/models/components/organizationentry.md:
-    last_write_checksum: sha1:d25cab5c2265fb437653402838c61ed27f7dcbc7
+    last_write_checksum: sha1:1f8c1c8ee8a054db54c0fb969caa97b81790bfa0
   docs/models/components/organizationinvitation.md:
     last_write_checksum: sha1:cc6c93b202004eccdd673dbd48fa92bc8a6dae57
   docs/models/components/organizationuser.md:
@@ -747,7 +747,7 @@ trackedFiles:
   docs/models/components/riskoverviewuser.md:
     last_write_checksum: sha1:e27f5822bf1197b237ac5f37aab0c8d439d3dfa0
   docs/models/components/riskpolicy.md:
-    last_write_checksum: sha1:dfe5eb39e4b2ac25657f4901c9cc8128ae2f9bcf
+    last_write_checksum: sha1:3fe1afd50cbab4adc0eb7715b201f13369f95acd
   docs/models/components/riskpolicyaction.md:
     last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
   docs/models/components/riskpolicystatus.md:
@@ -973,7 +973,7 @@ trackedFiles:
   docs/models/components/updaterequestbodyvisibility.md:
     last_write_checksum: sha1:13e67a9c7df67df83d191831827d14324b2fd409
   docs/models/components/updateriskpolicyrequestbody.md:
-    last_write_checksum: sha1:c2d1df279fb653e433e04a1e630efecc396d576a
+    last_write_checksum: sha1:41f845ce14656c998b4710b4a8c39eeaf1d7300e
   docs/models/components/updateriskpolicyrequestbodyaction.md:
     last_write_checksum: sha1:d0440dea4e7b2af3804fd303de46f1f8c1472d10
   docs/models/components/updateroleform.md:
@@ -3557,7 +3557,7 @@ trackedFiles:
   src/models/components/createresponsebody.ts:
     last_write_checksum: sha1:69fe2ce5ad8c1c2a848b034b6cd47f7b3012087c
   src/models/components/createriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:f4318e26cfd3f4d97b9e4ccefa2d3fa170517afd
+    last_write_checksum: sha1:3b161b121b39cd86c5c1cb276df93a9f6c3459ca
   src/models/components/createroleform.ts:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
@@ -3648,7 +3648,7 @@ trackedFiles:
   src/models/components/functionresourcedefinition.ts:
     last_write_checksum: sha1:cd82ab538fbb9585fc6d90b445e54499335975f0
   src/models/components/functiontooldefinition.ts:
-    last_write_checksum: sha1:5f4ba2f5a9da9d6f67d64e0315d5010678473b94
+    last_write_checksum: sha1:81cdcc477d5b4407af6e3b80b3eee59c04fdc5bd
   src/models/components/generatetitleresponsebody.ts:
     last_write_checksum: sha1:0908a7700ea1b4d25b03d3baab6d728e51c3c43c
   src/models/components/generateworkosadminportallinkrequestbody.ts:
@@ -3680,7 +3680,7 @@ trackedFiles:
   src/models/components/getobservabilityoverviewresult.ts:
     last_write_checksum: sha1:0dbfa9a9afa50661ca0f7406e2ddc5e59aab954e
   src/models/components/getproductfeaturesresponsebody.ts:
-    last_write_checksum: sha1:dc4c47f95f606a836bee9efa3871ac4e0a99a7ae
+    last_write_checksum: sha1:9f758037adb46a3b2a03a7171c9c7a443d588caa
   src/models/components/getprojectmetricssummarypayload.ts:
     last_write_checksum: sha1:e37e5370768df11ea61585493bffcc2c0f2ac198
   src/models/components/getprojectoverviewresult.ts:
@@ -3894,7 +3894,7 @@ trackedFiles:
   src/models/components/organization.ts:
     last_write_checksum: sha1:274293bd8e907520337f1fb425086aa6e04066ec
   src/models/components/organizationentry.ts:
-    last_write_checksum: sha1:ea941bf60c94870745f97d87fe5084c860dc91b1
+    last_write_checksum: sha1:4980dc2f6f8414740fb78d3c0bcb6f0d26e28e98
   src/models/components/organizationinvitation.ts:
     last_write_checksum: sha1:05a43f5ce730058eb70c1f149ac8321bb9978505
   src/models/components/organizationuser.ts:
@@ -4033,7 +4033,7 @@ trackedFiles:
   src/models/components/riskoverviewuser.ts:
     last_write_checksum: sha1:eb4da626d8348818266f75b28ae1dac267441b5d
   src/models/components/riskpolicy.ts:
-    last_write_checksum: sha1:bca84fcce8a842a32f6eb5e385407c78560206d1
+    last_write_checksum: sha1:501576190cc501222350095ab8085f49d98a6c35
   src/models/components/riskpolicystatus.ts:
     last_write_checksum: sha1:478a39101a4d8c9d51b31417839ef68b5b727e77
   src/models/components/riskresult.ts:
@@ -4101,7 +4101,7 @@ trackedFiles:
   src/models/components/setpluginassignmentsresponsebody.ts:
     last_write_checksum: sha1:880bca89d1b570199aa3c9161292f13052406ea9
   src/models/components/setproductfeaturerequestbody.ts:
-    last_write_checksum: sha1:a61b6f430b7736a9a4eed52a53e0cd2b2d608718
+    last_write_checksum: sha1:3e57d5c21f41c5febe3652f6c5ea496285c0b9c7
   src/models/components/setprojectlogoresult.ts:
     last_write_checksum: sha1:4b596a9d3ddae8d3cd24632a9dca5126ae123ada
   src/models/components/setsourceenvironmentlinkrequestbody.ts:
@@ -4199,7 +4199,7 @@ trackedFiles:
   src/models/components/updaterequestbody.ts:
     last_write_checksum: sha1:504b230ade27ef53b7f8a825b4fb8da9feead7f8
   src/models/components/updateriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:9ec8bbde88b973885b5664b6a10014c4f1f79d37
+    last_write_checksum: sha1:31d4b42c6343f676842f4ef8bd94d62f3eca3ff3
   src/models/components/updateroleform.ts:
     last_write_checksum: sha1:72e1a4589c1f3deeadc165d0e00491e2cde9e068
   src/models/components/updateserverform.ts:
@@ -7303,7 +7303,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"authz_challenge_logging_enabled": false, "logs_enabled": false, "session_capture_enabled": true, "tool_io_logs_enabled": true, "webhooks": true}
+          application/json: {"authz_challenge_logging_enabled": false, "logs_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

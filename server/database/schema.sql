@@ -862,7 +862,7 @@ WHERE deleted IS FALSE;
 -- upstream authorization servers
 CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
   remote_session_issuer_id uuid NOT NULL,
   user_session_issuer_id uuid NOT NULL,
 
@@ -895,6 +895,22 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   CONSTRAINT remote_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
+  remote_session_client_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT remote_session_client_user_session_issuers_pkey PRIMARY KEY (remote_session_client_id, user_session_issuer_id),
+  CONSTRAINT remote_session_client_user_session_issuers_client_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_client_user_session_issuers_issuer_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
+ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_one_per_issuer
+ON remote_session_client_user_session_issuers (user_session_issuer_id);
+
 -- Remote sessions represent credentials for an external resource that have
 -- been granted to a single Gram subject
 CREATE TABLE IF NOT EXISTS remote_sessions (
@@ -921,6 +937,10 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
 ON remote_sessions (subject_urn, remote_session_client_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_key
+ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolsets (

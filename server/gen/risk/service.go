@@ -124,6 +124,9 @@ type CreateRiskPolicyPayload struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier').
 	PromptInjectionRules []string
+	// Canonical rule_ids the user has unchecked within otherwise-enabled
+	// categories. Matching findings are dropped at scan time.
+	DisabledRules []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -530,6 +533,9 @@ type UpdateRiskPolicyPayload struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier').
 	PromptInjectionRules []string
+	// Canonical rule_ids the user has unchecked within otherwise-enabled
+	// categories. Matching findings are dropped at scan time.
+	DisabledRules []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

@@ -167,6 +167,17 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, err
 	}
 
+	// Drop findings whose canonical rule_id has been unchecked by the policy
+	// author. Done after the dedup pass so an enabled secret finding still
+	// suppresses an overlapping disabled presidio finding, instead of letting
+	// the disabled rule win the overlap and then disappear (leaving the
+	// region unflagged).
+	if disabled := NewDisabledRuleSet(policy.DisabledRules); !disabled.Empty() {
+		for i, batch := range findings {
+			findings[i] = disabled.FilterFindings(batch)
+		}
+	}
+
 	rows, findingsCount := a.buildRows(ctx, args, messages, findings)
 
 	if err := a.writeResults(ctx, args, rows); err != nil {

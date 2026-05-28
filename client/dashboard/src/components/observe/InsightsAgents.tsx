@@ -2,6 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { formatCompact } from "@/lib/format";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
@@ -100,14 +101,8 @@ function formatCost(value: number): string {
   return "$0.00";
 }
 
-function formatTokens(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toLocaleString();
-}
-
 function formatValue(value: number, mode: ValueMode): string {
-  return mode === "cost" ? formatCost(value) : formatTokens(value);
+  return mode === "cost" ? formatCost(value) : formatCompact(value);
 }
 
 function formatPlatform(value: string): string {
@@ -442,7 +437,7 @@ export function InsightsAgentsContent() {
         mcpConfig={mcpConfig}
         title="What would you like to know about AI agent costs?"
         subtitle="Ask about token spend, model costs, and usage by team or client"
-        contextInfo={`Agents tab: ${activeUsers} active users, ${formatTokens(totalTokens)} tokens, ${formatCost(totalCost)} total cost in ${rangeLabel}. ${clientBreakdown.length} client types, ${modelBreakdown.length} models.`}
+        contextInfo={`Agents tab: ${activeUsers} active users, ${formatCompact(totalTokens)} tokens, ${formatCost(totalCost)} total cost in ${rangeLabel}. ${clientBreakdown.length} client types, ${modelBreakdown.length} models.`}
         suggestions={[
           {
             title: "Cost Summary",
@@ -540,12 +535,12 @@ export function InsightsAgentsContent() {
                   value={filteredTotalTokens}
                   icon="gauge"
                   accentColor="blue"
-                  subtext={`${formatTokens(filteredTotalTokens)} across ${filteredTotalSessions.toLocaleString()} sessions`}
+                  subtext={`${formatCompact(filteredTotalTokens)} across ${formatCompact(filteredTotalSessions)} sessions`}
                 />
                 <MetricCard
                   title="Total Cost"
                   value={filteredTotalCost}
-                  format="number"
+                  format="currency"
                   icon="credit-card"
                   accentColor="purple"
                   subtext={
@@ -1069,7 +1064,7 @@ function EmployeeCostTable({
         width: "1fr",
         render: (role) => (
           <span className="font-mono tabular-nums">
-            {formatTokens(role.totalInputTokens)}
+            {formatCompact(role.totalInputTokens)}
           </span>
         ),
       },
@@ -1082,7 +1077,7 @@ function EmployeeCostTable({
         width: "1fr",
         render: (role) => (
           <span className="font-mono tabular-nums">
-            {formatTokens(role.totalOutputTokens)}
+            {formatCompact(role.totalOutputTokens)}
           </span>
         ),
       },
@@ -1147,7 +1142,7 @@ function EmployeeCostTable({
         width: "0.8fr",
         render: (user) => (
           <span className="font-mono tabular-nums">
-            {formatTokens(user.totalInputTokens)}
+            {formatCompact(user.totalInputTokens)}
           </span>
         ),
       },
@@ -1160,7 +1155,7 @@ function EmployeeCostTable({
         width: "0.8fr",
         render: (user) => (
           <span className="font-mono tabular-nums">
-            {formatTokens(user.totalOutputTokens)}
+            {formatCompact(user.totalOutputTokens)}
           </span>
         ),
       },
@@ -1174,7 +1169,7 @@ function EmployeeCostTable({
           <span
             className={cn("font-mono tabular-nums", !isCost && "font-semibold")}
           >
-            {formatTokens(user.totalTokens)}
+            {formatCompact(user.totalTokens)}
           </span>
         ),
       },

@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -31,7 +32,7 @@ func TestListRemoteSessions(t *testing.T) {
 	// Soft-delete one row directly so it must be excluded from the listing.
 	_, err := repo.New(ti.conn).RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{
 		ID:        soft.ID,
-		ProjectID: liveProjectID(t, ctx),
+		ProjectID: conv.ToNullUUID(liveProjectID(t, ctx)),
 	})
 	require.NoError(t, err)
 

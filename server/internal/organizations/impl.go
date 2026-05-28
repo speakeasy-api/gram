@@ -853,7 +853,7 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	// capabilities in svix.
 	var caps *[]models.AppPortalCapability
 	readCheckErr := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err == nil {
 		caps = new(fullSvixAppPortalCapabilities())
 	} else if readCheckErr == nil {
 		caps = new(minimumSvixAppPortalCapabilities())
@@ -1315,7 +1315,14 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 }
 
 func fullSvixAppPortalCapabilities() []models.AppPortalCapability {
-	return []models.AppPortalCapability{}
+	return []models.AppPortalCapability{
+		models.APPPORTALCAPABILITY_VIEW_BASE,
+		models.APPPORTALCAPABILITY_VIEW_ENDPOINT_SECRET,
+		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT_SECRET,
+		models.APPPORTALCAPABILITY_MANAGE_TRANSFORMATIONS,
+		models.APPPORTALCAPABILITY_CREATE_ATTEMPTS,
+		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT,
+	}
 }
 func minimumSvixAppPortalCapabilities() []models.AppPortalCapability {
 	return []models.AppPortalCapability{models.APPPORTALCAPABILITY_VIEW_BASE}

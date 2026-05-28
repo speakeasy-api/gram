@@ -4366,6 +4366,12 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 			res.PromptInjectionRules[i] = val
 		}
 	}
+	if v.DisabledRules != nil {
+		res.DisabledRules = make([]string, len(v.DisabledRules))
+		for i, val := range v.DisabledRules {
+			res.DisabledRules[i] = val
+		}
+	}
 
 	return res
 }

@@ -108,9 +108,10 @@ var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
 	Attribute("function_id", String, "The ID of the function")
 	Attribute("runtime", String, "Runtime environment (e.g., nodejs:24, python:3.12)")
 	Attribute("variables", Any, "Variables configuration for the function")
+	Attribute("tags", ArrayOf(String), "The tags list for this function tool")
 	Attribute("meta", MapOf(String, Any), "Meta tags for the tool")
 
-	Required("deployment_id", "asset_id", "function_id", "runtime")
+	Required("deployment_id", "asset_id", "function_id", "runtime", "tags")
 })
 
 // ExternalMCPToolDefinition represents a proxy tool that unfolds to external MCP server tools at runtime

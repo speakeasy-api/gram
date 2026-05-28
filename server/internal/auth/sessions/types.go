@@ -47,6 +47,8 @@ type Organization struct {
 	Slug               string
 	WorkosID           *string
 	UserWorkspaceSlugs []string
+	SSOEnabled         bool
+	SCIMEnabled        bool
 }
 
 type CachedUserInfo struct {

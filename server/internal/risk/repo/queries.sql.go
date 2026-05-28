@@ -132,6 +132,7 @@ INSERT INTO risk_policies (
   , sources
   , presidio_entities
   , prompt_injection_rules
+  , disabled_rules
   , enabled
   , action
   , auto_name
@@ -150,6 +151,7 @@ VALUES (
   , $9
   , $10
   , $11
+  , $12
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
@@ -163,6 +165,7 @@ type CreateRiskPolicyParams struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	DisabledRules        []string
 	Enabled              bool
 	Action               string
 	AutoName             bool
@@ -178,6 +181,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.Sources,
 		arg.PresidioEntities,
 		arg.PromptInjectionRules,
+		arg.DisabledRules,
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,
@@ -1637,22 +1641,24 @@ SET name = $1
   , sources = $2
   , presidio_entities = $3
   , prompt_injection_rules = $4
-  , enabled = $5
-  , action = $6
-  , auto_name = $7
-  , user_message = $8
+  , disabled_rules = $5
+  , enabled = $6
+  , action = $7
+  , auto_name = $8
+  , user_message = $9
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
         OR prompt_injection_rules IS DISTINCT FROM $4
-        OR enabled IS DISTINCT FROM $5
-        OR action IS DISTINCT FROM $6
+        OR disabled_rules IS DISTINCT FROM $5
+        OR enabled IS DISTINCT FROM $6
+        OR action IS DISTINCT FROM $7
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $9
-  AND project_id = $10
+WHERE id = $10
+  AND project_id = $11
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
@@ -1662,6 +1668,7 @@ type UpdateRiskPolicyParams struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	DisabledRules        []string
 	Enabled              bool
 	Action               string
 	AutoName             bool
@@ -1676,6 +1683,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.Sources,
 		arg.PresidioEntities,
 		arg.PromptInjectionRules,
+		arg.DisabledRules,
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,

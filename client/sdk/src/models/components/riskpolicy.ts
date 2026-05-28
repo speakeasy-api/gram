@@ -35,6 +35,10 @@ export type RiskPolicy = {
    */
   createdAt: Date;
   /**
+   * Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.
+   */
+  disabledRules?: Array<string> | undefined;
+  /**
    * Whether the policy is active.
    */
   enabled: boolean;
@@ -99,6 +103,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
       name: z.string(),
@@ -119,6 +124,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       return remap$(v, {
         "auto_name": "autoName",
         "created_at": "createdAt",
+        "disabled_rules": "disabledRules",
         "pending_messages": "pendingMessages",
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",
