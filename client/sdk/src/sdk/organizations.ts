@@ -7,6 +7,7 @@ import { organizationsDisableWebhooks } from "../funcs/organizationsDisableWebho
 import { organizationsEnableWebhooks } from "../funcs/organizationsEnableWebhooks.js";
 import { organizationsGenerateWorkOSAdminPortalLink } from "../funcs/organizationsGenerateWorkOSAdminPortalLink.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
+import { organizationsGetOnboardingStatus } from "../funcs/organizationsGetOnboardingStatus.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
@@ -107,6 +108,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Organization> {
     return unwrapAsync(organizationsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getOnboardingStatus organizations
+   *
+   * @remarks
+   * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+   */
+  async getOnboardingStatus(
+    request?: operations.GetOnboardingStatusRequest | undefined,
+    security?: operations.GetOnboardingStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.OnboardingStatusResult> {
+    return unwrapAsync(organizationsGetOnboardingStatus(
       this,
       request,
       security,

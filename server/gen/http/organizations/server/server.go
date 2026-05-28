@@ -29,6 +29,7 @@ type Server struct {
 	EnableWebhooks                http.Handler
 	DisableWebhooks               http.Handler
 	CreatePortalSession           http.Handler
+	GetOnboardingStatus           http.Handler
 	GenerateWorkOSAdminPortalLink http.Handler
 }
 
@@ -69,6 +70,7 @@ func New(
 			{"EnableWebhooks", "POST", "/rpc/organizations.enableWebhooks"},
 			{"DisableWebhooks", "POST", "/rpc/organizations.disableWebhooks"},
 			{"CreatePortalSession", "POST", "/rpc/organizations.createPortalSession"},
+			{"GetOnboardingStatus", "GET", "/rpc/organizations.getOnboardingStatus"},
 			{"GenerateWorkOSAdminPortalLink", "POST", "/rpc/organizations.generateWorkOSAdminPortalLink"},
 		},
 		Get:                           NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
@@ -81,6 +83,7 @@ func New(
 		EnableWebhooks:                NewEnableWebhooksHandler(e.EnableWebhooks, mux, decoder, encoder, errhandler, formatter),
 		DisableWebhooks:               NewDisableWebhooksHandler(e.DisableWebhooks, mux, decoder, encoder, errhandler, formatter),
 		CreatePortalSession:           NewCreatePortalSessionHandler(e.CreatePortalSession, mux, decoder, encoder, errhandler, formatter),
+		GetOnboardingStatus:           NewGetOnboardingStatusHandler(e.GetOnboardingStatus, mux, decoder, encoder, errhandler, formatter),
 		GenerateWorkOSAdminPortalLink: NewGenerateWorkOSAdminPortalLinkHandler(e.GenerateWorkOSAdminPortalLink, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -100,6 +103,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.EnableWebhooks = m(s.EnableWebhooks)
 	s.DisableWebhooks = m(s.DisableWebhooks)
 	s.CreatePortalSession = m(s.CreatePortalSession)
+	s.GetOnboardingStatus = m(s.GetOnboardingStatus)
 	s.GenerateWorkOSAdminPortalLink = m(s.GenerateWorkOSAdminPortalLink)
 }
 
@@ -118,6 +122,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountEnableWebhooksHandler(mux, h.EnableWebhooks)
 	MountDisableWebhooksHandler(mux, h.DisableWebhooks)
 	MountCreatePortalSessionHandler(mux, h.CreatePortalSession)
+	MountGetOnboardingStatusHandler(mux, h.GetOnboardingStatus)
 	MountGenerateWorkOSAdminPortalLinkHandler(mux, h.GenerateWorkOSAdminPortalLink)
 }
 
@@ -633,6 +638,59 @@ func NewCreatePortalSessionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createPortalSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOnboardingStatusHandler configures the mux to serve the
+// "organizations" service "getOnboardingStatus" endpoint.
+func MountGetOnboardingStatusHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizations.getOnboardingStatus", f)
+}
+
+// NewGetOnboardingStatusHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizations" service "getOnboardingStatus" endpoint.
+func NewGetOnboardingStatusHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOnboardingStatusRequest(mux, decoder)
+		encodeResponse = EncodeGetOnboardingStatusResponse(encoder)
+		encodeError    = EncodeGetOnboardingStatusError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOnboardingStatus")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

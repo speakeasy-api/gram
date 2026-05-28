@@ -652,6 +652,12 @@ SET scim_enabled = @enabled,
     updated_at = clock_timestamp()
 WHERE workos_id = @workos_id;
 
+-- name: ClearWorkosOrgID :exec
+UPDATE organization_metadata
+SET workos_id = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: ListActiveRoleAssignmentsByOrganization :many
 SELECT
     ora.user_id,

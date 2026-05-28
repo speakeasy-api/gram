@@ -35,6 +35,16 @@ type UpdateInviteRoleRequestBody struct {
 type GenerateWorkOSAdminPortalLinkRequestBody struct {
 	// WorkOS Admin Portal intent.
 	Intent *string `form:"intent,omitempty" json:"intent,omitempty" xml:"intent,omitempty"`
+	// URL to redirect the user to after the Admin Portal session ends.
+	ReturnURL *string `form:"return_url,omitempty" json:"return_url,omitempty" xml:"return_url,omitempty"`
+	// URL to redirect the user to on successful completion of the Admin Portal
+	// flow.
+	SuccessURL *string `form:"success_url,omitempty" json:"success_url,omitempty" xml:"success_url,omitempty"`
+	// IT contact email addresses displayed in the Admin Portal for end-user
+	// support.
+	ItContactEmails []string `form:"it_contact_emails,omitempty" json:"it_contact_emails,omitempty" xml:"it_contact_emails,omitempty"`
+	// Per-intent configuration for the Admin Portal flow.
+	IntentOptions *WorkOSIntentOptionsRequestBody `form:"intent_options,omitempty" json:"intent_options,omitempty" xml:"intent_options,omitempty"`
 }
 
 // GetResponseBody is the type of the "organizations" service "get" endpoint
@@ -126,6 +136,15 @@ type CreatePortalSessionResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// Front-end token for the webhook portal session.
 	Token string `form:"token" json:"token" xml:"token"`
+}
+
+// GetOnboardingStatusResponseBody is the type of the "organizations" service
+// "getOnboardingStatus" endpoint HTTP response body.
+type GetOnboardingStatusResponseBody struct {
+	// Whether the organization has at least one active SSO connection in WorkOS.
+	SsoConfigured bool `form:"sso_configured" json:"sso_configured" xml:"sso_configured"`
+	// Whether the organization has at least one linked directory sync in WorkOS.
+	DsyncConfigured bool `form:"dsync_configured" json:"dsync_configured" xml:"dsync_configured"`
 }
 
 // GenerateWorkOSAdminPortalLinkResponseBody is the type of the "organizations"
@@ -1994,6 +2013,196 @@ type CreatePortalSessionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetOnboardingStatusUnauthorizedResponseBody is the type of the
+// "organizations" service "getOnboardingStatus" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetOnboardingStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusForbiddenResponseBody is the type of the "organizations"
+// service "getOnboardingStatus" endpoint HTTP response body for the
+// "forbidden" error.
+type GetOnboardingStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusBadRequestResponseBody is the type of the "organizations"
+// service "getOnboardingStatus" endpoint HTTP response body for the
+// "bad_request" error.
+type GetOnboardingStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusNotFoundResponseBody is the type of the "organizations"
+// service "getOnboardingStatus" endpoint HTTP response body for the
+// "not_found" error.
+type GetOnboardingStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusConflictResponseBody is the type of the "organizations"
+// service "getOnboardingStatus" endpoint HTTP response body for the "conflict"
+// error.
+type GetOnboardingStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusUnsupportedMediaResponseBody is the type of the
+// "organizations" service "getOnboardingStatus" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetOnboardingStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusInvalidResponseBody is the type of the "organizations"
+// service "getOnboardingStatus" endpoint HTTP response body for the "invalid"
+// error.
+type GetOnboardingStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusInvariantViolationResponseBody is the type of the
+// "organizations" service "getOnboardingStatus" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetOnboardingStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusUnexpectedResponseBody is the type of the "organizations"
+// service "getOnboardingStatus" endpoint HTTP response body for the
+// "unexpected" error.
+type GetOnboardingStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOnboardingStatusGatewayErrorResponseBody is the type of the
+// "organizations" service "getOnboardingStatus" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetOnboardingStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody is the type of the
 // "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -2229,6 +2438,32 @@ type OrganizationUserResponseBody struct {
 	LastLogin *string `form:"last_login,omitempty" json:"last_login,omitempty" xml:"last_login,omitempty"`
 }
 
+// WorkOSIntentOptionsRequestBody is used to define fields on request body
+// types.
+type WorkOSIntentOptionsRequestBody struct {
+	// SSO-specific intent options.
+	Sso *WorkOSSSOIntentOptionsRequestBody `form:"sso,omitempty" json:"sso,omitempty" xml:"sso,omitempty"`
+	// Domain verification-specific intent options.
+	DomainVerification *WorkOSDomainVerificationIntentOptionsRequestBody `form:"domain_verification,omitempty" json:"domain_verification,omitempty" xml:"domain_verification,omitempty"`
+}
+
+// WorkOSSSOIntentOptionsRequestBody is used to define fields on request body
+// types.
+type WorkOSSSOIntentOptionsRequestBody struct {
+	// SSO bookmark slug to launch a specific app after authentication.
+	BookmarkSlug *string `form:"bookmark_slug,omitempty" json:"bookmark_slug,omitempty" xml:"bookmark_slug,omitempty"`
+	// SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML,
+	// GoogleSAML).
+	ProviderType *string `form:"provider_type,omitempty" json:"provider_type,omitempty" xml:"provider_type,omitempty"`
+}
+
+// WorkOSDomainVerificationIntentOptionsRequestBody is used to define fields on
+// request body types.
+type WorkOSDomainVerificationIntentOptionsRequestBody struct {
+	// Domain name to verify.
+	DomainName *string `form:"domain_name,omitempty" json:"domain_name,omitempty" xml:"domain_name,omitempty"`
+}
+
 // NewGetResponseBody builds the HTTP response body from the result of the
 // "get" endpoint of the "organizations" service.
 func NewGetResponseBody(res *organizations.Organization) *GetResponseBody {
@@ -2325,6 +2560,16 @@ func NewCreatePortalSessionResponseBody(res *organizations.CreatePortalSessionRe
 	body := &CreatePortalSessionResponseBody{
 		URL:   res.URL,
 		Token: res.Token,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusResponseBody builds the HTTP response body from the
+// result of the "getOnboardingStatus" endpoint of the "organizations" service.
+func NewGetOnboardingStatusResponseBody(res *organizations.OnboardingStatusResult) *GetOnboardingStatusResponseBody {
+	body := &GetOnboardingStatusResponseBody{
+		SsoConfigured:   res.SsoConfigured,
+		DsyncConfigured: res.DsyncConfigured,
 	}
 	return body
 }
@@ -3761,6 +4006,156 @@ func NewCreatePortalSessionGatewayErrorResponseBody(res *goa.ServiceError) *Crea
 	return body
 }
 
+// NewGetOnboardingStatusUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getOnboardingStatus" endpoint of the "organizations"
+// service.
+func NewGetOnboardingStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetOnboardingStatusUnauthorizedResponseBody {
+	body := &GetOnboardingStatusUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusForbiddenResponseBody builds the HTTP response body
+// from the result of the "getOnboardingStatus" endpoint of the "organizations"
+// service.
+func NewGetOnboardingStatusForbiddenResponseBody(res *goa.ServiceError) *GetOnboardingStatusForbiddenResponseBody {
+	body := &GetOnboardingStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusBadRequestResponseBody builds the HTTP response body
+// from the result of the "getOnboardingStatus" endpoint of the "organizations"
+// service.
+func NewGetOnboardingStatusBadRequestResponseBody(res *goa.ServiceError) *GetOnboardingStatusBadRequestResponseBody {
+	body := &GetOnboardingStatusBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusNotFoundResponseBody builds the HTTP response body
+// from the result of the "getOnboardingStatus" endpoint of the "organizations"
+// service.
+func NewGetOnboardingStatusNotFoundResponseBody(res *goa.ServiceError) *GetOnboardingStatusNotFoundResponseBody {
+	body := &GetOnboardingStatusNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusConflictResponseBody builds the HTTP response body
+// from the result of the "getOnboardingStatus" endpoint of the "organizations"
+// service.
+func NewGetOnboardingStatusConflictResponseBody(res *goa.ServiceError) *GetOnboardingStatusConflictResponseBody {
+	body := &GetOnboardingStatusConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getOnboardingStatus" endpoint of the
+// "organizations" service.
+func NewGetOnboardingStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOnboardingStatusUnsupportedMediaResponseBody {
+	body := &GetOnboardingStatusUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusInvalidResponseBody builds the HTTP response body from
+// the result of the "getOnboardingStatus" endpoint of the "organizations"
+// service.
+func NewGetOnboardingStatusInvalidResponseBody(res *goa.ServiceError) *GetOnboardingStatusInvalidResponseBody {
+	body := &GetOnboardingStatusInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getOnboardingStatus" endpoint of the
+// "organizations" service.
+func NewGetOnboardingStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetOnboardingStatusInvariantViolationResponseBody {
+	body := &GetOnboardingStatusInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getOnboardingStatus" endpoint of the "organizations"
+// service.
+func NewGetOnboardingStatusUnexpectedResponseBody(res *goa.ServiceError) *GetOnboardingStatusUnexpectedResponseBody {
+	body := &GetOnboardingStatusUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOnboardingStatusGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getOnboardingStatus" endpoint of the "organizations"
+// service.
+func NewGetOnboardingStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetOnboardingStatusGatewayErrorResponseBody {
+	body := &GetOnboardingStatusGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGenerateWorkOSAdminPortalLinkUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "generateWorkOSAdminPortalLink"
 // endpoint of the "organizations" service.
@@ -4008,11 +4403,31 @@ func NewCreatePortalSessionPayload(sessionToken *string) *organizations.CreatePo
 	return v
 }
 
+// NewGetOnboardingStatusPayload builds a organizations service
+// getOnboardingStatus endpoint payload.
+func NewGetOnboardingStatusPayload(sessionToken *string) *organizations.GetOnboardingStatusPayload {
+	v := &organizations.GetOnboardingStatusPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewGenerateWorkOSAdminPortalLinkPayload builds a organizations service
 // generateWorkOSAdminPortalLink endpoint payload.
 func NewGenerateWorkOSAdminPortalLinkPayload(body *GenerateWorkOSAdminPortalLinkRequestBody, sessionToken *string) *organizations.GenerateWorkOSAdminPortalLinkPayload {
 	v := &organizations.GenerateWorkOSAdminPortalLinkPayload{
-		Intent: *body.Intent,
+		Intent:     *body.Intent,
+		ReturnURL:  body.ReturnURL,
+		SuccessURL: body.SuccessURL,
+	}
+	if body.ItContactEmails != nil {
+		v.ItContactEmails = make([]string, len(body.ItContactEmails))
+		for i, val := range body.ItContactEmails {
+			v.ItContactEmails[i] = val
+		}
+	}
+	if body.IntentOptions != nil {
+		v.IntentOptions = unmarshalWorkOSIntentOptionsRequestBodyToOrganizationsWorkOSIntentOptions(body.IntentOptions)
 	}
 	v.SessionToken = sessionToken
 

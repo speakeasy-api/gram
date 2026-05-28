@@ -26,6 +26,7 @@ type Endpoints struct {
 	EnableWebhooks                goa.Endpoint
 	DisableWebhooks               goa.Endpoint
 	CreatePortalSession           goa.Endpoint
+	GetOnboardingStatus           goa.Endpoint
 	GenerateWorkOSAdminPortalLink goa.Endpoint
 }
 
@@ -44,6 +45,7 @@ func NewEndpoints(s Service) *Endpoints {
 		EnableWebhooks:                NewEnableWebhooksEndpoint(s, a.APIKeyAuth),
 		DisableWebhooks:               NewDisableWebhooksEndpoint(s, a.APIKeyAuth),
 		CreatePortalSession:           NewCreatePortalSessionEndpoint(s, a.APIKeyAuth),
+		GetOnboardingStatus:           NewGetOnboardingStatusEndpoint(s, a.APIKeyAuth),
 		GenerateWorkOSAdminPortalLink: NewGenerateWorkOSAdminPortalLinkEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -61,6 +63,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.EnableWebhooks = m(e.EnableWebhooks)
 	e.DisableWebhooks = m(e.DisableWebhooks)
 	e.CreatePortalSession = m(e.CreatePortalSession)
+	e.GetOnboardingStatus = m(e.GetOnboardingStatus)
 	e.GenerateWorkOSAdminPortalLink = m(e.GenerateWorkOSAdminPortalLink)
 }
 
@@ -291,6 +294,29 @@ func NewCreatePortalSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.CreatePortalSession(ctx, p)
+	}
+}
+
+// NewGetOnboardingStatusEndpoint returns an endpoint function that calls the
+// method "getOnboardingStatus" of service "organizations".
+func NewGetOnboardingStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOnboardingStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOnboardingStatus(ctx, p)
 	}
 }
 

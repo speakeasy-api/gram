@@ -1995,6 +1995,199 @@ func EncodeCreatePortalSessionError(encoder func(context.Context, http.ResponseW
 	}
 }
 
+// EncodeGetOnboardingStatusResponse returns an encoder for responses returned
+// by the organizations getOnboardingStatus endpoint.
+func EncodeGetOnboardingStatusResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*organizations.OnboardingStatusResult)
+		enc := encoder(ctx, w)
+		body := NewGetOnboardingStatusResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetOnboardingStatusRequest returns a decoder for requests sent to the
+// organizations getOnboardingStatus endpoint.
+func DecodeGetOnboardingStatusRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*organizations.GetOnboardingStatusPayload, error) {
+	return func(r *http.Request) (*organizations.GetOnboardingStatusPayload, error) {
+		var payload *organizations.GetOnboardingStatusPayload
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewGetOnboardingStatusPayload(sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetOnboardingStatusError returns an encoder for errors returned by the
+// getOnboardingStatus organizations endpoint.
+func EncodeGetOnboardingStatusError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetOnboardingStatusGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGenerateWorkOSAdminPortalLinkResponse returns an encoder for responses
 // returned by the organizations generateWorkOSAdminPortalLink endpoint.
 func EncodeGenerateWorkOSAdminPortalLinkResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -2243,6 +2436,53 @@ func marshalOrganizationsOrganizationUserToOrganizationUserResponseBody(v *organ
 		CreatedAt:          v.CreatedAt,
 		UpdatedAt:          v.UpdatedAt,
 		LastLogin:          v.LastLogin,
+	}
+
+	return res
+}
+
+// unmarshalWorkOSIntentOptionsRequestBodyToOrganizationsWorkOSIntentOptions
+// builds a value of type *organizations.WorkOSIntentOptions from a value of
+// type *WorkOSIntentOptionsRequestBody.
+func unmarshalWorkOSIntentOptionsRequestBodyToOrganizationsWorkOSIntentOptions(v *WorkOSIntentOptionsRequestBody) *organizations.WorkOSIntentOptions {
+	if v == nil {
+		return nil
+	}
+	res := &organizations.WorkOSIntentOptions{}
+	if v.Sso != nil {
+		res.Sso = unmarshalWorkOSSSOIntentOptionsRequestBodyToOrganizationsWorkOSSSOIntentOptions(v.Sso)
+	}
+	if v.DomainVerification != nil {
+		res.DomainVerification = unmarshalWorkOSDomainVerificationIntentOptionsRequestBodyToOrganizationsWorkOSDomainVerificationIntentOptions(v.DomainVerification)
+	}
+
+	return res
+}
+
+// unmarshalWorkOSSSOIntentOptionsRequestBodyToOrganizationsWorkOSSSOIntentOptions
+// builds a value of type *organizations.WorkOSSSOIntentOptions from a value of
+// type *WorkOSSSOIntentOptionsRequestBody.
+func unmarshalWorkOSSSOIntentOptionsRequestBodyToOrganizationsWorkOSSSOIntentOptions(v *WorkOSSSOIntentOptionsRequestBody) *organizations.WorkOSSSOIntentOptions {
+	if v == nil {
+		return nil
+	}
+	res := &organizations.WorkOSSSOIntentOptions{
+		BookmarkSlug: v.BookmarkSlug,
+		ProviderType: v.ProviderType,
+	}
+
+	return res
+}
+
+// unmarshalWorkOSDomainVerificationIntentOptionsRequestBodyToOrganizationsWorkOSDomainVerificationIntentOptions
+// builds a value of type *organizations.WorkOSDomainVerificationIntentOptions
+// from a value of type *WorkOSDomainVerificationIntentOptionsRequestBody.
+func unmarshalWorkOSDomainVerificationIntentOptionsRequestBodyToOrganizationsWorkOSDomainVerificationIntentOptions(v *WorkOSDomainVerificationIntentOptionsRequestBody) *organizations.WorkOSDomainVerificationIntentOptions {
+	if v == nil {
+		return nil
+	}
+	res := &organizations.WorkOSDomainVerificationIntentOptions{
+		DomainName: v.DomainName,
 	}
 
 	return res

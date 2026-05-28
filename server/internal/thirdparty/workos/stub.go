@@ -318,6 +318,18 @@ func (s *StubClient) UpdateOrganizationExternalID(_ context.Context, workosOrgID
 	return nil
 }
 
+func (s *StubClient) GenerateAdminPortalLink(_ context.Context, workosOrgID string, intent PortalIntent, _ GenerateAdminPortalLinkOpts) (string, error) {
+	return fmt.Sprintf("https://stub.workos.com/portal?intent=%s&organization=%s", string(intent), workosOrgID), nil
+}
+
+func (s *StubClient) ListConnections(_ context.Context, _ string) ([]Connection, error) {
+	return nil, nil
+}
+
+func (s *StubClient) ListDirectories(_ context.Context, _ string) ([]Directory, error) {
+	return nil, nil
+}
+
 func (s *StubClient) EnsureOrgExternalID(_ context.Context, workosOrgID, gramOrgID string) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()

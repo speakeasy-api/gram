@@ -13057,6 +13057,88 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: Organization
+  /rpc/organizations.getOnboardingStatus:
+    get:
+      description: Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+      operationId: getOnboardingStatus
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingStatusResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getOnboardingStatus organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: getOnboardingStatus
+      x-speakeasy-react-hook:
+        name: OnboardingStatus
   /rpc/organizations.listInvites:
     get:
       description: List pending WorkOS invitations for the active organization.
@@ -33092,6 +33174,19 @@ components:
             - audit_logs
             - domain_verification
             - log_streams
+        intent_options:
+          $ref: '#/components/schemas/WorkOSIntentOptions'
+        it_contact_emails:
+          type: array
+          items:
+            type: string
+          description: IT contact email addresses displayed in the Admin Portal for end-user support.
+        return_url:
+          type: string
+          description: URL to redirect the user to after the Admin Portal session ends.
+        success_url:
+          type: string
+          description: URL to redirect the user to on successful completion of the Admin Portal flow.
       required:
         - intent
     GenerateWorkOSAdminPortalLinkResult:
@@ -35910,6 +36005,18 @@ components:
         - total_tool_calls
         - failed_tool_calls
         - avg_latency_ms
+    OnboardingStatusResult:
+      type: object
+      properties:
+        dsync_configured:
+          type: boolean
+          description: Whether the organization has at least one linked directory sync in WorkOS.
+        sso_configured:
+          type: boolean
+          description: Whether the organization has at least one active SSO connection in WorkOS.
+      required:
+        - sso_configured
+        - dsync_configured
     OpenAPIv3DeploymentAsset:
       type: object
       properties:
@@ -41783,6 +41890,28 @@ components:
       required:
         - verified
         - message
+    WorkOSDomainVerificationIntentOptions:
+      type: object
+      properties:
+        domain_name:
+          type: string
+          description: Domain name to verify.
+    WorkOSIntentOptions:
+      type: object
+      properties:
+        domain_verification:
+          $ref: '#/components/schemas/WorkOSDomainVerificationIntentOptions'
+        sso:
+          $ref: '#/components/schemas/WorkOSSSOIntentOptions'
+    WorkOSSSOIntentOptions:
+      type: object
+      properties:
+        bookmark_slug:
+          type: string
+          description: SSO bookmark slug to launch a specific app after authentication.
+        provider_type:
+          type: string
+          description: SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML, GoogleSAML).
   securitySchemes:
     admin_auth_header_Authorization:
       type: apiKey

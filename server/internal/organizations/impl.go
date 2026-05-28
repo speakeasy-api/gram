@@ -61,7 +61,10 @@ type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
-	GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent workos.PortalIntent, returnURL string) (string, error)
+	ListRoles(ctx context.Context, workosOrgID string) ([]workos.Role, error)
+	GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent workos.PortalIntent, opts workos.GenerateAdminPortalLinkOpts) (string, error)
+	ListConnections(ctx context.Context, organizationID string) ([]workos.Connection, error)
+	ListDirectories(ctx context.Context, organizationID string) ([]workos.Directory, error)
 }
 
 var _ OrganizationProvider = (*workos.Client)(nil)
@@ -120,6 +123,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 }
 
 const inviteCallbackPath = "/rpc/organizations.inviteCallback"
+const setupCallbackPath = "/v1/setup/callback"
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
@@ -132,6 +136,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 	// Raw HTTP handler for Gram invite-token acceptance.
 	mux.Handle("GET", inviteCallbackPath, service.handleInviteCallback)
+
+	// Raw HTTP handler for onboarding setup portal callback.
+	// WorkOS success_url redirects here; we verify the setup state and redirect
+	// to the appropriate wizard step in the dashboard.
+	mux.Handle("GET", setupCallbackPath, service.handleSetupCallback)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -896,6 +905,123 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	}, nil
 }
 
+func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboardingStatusPayload) (*gen.OnboardingStatusResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+	}
+
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	if workosOrgID == "" {
+		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false}, nil
+	}
+
+	connections, err := s.orgs.ListConnections(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check SSO connections").Log(ctx, s.logger)
+	}
+
+	directories, err := s.orgs.ListDirectories(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check directory sync").Log(ctx, s.logger)
+	}
+
+	return &gen.OnboardingStatusResult{
+		SsoConfigured:   workos.HasActiveConnection(connections),
+		DsyncConfigured: workos.HasActiveDirectory(directories),
+	}, nil
+}
+
+// handleSetupCallback is the backend handler that WorkOS's success_url redirects to
+// after portal completion. It authenticates the session, verifies the setup
+// state with WorkOS, and 302-redirects to the appropriate wizard step.
+//
+// Query params:
+//   - intent: "sso" or "dsync"
+func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
+	ctx, span := s.tracer.Start(r.Context(), "organizations.handleSetupCallback")
+	defer span.End()
+
+	intent := r.URL.Query().Get("intent")
+	if intent == "" {
+		span.SetStatus(codes.Error, "missing intent")
+		http.Error(w, "missing intent parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Authenticate the user's session cookie (set by SessionMiddleware).
+	sessionToken, ok := contextvalues.GetSessionTokenFromContext(ctx)
+	if !ok {
+		span.SetStatus(codes.Error, "unauthenticated")
+		http.Redirect(w, r, s.siteURL+"/login", http.StatusTemporaryRedirect)
+		return
+	}
+
+	ctx, err := s.auth.Authorize(ctx, sessionToken, &security.APIKeyScheme{
+		Name:           "session",
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	})
+	if err != nil {
+		span.SetStatus(codes.Error, "auth failed")
+		http.Redirect(w, r, s.siteURL+"/login", http.StatusTemporaryRedirect)
+		return
+	}
+
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		span.SetStatus(codes.Error, "missing auth context")
+		http.Error(w, "missing auth context", http.StatusUnauthorized)
+		return
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
+		span.SetStatus(codes.Error, "read org failed")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	orgSlug := org.Slug
+
+	// Determine the next step based on what was just completed and what's verified.
+	var nextStep int
+	switch intent {
+	case "sso":
+		if workosOrgID != "" {
+			connections, err := s.orgs.ListConnections(ctx, workosOrgID)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
+			}
+			if workos.HasActiveConnection(connections) {
+				nextStep = 1 // SSO confirmed → advance to directory sync
+			}
+		}
+	case "dsync":
+		// Directory sync may take time to become "linked" after portal setup.
+		// Completing the portal is sufficient to advance — DSYNC is also skippable.
+		nextStep = 2
+	}
+
+	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
+	if nextStep > 0 {
+		redirectURL += fmt.Sprintf("?step=%d", nextStep)
+	}
+
+	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+}
+
 func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *gen.GenerateWorkOSAdminPortalLinkPayload) (res *gen.GenerateWorkOSAdminPortalLinkResult, err error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -916,7 +1042,28 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS")
 	}
 
-	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), "")
+	opts := workos.GenerateAdminPortalLinkOpts{
+		ReturnURL:       conv.PtrValOr(payload.ReturnURL, ""),
+		SuccessURL:      conv.PtrValOr(payload.SuccessURL, ""),
+		ITContactEmails: payload.ItContactEmails,
+	}
+	if payload.IntentOptions != nil {
+		iopts := &workos.IntentOptions{}
+		if payload.IntentOptions.Sso != nil {
+			iopts.SSO = &workos.SSOIntentOptions{
+				BookmarkSlug: conv.PtrValOr(payload.IntentOptions.Sso.BookmarkSlug, ""),
+				ProviderType: conv.PtrValOr(payload.IntentOptions.Sso.ProviderType, ""),
+			}
+		}
+		if payload.IntentOptions.DomainVerification != nil {
+			iopts.DomainVerification = &workos.DomainVerificationIntentOptions{
+				DomainName: conv.PtrValOr(payload.IntentOptions.DomainVerification.DomainName, ""),
+			}
+		}
+		opts.IntentOptions = iopts
+	}
+
+	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), opts)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate WorkOS admin portal link").Log(ctx, s.logger)
 	}

@@ -215,6 +215,26 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreatePortalSession"}`)
 	})
 
+	Method("getOnboardingStatus", func() {
+		Description("Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(OnboardingStatusResult)
+
+		HTTP(func() {
+			GET("/rpc/organizations.getOnboardingStatus")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOnboardingStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getOnboardingStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OnboardingStatus"}`)
+	})
+
 	Method("generateWorkOSAdminPortalLink", func() {
 		Description("Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).")
 
@@ -222,6 +242,10 @@ var _ = Service("organizations", func() {
 			Attribute("intent", String, "WorkOS Admin Portal intent.", func() {
 				Enum("dsync", "sso", "audit_logs", "domain_verification", "log_streams")
 			})
+			Attribute("return_url", String, "URL to redirect the user to after the Admin Portal session ends.")
+			Attribute("success_url", String, "URL to redirect the user to on successful completion of the Admin Portal flow.")
+			Attribute("it_contact_emails", ArrayOf(String), "IT contact email addresses displayed in the Admin Portal for end-user support.")
+			Attribute("intent_options", WorkOSIntentOptions, "Per-intent configuration for the Admin Portal flow.")
 			Required("intent")
 			security.SessionPayload()
 		})
@@ -319,8 +343,29 @@ var CreatePortalSessionResult = Type("CreatePortalSessionResult", func() {
 	Required("url", "token")
 })
 
+var WorkOSSSOIntentOptions = Type("WorkOSSSOIntentOptions", func() {
+	Attribute("bookmark_slug", String, "SSO bookmark slug to launch a specific app after authentication.")
+	Attribute("provider_type", String, "SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML, GoogleSAML).")
+})
+
+var WorkOSDomainVerificationIntentOptions = Type("WorkOSDomainVerificationIntentOptions", func() {
+	Attribute("domain_name", String, "Domain name to verify.")
+})
+
+var WorkOSIntentOptions = Type("WorkOSIntentOptions", func() {
+	Attribute("sso", WorkOSSSOIntentOptions, "SSO-specific intent options.")
+	Attribute("domain_verification", WorkOSDomainVerificationIntentOptions, "Domain verification-specific intent options.")
+})
+
 var GenerateWorkOSAdminPortalLinkResult = Type("GenerateWorkOSAdminPortalLinkResult", func() {
 	Attribute("url", String, "URL to the WorkOS Admin Portal flow.")
 
 	Required("url")
+})
+
+var OnboardingStatusResult = Type("OnboardingStatusResult", func() {
+	Attribute("sso_configured", Boolean, "Whether the organization has at least one active SSO connection in WorkOS.")
+	Attribute("dsync_configured", Boolean, "Whether the organization has at least one linked directory sync in WorkOS.")
+
+	Required("sso_configured", "dsync_configured")
 })

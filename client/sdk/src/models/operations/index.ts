@@ -108,6 +108,7 @@ export * from "./getmcpmetadata.js";
 export * from "./getmcpserver.js";
 export * from "./getmcpserverdetails.js";
 export * from "./getobservabilityoverview.js";
+export * from "./getonboardingstatus.js";
 export * from "./getorganization.js";
 export * from "./getotelforwardingconfig.js";
 export * from "./getperiodusage.js";

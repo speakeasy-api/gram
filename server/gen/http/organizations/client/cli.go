@@ -197,6 +197,21 @@ func BuildCreatePortalSessionPayload(organizationsCreatePortalSessionSessionToke
 	return v, nil
 }
 
+// BuildGetOnboardingStatusPayload builds the payload for the organizations
+// getOnboardingStatus endpoint from CLI flags.
+func BuildGetOnboardingStatusPayload(organizationsGetOnboardingStatusSessionToken string) (*organizations.GetOnboardingStatusPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsGetOnboardingStatusSessionToken != "" {
+			sessionToken = &organizationsGetOnboardingStatusSessionToken
+		}
+	}
+	v := &organizations.GetOnboardingStatusPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGenerateWorkOSAdminPortalLinkPayload builds the payload for the
 // organizations generateWorkOSAdminPortalLink endpoint from CLI flags.
 func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminPortalLinkBody string, organizationsGenerateWorkOSAdminPortalLinkSessionToken string) (*organizations.GenerateWorkOSAdminPortalLinkPayload, error) {
@@ -205,7 +220,7 @@ func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminP
 	{
 		err = json.Unmarshal([]byte(organizationsGenerateWorkOSAdminPortalLinkBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"intent\": \"sso\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"intent\": \"sso\",\n      \"intent_options\": {\n         \"domain_verification\": {\n            \"domain_name\": \"abc123\"\n         },\n         \"sso\": {\n            \"bookmark_slug\": \"abc123\",\n            \"provider_type\": \"abc123\"\n         }\n      },\n      \"it_contact_emails\": [\n         \"abc123\"\n      ],\n      \"return_url\": \"abc123\",\n      \"success_url\": \"abc123\"\n   }'")
 		}
 		if !(body.Intent == "dsync" || body.Intent == "sso" || body.Intent == "audit_logs" || body.Intent == "domain_verification" || body.Intent == "log_streams") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.intent", body.Intent, []any{"dsync", "sso", "audit_logs", "domain_verification", "log_streams"}))
@@ -221,7 +236,18 @@ func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminP
 		}
 	}
 	v := &organizations.GenerateWorkOSAdminPortalLinkPayload{
-		Intent: body.Intent,
+		Intent:     body.Intent,
+		ReturnURL:  body.ReturnURL,
+		SuccessURL: body.SuccessURL,
+	}
+	if body.ItContactEmails != nil {
+		v.ItContactEmails = make([]string, len(body.ItContactEmails))
+		for i, val := range body.ItContactEmails {
+			v.ItContactEmails[i] = val
+		}
+	}
+	if body.IntentOptions != nil {
+		v.IntentOptions = marshalWorkOSIntentOptionsRequestBodyToOrganizationsWorkOSIntentOptions(body.IntentOptions)
 	}
 	v.SessionToken = sessionToken
 

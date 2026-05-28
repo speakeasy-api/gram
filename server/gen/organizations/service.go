@@ -39,6 +39,9 @@ type Service interface {
 	DisableWebhooks(context.Context, *DisableWebhooksPayload) (err error)
 	// Create a webhook portal session.
 	CreatePortalSession(context.Context, *CreatePortalSessionPayload) (res *CreatePortalSessionResult, err error)
+	// Get the onboarding status for the active organization by checking WorkOS SSO
+	// connections and directory sync state.
+	GetOnboardingStatus(context.Context, *GetOnboardingStatusPayload) (res *OnboardingStatusResult, err error)
 	// Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
 	GenerateWorkOSAdminPortalLink(context.Context, *GenerateWorkOSAdminPortalLinkPayload) (res *GenerateWorkOSAdminPortalLinkResult, err error)
 }
@@ -63,7 +66,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "generateWorkOSAdminPortalLink"}
+var MethodNames = [12]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "generateWorkOSAdminPortalLink"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -96,8 +99,18 @@ type EnableWebhooksPayload struct {
 // organizations service generateWorkOSAdminPortalLink method.
 type GenerateWorkOSAdminPortalLinkPayload struct {
 	// WorkOS Admin Portal intent.
-	Intent       string
-	SessionToken *string
+	Intent string
+	// URL to redirect the user to after the Admin Portal session ends.
+	ReturnURL *string
+	// URL to redirect the user to on successful completion of the Admin Portal
+	// flow.
+	SuccessURL *string
+	// IT contact email addresses displayed in the Admin Portal for end-user
+	// support.
+	ItContactEmails []string
+	// Per-intent configuration for the Admin Portal flow.
+	IntentOptions *WorkOSIntentOptions
+	SessionToken  *string
 }
 
 // GenerateWorkOSAdminPortalLinkResult is the result type of the organizations
@@ -105,6 +118,12 @@ type GenerateWorkOSAdminPortalLinkPayload struct {
 type GenerateWorkOSAdminPortalLinkResult struct {
 	// URL to the WorkOS Admin Portal flow.
 	URL string
+}
+
+// GetOnboardingStatusPayload is the payload type of the organizations service
+// getOnboardingStatus method.
+type GetOnboardingStatusPayload struct {
+	SessionToken *string
 }
 
 // GetPayload is the payload type of the organizations service get method.
@@ -137,6 +156,15 @@ type ListUsersPayload struct {
 type ListUsersResult struct {
 	// Users linked to the organization in Gram.
 	Users []*OrganizationUser
+}
+
+// OnboardingStatusResult is the result type of the organizations service
+// getOnboardingStatus method.
+type OnboardingStatusResult struct {
+	// Whether the organization has at least one active SSO connection in WorkOS.
+	SsoConfigured bool
+	// Whether the organization has at least one linked directory sync in WorkOS.
+	DsyncConfigured bool
 }
 
 // Organization is the result type of the organizations service get method.
@@ -237,6 +265,26 @@ type UpdateInviteRolePayload struct {
 	// Role ID to assign to the invitee.
 	RoleID       string
 	SessionToken *string
+}
+
+type WorkOSDomainVerificationIntentOptions struct {
+	// Domain name to verify.
+	DomainName *string
+}
+
+type WorkOSIntentOptions struct {
+	// SSO-specific intent options.
+	Sso *WorkOSSSOIntentOptions
+	// Domain verification-specific intent options.
+	DomainVerification *WorkOSDomainVerificationIntentOptions
+}
+
+type WorkOSSSOIntentOptions struct {
+	// SSO bookmark slug to launch a specific app after authentication.
+	BookmarkSlug *string
+	// SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML,
+	// GoogleSAML).
+	ProviderType *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
