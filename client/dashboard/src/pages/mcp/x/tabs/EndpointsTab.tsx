@@ -272,8 +272,8 @@ function EndpointRow({
   };
 
   const urlPrefix = customDomainLabel
-    ? `https://${customDomainLabel}/x/mcp/`
-    : `${getServerURL()}/x/mcp/`;
+    ? `https://${customDomainLabel}/mcp/`
+    : `${getServerURL()}/mcp/`;
 
   return (
     <div className="rounded-md border p-3">
@@ -412,7 +412,7 @@ function NewEndpointRow({
         <Stack direction="horizontal" align="center" className="min-w-0 flex-1">
           {!customDomainId && (
             <Type muted mono variant="small">
-              {`${getServerURL()}/x/mcp/`}
+              {`${getServerURL()}/mcp/`}
             </Type>
           )}
           <Input
@@ -524,7 +524,7 @@ function NewCustomDomainEndpointRow({
             </SelectContent>
           </Select>
           <Type muted mono variant="small">
-            /x/mcp/
+            /mcp/
           </Type>
           <Input
             value={slug}
