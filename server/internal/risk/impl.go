@@ -1337,45 +1337,8 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 	}, nil
 }
 
-func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerRiskAnalysisPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return err
-	}
-
-	id, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return oops.C(oops.CodeInvalid)
-	}
-
-	policy, err := s.repo.BumpRiskPolicyVersion(ctx, repo.BumpRiskPolicyVersionParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
-	}
-
-	if err := s.audit.LogRiskPolicyTrigger(ctx, s.db, audit.LogRiskPolicyTriggerEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		RiskPolicyID:     policy.ID,
-		RiskPolicyName:   policy.Name,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log risk policy trigger").Log(ctx, s.logger)
-	}
-
-	if err := s.signaler.Signal(ctx, policy.ProjectID); err != nil {
-		return fmt.Errorf("signal risk analysis workflow: %w", err)
-	}
-	return nil
+func (s *Service) TriggerRiskAnalysis(_ context.Context, _ *gen.TriggerRiskAnalysisPayload) error {
+	return oops.E(oops.CodeNotImplemented, nil, "operation not supported")
 }
 
 func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.CreateCustomDetectionRulePayload) (*types.RiskCustomDetectionRule, error) {

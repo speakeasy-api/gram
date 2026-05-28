@@ -43,7 +43,6 @@ import {
   useRiskCreatePolicyMutation,
   useRiskListPolicies,
   useRiskPoliciesDeleteMutation,
-  useRiskPoliciesTriggerMutation,
   useRiskPoliciesUpdateMutation,
 } from "@gram/client/react-query/index.js";
 import {
@@ -243,10 +242,6 @@ function PolicyCenterContent() {
     onSuccess: invalidate,
   });
 
-  const triggerMutation = useRiskPoliciesTriggerMutation({
-    onSuccess: invalidate,
-  });
-
   const handleCreate = () => {
     setEditingPolicy(null);
     setFormName("");
@@ -332,12 +327,6 @@ function PolicyCenterContent() {
 
   const handleDelete = (id: string) => {
     deleteMutation.mutate({ request: { id } });
-  };
-
-  const handleTrigger = (id: string) => {
-    triggerMutation.mutate({
-      request: { triggerRiskAnalysisRequestBody: { id } },
-    });
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
@@ -658,13 +647,7 @@ function PolicyCenterContent() {
           }}
         >
           <SheetContent side="right" className="sm:max-w-md">
-            {runPanelPolicy && (
-              <RunPanel
-                policy={runPanelPolicy}
-                onTrigger={() => handleTrigger(runPanelPolicy.id)}
-                isTriggerPending={triggerMutation.isPending}
-              />
-            )}
+            {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
           </SheetContent>
         </Sheet>
       </Page.Body>
@@ -1042,15 +1025,7 @@ function PolicySheetBody({
 /*  RunPanel                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function RunPanel({
-  policy,
-  onTrigger,
-  isTriggerPending,
-}: {
-  policy: RiskPolicy;
-  onTrigger: () => void;
-  isTriggerPending: boolean;
-}) {
+function RunPanel({ policy }: { policy: RiskPolicy }) {
   const {
     data: status,
     isLoading,
@@ -1168,21 +1143,6 @@ function RunPanel({
           </>
         ) : null}
       </div>
-
-      <SheetFooter className="border-border border-t px-6 py-4">
-        <Button
-          onClick={onTrigger}
-          disabled={isTriggerPending}
-          className="w-full"
-        >
-          {isTriggerPending && (
-            <Button.LeftIcon>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            </Button.LeftIcon>
-          )}
-          <Button.Text>Trigger Analysis</Button.Text>
-        </Button>
-      </SheetFooter>
     </>
   );
 }
