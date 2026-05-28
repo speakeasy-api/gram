@@ -277,12 +277,12 @@ vi.mock("@/components/moon/textarea", () => ({
 
 import { ApprovalRequestsContent } from "./ApprovalRequestsContent";
 
-function renderContent() {
+function renderContent(projectId = "project-1") {
   const queryClient = new QueryClient();
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <ApprovalRequestsContent />
+      <ApprovalRequestsContent projectId={projectId} />
     </QueryClientProvider>,
   );
 }
@@ -349,6 +349,7 @@ describe("ApprovalRequestsContent", () => {
     expect(screen.queryByText("Requested")).toBeNull();
     expect(screen.queryByText("Approved")).toBeNull();
     expect(screen.queryByText("All")).toBeNull();
+    expect(screen.queryByText("Approval History")).toBeNull();
   });
 
   it("does not load or render approval requests for non-admin org readers", () => {
@@ -368,6 +369,32 @@ describe("ApprovalRequestsContent", () => {
       screen.queryByRole("heading", { name: "Approval Requests" }),
     ).toBeNull();
     expect(screen.getByRole("heading", { name: "Access Rules" })).toBeTruthy();
+  });
+
+  it("does not load project-scoped data without a project id", () => {
+    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
+      requests: [],
+    });
+    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
+      rules: [],
+    });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    renderContent("");
+
+    expect(listShadowMCPApprovalRequests).not.toHaveBeenCalled();
+    expect(listShadowMCPAccessRules).not.toHaveBeenCalled();
   });
 
   it("loads additional approval request pages with the next cursor", async () => {
@@ -450,101 +477,21 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
         limit: 100,
+        projectId: "project-1",
         status: "requested",
         cursor: "next-requests",
       });
     });
-  });
-
-  it("renders approved and denied approval requests in approval history", async () => {
-    const listShadowMCPApprovalRequests = vi
-      .fn()
-      .mockImplementation(({ status }: { status?: string }) => {
-        if (status === "approved") {
-          return Promise.resolve({
-            requests: [
-              {
-                id: "request-approved",
-                observedName: "Approved server",
-                resourceType: "shadow_mcp",
-                requesterEmail: "approved@example.com",
-                status: "approved",
-                blockedCount: 2,
-                lastBlockedAt: new Date("2026-01-01"),
-                decidedAt: new Date("2026-01-03"),
-                updatedAt: new Date("2026-01-03"),
-              },
-            ],
-          });
-        }
-
-        if (status === "denied") {
-          return Promise.resolve({
-            requests: [
-              {
-                id: "request-denied",
-                observedName: "Denied server",
-                resourceType: "shadow_mcp",
-                requesterEmail: "denied@example.com",
-                status: "denied",
-                blockedCount: 1,
-                lastBlockedAt: new Date("2026-01-02"),
-                decidedAt: new Date("2026-01-04"),
-                updatedAt: new Date("2026-01-04"),
-              },
-            ],
-          });
-        }
-
-        return Promise.resolve({ requests: [] });
-      });
-    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
-      rules: [],
-    });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-
-    renderContent();
-
-    await waitFor(() => {
-      expect(screen.getByText("Approved server")).toBeTruthy();
-      expect(screen.getByText("Denied server")).toBeTruthy();
-    });
-
-    const historySection = screen
-      .getByRole("heading", { name: "Approval History" })
-      .closest("section");
-    if (!historySection) throw new Error("Approval History section not found");
-    expect(within(historySection).getByText("Approved")).toBeTruthy();
-    expect(within(historySection).getByText("Denied")).toBeTruthy();
     expect(
-      within(historySection).queryByRole("button", { name: "Review" }),
-    ).toBeNull();
-    expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
-      limit: 100,
-      status: "requested",
-      cursor: undefined,
-    });
-    expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
-      limit: 100,
-      status: "approved",
-      cursor: undefined,
-    });
-    expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
-      limit: 100,
-      status: "denied",
-      cursor: undefined,
-    });
+      listShadowMCPApprovalRequests.mock.calls.map(
+        ([request]) => request.status,
+      ),
+    ).not.toContain("approved");
+    expect(
+      listShadowMCPApprovalRequests.mock.calls.map(
+        ([request]) => request.status,
+      ),
+    ).not.toContain("denied");
   });
 
   it("allows denying without a deny rule after clearing the rule name", async () => {
@@ -598,6 +545,7 @@ describe("ApprovalRequestsContent", () => {
       expect(screen.getByText("Denied without rule")).toBeTruthy();
     });
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(screen.queryByText("Project")).toBeNull();
     fireEvent.click(screen.getAllByRole("radio")[1]);
     fireEvent.change(screen.getAllByLabelText("Rule name")[0], {
       target: { value: "" },
@@ -613,7 +561,145 @@ describe("ApprovalRequestsContent", () => {
           denyShadowMCPApprovalRequestForm: expect.objectContaining({
             id: "request-deny",
             createDenyRule: false,
+            projectIds: ["project-1"],
             displayName: "",
+          }),
+        },
+      });
+    });
+  });
+
+  it("approves requests with the active project id", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    const listShadowMCPApprovalRequests = vi
+      .fn()
+      .mockImplementation(({ status }: { status?: string }) => {
+        if (status !== "requested") {
+          return Promise.resolve({ requests: [] });
+        }
+
+        return Promise.resolve({
+          requests: [
+            {
+              id: "request-approve",
+              observedName: "Approve project request",
+              observedFullUrl: "https://allowed.example.com/mcp",
+              resourceType: "shadow_mcp",
+              requesterEmail: "requester@example.com",
+              projectId: "project-1",
+              status: "requested",
+              blockedCount: 1,
+              lastBlockedAt: new Date("2026-01-01"),
+            },
+          ],
+        });
+      });
+    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
+      rules: [],
+    });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Approve project request")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve and create rule" }),
+    );
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          approveShadowMCPApprovalRequestForm: expect.objectContaining({
+            id: "request-approve",
+            accessScope: "project",
+            projectIds: ["project-1"],
+            matchBreadth: "full_url",
+            matchValue: "https://allowed.example.com/mcp",
+          }),
+        },
+      });
+    });
+  });
+
+  it("creates manual rules with the active project id", async () => {
+    const createRule = vi.fn().mockResolvedValue({});
+    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
+      requests: [],
+    });
+    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
+      rules: [
+        {
+          id: "rule-existing",
+          displayName: "Existing rule",
+          resourceType: "shadow_mcp",
+          disposition: "allowed",
+          accessScope: "project",
+          projectId: "project-1",
+          matchBreadth: "url_host",
+          matchValue: "existing.example.com",
+          updatedAt: new Date("2026-01-01"),
+        },
+      ],
+    });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: createRule,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Existing rule")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add Rule" }));
+    expect(screen.queryByText("Select project")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Rule name"), {
+      target: { value: "New project rule" },
+    });
+    fireEvent.change(screen.getByLabelText("Match value"), {
+      target: { value: "https://new.example.com/mcp" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
+
+    await waitFor(() => {
+      expect(createRule).toHaveBeenCalledWith({
+        request: {
+          createShadowMCPAccessRuleForm: expect.objectContaining({
+            displayName: "New project rule",
+            accessScope: "project",
+            projectIds: ["project-1"],
+            matchBreadth: "full_url",
+            matchValue: "https://new.example.com/mcp",
           }),
         },
       });
@@ -694,38 +780,49 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
         limit: 100,
+        accessScope: "project",
+        projectId: "project-1",
         disposition: undefined,
         cursor: "next-rules",
       });
     });
   });
 
-  it("renders organization-scoped blocked access rules", async () => {
+  it("renders project-scoped blocked access rules", async () => {
     const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
       requests: [],
     });
     const listShadowMCPAccessRules = vi
       .fn()
-      .mockImplementation(({ accessScope }: { accessScope?: string }) => {
-        if (accessScope === "project") {
-          return Promise.resolve({ rules: [] });
-        }
+      .mockImplementation(
+        ({
+          accessScope,
+          projectId,
+        }: {
+          accessScope?: string;
+          projectId?: string;
+        }) => {
+          if (accessScope !== "project" || projectId !== "project-1") {
+            return Promise.resolve({ rules: [] });
+          }
 
-        return Promise.resolve({
-          rules: [
-            {
-              id: "rule-blocked-org",
-              displayName: "Blocked org rule",
-              resourceType: "shadow_mcp",
-              disposition: "denied",
-              accessScope: "organization",
-              matchBreadth: "url_host",
-              matchValue: "blocked.example.com",
-              updatedAt: new Date("2026-01-01"),
-            },
-          ],
-        });
-      });
+          return Promise.resolve({
+            rules: [
+              {
+                id: "rule-blocked-project",
+                displayName: "Blocked project rule",
+                resourceType: "shadow_mcp",
+                disposition: "denied",
+                accessScope: "project",
+                projectId: "project-1",
+                matchBreadth: "url_host",
+                matchValue: "blocked.example.com",
+                updatedAt: new Date("2026-01-01"),
+              },
+            ],
+          });
+        },
+      );
     mocks.useSdkClient.mockReturnValue({
       access: {
         listShadowMCPApprovalRequests,
@@ -742,14 +839,18 @@ describe("ApprovalRequestsContent", () => {
     renderContent();
 
     await waitFor(() => {
-      expect(screen.getByText("Blocked org rule")).toBeTruthy();
+      expect(screen.getByText("Blocked project rule")).toBeTruthy();
     });
-    const blockedRuleRow = screen.getByText("Blocked org rule").closest("tr");
+    const blockedRuleRow = screen
+      .getByText("Blocked project rule")
+      .closest("tr");
     if (!blockedRuleRow) throw new Error("Blocked rule row not found");
     expect(within(blockedRuleRow).getByText("Denied")).toBeTruthy();
-    expect(within(blockedRuleRow).getByText("Organization")).toBeTruthy();
+    expect(within(blockedRuleRow).getByText("Project")).toBeTruthy();
     expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
       limit: 100,
+      accessScope: "project",
+      projectId: "project-1",
       disposition: undefined,
       cursor: undefined,
     });
@@ -813,6 +914,8 @@ describe("ApprovalRequestsContent", () => {
     expect(screen.getByRole("button", { name: "Add Rule" })).toBeTruthy();
     expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
       limit: 100,
+      accessScope: "project",
+      projectId: "project-1",
       disposition: "denied",
       cursor: undefined,
     });

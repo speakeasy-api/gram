@@ -212,19 +212,9 @@ function projectName(
   );
 }
 
-function selectedProjectIds(projectSelection: string) {
-  return projectSelection ? [projectSelection] : [];
-}
-
-function requestDecisionTime(request: ShadowMCPApprovalRequest) {
-  return new Date(
-    request.decidedAt ?? request.updatedAt ?? request.requestedAt,
-  ).getTime();
-}
-
 function ReviewRequestSheet({
   request,
-  projects,
+  projectId,
   open,
   isSubmitting,
   onOpenChange,
@@ -232,7 +222,7 @@ function ReviewRequestSheet({
   onDeny,
 }: {
   request: ShadowMCPApprovalRequest | null;
-  projects?: { id: string; name: string }[];
+  projectId: string;
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
@@ -257,7 +247,6 @@ function ReviewRequestSheet({
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [matchValue, setMatchValue] = useState("");
-  const [projectSelection, setProjectSelection] = useState("");
   const [reason, setReason] = useState("");
   const [createDenyRule, setCreateDenyRule] = useState(false);
 
@@ -269,18 +258,16 @@ function ReviewRequestSheet({
     setDisplayName(getRequestDisplayName(request));
     setMatchBreadth(nextMatchBreadth);
     setMatchValue(getMatchValue(request, nextMatchBreadth));
-    setProjectSelection(request.projectId || projects?.[0]?.id || "");
     setReason("");
     setCreateDenyRule(false);
-  }, [projects, request, open]);
+  }, [request, open]);
 
   if (!request) return null;
 
-  const projectList = projects ?? [];
-  const projectIds = selectedProjectIds(projectSelection);
+  const projectIds = [projectId];
   const requiresRuleFields = action === "approve" || createDenyRule;
   const canSubmit =
-    projectIds.length > 0 &&
+    projectId.length > 0 &&
     (!requiresRuleFields ||
       (displayName.trim().length > 0 && matchValue.trim().length > 0));
   const submitLabel =
@@ -431,24 +418,6 @@ function ReviewRequestSheet({
               />
             </Field>
 
-            <Field label="Project">
-              <Select
-                value={projectSelection}
-                onValueChange={setProjectSelection}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {projectList.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
             <Field label="Match">
               <Select
                 value={matchBreadth}
@@ -515,14 +484,14 @@ function ReviewRequestSheet({
 
 function AccessRuleSheet({
   rule,
-  projects,
+  projectId,
   open,
   isSubmitting,
   onOpenChange,
   onSubmit,
 }: {
   rule: ShadowMCPAccessRule | null;
-  projects: { id: string; name: string }[];
+  projectId: string;
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
@@ -542,9 +511,7 @@ function AccessRuleSheet({
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [matchValue, setMatchValue] = useState("");
-  const [projectSelection, setProjectSelection] = useState("");
   const [reason, setReason] = useState("");
-  const defaultProjectId = projects[0]?.id ?? "";
 
   useEffect(() => {
     if (!open) return;
@@ -552,7 +519,6 @@ function AccessRuleSheet({
     if (rule) {
       setDisposition(rule.disposition);
       setDisplayName(rule.displayName);
-      setProjectSelection(rule.projectId ?? "");
       setMatchBreadth(normalizeRuleMatchBreadth(rule.matchBreadth));
       setMatchValue(rule.matchValue);
       setReason(rule.reason ?? "");
@@ -561,24 +527,23 @@ function AccessRuleSheet({
 
     setDisposition("allowed");
     setDisplayName("");
-    setProjectSelection(defaultProjectId);
     setMatchBreadth("full_url");
     setMatchValue("");
     setReason("");
-  }, [defaultProjectId, rule, open]);
+  }, [rule, open]);
 
-  const projectIds = selectedProjectIds(projectSelection);
+  const projectIds = [projectId];
   const canSubmit =
     displayName.trim().length > 0 &&
     matchValue.trim().length > 0 &&
-    projectIds.length > 0;
+    projectId.length > 0;
 
   const submit = async () => {
     try {
       await onSubmit({
         displayName: displayName.trim(),
         disposition,
-        projectId: projectSelection,
+        projectId,
         projectIds,
         matchBreadth,
         matchValue: matchValue.trim(),
@@ -663,24 +628,6 @@ function AccessRuleSheet({
                 onChange={(event) => setDisplayName(event.target.value)}
                 placeholder="Datadog"
               />
-            </Field>
-
-            <Field label="Project">
-              <Select
-                value={projectSelection}
-                onValueChange={setProjectSelection}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </Field>
 
             <Field label="Match">
@@ -778,7 +725,7 @@ function AddRuleButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function ApprovalRequestsContent() {
+export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const client = useSdkClient();
   const organization = useOrganization();
@@ -798,77 +745,43 @@ export function ApprovalRequestsContent() {
   const hasActiveRuleFilter = ruleDispositionFilter !== "all";
 
   const requestsQuery = useInfiniteQuery({
-    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, "requested"],
+    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, projectId, "requested"],
     queryFn: ({ pageParam }) =>
       client.access.listShadowMCPApprovalRequests({
         limit: APPROVAL_REQUESTS_PAGE_SIZE,
+        projectId,
         status: "requested",
         cursor: pageParam,
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: canAdmin,
-  });
-  const approvedRequestsQuery = useInfiniteQuery({
-    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, "approved"],
-    queryFn: ({ pageParam }) =>
-      client.access.listShadowMCPApprovalRequests({
-        limit: APPROVAL_REQUESTS_PAGE_SIZE,
-        status: "approved",
-        cursor: pageParam,
-      }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: canAdmin,
-  });
-  const deniedRequestsQuery = useInfiniteQuery({
-    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, "denied"],
-    queryFn: ({ pageParam }) =>
-      client.access.listShadowMCPApprovalRequests({
-        limit: APPROVAL_REQUESTS_PAGE_SIZE,
-        status: "denied",
-        cursor: pageParam,
-      }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: canAdmin,
+    enabled: canAdmin && projectId.length > 0,
   });
   const rulesQuery = useInfiniteQuery({
-    queryKey: [...APPROVAL_REQUEST_RULES_QUERY_KEY, ruleDisposition],
+    queryKey: [...APPROVAL_REQUEST_RULES_QUERY_KEY, projectId, ruleDisposition],
     queryFn: ({ pageParam }) =>
       client.access.listShadowMCPAccessRules({
         limit: APPROVAL_REQUESTS_PAGE_SIZE,
+        accessScope: "project",
+        projectId,
         disposition: ruleDisposition,
         cursor: pageParam,
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: projectId.length > 0,
   });
 
   const requests = useMemo(
     () => requestsQuery.data?.pages.flatMap((page) => page.requests) ?? [],
     [requestsQuery.data?.pages],
   );
-  const resolvedRequests = useMemo(() => {
-    const approved =
-      approvedRequestsQuery.data?.pages.flatMap((page) => page.requests) ?? [];
-    const denied =
-      deniedRequestsQuery.data?.pages.flatMap((page) => page.requests) ?? [];
-
-    return [...approved, ...denied].sort(
-      (a, b) => requestDecisionTime(b) - requestDecisionTime(a),
-    );
-  }, [approvedRequestsQuery.data?.pages, deniedRequestsQuery.data?.pages]);
   const rules = useMemo(
     () => rulesQuery.data?.pages.flatMap((page) => page.rules) ?? [],
     [rulesQuery.data?.pages],
   );
   const requestsLoading = requestsQuery.isLoading;
   const requestsError = requestsQuery.error;
-  const resolvedRequestsLoading =
-    approvedRequestsQuery.isLoading || deniedRequestsQuery.isLoading;
-  const resolvedRequestsError =
-    approvedRequestsQuery.error || deniedRequestsQuery.error;
   const rulesLoading = rulesQuery.isLoading;
   const rulesError = rulesQuery.error;
 
@@ -1114,7 +1027,7 @@ export function ApprovalRequestsContent() {
     <div className="space-y-8">
       <ReviewRequestSheet
         request={reviewRequest}
-        projects={organization.projects}
+        projectId={projectId}
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
@@ -1170,7 +1083,7 @@ export function ApprovalRequestsContent() {
 
       <AccessRuleSheet
         rule={editingRule}
-        projects={organization.projects}
+        projectId={projectId}
         open={isRuleSheetOpen}
         isSubmitting={isRuleSubmitting}
         onOpenChange={(open) => {
@@ -1275,69 +1188,6 @@ export function ApprovalRequestsContent() {
                   void requestsQuery.fetchNextPage();
                 },
                 showEndMessage: (requestsQuery.data?.pages.length ?? 0) > 1,
-              })}
-            </div>
-          )}
-        </section>
-      )}
-
-      {canAdmin && (
-        <section className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Heading variant="h5">Approval History</Heading>
-              <Type muted small className="mt-1">
-                View approved and denied access requests.
-              </Type>
-            </div>
-          </div>
-
-          {resolvedRequestsLoading ? (
-            <SkeletonTable />
-          ) : resolvedRequestsError ? (
-            <TableEmptyState
-              title="Approval history could not be loaded"
-              description="Refresh the page or try again later."
-            />
-          ) : resolvedRequests.length === 0 ? (
-            <ApprovalSectionEmptyState
-              icon={Inbox}
-              title="No approval history"
-              description="Approved and denied requests will appear here after review."
-            />
-          ) : (
-            <div className="overflow-hidden rounded-lg border">
-              <Table
-                columns={requestColumns}
-                data={resolvedRequests}
-                rowKey={(row) => row.id}
-                className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
-              />
-              {renderPaginationFooter({
-                count: resolvedRequests.length,
-                hasNextPage:
-                  approvedRequestsQuery.hasNextPage ||
-                  deniedRequestsQuery.hasNextPage,
-                isFetching:
-                  approvedRequestsQuery.isFetching ||
-                  deniedRequestsQuery.isFetching,
-                isFetchingNextPage:
-                  approvedRequestsQuery.isFetchingNextPage ||
-                  deniedRequestsQuery.isFetchingNextPage,
-                noun: "request",
-                onLoadMore: () => {
-                  void Promise.all([
-                    approvedRequestsQuery.hasNextPage
-                      ? approvedRequestsQuery.fetchNextPage()
-                      : Promise.resolve(),
-                    deniedRequestsQuery.hasNextPage
-                      ? deniedRequestsQuery.fetchNextPage()
-                      : Promise.resolve(),
-                  ]);
-                },
-                showEndMessage:
-                  (approvedRequestsQuery.data?.pages.length ?? 0) > 1 ||
-                  (deniedRequestsQuery.data?.pages.length ?? 0) > 1,
               })}
             </div>
           )}
