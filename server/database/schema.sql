@@ -1287,6 +1287,11 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
+  -- Set when all active risk policies have analyzed this message.
+  -- NULL means unanalyzed (or analysis was reset). Best-effort: policy
+  -- version rescans and backfills are coordinated outside this field.
+  risk_analyzed_at timestamptz,
+
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
@@ -1297,6 +1302,12 @@ CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_mess
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
+
+-- Partial index over unanalyzed messages only. Shrinks toward zero at steady
+-- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.
+CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
+ON chat_messages (project_id, id)
+WHERE risk_analyzed_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

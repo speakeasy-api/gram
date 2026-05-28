@@ -39,17 +39,19 @@ func TestOnMessagesStored_SignalsEnabledPolicies(t *testing.T) {
 
 	ti.service.OnMessagesStored(ctx, *authCtx.ProjectID)
 
-	// Only the enabled policy should have been signaled.
+	// The project should have been signaled once.
 	require.Len(t, ti.signaler.calls, 1)
-	require.Equal(t, *authCtx.ProjectID, ti.signaler.calls[0].ProjectID)
+	require.Equal(t, *authCtx.ProjectID, ti.signaler.calls[0])
 }
 
 func TestOnMessagesStored_NoPolicies(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	// No policies created — should not signal anything.
-	ti.service.OnMessagesStored(ctx, uuid.New())
+	// Coordinator is always signaled; it discovers no policies during FetchUnanalyzed.
+	projectID := uuid.New()
+	ti.service.OnMessagesStored(ctx, projectID)
 
-	require.Empty(t, ti.signaler.calls)
+	require.Len(t, ti.signaler.calls, 1)
+	require.Equal(t, projectID, ti.signaler.calls[0])
 }

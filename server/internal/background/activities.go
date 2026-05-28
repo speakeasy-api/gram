@@ -77,6 +77,7 @@ type Activities struct {
 	getUserFeedbackForChat          *resolution_activities.GetUserFeedbackForChat
 	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
+	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
@@ -168,6 +169,7 @@ func NewActivities(
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn)),
+		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
@@ -371,6 +373,13 @@ func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.Analy
 		return nil, fmt.Errorf("analyze batch: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) MarkMessagesAnalyzed(ctx context.Context, input risk_analysis.MarkMessagesAnalyzedArgs) error {
+	if err := a.markMessagesAnalyzed.Do(ctx, input); err != nil {
+		return fmt.Errorf("mark messages analyzed: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) AdmitAssistantThreads(ctx context.Context, input activities.AdmitAssistantThreadsInput) (*activities.AdmitAssistantThreadsResult, error) {

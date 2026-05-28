@@ -247,40 +247,25 @@ const fetchUnanalyzedMessageIDs = `-- name: FetchUnanalyzedMessageIDs :many
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = $1
-  AND NOT EXISTS (
-    SELECT 1
-    FROM risk_results rr
-    WHERE rr.chat_message_id = cm.id
-      AND rr.project_id = $1
-      AND rr.risk_policy_id = $2
-      AND rr.risk_policy_version = $3
-    LIMIT 1
-  )
+  AND cm.risk_analyzed_at IS NULL
+  AND cm.id >= $2
 ORDER BY cm.id DESC
-LIMIT $4
+LIMIT $3
 `
 
 type FetchUnanalyzedMessageIDsParams struct {
-	ProjectID         uuid.NullUUID
-	RiskPolicyID      uuid.UUID
-	RiskPolicyVersion int64
-	BatchLimit        int32
+	ProjectID    uuid.NullUUID
+	IDLowerBound uuid.UUID
+	BatchLimit   int32
 }
 
-// uuidv7 is k-sortable. The existing composite index
-// chat_messages_project_id_id_idx (project_id, id) lets Postgres satisfy
-// ORDER BY cm.id DESC with an Index Only Scan Backward, so we get
-// "most recent first" without a Sort node or any new index. Combined
-// with LIMIT this lets the planner stop scanning early when only the
-// recent tail is needed (verified via EXPLAIN ANALYZE: LIMIT 100 over a
-// 15k-message table scans ~2k rows in ~2ms).
+// Scans the partial index chat_messages_risk_analyzed_at_null_idx
+// (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
+// zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
+// bound computed from the configured lookback) further limits the scan to
+// recent messages, reusing the same partial index ordering.
 func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanalyzedMessageIDsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs,
-		arg.ProjectID,
-		arg.RiskPolicyID,
-		arg.RiskPolicyVersion,
-		arg.BatchLimit,
-	)
+	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs, arg.ProjectID, arg.IDLowerBound, arg.BatchLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1627,6 +1612,23 @@ func (q *Queries) ListRiskUserRuleBreakdown(ctx context.Context, arg ListRiskUse
 		return nil, err
 	}
 	return items, nil
+}
+
+const markMessagesRiskAnalyzed = `-- name: MarkMessagesRiskAnalyzed :exec
+UPDATE chat_messages
+SET risk_analyzed_at = clock_timestamp()
+WHERE id = ANY($1::uuid[])
+  AND project_id = $2
+`
+
+type MarkMessagesRiskAnalyzedParams struct {
+	MessageIds []uuid.UUID
+	ProjectID  uuid.NullUUID
+}
+
+func (q *Queries) MarkMessagesRiskAnalyzed(ctx context.Context, arg MarkMessagesRiskAnalyzedParams) error {
+	_, err := q.db.Exec(ctx, markMessagesRiskAnalyzed, arg.MessageIds, arg.ProjectID)
+	return err
 }
 
 const updateRiskPolicy = `-- name: UpdateRiskPolicy :one
