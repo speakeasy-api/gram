@@ -348,6 +348,7 @@ describe("ApprovalRequestsContent", () => {
               {
                 id: "request-2",
                 observedName: "Second request",
+                resourceType: "shadow_mcp",
                 requesterEmail: "second@example.com",
                 status: "requested",
                 blockedCount: 1,
@@ -363,6 +364,7 @@ describe("ApprovalRequestsContent", () => {
             {
               id: "request-1",
               observedName: "First request",
+              resourceType: "shadow_mcp",
               requesterEmail: "first@example.com",
               status: "requested",
               blockedCount: 1,
@@ -392,6 +394,10 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(screen.getAllByText("First request").length).toBeGreaterThan(0);
     });
+    expect(
+      screen.getByRole("columnheader", { name: "Resource Type" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP")).toBeTruthy();
     const requestsSection = screen
       .getByRole("heading", { name: "Approval Requests" })
       .closest("section");
@@ -425,6 +431,7 @@ describe("ApprovalRequestsContent", () => {
               {
                 id: "rule-2",
                 displayName: "Second rule",
+                resourceType: "shadow_mcp",
                 disposition: "allowed",
                 matchBreadth: "url_host",
                 matchValue: "second.example.com",
@@ -440,6 +447,7 @@ describe("ApprovalRequestsContent", () => {
             {
               id: "rule-1",
               displayName: "First rule",
+              resourceType: "shadow_mcp",
               disposition: "allowed",
               matchBreadth: "url_host",
               matchValue: "first.example.com",
@@ -466,6 +474,10 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(screen.getAllByText("First rule").length).toBeGreaterThan(0);
     });
+    expect(
+      screen.getByRole("columnheader", { name: "Resource Type" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP")).toBeTruthy();
     const accessRuleHeadings = screen.getAllByRole("heading", {
       name: "Access Rules",
     });
@@ -506,6 +518,7 @@ describe("ApprovalRequestsContent", () => {
               {
                 id: "rule-1",
                 displayName: "Allowed rule",
+                resourceType: "shadow_mcp",
                 disposition: "allowed",
                 matchBreadth: "url_host",
                 matchValue: "allowed.example.com",

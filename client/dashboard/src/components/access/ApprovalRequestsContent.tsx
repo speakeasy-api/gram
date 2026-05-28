@@ -61,6 +61,7 @@ import {
   getRequestDisplayName,
   getRequestServerDetail,
   getRequestStatusLabel,
+  getResourceTypeLabel,
   getRuleDisplayName,
   getRuleServerDetail,
   type ShadowMCPDisposition,
@@ -138,11 +139,14 @@ function ServerCell({
 }) {
   return (
     <div className="min-w-0 space-y-1">
-      <Type variant="body" className="truncate font-medium">
+      <Type variant="small" className="truncate font-medium">
         {name}
       </Type>
       {detail && (
-        <Type variant="body" className="text-muted-foreground truncate text-xs">
+        <Type
+          variant="small"
+          className="text-muted-foreground truncate text-xs"
+        >
           {detail}
         </Type>
       )}
@@ -901,6 +905,16 @@ export function ApprovalRequestsContent() {
       ),
     },
     {
+      key: "resourceType",
+      header: "Type",
+      width: "0.75fr",
+      render: (request) => (
+        <Badge variant="neutral">
+          <Badge.Text>{getResourceTypeLabel(request.resourceType)}</Badge.Text>
+        </Badge>
+      ),
+    },
+    {
       key: "requester",
       header: "Requester",
       width: "1.25fr",
@@ -922,7 +936,7 @@ export function ApprovalRequestsContent() {
       header: "Blocked",
       width: "0.5fr",
       render: (request) => (
-        <Type variant="body">
+        <Type variant="small">
           {request.blockedCount}{" "}
           <span className="text-muted-foreground">times</span>
         </Type>
@@ -933,7 +947,7 @@ export function ApprovalRequestsContent() {
       header: "Last blocked",
       width: "0.75fr",
       render: (request) => (
-        <Type variant="body">{formatShortDate(request.lastBlockedAt)}</Type>
+        <Type variant="small">{formatShortDate(request.lastBlockedAt)}</Type>
       ),
     },
     {
@@ -967,16 +981,26 @@ export function ApprovalRequestsContent() {
       ),
     },
     {
+      key: "resourceType",
+      header: "Type",
+      width: "0.75fr",
+      render: (rule) => (
+        <Badge variant="neutral">
+          <Badge.Text>{getResourceTypeLabel(rule.resourceType)}</Badge.Text>
+        </Badge>
+      ),
+    },
+    {
       key: "match",
       header: "Match",
       width: "1.25fr",
       render: (rule) => (
         <div className="min-w-0 space-y-1">
-          <Type variant="body" className="font-medium">
+          <Type variant="small" className="font-medium">
             {getMatchBreadthLabel(rule.matchBreadth)}
           </Type>
           <Type
-            variant="body"
+            variant="small"
             className="text-muted-foreground truncate text-xs"
           >
             {rule.matchValue}
@@ -995,7 +1019,7 @@ export function ApprovalRequestsContent() {
       header: "Scope",
       width: "0.5fr",
       render: (rule) => (
-        <Type variant="body">
+        <Type variant="small">
           {rule.accessScope === "project"
             ? projectName(organization.projects, rule.projectId)
             : getAccessScopeLabel(rule.accessScope)}
@@ -1007,7 +1031,7 @@ export function ApprovalRequestsContent() {
       header: "Updated",
       width: "0.75fr",
       render: (rule) => (
-        <Type variant="body">{formatShortDate(rule.updatedAt)}</Type>
+        <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
       ),
     },
     {

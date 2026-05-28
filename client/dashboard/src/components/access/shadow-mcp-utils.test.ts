@@ -6,6 +6,7 @@ import {
   getMatchValue,
   getRequestDisplayName,
   getRequestServerDetail,
+  getResourceTypeLabel,
   getRuleServerDetail,
 } from "./shadow-mcp-utils";
 
@@ -19,6 +20,7 @@ function approvalRequest(
     organizationId: "org_1",
     projectId: "project_1",
     requestedAt: new Date("2026-05-01T00:00:00Z"),
+    resourceType: "shadow_mcp",
     status: "requested",
     updatedAt: new Date("2026-05-01T00:00:00Z"),
     ...overrides,
@@ -37,12 +39,17 @@ function accessRule(
     matchBreadth: "full_url",
     matchValue: "https://datadog.example/mcp",
     organizationId: "org_1",
+    resourceType: "shadow_mcp",
     updatedAt: new Date("2026-05-01T00:00:00Z"),
     ...overrides,
   };
 }
 
 describe("shadow-mcp-utils", () => {
+  it("labels resource types", () => {
+    expect(getResourceTypeLabel("shadow_mcp")).toBe("Shadow MCP");
+  });
+
   it("defaults to the narrowest available URL match", () => {
     expect(
       getDefaultMatchBreadth(

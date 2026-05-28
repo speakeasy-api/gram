@@ -26,6 +26,17 @@ export function getAccessScopeLabel(accessScope: ShadowMCPAccessScope) {
   return accessScope === "organization" ? "Organization" : "Project";
 }
 
+export function getResourceTypeLabel(resourceType: string | undefined) {
+  switch (resourceType) {
+    case "shadow_mcp":
+      return "Shadow MCP";
+    case undefined:
+      return "Unknown";
+    default:
+      return resourceType;
+  }
+}
+
 export function getRequestStatusLabel(
   status: ShadowMCPApprovalRequest["status"],
 ) {
