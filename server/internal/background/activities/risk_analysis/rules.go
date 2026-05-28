@@ -19,6 +19,7 @@ import (
 //	destructive.tool                 — MCP tool annotated as destructive
 //	destructive.<cat>.<name>         — destructive shell / git / db / cloud command
 //	prompt_injection                 — prompt injection (engine selected per-org)
+//	custom.<rule_slug>               — project-defined custom detection rule
 //
 // The pair (source, rule_id) is the stable composite identity for downstream
 // consumers, but the prefix alone is enough to bucket findings into
