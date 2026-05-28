@@ -226,10 +226,42 @@ vi.mock("@/components/ui/checkbox", () => ({
   Checkbox: () => <input type="checkbox" />,
 }));
 
-vi.mock("@/components/ui/radio-group", () => ({
-  RadioGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  RadioGroupItem: () => <input type="radio" />,
-}));
+vi.mock("@/components/ui/radio-group", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  const RadioContext = React.createContext<
+    | {
+        value?: string;
+        onValueChange?: (value: string) => void;
+      }
+    | undefined
+  >(undefined);
+
+  return {
+    RadioGroup: ({
+      children,
+      value,
+      onValueChange,
+    }: {
+      children: ReactNode;
+      value?: string;
+      onValueChange?: (value: string) => void;
+    }) => (
+      <RadioContext.Provider value={{ value, onValueChange }}>
+        <div>{children}</div>
+      </RadioContext.Provider>
+    ),
+    RadioGroupItem: ({ value }: { value: string }) => {
+      const context = React.useContext(RadioContext);
+      return (
+        <input
+          type="radio"
+          checked={context?.value === value}
+          onChange={() => context?.onValueChange?.(value)}
+        />
+      );
+    },
+  };
+});
 
 vi.mock("@/components/moon/input", () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
@@ -512,6 +544,79 @@ describe("ApprovalRequestsContent", () => {
       limit: 100,
       status: "denied",
       cursor: undefined,
+    });
+  });
+
+  it("allows denying without a deny rule after clearing the rule name", async () => {
+    const denyRequest = vi.fn().mockResolvedValue({});
+    const listShadowMCPApprovalRequests = vi
+      .fn()
+      .mockImplementation(({ status }: { status?: string }) => {
+        if (status !== "requested") {
+          return Promise.resolve({ requests: [] });
+        }
+
+        return Promise.resolve({
+          requests: [
+            {
+              id: "request-deny",
+              observedName: "Denied without rule",
+              observedFullUrl: "https://blocked.example.com/mcp",
+              resourceType: "shadow_mcp",
+              requesterEmail: "requester@example.com",
+              projectId: "project-1",
+              status: "requested",
+              blockedCount: 1,
+              lastBlockedAt: new Date("2026-01-01"),
+            },
+          ],
+        });
+      });
+    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
+      rules: [],
+    });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: denyRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Denied without rule")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getAllByRole("radio")[1]);
+    fireEvent.change(screen.getAllByLabelText("Rule name")[0], {
+      target: { value: "" },
+    });
+
+    const submitButton = screen.getByRole("button", { name: "Deny request" });
+    expect(submitButton).toHaveProperty("disabled", false);
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(denyRequest).toHaveBeenCalledWith({
+        request: {
+          denyShadowMCPApprovalRequestForm: expect.objectContaining({
+            id: "request-deny",
+            createDenyRule: false,
+            displayName: "",
+          }),
+        },
+      });
     });
   });
 

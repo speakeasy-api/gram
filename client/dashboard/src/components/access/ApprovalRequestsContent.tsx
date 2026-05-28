@@ -278,10 +278,11 @@ function ReviewRequestSheet({
 
   const projectList = projects ?? [];
   const projectIds = selectedProjectIds(projectSelection);
+  const requiresRuleFields = action === "approve" || createDenyRule;
   const canSubmit =
-    displayName.trim().length > 0 &&
-    matchValue.trim().length > 0 &&
-    projectIds.length > 0;
+    projectIds.length > 0 &&
+    (!requiresRuleFields ||
+      (displayName.trim().length > 0 && matchValue.trim().length > 0));
   const submitLabel =
     action === "approve"
       ? "Approve and create rule"
