@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -28,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -48,9 +46,9 @@ import (
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-// RiskAnalysisSignaler starts or signals the drain workflow for a risk policy.
+// RiskAnalysisSignaler signals the per-project risk analysis coordinator workflow.
 type RiskAnalysisSignaler interface {
-	SignalNewMessages(ctx context.Context, params background.DrainRiskAnalysisParams) error
+	Signal(ctx context.Context, projectID uuid.UUID) error
 }
 
 type Service struct {
@@ -161,38 +159,12 @@ func (s *Service) GetRiskCapabilities(ctx context.Context, payload *gen.GetRiskC
 // (notifyObservers) already dispatches this in a goroutine with a
 // detached context, so this method can safely perform I/O.
 func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
-	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "list enabled risk policies for observer", attr.SlogError(err))
-		return
+	if err := s.signaler.Signal(ctx, projectID); err != nil {
+		s.logger.ErrorContext(ctx, "signal risk coordinator",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+		)
 	}
-
-	s.logger.DebugContext(ctx, "risk observer signaling policies",
-		attr.SlogProjectID(projectID.String()),
-		attr.SlogRiskPolicyCount(len(policies)),
-	)
-
-	// Each SignalNewMessages call round-trips to Temporal (~20ms),
-	// and this runs on the chat-message hot path. Fan out so total
-	// latency is the slowest signal, not the sum of all signals.
-	var wg sync.WaitGroup
-	wg.Add(len(policies))
-	for _, p := range policies {
-		go func(p repo.RiskPolicy) {
-			defer wg.Done()
-			if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-				ProjectID:    p.ProjectID,
-				RiskPolicyID: p.ID,
-				MaxMessages:  background.DefaultRecentMessagesBudget,
-			}); err != nil {
-				s.logger.ErrorContext(ctx, "signal risk drain workflow",
-					attr.SlogError(err),
-					attr.SlogRiskPolicyID(p.ID.String()),
-				)
-			}
-		}(p)
-	}
-	wg.Wait()
 }
 
 func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskPolicyPayload) (*types.RiskPolicy, error) {
@@ -311,15 +283,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
-	// Trigger the drain workflow for the new policy. New policies only
-	// scan the most recent slice by default; users can request a full
-	// backfill explicitly via TriggerRiskAnalysis on the Progress tab.
 	if enabled {
-		_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-			ProjectID:    row.ProjectID,
-			RiskPolicyID: row.ID,
-			MaxMessages:  background.DefaultRecentMessagesBudget,
-		})
+		_ = s.signaler.Signal(ctx, row.ProjectID)
 	}
 
 	return s.policyToType(ctx, row)
@@ -523,15 +488,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
-	// Signal the drain workflow — it reads the current enabled/version
-	// from the DB, so it will clean up results if the policy was
-	// disabled. Policy edits default to the recent-N budget; full
-	// backfill is opt-in via TriggerRiskAnalysis.
-	_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-		ProjectID:    row.ProjectID,
-		RiskPolicyID: row.ID,
-		MaxMessages:  background.DefaultRecentMessagesBudget,
-	})
+	_ = s.signaler.Signal(ctx, row.ProjectID)
 
 	return s.policyToType(ctx, row)
 }
@@ -1384,16 +1341,7 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.E(oops.CodeUnexpected, err, "log risk policy trigger").Log(ctx, s.logger)
 	}
 
-	// payload.Limit defaults to 100 (Goa fills in the recent-N budget
-	// when callers omit it). Explicit 0 requests a full backfill of
-	// every unanalyzed message.
-	maxMessages := payload.Limit
-
-	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-		ProjectID:    policy.ProjectID,
-		RiskPolicyID: policy.ID,
-		MaxMessages:  maxMessages,
-	}); err != nil {
+	if err := s.signaler.Signal(ctx, policy.ProjectID); err != nil {
 		return fmt.Errorf("signal risk analysis workflow: %w", err)
 	}
 	return nil

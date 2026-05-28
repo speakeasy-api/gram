@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/background"
+
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -49,11 +49,11 @@ func TestMain(m *testing.M) {
 }
 
 type signalerStub struct {
-	calls []background.DrainRiskAnalysisParams
+	calls []uuid.UUID
 }
 
-func (s *signalerStub) SignalNewMessages(_ context.Context, params background.DrainRiskAnalysisParams) error {
-	s.calls = append(s.calls, params)
+func (s *signalerStub) Signal(_ context.Context, projectID uuid.UUID) error {
+	s.calls = append(s.calls, projectID)
 	return nil
 }
 
