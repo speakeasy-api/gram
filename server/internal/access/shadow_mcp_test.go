@@ -116,6 +116,61 @@ func TestService_ApproveShadowMCPApprovalRequest_CreatesProjectScopedAllowRule(t
 	require.Equal(t, request.ID, *result.Rule.SourceRequestID)
 }
 
+func TestService_ApproveShadowMCPApprovalRequest_ExistingRuleDoesNotAuditRuleUpdate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+	projectID := project.ID.String()
+	fullURL := "https://existing-rule.example.com/mcp"
+
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	existingRule := createShadowMCPAccessRuleForTest(t, ctx, ti, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeProject,
+		ProjectID:    &projectID,
+		MatchBreadth: "full_url",
+		MatchValue:   fullURL,
+		DisplayName:  "Existing Shadow MCP",
+	})
+	request, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
+		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:    conv.PtrEmpty("Existing Shadow MCP"),
+			ObservedFullURL: &fullURL,
+		}),
+	})
+	require.NoError(t, err)
+
+	createBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleCreate)
+	require.NoError(t, err)
+	updateBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleUpdate)
+	require.NoError(t, err)
+	approveBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPApprovalRequestApprove)
+	require.NoError(t, err)
+
+	result, err := ti.service.ApproveShadowMCPApprovalRequest(ctx, &gen.ApproveShadowMCPApprovalRequestPayload{
+		ID:           request.ID,
+		AccessScope:  shadowMCPAccessScopeProject,
+		MatchBreadth: "full_url",
+		MatchValue:   fullURL,
+		DisplayName:  "Existing Shadow MCP",
+		Reason:       conv.PtrEmpty("Already allowed"),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, existingRule.ID, result.Rule.ID)
+	createAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleCreate)
+	require.NoError(t, err)
+	require.Equal(t, createBefore, createAfter)
+	updateAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleUpdate)
+	require.NoError(t, err)
+	require.Equal(t, updateBefore, updateAfter)
+	approveAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPApprovalRequestApprove)
+	require.NoError(t, err)
+	require.Equal(t, approveBefore+1, approveAfter)
+}
+
 func TestService_ApproveShadowMCPApprovalRequest_CreatesSelectedProjectAllowRules(t *testing.T) {
 	t.Parallel()
 
