@@ -223,6 +223,9 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").Log(ctx, logger)
 	}
 
+	// The join table has a global one-client-per-user-issuer unique index.
+	// Validate project ownership before inserting so this project cannot consume
+	// another project's issuer binding slot.
 	if _, err := txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
 		ID:        userIssuerID,
 		ProjectID: *authCtx.ProjectID,
@@ -384,6 +387,9 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	}
 
 	if payload.UserSessionIssuerID != nil {
+		// The join table has a global one-client-per-user-issuer unique index.
+		// Validate project ownership before rebuilding the binding so this project
+		// cannot consume another project's issuer binding slot.
 		if _, err := txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
 			ID:        userIssuerID.UUID,
 			ProjectID: *authCtx.ProjectID,
