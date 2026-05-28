@@ -236,7 +236,7 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	}
 
-	record, err := s.repo.GetMetadataForToolset(ctx, toolset.ID)
+	record, err := s.repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this toolset")
@@ -291,7 +291,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	)
 
 	var existing *types.McpMetadata
-	existingRow, err := mcpr.GetMetadataForToolset(ctx, toolset.ID)
+	existingRow, err := mcpr.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		// No existing metadata, proceed with creation
@@ -356,7 +356,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	result, err := mcpr.UpsertMetadata(ctx, repo.UpsertMetadataParams{
-		ToolsetID:                 toolset.ID,
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  externalDocURL,
 		ExternalDocumentationText: externalDocText,
@@ -469,7 +469,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	headerDisplayNames := make(map[string]string)
 	variableProvidedBy := make(map[string]string)
 
-	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
+	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	if metadataErr == nil {
 		if metadataRecord.LogoID.Valid {
 			logoURLValue := *s.serverURL
@@ -658,7 +658,7 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 
 	metadata := &types.McpMetadata{
 		ID:                        record.ID.String(),
-		ToolsetID:                 record.ToolsetID.String(),
+		ToolsetID:                 record.ToolsetID.UUID.String(),
 		CreatedAt:                 record.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                 record.UpdatedAt.Time.Format(time.RFC3339),
 		ExternalDocumentationURL:  conv.FromPGText[string](record.ExternalDocumentationUrl),
@@ -796,7 +796,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	var instructions string
 	headerDisplayNames := make(map[string]string)
 	variableProvidedBy := make(map[string]string)
-	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
+	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	if metadataErr != nil {
 		if !errors.Is(metadataErr, pgx.ErrNoRows) {
 			s.logger.WarnContext(ctx, "failed to load MCP install page metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))

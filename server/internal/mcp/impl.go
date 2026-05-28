@@ -892,7 +892,7 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID) map[string]string {
 	result := make(map[string]string)
 
-	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, toolsetID)
+	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
 	if err != nil {
 		// Not found or error - return empty map, this is non-critical
 		return result
