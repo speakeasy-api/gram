@@ -1,6 +1,5 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { useOnboardingStatus } from "@gram/client/react-query";
 import { OnboardingHeader } from "./onboarding-header";
 import { OnboardingFooter } from "./onboarding-footer";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
@@ -45,21 +44,30 @@ export function SetupWizard() {
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { data: onboardingStatus, isLoading: isStatusLoading } =
-    useOnboardingStatus();
+  // All steps are accessible — SSO and DSYNC are both skippable.
+  const maxAllowedStep = STEPS.length - 1;
 
-  // Only SSO is a hard gate. DSYNC is optional (skippable), so once SSO is
-  // verified all subsequent steps are accessible.
-  const maxAllowedStep = useMemo(() => {
-    if (!onboardingStatus) return 0;
-    if (!onboardingStatus.ssoConfigured) return 0;
-    return STEPS.length - 1;
-  }, [onboardingStatus]);
+  const stepSlug = searchParams.get("step");
 
-  const requestedStep = Math.min(
-    Math.max(0, Number(searchParams.get("step") || 0)),
-    STEPS.length - 1,
-  );
+  useEffect(() => {
+    if (!stepSlug) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("step", STEPS[0].id);
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [stepSlug, setSearchParams]);
+
+  const requestedStep = stepSlug
+    ? Math.max(
+        0,
+        STEPS.findIndex((s) => s.id === stepSlug),
+      )
+    : 0;
 
   const currentStep = Math.min(requestedStep, maxAllowedStep);
 
@@ -68,11 +76,7 @@ export function SetupWizard() {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (index === 0) {
-            next.delete("step");
-          } else {
-            next.set("step", String(index));
-          }
+          next.set("step", STEPS[index].id);
           return next;
         },
         { replace: true },
@@ -113,16 +117,15 @@ export function SetupWizard() {
     navigate(`/${orgSlug}`);
   };
 
-  // Wait for onboarding status before rendering when a step param is present.
-  // Prevents flash of step 0 before maxAllowedStep is computed.
-  if (isStatusLoading && requestedStep > 0) {
-    return null;
-  }
-
   const renderStep = () => {
     switch (currentStep) {
       case 0:
-        return <ConnectIdpStep onComplete={completeCurrentStep} />;
+        return (
+          <ConnectIdpStep
+            onComplete={completeCurrentStep}
+            onSkip={completeCurrentStep}
+          />
+        );
       case 1:
         return (
           <DirectorySyncStep onComplete={completeCurrentStep} onBack={goBack} />

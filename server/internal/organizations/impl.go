@@ -996,7 +996,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	orgSlug := org.Slug
 
 	// Determine the next step based on what was just completed and what's verified.
-	var nextStep int
+	var nextStepSlug string
 	switch intent {
 	case "sso":
 		if workosOrgID != "" {
@@ -1005,18 +1005,18 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
 			}
 			if workos.HasActiveConnection(connections) {
-				nextStep = 1 // SSO confirmed → advance to directory sync
+				nextStepSlug = "directory-sync"
 			}
 		}
 	case "dsync":
 		// Directory sync may take time to become "linked" after portal setup.
 		// Completing the portal is sufficient to advance — DSYNC is also skippable.
-		nextStep = 2
+		nextStepSlug = "instrument-agents"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
-	if nextStep > 0 {
-		redirectURL += fmt.Sprintf("?step=%d", nextStep)
+	if nextStepSlug != "" {
+		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
 	}
 
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
