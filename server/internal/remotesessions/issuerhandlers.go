@@ -129,7 +129,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	txRepo := repo.New(dbtx)
 
 	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         *authCtx.ProjectID,
+		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Slug:                              payload.Slug,
 		Issuer:                            payload.Issuer,
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
@@ -208,7 +208,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 
 	existing, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
 		ID:        issuerID,
-		ProjectID: *authCtx.ProjectID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -233,7 +233,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
 		ID:                                issuerID,
-		ProjectID:                         *authCtx.ProjectID,
+		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -283,7 +283,7 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 	}
 
 	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, repo.ListRemoteSessionIssuersByProjectIDParams{
-		ProjectID:  *authCtx.ProjectID,
+		ProjectID:  uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Cursor:     cursor,
 		LimitValue: limit,
 	})
@@ -336,7 +336,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		}
 		issuer, err = repo.New(s.db).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
 			ID:        issuerID,
-			ProjectID: *authCtx.ProjectID,
+			ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -351,7 +351,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		var err error
 		issuer, err = repo.New(s.db).GetRemoteSessionIssuerBySlug(ctx, repo.GetRemoteSessionIssuerBySlugParams{
 			Slug:      *payload.Slug,
-			ProjectID: *authCtx.ProjectID,
+			ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -401,7 +401,7 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 
 	deleted, err := txRepo.DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{
 		ID:        issuerID,
-		ProjectID: *authCtx.ProjectID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
