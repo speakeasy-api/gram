@@ -40,10 +40,11 @@ func TestDeleteDomain_ZeroEndpoints_NoCascadeAudits(t *testing.T) {
 	authCtx := testAuthContext(t, ctx)
 
 	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Domain:         "delete-zero.example.com",
-		IngressName:    pgTextValid("ingress-zero"),
-		CertSecretName: pgTextValid("cert-zero"),
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "delete-zero.example.com",
+		IngressName:     pgTextValid("ingress-zero"),
+		CertSecretName:  pgTextValid("cert-zero"),
+		ProvisionerKind: "ingress",
 	})
 	require.NoError(t, err)
 
@@ -75,10 +76,11 @@ func TestDeleteDomain_CascadesSoftDeleteToMcpEndpointsAcrossProjects(t *testing.
 	authCtx := testAuthContext(t, ctx)
 
 	domainRow, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Domain:         "cascade.example.com",
-		IngressName:    pgTextValid("ingress-cascade"),
-		CertSecretName: pgTextValid("cert-cascade"),
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "cascade.example.com",
+		IngressName:     pgTextValid("ingress-cascade"),
+		CertSecretName:  pgTextValid("cert-cascade"),
+		ProvisionerKind: "ingress",
 	})
 	require.NoError(t, err)
 
