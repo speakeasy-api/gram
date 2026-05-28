@@ -56,6 +56,7 @@ import {
   getDispositionLabel,
   getMatchBreadthLabel,
   getMatchValue,
+  normalizeRuleMatchBreadth,
   getRequesterDetail,
   getRequesterLabel,
   getRequestDisplayName,
@@ -81,7 +82,6 @@ const MATCH_BREADTH_OPTIONS: {
 }[] = [
   { value: "full_url", label: "Full URL" },
   { value: "url_host", label: "URL host" },
-  { value: "server_identity", label: "Server identity" },
 ];
 
 function TableEmptyState({
@@ -553,7 +553,7 @@ function AccessRuleSheet({
       setDisposition(rule.disposition);
       setDisplayName(rule.displayName);
       setProjectSelection(rule.projectId ?? "");
-      setMatchBreadth(rule.matchBreadth);
+      setMatchBreadth(normalizeRuleMatchBreadth(rule.matchBreadth));
       setMatchValue(rule.matchValue);
       setReason(rule.reason ?? "");
       return;
@@ -1193,10 +1193,6 @@ export function ApprovalRequestsContent() {
                     input.matchBreadth === "full_url"
                       ? input.matchValue
                       : undefined,
-                  observedServerIdentity:
-                    input.matchBreadth === "server_identity"
-                      ? input.matchValue
-                      : undefined,
                   observedUrlHost:
                     input.matchBreadth === "url_host"
                       ? input.matchValue
@@ -1218,10 +1214,6 @@ export function ApprovalRequestsContent() {
                   matchValue: input.matchValue,
                   observedFullUrl:
                     input.matchBreadth === "full_url"
-                      ? input.matchValue
-                      : undefined,
-                  observedServerIdentity:
-                    input.matchBreadth === "server_identity"
                       ? input.matchValue
                       : undefined,
                   observedUrlHost:

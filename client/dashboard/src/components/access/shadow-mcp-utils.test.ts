@@ -62,7 +62,7 @@ describe("shadow-mcp-utils", () => {
     ).toBe("full_url");
   });
 
-  it("falls back to host and server identity when full URL is unavailable", () => {
+  it("falls back to host when full URL is unavailable", () => {
     expect(
       getDefaultMatchBreadth(
         approvalRequest({
@@ -78,7 +78,7 @@ describe("shadow-mcp-utils", () => {
           observedServerIdentity: "datadog",
         }),
       ),
-    ).toBe("server_identity");
+    ).toBe("full_url");
   });
 
   it("returns the selected evidence value for each match breadth", () => {
@@ -92,7 +92,6 @@ describe("shadow-mcp-utils", () => {
       "https://datadog.example/mcp",
     );
     expect(getMatchValue(request, "url_host")).toBe("datadog.example");
-    expect(getMatchValue(request, "server_identity")).toBe("datadog");
   });
 
   it("falls back when displaying request and rule names", () => {
@@ -133,10 +132,8 @@ describe("shadow-mcp-utils", () => {
     expect(getRequestServerDetail(request)).toBe(
       "Server identity: claude_ai_calendly",
     );
-    expect(getDefaultMatchBreadth(request)).toBe("server_identity");
-    expect(getMatchValue(request, "server_identity")).toBe(
-      "claude_ai_calendly",
-    );
+    expect(getDefaultMatchBreadth(request)).toBe("full_url");
+    expect(getMatchValue(request, "full_url")).toBe("");
   });
 
   it("labels server identity only rule details", () => {
@@ -144,8 +141,7 @@ describe("shadow-mcp-utils", () => {
       getRuleServerDetail(
         accessRule({
           displayName: "Claude AI Calendly",
-          matchBreadth: "server_identity",
-          matchValue: "claude_ai_calendly",
+          matchValue: "",
           observedServerIdentity: "claude_ai_calendly",
         }),
       ),

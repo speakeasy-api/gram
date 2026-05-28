@@ -1,20 +1,31 @@
 import type { ShadowMCPAccessRule } from "@gram/client/models/components/shadowmcpaccessrule.js";
 import type { ShadowMCPApprovalRequest } from "@gram/client/models/components/shadowmcpapprovalrequest.js";
 
-export type ShadowMCPMatchBreadth = "full_url" | "url_host" | "server_identity";
+export type ShadowMCPMatchBreadth = "full_url" | "url_host";
 
 export type ShadowMCPDisposition = "allowed" | "denied";
 
 export type ShadowMCPAccessScope = "organization" | "project";
 
-export function getMatchBreadthLabel(matchBreadth: ShadowMCPMatchBreadth) {
+export function normalizeRuleMatchBreadth(
+  matchBreadth: string | undefined,
+): ShadowMCPMatchBreadth {
   switch (matchBreadth) {
+    case "full_url":
+      return "full_url";
+    case "url_host":
+      return "url_host";
+    default:
+      return "full_url";
+  }
+}
+
+export function getMatchBreadthLabel(matchBreadth: string | undefined) {
+  switch (normalizeRuleMatchBreadth(matchBreadth)) {
     case "full_url":
       return "Full URL";
     case "url_host":
       return "URL host";
-    case "server_identity":
-      return "Server identity";
   }
 }
 
@@ -121,7 +132,7 @@ export function getDefaultMatchBreadth(
 ): ShadowMCPMatchBreadth {
   if (source.observedFullUrl) return "full_url";
   if (source.observedUrlHost) return "url_host";
-  return "server_identity";
+  return "full_url";
 }
 
 export function getMatchValue(
@@ -136,7 +147,5 @@ export function getMatchValue(
       return source.observedFullUrl ?? "";
     case "url_host":
       return source.observedUrlHost ?? "";
-    case "server_identity":
-      return source.observedServerIdentity ?? "";
   }
 }
