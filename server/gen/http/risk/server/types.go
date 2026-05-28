@@ -30,6 +30,8 @@ type CreateRiskPolicyRequestBody struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids to enable for this policy.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -58,6 +60,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids to enable for this policy. Omit to preserve the
+	// current selection.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -89,6 +94,43 @@ type TriggerRiskAnalysisRequestBody struct {
 	// (the recent-N drain budget). Pass 0 to request a full backfill of every
 	// unanalyzed message.
 	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
+// CreateCustomDetectionRuleRequestBody is the type of the "risk" service
+// "createCustomDetectionRule" endpoint HTTP request body.
+type CreateCustomDetectionRuleRequestBody struct {
+	// Stable rule identifier, prefixed with `custom.`.
+	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
+	// Human-readable title for the rule.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Description of what the rule detects.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// RE2-compatible regex pattern.
+	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Severity level for findings produced by this rule.
+	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
+}
+
+// UpdateCustomDetectionRuleRequestBody is the type of the "risk" service
+// "updateCustomDetectionRule" endpoint HTTP request body.
+type UpdateCustomDetectionRuleRequestBody struct {
+	// The custom detection rule ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Human-readable title for the rule.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Description of what the rule detects.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// RE2-compatible regex pattern.
+	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Severity level for findings produced by this rule.
+	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
+}
+
+// DeleteCustomDetectionRuleRequestBody is the type of the "risk" service
+// "deleteCustomDetectionRule" endpoint HTTP request body.
+type DeleteCustomDetectionRuleRequestBody struct {
+	// The custom detection rule ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
 // SuggestCustomDetectionRuleRequestBody is the type of the "risk" service
@@ -135,6 +177,8 @@ type CreateRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids enabled for this policy.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -192,6 +236,8 @@ type GetRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids enabled for this policy.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -235,6 +281,8 @@ type UpdateRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids enabled for this policy.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -394,6 +442,76 @@ type ApproveShadowMCPResponseBody struct {
 	ApprovedBy *string `form:"approved_by,omitempty" json:"approved_by,omitempty" xml:"approved_by,omitempty"`
 	// When the approval was recorded.
 	ApprovedAt string `form:"approved_at" json:"approved_at" xml:"approved_at"`
+}
+
+// CreateCustomDetectionRuleResponseBody is the type of the "risk" service
+// "createCustomDetectionRule" endpoint HTTP response body.
+type CreateCustomDetectionRuleResponseBody struct {
+	// The custom detection rule ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Stable rule identifier, prefixed with `custom.`.
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Human-readable title for the rule.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Description of what the rule detects.
+	Description string `form:"description" json:"description" xml:"description"`
+	// RE2-compatible regex pattern.
+	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// Severity level for findings produced by this rule.
+	Severity string `form:"severity" json:"severity" xml:"severity"`
+	// When the custom detection rule was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the custom detection rule was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListCustomDetectionRulesResponseBody is the type of the "risk" service
+// "listCustomDetectionRules" endpoint HTTP response body.
+type ListCustomDetectionRulesResponseBody struct {
+	// The list of custom detection rules.
+	Rules []*RiskCustomDetectionRuleResponseBody `form:"rules" json:"rules" xml:"rules"`
+}
+
+// GetCustomDetectionRuleResponseBody is the type of the "risk" service
+// "getCustomDetectionRule" endpoint HTTP response body.
+type GetCustomDetectionRuleResponseBody struct {
+	// The custom detection rule ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Stable rule identifier, prefixed with `custom.`.
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Human-readable title for the rule.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Description of what the rule detects.
+	Description string `form:"description" json:"description" xml:"description"`
+	// RE2-compatible regex pattern.
+	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// Severity level for findings produced by this rule.
+	Severity string `form:"severity" json:"severity" xml:"severity"`
+	// When the custom detection rule was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the custom detection rule was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateCustomDetectionRuleResponseBody is the type of the "risk" service
+// "updateCustomDetectionRule" endpoint HTTP response body.
+type UpdateCustomDetectionRuleResponseBody struct {
+	// The custom detection rule ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Stable rule identifier, prefixed with `custom.`.
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Human-readable title for the rule.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Description of what the rule detects.
+	Description string `form:"description" json:"description" xml:"description"`
+	// RE2-compatible regex pattern.
+	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// Severity level for findings produced by this rule.
+	Severity string `form:"severity" json:"severity" xml:"severity"`
+	// When the custom detection rule was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the custom detection rule was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // SuggestCustomDetectionRuleResponseBody is the type of the "risk" service
@@ -3747,6 +3865,955 @@ type TriggerRiskAnalysisGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
+// service "createCustomDetectionRule" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateCustomDetectionRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleForbiddenResponseBody is the type of the "risk"
+// service "createCustomDetectionRule" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateCustomDetectionRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleBadRequestResponseBody is the type of the "risk"
+// service "createCustomDetectionRule" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateCustomDetectionRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleNotFoundResponseBody is the type of the "risk"
+// service "createCustomDetectionRule" endpoint HTTP response body for the
+// "not_found" error.
+type CreateCustomDetectionRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleConflictResponseBody is the type of the "risk"
+// service "createCustomDetectionRule" endpoint HTTP response body for the
+// "conflict" error.
+type CreateCustomDetectionRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleUnsupportedMediaResponseBody is the type of the
+// "risk" service "createCustomDetectionRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateCustomDetectionRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleInvalidResponseBody is the type of the "risk"
+// service "createCustomDetectionRule" endpoint HTTP response body for the
+// "invalid" error.
+type CreateCustomDetectionRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleInvariantViolationResponseBody is the type of the
+// "risk" service "createCustomDetectionRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CreateCustomDetectionRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleUnexpectedResponseBody is the type of the "risk"
+// service "createCustomDetectionRule" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateCustomDetectionRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomDetectionRuleGatewayErrorResponseBody is the type of the "risk"
+// service "createCustomDetectionRule" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateCustomDetectionRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesUnauthorizedResponseBody is the type of the "risk"
+// service "listCustomDetectionRules" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListCustomDetectionRulesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesForbiddenResponseBody is the type of the "risk"
+// service "listCustomDetectionRules" endpoint HTTP response body for the
+// "forbidden" error.
+type ListCustomDetectionRulesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesBadRequestResponseBody is the type of the "risk"
+// service "listCustomDetectionRules" endpoint HTTP response body for the
+// "bad_request" error.
+type ListCustomDetectionRulesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesNotFoundResponseBody is the type of the "risk"
+// service "listCustomDetectionRules" endpoint HTTP response body for the
+// "not_found" error.
+type ListCustomDetectionRulesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesConflictResponseBody is the type of the "risk"
+// service "listCustomDetectionRules" endpoint HTTP response body for the
+// "conflict" error.
+type ListCustomDetectionRulesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesUnsupportedMediaResponseBody is the type of the
+// "risk" service "listCustomDetectionRules" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListCustomDetectionRulesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesInvalidResponseBody is the type of the "risk"
+// service "listCustomDetectionRules" endpoint HTTP response body for the
+// "invalid" error.
+type ListCustomDetectionRulesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesInvariantViolationResponseBody is the type of the
+// "risk" service "listCustomDetectionRules" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListCustomDetectionRulesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesUnexpectedResponseBody is the type of the "risk"
+// service "listCustomDetectionRules" endpoint HTTP response body for the
+// "unexpected" error.
+type ListCustomDetectionRulesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomDetectionRulesGatewayErrorResponseBody is the type of the "risk"
+// service "listCustomDetectionRules" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListCustomDetectionRulesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
+// service "getCustomDetectionRule" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetCustomDetectionRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleForbiddenResponseBody is the type of the "risk"
+// service "getCustomDetectionRule" endpoint HTTP response body for the
+// "forbidden" error.
+type GetCustomDetectionRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleBadRequestResponseBody is the type of the "risk"
+// service "getCustomDetectionRule" endpoint HTTP response body for the
+// "bad_request" error.
+type GetCustomDetectionRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleNotFoundResponseBody is the type of the "risk" service
+// "getCustomDetectionRule" endpoint HTTP response body for the "not_found"
+// error.
+type GetCustomDetectionRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleConflictResponseBody is the type of the "risk" service
+// "getCustomDetectionRule" endpoint HTTP response body for the "conflict"
+// error.
+type GetCustomDetectionRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleUnsupportedMediaResponseBody is the type of the "risk"
+// service "getCustomDetectionRule" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetCustomDetectionRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleInvalidResponseBody is the type of the "risk" service
+// "getCustomDetectionRule" endpoint HTTP response body for the "invalid" error.
+type GetCustomDetectionRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleInvariantViolationResponseBody is the type of the
+// "risk" service "getCustomDetectionRule" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetCustomDetectionRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleUnexpectedResponseBody is the type of the "risk"
+// service "getCustomDetectionRule" endpoint HTTP response body for the
+// "unexpected" error.
+type GetCustomDetectionRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomDetectionRuleGatewayErrorResponseBody is the type of the "risk"
+// service "getCustomDetectionRule" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetCustomDetectionRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
+// service "updateCustomDetectionRule" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateCustomDetectionRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleForbiddenResponseBody is the type of the "risk"
+// service "updateCustomDetectionRule" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateCustomDetectionRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleBadRequestResponseBody is the type of the "risk"
+// service "updateCustomDetectionRule" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateCustomDetectionRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleNotFoundResponseBody is the type of the "risk"
+// service "updateCustomDetectionRule" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateCustomDetectionRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleConflictResponseBody is the type of the "risk"
+// service "updateCustomDetectionRule" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateCustomDetectionRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleUnsupportedMediaResponseBody is the type of the
+// "risk" service "updateCustomDetectionRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateCustomDetectionRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleInvalidResponseBody is the type of the "risk"
+// service "updateCustomDetectionRule" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateCustomDetectionRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleInvariantViolationResponseBody is the type of the
+// "risk" service "updateCustomDetectionRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateCustomDetectionRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleUnexpectedResponseBody is the type of the "risk"
+// service "updateCustomDetectionRule" endpoint HTTP response body for the
+// "unexpected" error.
+type UpdateCustomDetectionRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateCustomDetectionRuleGatewayErrorResponseBody is the type of the "risk"
+// service "updateCustomDetectionRule" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateCustomDetectionRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
+// service "deleteCustomDetectionRule" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeleteCustomDetectionRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleForbiddenResponseBody is the type of the "risk"
+// service "deleteCustomDetectionRule" endpoint HTTP response body for the
+// "forbidden" error.
+type DeleteCustomDetectionRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleBadRequestResponseBody is the type of the "risk"
+// service "deleteCustomDetectionRule" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteCustomDetectionRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleNotFoundResponseBody is the type of the "risk"
+// service "deleteCustomDetectionRule" endpoint HTTP response body for the
+// "not_found" error.
+type DeleteCustomDetectionRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleConflictResponseBody is the type of the "risk"
+// service "deleteCustomDetectionRule" endpoint HTTP response body for the
+// "conflict" error.
+type DeleteCustomDetectionRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleUnsupportedMediaResponseBody is the type of the
+// "risk" service "deleteCustomDetectionRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteCustomDetectionRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleInvalidResponseBody is the type of the "risk"
+// service "deleteCustomDetectionRule" endpoint HTTP response body for the
+// "invalid" error.
+type DeleteCustomDetectionRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleInvariantViolationResponseBody is the type of the
+// "risk" service "deleteCustomDetectionRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteCustomDetectionRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleUnexpectedResponseBody is the type of the "risk"
+// service "deleteCustomDetectionRule" endpoint HTTP response body for the
+// "unexpected" error.
+type DeleteCustomDetectionRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteCustomDetectionRuleGatewayErrorResponseBody is the type of the "risk"
+// service "deleteCustomDetectionRule" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteCustomDetectionRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SuggestCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
 // service "suggestCustomDetectionRule" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4140,6 +5207,8 @@ type RiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids enabled for this policy.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -4336,6 +5405,27 @@ type ShadowMCPApprovalResponseBody struct {
 	ApprovedAt string `form:"approved_at" json:"approved_at" xml:"approved_at"`
 }
 
+// RiskCustomDetectionRuleResponseBody is used to define fields on response
+// body types.
+type RiskCustomDetectionRuleResponseBody struct {
+	// The custom detection rule ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Stable rule identifier, prefixed with `custom.`.
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Human-readable title for the rule.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Description of what the rule detects.
+	Description string `form:"description" json:"description" xml:"description"`
+	// RE2-compatible regex pattern.
+	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// Severity level for findings produced by this rule.
+	Severity string `form:"severity" json:"severity" xml:"severity"`
+	// When the custom detection rule was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the custom detection rule was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // TestDetectionRuleMatchResponseBody is used to define fields on response body
 // types.
 type TestDetectionRuleMatchResponseBody struct {
@@ -4399,6 +5489,12 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		body.DisabledRules = make([]string, len(res.DisabledRules))
 		for i, val := range res.DisabledRules {
 			body.DisabledRules[i] = val
+		}
+	}
+	if res.CustomRuleIds != nil {
+		body.CustomRuleIds = make([]string, len(res.CustomRuleIds))
+		for i, val := range res.CustomRuleIds {
+			body.CustomRuleIds[i] = val
 		}
 	}
 	return body
@@ -4475,6 +5571,12 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 			body.DisabledRules[i] = val
 		}
 	}
+	if res.CustomRuleIds != nil {
+		body.CustomRuleIds = make([]string, len(res.CustomRuleIds))
+		for i, val := range res.CustomRuleIds {
+			body.CustomRuleIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -4519,6 +5621,12 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		body.DisabledRules = make([]string, len(res.DisabledRules))
 		for i, val := range res.DisabledRules {
 			body.DisabledRules[i] = val
+		}
+	}
+	if res.CustomRuleIds != nil {
+		body.CustomRuleIds = make([]string, len(res.CustomRuleIds))
+		for i, val := range res.CustomRuleIds {
+			body.CustomRuleIds[i] = val
 		}
 	}
 	return body
@@ -4773,6 +5881,73 @@ func NewApproveShadowMCPResponseBody(res *types.ShadowMCPApproval) *ApproveShado
 		ServerName: res.ServerName,
 		ApprovedBy: res.ApprovedBy,
 		ApprovedAt: res.ApprovedAt,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleResponseBody builds the HTTP response body from
+// the result of the "createCustomDetectionRule" endpoint of the "risk" service.
+func NewCreateCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *CreateCustomDetectionRuleResponseBody {
+	body := &CreateCustomDetectionRuleResponseBody{
+		ID:          res.ID,
+		RuleID:      res.RuleID,
+		Title:       res.Title,
+		Description: res.Description,
+		Regex:       res.Regex,
+		Severity:    res.Severity,
+		CreatedAt:   res.CreatedAt,
+		UpdatedAt:   res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesResponseBody builds the HTTP response body from
+// the result of the "listCustomDetectionRules" endpoint of the "risk" service.
+func NewListCustomDetectionRulesResponseBody(res *risk.ListCustomDetectionRulesResult) *ListCustomDetectionRulesResponseBody {
+	body := &ListCustomDetectionRulesResponseBody{}
+	if res.Rules != nil {
+		body.Rules = make([]*RiskCustomDetectionRuleResponseBody, len(res.Rules))
+		for i, val := range res.Rules {
+			if val == nil {
+				body.Rules[i] = nil
+				continue
+			}
+			body.Rules[i] = marshalTypesRiskCustomDetectionRuleToRiskCustomDetectionRuleResponseBody(val)
+		}
+	} else {
+		body.Rules = []*RiskCustomDetectionRuleResponseBody{}
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleResponseBody builds the HTTP response body from the
+// result of the "getCustomDetectionRule" endpoint of the "risk" service.
+func NewGetCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *GetCustomDetectionRuleResponseBody {
+	body := &GetCustomDetectionRuleResponseBody{
+		ID:          res.ID,
+		RuleID:      res.RuleID,
+		Title:       res.Title,
+		Description: res.Description,
+		Regex:       res.Regex,
+		Severity:    res.Severity,
+		CreatedAt:   res.CreatedAt,
+		UpdatedAt:   res.UpdatedAt,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleResponseBody builds the HTTP response body from
+// the result of the "updateCustomDetectionRule" endpoint of the "risk" service.
+func NewUpdateCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *UpdateCustomDetectionRuleResponseBody {
+	body := &UpdateCustomDetectionRuleResponseBody{
+		ID:          res.ID,
+		RuleID:      res.RuleID,
+		Title:       res.Title,
+		Description: res.Description,
+		Regex:       res.Regex,
+		Severity:    res.Severity,
+		CreatedAt:   res.CreatedAt,
+		UpdatedAt:   res.UpdatedAt,
 	}
 	return body
 }
@@ -7399,6 +8574,756 @@ func NewTriggerRiskAnalysisGatewayErrorResponseBody(res *goa.ServiceError) *Trig
 	return body
 }
 
+// NewCreateCustomDetectionRuleUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "createCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewCreateCustomDetectionRuleUnauthorizedResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleUnauthorizedResponseBody {
+	body := &CreateCustomDetectionRuleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleForbiddenResponseBody builds the HTTP response
+// body from the result of the "createCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewCreateCustomDetectionRuleForbiddenResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleForbiddenResponseBody {
+	body := &CreateCustomDetectionRuleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleBadRequestResponseBody builds the HTTP response
+// body from the result of the "createCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewCreateCustomDetectionRuleBadRequestResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleBadRequestResponseBody {
+	body := &CreateCustomDetectionRuleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleNotFoundResponseBody builds the HTTP response
+// body from the result of the "createCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewCreateCustomDetectionRuleNotFoundResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleNotFoundResponseBody {
+	body := &CreateCustomDetectionRuleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleConflictResponseBody builds the HTTP response
+// body from the result of the "createCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewCreateCustomDetectionRuleConflictResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleConflictResponseBody {
+	body := &CreateCustomDetectionRuleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewCreateCustomDetectionRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleUnsupportedMediaResponseBody {
+	body := &CreateCustomDetectionRuleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleInvalidResponseBody builds the HTTP response
+// body from the result of the "createCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewCreateCustomDetectionRuleInvalidResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleInvalidResponseBody {
+	body := &CreateCustomDetectionRuleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewCreateCustomDetectionRuleInvariantViolationResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleInvariantViolationResponseBody {
+	body := &CreateCustomDetectionRuleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleUnexpectedResponseBody builds the HTTP response
+// body from the result of the "createCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewCreateCustomDetectionRuleUnexpectedResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleUnexpectedResponseBody {
+	body := &CreateCustomDetectionRuleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomDetectionRuleGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "createCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewCreateCustomDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError) *CreateCustomDetectionRuleGatewayErrorResponseBody {
+	body := &CreateCustomDetectionRuleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listCustomDetectionRules" endpoint of the
+// "risk" service.
+func NewListCustomDetectionRulesUnauthorizedResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesUnauthorizedResponseBody {
+	body := &ListCustomDetectionRulesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesForbiddenResponseBody builds the HTTP response
+// body from the result of the "listCustomDetectionRules" endpoint of the
+// "risk" service.
+func NewListCustomDetectionRulesForbiddenResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesForbiddenResponseBody {
+	body := &ListCustomDetectionRulesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesBadRequestResponseBody builds the HTTP response
+// body from the result of the "listCustomDetectionRules" endpoint of the
+// "risk" service.
+func NewListCustomDetectionRulesBadRequestResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesBadRequestResponseBody {
+	body := &ListCustomDetectionRulesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesNotFoundResponseBody builds the HTTP response
+// body from the result of the "listCustomDetectionRules" endpoint of the
+// "risk" service.
+func NewListCustomDetectionRulesNotFoundResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesNotFoundResponseBody {
+	body := &ListCustomDetectionRulesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesConflictResponseBody builds the HTTP response
+// body from the result of the "listCustomDetectionRules" endpoint of the
+// "risk" service.
+func NewListCustomDetectionRulesConflictResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesConflictResponseBody {
+	body := &ListCustomDetectionRulesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listCustomDetectionRules" endpoint of
+// the "risk" service.
+func NewListCustomDetectionRulesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesUnsupportedMediaResponseBody {
+	body := &ListCustomDetectionRulesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesInvalidResponseBody builds the HTTP response body
+// from the result of the "listCustomDetectionRules" endpoint of the "risk"
+// service.
+func NewListCustomDetectionRulesInvalidResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesInvalidResponseBody {
+	body := &ListCustomDetectionRulesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listCustomDetectionRules" endpoint of
+// the "risk" service.
+func NewListCustomDetectionRulesInvariantViolationResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesInvariantViolationResponseBody {
+	body := &ListCustomDetectionRulesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listCustomDetectionRules" endpoint of the
+// "risk" service.
+func NewListCustomDetectionRulesUnexpectedResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesUnexpectedResponseBody {
+	body := &ListCustomDetectionRulesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDetectionRulesGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listCustomDetectionRules" endpoint of the
+// "risk" service.
+func NewListCustomDetectionRulesGatewayErrorResponseBody(res *goa.ServiceError) *ListCustomDetectionRulesGatewayErrorResponseBody {
+	body := &ListCustomDetectionRulesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getCustomDetectionRule" endpoint of the "risk"
+// service.
+func NewGetCustomDetectionRuleUnauthorizedResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleUnauthorizedResponseBody {
+	body := &GetCustomDetectionRuleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleForbiddenResponseBody builds the HTTP response body
+// from the result of the "getCustomDetectionRule" endpoint of the "risk"
+// service.
+func NewGetCustomDetectionRuleForbiddenResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleForbiddenResponseBody {
+	body := &GetCustomDetectionRuleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleBadRequestResponseBody builds the HTTP response
+// body from the result of the "getCustomDetectionRule" endpoint of the "risk"
+// service.
+func NewGetCustomDetectionRuleBadRequestResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleBadRequestResponseBody {
+	body := &GetCustomDetectionRuleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleNotFoundResponseBody builds the HTTP response body
+// from the result of the "getCustomDetectionRule" endpoint of the "risk"
+// service.
+func NewGetCustomDetectionRuleNotFoundResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleNotFoundResponseBody {
+	body := &GetCustomDetectionRuleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleConflictResponseBody builds the HTTP response body
+// from the result of the "getCustomDetectionRule" endpoint of the "risk"
+// service.
+func NewGetCustomDetectionRuleConflictResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleConflictResponseBody {
+	body := &GetCustomDetectionRuleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewGetCustomDetectionRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleUnsupportedMediaResponseBody {
+	body := &GetCustomDetectionRuleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleInvalidResponseBody builds the HTTP response body
+// from the result of the "getCustomDetectionRule" endpoint of the "risk"
+// service.
+func NewGetCustomDetectionRuleInvalidResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleInvalidResponseBody {
+	body := &GetCustomDetectionRuleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewGetCustomDetectionRuleInvariantViolationResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleInvariantViolationResponseBody {
+	body := &GetCustomDetectionRuleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getCustomDetectionRule" endpoint of the "risk"
+// service.
+func NewGetCustomDetectionRuleUnexpectedResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleUnexpectedResponseBody {
+	body := &GetCustomDetectionRuleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomDetectionRuleGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getCustomDetectionRule" endpoint of the "risk"
+// service.
+func NewGetCustomDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError) *GetCustomDetectionRuleGatewayErrorResponseBody {
+	body := &GetCustomDetectionRuleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "updateCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewUpdateCustomDetectionRuleUnauthorizedResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleUnauthorizedResponseBody {
+	body := &UpdateCustomDetectionRuleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleForbiddenResponseBody builds the HTTP response
+// body from the result of the "updateCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewUpdateCustomDetectionRuleForbiddenResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleForbiddenResponseBody {
+	body := &UpdateCustomDetectionRuleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleBadRequestResponseBody builds the HTTP response
+// body from the result of the "updateCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewUpdateCustomDetectionRuleBadRequestResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleBadRequestResponseBody {
+	body := &UpdateCustomDetectionRuleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleNotFoundResponseBody builds the HTTP response
+// body from the result of the "updateCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewUpdateCustomDetectionRuleNotFoundResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleNotFoundResponseBody {
+	body := &UpdateCustomDetectionRuleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleConflictResponseBody builds the HTTP response
+// body from the result of the "updateCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewUpdateCustomDetectionRuleConflictResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleConflictResponseBody {
+	body := &UpdateCustomDetectionRuleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "updateCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewUpdateCustomDetectionRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleUnsupportedMediaResponseBody {
+	body := &UpdateCustomDetectionRuleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleInvalidResponseBody builds the HTTP response
+// body from the result of the "updateCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewUpdateCustomDetectionRuleInvalidResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleInvalidResponseBody {
+	body := &UpdateCustomDetectionRuleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewUpdateCustomDetectionRuleInvariantViolationResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleInvariantViolationResponseBody {
+	body := &UpdateCustomDetectionRuleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleUnexpectedResponseBody builds the HTTP response
+// body from the result of the "updateCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewUpdateCustomDetectionRuleUnexpectedResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleUnexpectedResponseBody {
+	body := &UpdateCustomDetectionRuleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateCustomDetectionRuleGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "updateCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewUpdateCustomDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError) *UpdateCustomDetectionRuleGatewayErrorResponseBody {
+	body := &UpdateCustomDetectionRuleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "deleteCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewDeleteCustomDetectionRuleUnauthorizedResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleUnauthorizedResponseBody {
+	body := &DeleteCustomDetectionRuleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleForbiddenResponseBody builds the HTTP response
+// body from the result of the "deleteCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewDeleteCustomDetectionRuleForbiddenResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleForbiddenResponseBody {
+	body := &DeleteCustomDetectionRuleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleBadRequestResponseBody builds the HTTP response
+// body from the result of the "deleteCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewDeleteCustomDetectionRuleBadRequestResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleBadRequestResponseBody {
+	body := &DeleteCustomDetectionRuleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleNotFoundResponseBody builds the HTTP response
+// body from the result of the "deleteCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewDeleteCustomDetectionRuleNotFoundResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleNotFoundResponseBody {
+	body := &DeleteCustomDetectionRuleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleConflictResponseBody builds the HTTP response
+// body from the result of the "deleteCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewDeleteCustomDetectionRuleConflictResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleConflictResponseBody {
+	body := &DeleteCustomDetectionRuleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "deleteCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewDeleteCustomDetectionRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleUnsupportedMediaResponseBody {
+	body := &DeleteCustomDetectionRuleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleInvalidResponseBody builds the HTTP response
+// body from the result of the "deleteCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewDeleteCustomDetectionRuleInvalidResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleInvalidResponseBody {
+	body := &DeleteCustomDetectionRuleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "deleteCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewDeleteCustomDetectionRuleInvariantViolationResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleInvariantViolationResponseBody {
+	body := &DeleteCustomDetectionRuleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleUnexpectedResponseBody builds the HTTP response
+// body from the result of the "deleteCustomDetectionRule" endpoint of the
+// "risk" service.
+func NewDeleteCustomDetectionRuleUnexpectedResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleUnexpectedResponseBody {
+	body := &DeleteCustomDetectionRuleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteCustomDetectionRuleGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "deleteCustomDetectionRule" endpoint of
+// the "risk" service.
+func NewDeleteCustomDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError) *DeleteCustomDetectionRuleGatewayErrorResponseBody {
+	body := &DeleteCustomDetectionRuleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSuggestCustomDetectionRuleUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "suggestCustomDetectionRule" endpoint
 // of the "risk" service.
@@ -7727,6 +9652,12 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 			v.DisabledRules[i] = val
 		}
 	}
+	if body.CustomRuleIds != nil {
+		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
+		for i, val := range body.CustomRuleIds {
+			v.CustomRuleIds[i] = val
+		}
+	}
 	if body.Action == nil {
 		v.Action = "flag"
 	}
@@ -7803,6 +9734,12 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		v.DisabledRules = make([]string, len(body.DisabledRules))
 		for i, val := range body.DisabledRules {
 			v.DisabledRules[i] = val
+		}
+	}
+	if body.CustomRuleIds != nil {
+		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
+		for i, val := range body.CustomRuleIds {
+			v.CustomRuleIds[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -8000,6 +9937,81 @@ func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyT
 	return v
 }
 
+// NewCreateCustomDetectionRulePayload builds a risk service
+// createCustomDetectionRule endpoint payload.
+func NewCreateCustomDetectionRulePayload(body *CreateCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateCustomDetectionRulePayload {
+	v := &risk.CreateCustomDetectionRulePayload{
+		RuleID:      *body.RuleID,
+		Title:       *body.Title,
+		Description: body.Description,
+		Regex:       *body.Regex,
+	}
+	if body.Severity != nil {
+		v.Severity = *body.Severity
+	}
+	if body.Severity == nil {
+		v.Severity = "medium"
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListCustomDetectionRulesPayload builds a risk service
+// listCustomDetectionRules endpoint payload.
+func NewListCustomDetectionRulesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListCustomDetectionRulesPayload {
+	v := &risk.ListCustomDetectionRulesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetCustomDetectionRulePayload builds a risk service
+// getCustomDetectionRule endpoint payload.
+func NewGetCustomDetectionRulePayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetCustomDetectionRulePayload {
+	v := &risk.GetCustomDetectionRulePayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdateCustomDetectionRulePayload builds a risk service
+// updateCustomDetectionRule endpoint payload.
+func NewUpdateCustomDetectionRulePayload(body *UpdateCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdateCustomDetectionRulePayload {
+	v := &risk.UpdateCustomDetectionRulePayload{
+		ID:          *body.ID,
+		Title:       *body.Title,
+		Description: body.Description,
+		Regex:       *body.Regex,
+		Severity:    *body.Severity,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeleteCustomDetectionRulePayload builds a risk service
+// deleteCustomDetectionRule endpoint payload.
+func NewDeleteCustomDetectionRulePayload(body *DeleteCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.DeleteCustomDetectionRulePayload {
+	v := &risk.DeleteCustomDetectionRulePayload{
+		ID: *body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewSuggestCustomDetectionRulePayload builds a risk service
 // suggestCustomDetectionRule endpoint payload.
 func NewSuggestCustomDetectionRulePayload(body *SuggestCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.SuggestCustomDetectionRulePayload {
@@ -8093,6 +10105,64 @@ func ValidateTriggerRiskAnalysisRequestBody(body *TriggerRiskAnalysisRequestBody
 		if *body.Limit < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 0, true))
 		}
+	}
+	return
+}
+
+// ValidateCreateCustomDetectionRuleRequestBody runs the validations defined on
+// CreateCustomDetectionRuleRequestBody
+func ValidateCreateCustomDetectionRuleRequestBody(body *CreateCustomDetectionRuleRequestBody) (err error) {
+	if body.RuleID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rule_id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Regex == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("regex", "body"))
+	}
+	if body.Severity != nil {
+		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"info", "low", "medium", "high", "critical"}))
+		}
+	}
+	return
+}
+
+// ValidateUpdateCustomDetectionRuleRequestBody runs the validations defined on
+// UpdateCustomDetectionRuleRequestBody
+func ValidateUpdateCustomDetectionRuleRequestBody(body *UpdateCustomDetectionRuleRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Regex == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("regex", "body"))
+	}
+	if body.Severity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("severity", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Severity != nil {
+		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"info", "low", "medium", "high", "critical"}))
+		}
+	}
+	return
+}
+
+// ValidateDeleteCustomDetectionRuleRequestBody runs the validations defined on
+// DeleteCustomDetectionRuleRequestBody
+func ValidateDeleteCustomDetectionRuleRequestBody(body *DeleteCustomDetectionRuleRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

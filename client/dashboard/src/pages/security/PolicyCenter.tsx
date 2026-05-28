@@ -39,12 +39,12 @@ import {
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useRiskListPolicies,
+  invalidateAllRiskListPolicies,
   useRiskCreatePolicyMutation,
-  useRiskPoliciesUpdateMutation,
+  useRiskListPolicies,
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesTriggerMutation,
-  invalidateAllRiskListPolicies,
+  useRiskPoliciesUpdateMutation,
 } from "@gram/client/react-query/index.js";
 import {
   useRiskPoliciesStatus,
@@ -77,6 +77,7 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
   "prompt_injection",
+  "custom",
 ]);
 
 /** All rule categories in display order */
@@ -260,14 +261,20 @@ function PolicyCenterContent() {
   };
 
   const handleEdit = (policy: RiskPolicy) => {
+    const customRuleIds = policy.customRuleIds ?? [];
     setEditingPolicy(policy);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
-    setSelectedCategories(
-      policyToCategories(policy.sources, policy.presidioEntities),
+    const categories = policyToCategories(
+      policy.sources,
+      policy.presidioEntities,
     );
+    if (customRuleIds.length > 0) {
+      categories.add("custom");
+    }
+    setSelectedCategories(categories);
     setDisabledRules(new Set(policy.disabledRules ?? []));
-    setSelectedCustomRuleIds(new Set<string>());
+    setSelectedCustomRuleIds(new Set<string>(customRuleIds));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
@@ -296,6 +303,7 @@ function PolicyCenterContent() {
             presidioEntities,
             promptInjectionRules,
             disabledRules: payloadDisabled,
+            customRuleIds: [...selectedCustomRuleIds],
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -312,6 +320,7 @@ function PolicyCenterContent() {
             presidioEntities,
             promptInjectionRules,
             disabledRules: payloadDisabled,
+            customRuleIds: [...selectedCustomRuleIds],
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -396,6 +405,7 @@ function PolicyCenterContent() {
                       presidioEntities,
                       promptInjectionRules,
                       disabledRules: payloadDisabled,
+                      customRuleIds: [],
                     },
                   },
                 });
@@ -479,6 +489,9 @@ function PolicyCenterContent() {
           policy.sources,
           policy.presidioEntities,
         );
+        if (policy.customRuleIds?.length) {
+          categories.push("custom");
+        }
 
         return (
           <div className="flex flex-wrap gap-1">

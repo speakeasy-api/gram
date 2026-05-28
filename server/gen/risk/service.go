@@ -71,6 +71,16 @@ type Service interface {
 	// workflow. Defaults to the most recent 100 unanalyzed messages; pass
 	// `limit=0` to backfill every unanalyzed message.
 	TriggerRiskAnalysis(context.Context, *TriggerRiskAnalysisPayload) (err error)
+	// Create a custom regex-backed detection rule for the current project.
+	CreateCustomDetectionRule(context.Context, *CreateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error)
+	// List custom detection rules for the current project.
+	ListCustomDetectionRules(context.Context, *ListCustomDetectionRulesPayload) (res *ListCustomDetectionRulesResult, err error)
+	// Get a custom detection rule by ID.
+	GetCustomDetectionRule(context.Context, *GetCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error)
+	// Update a custom detection rule.
+	UpdateCustomDetectionRule(context.Context, *UpdateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error)
+	// Delete a custom detection rule.
+	DeleteCustomDetectionRule(context.Context, *DeleteCustomDetectionRulePayload) (err error)
 	// Suggest a custom detection rule (rule_id, title, description, regex,
 	// severity) from a natural-language prompt. Calls the configured LLM with a
 	// JSON-schema constrained response so the dashboard can prefill the create
@@ -103,7 +113,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [25]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -117,6 +127,24 @@ type ApproveShadowMCPPayload struct {
 	Match string
 	// Display name of the MCP server (optional, for UI).
 	ServerName *string
+}
+
+// CreateCustomDetectionRulePayload is the payload type of the risk service
+// createCustomDetectionRule method.
+type CreateCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Stable rule identifier, prefixed with `custom.`.
+	RuleID string
+	// Human-readable title for the rule.
+	Title string
+	// Description of what the rule detects.
+	Description *string
+	// RE2-compatible regex pattern.
+	Regex string
+	// Severity level for findings produced by this rule.
+	Severity string
 }
 
 // CreateRiskPolicyPayload is the payload type of the risk service
@@ -137,6 +165,8 @@ type CreateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
+	// Custom detection rule ids to enable for this policy.
+	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -148,6 +178,16 @@ type CreateRiskPolicyPayload struct {
 	UserMessage *string
 }
 
+// DeleteCustomDetectionRulePayload is the payload type of the risk service
+// deleteCustomDetectionRule method.
+type DeleteCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The custom detection rule ID.
+	ID string
+}
+
 // DeleteRiskPolicyPayload is the payload type of the risk service
 // deleteRiskPolicy method.
 type DeleteRiskPolicyPayload struct {
@@ -155,6 +195,16 @@ type DeleteRiskPolicyPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy ID.
+	ID string
+}
+
+// GetCustomDetectionRulePayload is the payload type of the risk service
+// getCustomDetectionRule method.
+type GetCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The custom detection rule ID.
 	ID string
 }
 
@@ -227,6 +277,21 @@ type GetRiskUserBreakdownPayload struct {
 	From *string
 	// Exclusive end of the window. Defaults to now.
 	To *string
+}
+
+// ListCustomDetectionRulesPayload is the payload type of the risk service
+// listCustomDetectionRules method.
+type ListCustomDetectionRulesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListCustomDetectionRulesResult is the result type of the risk service
+// listCustomDetectionRules method.
+type ListCustomDetectionRulesResult struct {
+	// The list of custom detection rules.
+	Rules []*types.RiskCustomDetectionRule
 }
 
 // ListRiskCategoriesPayload is the payload type of the risk service
@@ -602,6 +667,24 @@ type TriggerRiskAnalysisPayload struct {
 	Limit int32
 }
 
+// UpdateCustomDetectionRulePayload is the payload type of the risk service
+// updateCustomDetectionRule method.
+type UpdateCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The custom detection rule ID.
+	ID string
+	// Human-readable title for the rule.
+	Title string
+	// Description of what the rule detects.
+	Description *string
+	// RE2-compatible regex pattern.
+	Regex string
+	// Severity level for findings produced by this rule.
+	Severity string
+}
+
 // UpdateRiskPolicyPayload is the payload type of the risk service
 // updateRiskPolicy method.
 type UpdateRiskPolicyPayload struct {
@@ -622,6 +705,9 @@ type UpdateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
+	// Custom detection rule ids to enable for this policy. Omit to preserve the
+	// current selection.
+	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

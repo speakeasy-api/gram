@@ -4395,6 +4395,1203 @@ func DecodeTriggerRiskAnalysisResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildCreateCustomDetectionRuleRequest instantiates a HTTP request object
+// with method and path set to call the "risk" service
+// "createCustomDetectionRule" endpoint
+func (c *Client) BuildCreateCustomDetectionRuleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateCustomDetectionRuleRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "createCustomDetectionRule", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateCustomDetectionRuleRequest returns an encoder for requests sent
+// to the risk createCustomDetectionRule server.
+func EncodeCreateCustomDetectionRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.CreateCustomDetectionRulePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "createCustomDetectionRule", "*risk.CreateCustomDetectionRulePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateCustomDetectionRuleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "createCustomDetectionRule", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateCustomDetectionRuleResponse returns a decoder for responses
+// returned by the risk createCustomDetectionRule endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCreateCustomDetectionRuleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateCustomDetectionRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateCustomDetectionRuleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			res := NewCreateCustomDetectionRuleRiskCustomDetectionRuleOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateCustomDetectionRuleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			return nil, NewCreateCustomDetectionRuleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateCustomDetectionRuleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			return nil, NewCreateCustomDetectionRuleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateCustomDetectionRuleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			return nil, NewCreateCustomDetectionRuleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateCustomDetectionRuleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			return nil, NewCreateCustomDetectionRuleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateCustomDetectionRuleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			return nil, NewCreateCustomDetectionRuleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateCustomDetectionRuleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			return nil, NewCreateCustomDetectionRuleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateCustomDetectionRuleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			return nil, NewCreateCustomDetectionRuleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateCustomDetectionRuleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+				}
+				err = ValidateCreateCustomDetectionRuleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+				}
+				return nil, NewCreateCustomDetectionRuleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateCustomDetectionRuleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+				}
+				err = ValidateCreateCustomDetectionRuleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+				}
+				return nil, NewCreateCustomDetectionRuleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "createCustomDetectionRule", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateCustomDetectionRuleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createCustomDetectionRule", err)
+			}
+			err = ValidateCreateCustomDetectionRuleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createCustomDetectionRule", err)
+			}
+			return nil, NewCreateCustomDetectionRuleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "createCustomDetectionRule", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListCustomDetectionRulesRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listCustomDetectionRules"
+// endpoint
+func (c *Client) BuildListCustomDetectionRulesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListCustomDetectionRulesRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "listCustomDetectionRules", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListCustomDetectionRulesRequest returns an encoder for requests sent
+// to the risk listCustomDetectionRules server.
+func EncodeListCustomDetectionRulesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ListCustomDetectionRulesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "listCustomDetectionRules", "*risk.ListCustomDetectionRulesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListCustomDetectionRulesResponse returns a decoder for responses
+// returned by the risk listCustomDetectionRules endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListCustomDetectionRulesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListCustomDetectionRulesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListCustomDetectionRulesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			res := NewListCustomDetectionRulesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListCustomDetectionRulesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			return nil, NewListCustomDetectionRulesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListCustomDetectionRulesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			return nil, NewListCustomDetectionRulesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListCustomDetectionRulesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			return nil, NewListCustomDetectionRulesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListCustomDetectionRulesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			return nil, NewListCustomDetectionRulesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListCustomDetectionRulesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			return nil, NewListCustomDetectionRulesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListCustomDetectionRulesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			return nil, NewListCustomDetectionRulesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListCustomDetectionRulesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			return nil, NewListCustomDetectionRulesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListCustomDetectionRulesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+				}
+				err = ValidateListCustomDetectionRulesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+				}
+				return nil, NewListCustomDetectionRulesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListCustomDetectionRulesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+				}
+				err = ValidateListCustomDetectionRulesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+				}
+				return nil, NewListCustomDetectionRulesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "listCustomDetectionRules", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListCustomDetectionRulesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listCustomDetectionRules", err)
+			}
+			err = ValidateListCustomDetectionRulesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listCustomDetectionRules", err)
+			}
+			return nil, NewListCustomDetectionRulesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "listCustomDetectionRules", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetCustomDetectionRuleRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "getCustomDetectionRule"
+// endpoint
+func (c *Client) BuildGetCustomDetectionRuleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetCustomDetectionRuleRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getCustomDetectionRule", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetCustomDetectionRuleRequest returns an encoder for requests sent to
+// the risk getCustomDetectionRule server.
+func EncodeGetCustomDetectionRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetCustomDetectionRulePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getCustomDetectionRule", "*risk.GetCustomDetectionRulePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetCustomDetectionRuleResponse returns a decoder for responses
+// returned by the risk getCustomDetectionRule endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetCustomDetectionRuleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetCustomDetectionRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetCustomDetectionRuleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			res := NewGetCustomDetectionRuleRiskCustomDetectionRuleOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetCustomDetectionRuleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			return nil, NewGetCustomDetectionRuleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetCustomDetectionRuleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			return nil, NewGetCustomDetectionRuleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetCustomDetectionRuleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			return nil, NewGetCustomDetectionRuleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetCustomDetectionRuleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			return nil, NewGetCustomDetectionRuleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetCustomDetectionRuleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			return nil, NewGetCustomDetectionRuleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetCustomDetectionRuleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			return nil, NewGetCustomDetectionRuleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetCustomDetectionRuleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			return nil, NewGetCustomDetectionRuleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetCustomDetectionRuleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+				}
+				err = ValidateGetCustomDetectionRuleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+				}
+				return nil, NewGetCustomDetectionRuleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetCustomDetectionRuleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+				}
+				err = ValidateGetCustomDetectionRuleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+				}
+				return nil, NewGetCustomDetectionRuleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getCustomDetectionRule", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetCustomDetectionRuleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getCustomDetectionRule", err)
+			}
+			err = ValidateGetCustomDetectionRuleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getCustomDetectionRule", err)
+			}
+			return nil, NewGetCustomDetectionRuleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getCustomDetectionRule", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateCustomDetectionRuleRequest instantiates a HTTP request object
+// with method and path set to call the "risk" service
+// "updateCustomDetectionRule" endpoint
+func (c *Client) BuildUpdateCustomDetectionRuleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateCustomDetectionRuleRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "updateCustomDetectionRule", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateCustomDetectionRuleRequest returns an encoder for requests sent
+// to the risk updateCustomDetectionRule server.
+func EncodeUpdateCustomDetectionRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.UpdateCustomDetectionRulePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "updateCustomDetectionRule", "*risk.UpdateCustomDetectionRulePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateCustomDetectionRuleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "updateCustomDetectionRule", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateCustomDetectionRuleResponse returns a decoder for responses
+// returned by the risk updateCustomDetectionRule endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeUpdateCustomDetectionRuleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateCustomDetectionRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateCustomDetectionRuleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			res := NewUpdateCustomDetectionRuleRiskCustomDetectionRuleOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateCustomDetectionRuleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			return nil, NewUpdateCustomDetectionRuleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateCustomDetectionRuleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			return nil, NewUpdateCustomDetectionRuleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateCustomDetectionRuleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			return nil, NewUpdateCustomDetectionRuleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateCustomDetectionRuleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			return nil, NewUpdateCustomDetectionRuleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateCustomDetectionRuleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			return nil, NewUpdateCustomDetectionRuleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateCustomDetectionRuleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			return nil, NewUpdateCustomDetectionRuleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateCustomDetectionRuleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			return nil, NewUpdateCustomDetectionRuleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateCustomDetectionRuleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+				}
+				err = ValidateUpdateCustomDetectionRuleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+				}
+				return nil, NewUpdateCustomDetectionRuleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateCustomDetectionRuleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+				}
+				err = ValidateUpdateCustomDetectionRuleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+				}
+				return nil, NewUpdateCustomDetectionRuleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "updateCustomDetectionRule", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateCustomDetectionRuleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updateCustomDetectionRule", err)
+			}
+			err = ValidateUpdateCustomDetectionRuleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updateCustomDetectionRule", err)
+			}
+			return nil, NewUpdateCustomDetectionRuleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "updateCustomDetectionRule", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteCustomDetectionRuleRequest instantiates a HTTP request object
+// with method and path set to call the "risk" service
+// "deleteCustomDetectionRule" endpoint
+func (c *Client) BuildDeleteCustomDetectionRuleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteCustomDetectionRuleRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "deleteCustomDetectionRule", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteCustomDetectionRuleRequest returns an encoder for requests sent
+// to the risk deleteCustomDetectionRule server.
+func EncodeDeleteCustomDetectionRuleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.DeleteCustomDetectionRulePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "deleteCustomDetectionRule", "*risk.DeleteCustomDetectionRulePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewDeleteCustomDetectionRuleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "deleteCustomDetectionRule", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDeleteCustomDetectionRuleResponse returns a decoder for responses
+// returned by the risk deleteCustomDetectionRule endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDeleteCustomDetectionRuleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteCustomDetectionRuleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteCustomDetectionRuleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+			}
+			err = ValidateDeleteCustomDetectionRuleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+			}
+			return nil, NewDeleteCustomDetectionRuleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteCustomDetectionRuleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+			}
+			err = ValidateDeleteCustomDetectionRuleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+			}
+			return nil, NewDeleteCustomDetectionRuleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteCustomDetectionRuleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+			}
+			err = ValidateDeleteCustomDetectionRuleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+			}
+			return nil, NewDeleteCustomDetectionRuleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteCustomDetectionRuleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+			}
+			err = ValidateDeleteCustomDetectionRuleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+			}
+			return nil, NewDeleteCustomDetectionRuleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteCustomDetectionRuleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+			}
+			err = ValidateDeleteCustomDetectionRuleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+			}
+			return nil, NewDeleteCustomDetectionRuleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteCustomDetectionRuleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+			}
+			err = ValidateDeleteCustomDetectionRuleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+			}
+			return nil, NewDeleteCustomDetectionRuleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteCustomDetectionRuleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+			}
+			err = ValidateDeleteCustomDetectionRuleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+			}
+			return nil, NewDeleteCustomDetectionRuleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteCustomDetectionRuleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+				}
+				err = ValidateDeleteCustomDetectionRuleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+				}
+				return nil, NewDeleteCustomDetectionRuleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteCustomDetectionRuleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+				}
+				err = ValidateDeleteCustomDetectionRuleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+				}
+				return nil, NewDeleteCustomDetectionRuleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "deleteCustomDetectionRule", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteCustomDetectionRuleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "deleteCustomDetectionRule", err)
+			}
+			err = ValidateDeleteCustomDetectionRuleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "deleteCustomDetectionRule", err)
+			}
+			return nil, NewDeleteCustomDetectionRuleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "deleteCustomDetectionRule", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSuggestCustomDetectionRuleRequest instantiates a HTTP request object
 // with method and path set to call the "risk" service
 // "suggestCustomDetectionRule" endpoint
@@ -4919,6 +6116,12 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 			res.DisabledRules[i] = val
 		}
 	}
+	if v.CustomRuleIds != nil {
+		res.CustomRuleIds = make([]string, len(v.CustomRuleIds))
+		for i, val := range v.CustomRuleIds {
+			res.CustomRuleIds[i] = val
+		}
+	}
 
 	return res
 }
@@ -5079,6 +6282,24 @@ func unmarshalShadowMCPApprovalResponseBodyToTypesShadowMCPApproval(v *ShadowMCP
 		ServerName: v.ServerName,
 		ApprovedBy: v.ApprovedBy,
 		ApprovedAt: *v.ApprovedAt,
+	}
+
+	return res
+}
+
+// unmarshalRiskCustomDetectionRuleResponseBodyToTypesRiskCustomDetectionRule
+// builds a value of type *types.RiskCustomDetectionRule from a value of type
+// *RiskCustomDetectionRuleResponseBody.
+func unmarshalRiskCustomDetectionRuleResponseBodyToTypesRiskCustomDetectionRule(v *RiskCustomDetectionRuleResponseBody) *types.RiskCustomDetectionRule {
+	res := &types.RiskCustomDetectionRule{
+		ID:          *v.ID,
+		RuleID:      *v.RuleID,
+		Title:       *v.Title,
+		Description: *v.Description,
+		Regex:       *v.Regex,
+		Severity:    *v.Severity,
+		CreatedAt:   *v.CreatedAt,
+		UpdatedAt:   *v.UpdatedAt,
 	}
 
 	return res

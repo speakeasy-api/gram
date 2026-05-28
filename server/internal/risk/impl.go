@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -16,6 +17,8 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -226,6 +229,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := validateSourceAction(sources, action); err != nil {
 		return nil, err
 	}
+	if err := validateCustomRuleIDs(payload.CustomRuleIds); err != nil {
+		return nil, err
+	}
 
 	enabled := true
 	if payload.Enabled != nil {
@@ -269,6 +275,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PresidioEntities:     payload.PresidioEntities,
 		PromptInjectionRules: payload.PromptInjectionRules,
 		DisabledRules:        payload.DisabledRules,
+		CustomRuleIds:        payload.CustomRuleIds,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -409,6 +416,14 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		disabledRules = payload.DisabledRules
 	}
 
+	customRuleIds := current.CustomRuleIds
+	if payload.CustomRuleIds != nil {
+		if err := validateCustomRuleIDs(payload.CustomRuleIds); err != nil {
+			return nil, err
+		}
+		customRuleIds = payload.CustomRuleIds
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -472,6 +487,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		PresidioEntities:     presidioEntities,
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
+		CustomRuleIds:        customRuleIds,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -1362,6 +1378,195 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 	return nil
 }
 
+func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.CreateCustomDetectionRulePayload) (*types.RiskCustomDetectionRule, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	ruleID := strings.TrimSpace(payload.RuleID)
+	title := strings.TrimSpace(payload.Title)
+	description := ""
+	if payload.Description != nil {
+		description = strings.TrimSpace(*payload.Description)
+	}
+	regexPattern := strings.TrimSpace(payload.Regex)
+	severity := payload.Severity
+	if severity == "" {
+		severity = "medium"
+	}
+	if err := validateCustomDetectionRule(ruleID, title, regexPattern, severity); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := repo.New(dbtx).CreateCustomDetectionRule(ctx, repo.CreateCustomDetectionRuleParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RuleID:         ruleID,
+		Title:          title,
+		Description:    description,
+		Regex:          pgtype.Text{String: regexPattern, Valid: true},
+		Severity:       severity,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, nil, "custom detection rule already exists")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "create custom detection rule").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit custom detection rule create").Log(ctx, s.logger)
+	}
+
+	return customDetectionRuleToType(row), nil
+}
+
+func (s *Service) ListCustomDetectionRules(ctx context.Context, payload *gen.ListCustomDetectionRulesPayload) (*gen.ListCustomDetectionRulesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.ListCustomDetectionRules(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list custom detection rules").Log(ctx, s.logger)
+	}
+
+	rules := make([]*types.RiskCustomDetectionRule, 0, len(rows))
+	for _, row := range rows {
+		rules = append(rules, customDetectionRuleToType(row))
+	}
+
+	return &gen.ListCustomDetectionRulesResult{Rules: rules}, nil
+}
+
+func (s *Service) GetCustomDetectionRule(ctx context.Context, payload *gen.GetCustomDetectionRulePayload) (*types.RiskCustomDetectionRule, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.C(oops.CodeInvalid)
+	}
+
+	row, err := s.repo.GetCustomDetectionRule(ctx, repo.GetCustomDetectionRuleParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "custom detection rule not found").Log(ctx, s.logger)
+	}
+
+	return customDetectionRuleToType(row), nil
+}
+
+func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.UpdateCustomDetectionRulePayload) (*types.RiskCustomDetectionRule, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.C(oops.CodeInvalid)
+	}
+
+	title := strings.TrimSpace(payload.Title)
+	description := ""
+	if payload.Description != nil {
+		description = strings.TrimSpace(*payload.Description)
+	}
+	regexPattern := strings.TrimSpace(payload.Regex)
+	if err := validateCustomDetectionRuleFields(title, regexPattern, payload.Severity); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := repo.New(dbtx).UpdateCustomDetectionRule(ctx, repo.UpdateCustomDetectionRuleParams{
+		ID:          id,
+		ProjectID:   *authCtx.ProjectID,
+		Title:       title,
+		Description: description,
+		Regex:       pgtype.Text{String: regexPattern, Valid: true},
+		Severity:    payload.Severity,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "custom detection rule not found").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit custom detection rule update").Log(ctx, s.logger)
+	}
+
+	return customDetectionRuleToType(row), nil
+}
+
+func (s *Service) DeleteCustomDetectionRule(ctx context.Context, payload *gen.DeleteCustomDetectionRulePayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.C(oops.CodeInvalid)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if err := repo.New(dbtx).DeleteCustomDetectionRule(ctx, repo.DeleteCustomDetectionRuleParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete custom detection rule").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit custom detection rule delete").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
 // SuggestCustomDetectionRule turns a natural-language description ("what do
 // you want to detect?") into a structured custom-rule suggestion. The
 // response is intentionally minimal — the dashboard prefills its create
@@ -1463,10 +1668,39 @@ var customRuleSeverityAllow = map[string]bool{
 	"critical": true,
 }
 
-var customRuleIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+var customRuleIDPattern = regexp.MustCompile(`^custom\.[a-z0-9_]+$`)
+
+func validateCustomRuleIDs(ids []string) error {
+	for _, id := range ids {
+		if !strings.HasPrefix(id, "custom.") {
+			return oops.E(oops.CodeInvalid, nil, "custom rule id %q must start with custom.", id)
+		}
+	}
+	return nil
+}
+
+func validateCustomDetectionRule(ruleID, title, regexPattern, severity string) error {
+	if !customRuleIDPattern.MatchString(ruleID) {
+		return oops.E(oops.CodeInvalid, nil, "rule_id must match custom.[a-z0-9_]+")
+	}
+	return validateCustomDetectionRuleFields(title, regexPattern, severity)
+}
+
+func validateCustomDetectionRuleFields(title, regexPattern, severity string) error {
+	if title == "" {
+		return oops.E(oops.CodeInvalid, nil, "title must not be empty")
+	}
+	if _, err := regexp.Compile(regexPattern); err != nil {
+		return oops.E(oops.CodeInvalid, err, "regex is invalid")
+	}
+	if !customRuleSeverityAllow[severity] {
+		return oops.E(oops.CodeInvalid, nil, "severity must be one of info, low, medium, high, critical")
+	}
+	return nil
+}
 
 func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
-	systemPrompt := `You are a security-rules assistant for a runtime DLP product.
+	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
 Given a single natural-language description of what an operator wants to detect, return a JSON object that the dashboard will use to prefill a "create custom detection rule" form.
 
@@ -1732,9 +1966,6 @@ func (s *Service) testCustomRule(ruleID, pattern, text string) (*gen.TestDetecti
 	}, nil
 }
 
-//go:fix inline
-func strPtr(s string) *string { return new(s) }
-
 func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
 	return &gen.TestDetectionRuleMatch{
 		RuleID:      f.RuleID,
@@ -1774,6 +2005,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PresidioEntities:     row.PresidioEntities,
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
+		CustomRuleIds:        row.CustomRuleIds,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,
@@ -1799,6 +2031,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		PresidioEntities:     row.PresidioEntities,
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
+		CustomRuleIds:        row.CustomRuleIds,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,
@@ -1808,6 +2041,19 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 		PendingMessages:      -1,
 		TotalMessages:        -1,
+	}
+}
+
+func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCustomDetectionRule {
+	return &types.RiskCustomDetectionRule{
+		ID:          row.ID.String(),
+		RuleID:      row.RuleID,
+		Title:       row.Title,
+		Description: row.Description,
+		Regex:       conv.PtrValOr(conv.FromPGText[string](row.Regex), ""),
+		Severity:    row.Severity,
+		CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:   row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

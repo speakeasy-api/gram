@@ -97,6 +97,31 @@ func TriggerRiskAnalysisRiskPath() string {
 	return "/rpc/risk.policies.trigger"
 }
 
+// CreateCustomDetectionRuleRiskPath returns the URL path to the risk service createCustomDetectionRule HTTP endpoint.
+func CreateCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.create"
+}
+
+// ListCustomDetectionRulesRiskPath returns the URL path to the risk service listCustomDetectionRules HTTP endpoint.
+func ListCustomDetectionRulesRiskPath() string {
+	return "/rpc/risk.customRules.list"
+}
+
+// GetCustomDetectionRuleRiskPath returns the URL path to the risk service getCustomDetectionRule HTTP endpoint.
+func GetCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.get"
+}
+
+// UpdateCustomDetectionRuleRiskPath returns the URL path to the risk service updateCustomDetectionRule HTTP endpoint.
+func UpdateCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.update"
+}
+
+// DeleteCustomDetectionRuleRiskPath returns the URL path to the risk service deleteCustomDetectionRule HTTP endpoint.
+func DeleteCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.delete"
+}
+
 // SuggestCustomDetectionRuleRiskPath returns the URL path to the risk service suggestCustomDetectionRule HTTP endpoint.
 func SuggestCustomDetectionRuleRiskPath() string {
 	return "/rpc/risk.customRules.suggest"

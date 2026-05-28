@@ -8,6 +8,7 @@ INSERT INTO risk_policies (
   , presidio_entities
   , prompt_injection_rules
   , disabled_rules
+  , custom_rule_ids
   , enabled
   , action
   , auto_name
@@ -23,6 +24,7 @@ VALUES (
   , @presidio_entities
   , @prompt_injection_rules
   , @disabled_rules
+  , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , @enabled
   , @action
   , @auto_name
@@ -59,6 +61,7 @@ SET name = @name
   , presidio_entities = @presidio_entities
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
+  , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
@@ -68,6 +71,7 @@ SET name = @name
         OR presidio_entities IS DISTINCT FROM @presidio_entities
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
+        OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
       THEN version + 1
@@ -90,6 +94,61 @@ RETURNING *;
 
 -- name: DeleteRiskPolicy :exec
 UPDATE risk_policies
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: CreateCustomDetectionRule :one
+INSERT INTO risk_custom_detection_rules (
+    project_id
+  , organization_id
+  , rule_id
+  , title
+  , description
+  , regex
+  , severity
+)
+VALUES (
+    @project_id
+  , @organization_id
+  , @rule_id
+  , @title
+  , @description
+  , @regex
+  , @severity
+)
+RETURNING *;
+
+-- name: ListCustomDetectionRules :many
+SELECT *
+FROM risk_custom_detection_rules
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: GetCustomDetectionRule :one
+SELECT *
+FROM risk_custom_detection_rules
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: UpdateCustomDetectionRule :one
+UPDATE risk_custom_detection_rules
+SET title = @title
+  , description = @description
+  , regex = @regex
+  , severity = @severity
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteCustomDetectionRule :exec
+UPDATE risk_custom_detection_rules
 SET deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = @id

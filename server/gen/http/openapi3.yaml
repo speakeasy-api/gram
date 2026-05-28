@@ -19428,6 +19428,423 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskCategories
+    /rpc/risk.customRules.create:
+        post:
+            description: Create a custom regex-backed detection rule for the current project.
+            operationId: createCustomDetectionRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateCustomDetectionRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskCustomDetectionRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createCustomDetectionRule risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.customRules
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: RiskCreateCustomDetectionRule
+                type: mutation
+    /rpc/risk.customRules.delete:
+        post:
+            description: Delete a custom detection rule.
+            operationId: deleteCustomDetectionRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteCustomDetectionRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteCustomDetectionRule risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.customRules
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: RiskDeleteCustomDetectionRule
+                type: mutation
+    /rpc/risk.customRules.get:
+        get:
+            description: Get a custom detection rule by ID.
+            operationId: getCustomDetectionRule
+            parameters:
+                - allowEmptyValue: true
+                  description: The custom detection rule ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The custom detection rule ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskCustomDetectionRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getCustomDetectionRule risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.customRules
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: RiskGetCustomDetectionRule
+                type: query
+    /rpc/risk.customRules.list:
+        get:
+            description: List custom detection rules for the current project.
+            operationId: listCustomDetectionRules
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCustomDetectionRulesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listCustomDetectionRules risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.customRules
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: RiskListCustomDetectionRules
+                type: query
     /rpc/risk.customRules.suggest:
         post:
             description: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.
@@ -19533,6 +19950,112 @@ paths:
             x-speakeasy-name-override: suggest
             x-speakeasy-react-hook:
                 name: RiskSuggestCustomRule
+                type: mutation
+    /rpc/risk.customRules.update:
+        post:
+            description: Update a custom detection rule.
+            operationId: updateCustomDetectionRule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateCustomDetectionRuleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskCustomDetectionRule'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateCustomDetectionRule risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.customRules
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: RiskUpdateCustomDetectionRule
                 type: mutation
     /rpc/risk.overview.get:
         get:
@@ -30063,6 +30586,35 @@ components:
                 - model
                 - instructions
                 - toolsets
+        CreateCustomDetectionRuleRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what the rule detects.
+                regex:
+                    type: string
+                    description: RE2-compatible regex pattern.
+                rule_id:
+                    type: string
+                    description: Stable rule identifier, prefixed with `custom.`.
+                severity:
+                    type: string
+                    description: Severity level for findings produced by this rule.
+                    default: medium
+                    enum:
+                        - info
+                        - low
+                        - medium
+                        - high
+                        - critical
+                title:
+                    type: string
+                    description: Human-readable title for the rule.
+            required:
+                - rule_id
+                - title
+                - regex
         CreateDeploymentForm:
             type: object
             properties:
@@ -30601,6 +31153,11 @@ components:
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
+                custom_rule_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Custom detection rule ids to enable for this policy.
                 disabled_rules:
                     type: array
                     items:
@@ -31092,6 +31649,15 @@ components:
                     description: AI provider identifier. Initially only cursor is supported.
             required:
                 - provider
+        DeleteCustomDetectionRuleRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The custom detection rule ID.
+                    format: uuid
+            required:
+                - id
         DeleteGlobalToolVariationForm:
             type: object
             properties:
@@ -33387,6 +33953,16 @@ components:
             required:
                 - chats
                 - total
+        ListCustomDetectionRulesResult:
+            type: object
+            properties:
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskCustomDetectionRule'
+                    description: The list of custom detection rules.
+            required:
+                - rules
         ListCustomDomainMcpEndpointsResult:
             type: object
             properties:
@@ -36517,6 +37093,51 @@ components:
                 - chat_id
                 - findings_count
                 - latest_detected
+        RiskCustomDetectionRule:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the custom detection rule was created.
+                    format: date-time
+                description:
+                    type: string
+                    description: Description of what the rule detects.
+                id:
+                    type: string
+                    description: The custom detection rule ID.
+                    format: uuid
+                regex:
+                    type: string
+                    description: RE2-compatible regex pattern.
+                rule_id:
+                    type: string
+                    description: Stable rule identifier, prefixed with `custom.`.
+                severity:
+                    type: string
+                    description: Severity level for findings produced by this rule.
+                    enum:
+                        - info
+                        - low
+                        - medium
+                        - high
+                        - critical
+                title:
+                    type: string
+                    description: Human-readable title for the rule.
+                updated_at:
+                    type: string
+                    description: When the custom detection rule was last updated.
+                    format: date-time
+            required:
+                - id
+                - rule_id
+                - title
+                - description
+                - regex
+                - severity
+                - created_at
+                - updated_at
         RiskOverviewCategory:
             type: object
             properties:
@@ -36640,6 +37261,11 @@ components:
                     type: string
                     description: When the policy was created.
                     format: date-time
+                custom_rule_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Custom detection rule ids enabled for this policy.
                 disabled_rules:
                     type: array
                     items:
@@ -39154,6 +39780,36 @@ components:
                     format: int64
             required:
                 - id
+        UpdateCustomDetectionRuleRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what the rule detects.
+                id:
+                    type: string
+                    description: The custom detection rule ID.
+                    format: uuid
+                regex:
+                    type: string
+                    description: RE2-compatible regex pattern.
+                severity:
+                    type: string
+                    description: Severity level for findings produced by this rule.
+                    enum:
+                        - info
+                        - low
+                        - medium
+                        - high
+                        - critical
+                title:
+                    type: string
+                    description: Human-readable title for the rule.
+            required:
+                - id
+                - title
+                - regex
+                - severity
         UpdateEnvironmentForm:
             type: object
             properties:
@@ -39585,6 +40241,11 @@ components:
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
+                custom_rule_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
                 disabled_rules:
                     type: array
                     items:

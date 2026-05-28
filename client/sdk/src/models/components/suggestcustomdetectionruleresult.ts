@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Suggested severity level.
  */
-export const Severity = {
+export const SuggestCustomDetectionRuleResultSeverity = {
   Info: "info",
   Low: "low",
   Medium: "medium",
@@ -22,7 +22,9 @@ export const Severity = {
 /**
  * Suggested severity level.
  */
-export type Severity = ClosedEnum<typeof Severity>;
+export type SuggestCustomDetectionRuleResultSeverity = ClosedEnum<
+  typeof SuggestCustomDetectionRuleResultSeverity
+>;
 
 export type SuggestCustomDetectionRuleResult = {
   /**
@@ -40,7 +42,7 @@ export type SuggestCustomDetectionRuleResult = {
   /**
    * Suggested severity level.
    */
-  severity: Severity;
+  severity: SuggestCustomDetectionRuleResultSeverity;
   /**
    * Short, human-friendly title for the rule.
    */
@@ -48,9 +50,10 @@ export type SuggestCustomDetectionRuleResult = {
 };
 
 /** @internal */
-export const Severity$inboundSchema: z.ZodMiniEnum<typeof Severity> = z.enum(
-  Severity,
-);
+export const SuggestCustomDetectionRuleResultSeverity$inboundSchema:
+  z.ZodMiniEnum<typeof SuggestCustomDetectionRuleResultSeverity> = z.enum(
+    SuggestCustomDetectionRuleResultSeverity,
+  );
 
 /** @internal */
 export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
@@ -61,7 +64,7 @@ export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
     description: z.string(),
     regex: z.string(),
     rule_id: z.string(),
-    severity: Severity$inboundSchema,
+    severity: SuggestCustomDetectionRuleResultSeverity$inboundSchema,
     title: z.string(),
   }),
   z.transform((v) => {

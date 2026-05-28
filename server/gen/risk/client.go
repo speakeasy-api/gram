@@ -34,12 +34,17 @@ type Client struct {
 	ApproveShadowMCPEndpoint           goa.Endpoint
 	RevokeShadowMCPApprovalEndpoint    goa.Endpoint
 	TriggerRiskAnalysisEndpoint        goa.Endpoint
+	CreateCustomDetectionRuleEndpoint  goa.Endpoint
+	ListCustomDetectionRulesEndpoint   goa.Endpoint
+	GetCustomDetectionRuleEndpoint     goa.Endpoint
+	UpdateCustomDetectionRuleEndpoint  goa.Endpoint
+	DeleteCustomDetectionRuleEndpoint  goa.Endpoint
 	SuggestCustomDetectionRuleEndpoint goa.Endpoint
 	TestDetectionRuleEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskCapabilities, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, listShadowMCPApprovals, approveShadowMCP, revokeShadowMCPApproval, triggerRiskAnalysis, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, getRiskCapabilities, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, listShadowMCPApprovals, approveShadowMCP, revokeShadowMCPApproval, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:           createRiskPolicy,
 		ListRiskPoliciesEndpoint:           listRiskPolicies,
@@ -59,6 +64,11 @@ func NewClient(createRiskPolicy, listRiskPolicies, getRiskCapabilities, getRiskP
 		ApproveShadowMCPEndpoint:           approveShadowMCP,
 		RevokeShadowMCPApprovalEndpoint:    revokeShadowMCPApproval,
 		TriggerRiskAnalysisEndpoint:        triggerRiskAnalysis,
+		CreateCustomDetectionRuleEndpoint:  createCustomDetectionRule,
+		ListCustomDetectionRulesEndpoint:   listCustomDetectionRules,
+		GetCustomDetectionRuleEndpoint:     getCustomDetectionRule,
+		UpdateCustomDetectionRuleEndpoint:  updateCustomDetectionRule,
+		DeleteCustomDetectionRuleEndpoint:  deleteCustomDetectionRule,
 		SuggestCustomDetectionRuleEndpoint: suggestCustomDetectionRule,
 		TestDetectionRuleEndpoint:          testDetectionRule,
 	}
@@ -455,6 +465,117 @@ func (c *Client) RevokeShadowMCPApproval(ctx context.Context, p *RevokeShadowMCP
 //   - error: internal error
 func (c *Client) TriggerRiskAnalysis(ctx context.Context, p *TriggerRiskAnalysisPayload) (err error) {
 	_, err = c.TriggerRiskAnalysisEndpoint(ctx, p)
+	return
+}
+
+// CreateCustomDetectionRule calls the "createCustomDetectionRule" endpoint of
+// the "risk" service.
+// CreateCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateCustomDetectionRule(ctx context.Context, p *CreateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error) {
+	var ires any
+	ires, err = c.CreateCustomDetectionRuleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskCustomDetectionRule), nil
+}
+
+// ListCustomDetectionRules calls the "listCustomDetectionRules" endpoint of
+// the "risk" service.
+// ListCustomDetectionRules may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListCustomDetectionRules(ctx context.Context, p *ListCustomDetectionRulesPayload) (res *ListCustomDetectionRulesResult, err error) {
+	var ires any
+	ires, err = c.ListCustomDetectionRulesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListCustomDetectionRulesResult), nil
+}
+
+// GetCustomDetectionRule calls the "getCustomDetectionRule" endpoint of the
+// "risk" service.
+// GetCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetCustomDetectionRule(ctx context.Context, p *GetCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error) {
+	var ires any
+	ires, err = c.GetCustomDetectionRuleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskCustomDetectionRule), nil
+}
+
+// UpdateCustomDetectionRule calls the "updateCustomDetectionRule" endpoint of
+// the "risk" service.
+// UpdateCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateCustomDetectionRule(ctx context.Context, p *UpdateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error) {
+	var ires any
+	ires, err = c.UpdateCustomDetectionRuleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskCustomDetectionRule), nil
+}
+
+// DeleteCustomDetectionRule calls the "deleteCustomDetectionRule" endpoint of
+// the "risk" service.
+// DeleteCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteCustomDetectionRule(ctx context.Context, p *DeleteCustomDetectionRulePayload) (err error) {
+	_, err = c.DeleteCustomDetectionRuleEndpoint(ctx, p)
 	return
 }
 

@@ -34,6 +34,11 @@ type Endpoints struct {
 	ApproveShadowMCP           goa.Endpoint
 	RevokeShadowMCPApproval    goa.Endpoint
 	TriggerRiskAnalysis        goa.Endpoint
+	CreateCustomDetectionRule  goa.Endpoint
+	ListCustomDetectionRules   goa.Endpoint
+	GetCustomDetectionRule     goa.Endpoint
+	UpdateCustomDetectionRule  goa.Endpoint
+	DeleteCustomDetectionRule  goa.Endpoint
 	SuggestCustomDetectionRule goa.Endpoint
 	TestDetectionRule          goa.Endpoint
 }
@@ -61,6 +66,11 @@ func NewEndpoints(s Service) *Endpoints {
 		ApproveShadowMCP:           NewApproveShadowMCPEndpoint(s, a.APIKeyAuth),
 		RevokeShadowMCPApproval:    NewRevokeShadowMCPApprovalEndpoint(s, a.APIKeyAuth),
 		TriggerRiskAnalysis:        NewTriggerRiskAnalysisEndpoint(s, a.APIKeyAuth),
+		CreateCustomDetectionRule:  NewCreateCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		ListCustomDetectionRules:   NewListCustomDetectionRulesEndpoint(s, a.APIKeyAuth),
+		GetCustomDetectionRule:     NewGetCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		UpdateCustomDetectionRule:  NewUpdateCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		DeleteCustomDetectionRule:  NewDeleteCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
 		SuggestCustomDetectionRule: NewSuggestCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
 		TestDetectionRule:          NewTestDetectionRuleEndpoint(s, a.APIKeyAuth),
 	}
@@ -86,6 +96,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ApproveShadowMCP = m(e.ApproveShadowMCP)
 	e.RevokeShadowMCPApproval = m(e.RevokeShadowMCPApproval)
 	e.TriggerRiskAnalysis = m(e.TriggerRiskAnalysis)
+	e.CreateCustomDetectionRule = m(e.CreateCustomDetectionRule)
+	e.ListCustomDetectionRules = m(e.ListCustomDetectionRules)
+	e.GetCustomDetectionRule = m(e.GetCustomDetectionRule)
+	e.UpdateCustomDetectionRule = m(e.UpdateCustomDetectionRule)
+	e.DeleteCustomDetectionRule = m(e.DeleteCustomDetectionRule)
 	e.SuggestCustomDetectionRule = m(e.SuggestCustomDetectionRule)
 	e.TestDetectionRule = m(e.TestDetectionRule)
 }
@@ -1149,6 +1164,301 @@ func NewTriggerRiskAnalysisEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return nil, s.TriggerRiskAnalysis(ctx, p)
+	}
+}
+
+// NewCreateCustomDetectionRuleEndpoint returns an endpoint function that calls
+// the method "createCustomDetectionRule" of service "risk".
+func NewCreateCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateCustomDetectionRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateCustomDetectionRule(ctx, p)
+	}
+}
+
+// NewListCustomDetectionRulesEndpoint returns an endpoint function that calls
+// the method "listCustomDetectionRules" of service "risk".
+func NewListCustomDetectionRulesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListCustomDetectionRulesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListCustomDetectionRules(ctx, p)
+	}
+}
+
+// NewGetCustomDetectionRuleEndpoint returns an endpoint function that calls
+// the method "getCustomDetectionRule" of service "risk".
+func NewGetCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetCustomDetectionRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetCustomDetectionRule(ctx, p)
+	}
+}
+
+// NewUpdateCustomDetectionRuleEndpoint returns an endpoint function that calls
+// the method "updateCustomDetectionRule" of service "risk".
+func NewUpdateCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateCustomDetectionRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateCustomDetectionRule(ctx, p)
+	}
+}
+
+// NewDeleteCustomDetectionRuleEndpoint returns an endpoint function that calls
+// the method "deleteCustomDetectionRule" of service "risk".
+func NewDeleteCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteCustomDetectionRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteCustomDetectionRule(ctx, p)
 	}
 }
 

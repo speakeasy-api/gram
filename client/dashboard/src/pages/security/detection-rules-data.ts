@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  invalidateAllRiskListCustomDetectionRules,
+  useRiskCreateCustomDetectionRuleMutation,
+  useRiskDeleteCustomDetectionRuleMutation,
+  useRiskListCustomDetectionRules,
+  useRiskUpdateCustomDetectionRuleMutation,
+} from "@gram/client/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
 
 /** Severity levels assigned to a detection rule. Drives how findings show
@@ -167,6 +174,7 @@ export const BUILTIN_RULE_IDS = new Set<string>(
 
 export type CustomDetectionRule = {
   id: string;
+  dbId: string;
   title: string;
   description: string;
   regex: string;
@@ -175,108 +183,96 @@ export type CustomDetectionRule = {
   updatedAt: string;
 };
 
-const STORAGE_KEY = "gram.detection-rules.v1";
-
-type StoredState = {
-  customRules: CustomDetectionRule[];
-};
-
-const EMPTY_STATE: StoredState = {
-  customRules: [],
-};
-
-function readState(): StoredState {
-  if (typeof window === "undefined") return EMPTY_STATE;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return EMPTY_STATE;
-    const parsed = JSON.parse(raw) as Partial<StoredState>;
-    return {
-      customRules: parsed.customRules ?? [],
-    };
-  } catch {
-    return EMPTY_STATE;
-  }
+function mapCustomDetectionRule(rule: {
+  id: string;
+  ruleId: string;
+  title: string;
+  description: string;
+  regex: string;
+  severity: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): CustomDetectionRule {
+  return {
+    id: rule.ruleId,
+    dbId: rule.id,
+    title: rule.title,
+    description: rule.description,
+    regex: rule.regex,
+    severity: rule.severity as SeverityLevel,
+    createdAt: rule.createdAt.toISOString(),
+    updatedAt: rule.updatedAt.toISOString(),
+  };
 }
 
-function writeState(state: StoredState) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  window.dispatchEvent(new CustomEvent(STORAGE_EVENT));
-}
-
-const STORAGE_EVENT = "gram.detection-rules.changed";
-
-/** Local-storage backed store for severity overrides + custom rules.
- *  Mocked client-side until the server endpoints land. */
 export function useDetectionRulesStore() {
-  const [state, setState] = useState<StoredState>(() => readState());
+  const queryClient = useQueryClient();
+  const rulesQuery = useRiskListCustomDetectionRules();
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onChange = () => setState(readState());
-    window.addEventListener(STORAGE_EVENT, onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener(STORAGE_EVENT, onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, []);
+  const invalidate = () =>
+    invalidateAllRiskListCustomDetectionRules(queryClient);
 
-  const addCustomRule = useCallback(
-    (rule: Omit<CustomDetectionRule, "createdAt" | "updatedAt">) => {
-      const now = new Date().toISOString();
-      setState((prev) => {
-        const updated = {
-          ...prev,
-          customRules: [
-            ...prev.customRules,
-            { ...rule, createdAt: now, updatedAt: now },
-          ],
-        };
-        writeState(updated);
-        return updated;
-      });
-    },
-    [],
-  );
+  const createMutation = useRiskCreateCustomDetectionRuleMutation({
+    onSuccess: invalidate,
+  });
 
-  const updateCustomRule = useCallback(
-    (
-      id: string,
-      patch: Partial<Omit<CustomDetectionRule, "id" | "createdAt">>,
-    ) => {
-      const now = new Date().toISOString();
-      setState((prev) => {
-        const updated = {
-          ...prev,
-          customRules: prev.customRules.map((r) =>
-            r.id === id ? { ...r, ...patch, updatedAt: now } : r,
-          ),
-        };
-        writeState(updated);
-        return updated;
-      });
-    },
-    [],
-  );
+  const updateMutation = useRiskUpdateCustomDetectionRuleMutation({
+    onSuccess: invalidate,
+  });
 
-  const removeCustomRule = useCallback((id: string) => {
-    setState((prev) => {
-      const updated = {
-        ...prev,
-        customRules: prev.customRules.filter((r) => r.id !== id),
-      };
-      writeState(updated);
-      return updated;
-    });
-  }, []);
+  const deleteMutation = useRiskDeleteCustomDetectionRuleMutation({
+    onSuccess: invalidate,
+  });
+
+  const customRules = rulesQuery.data?.rules.map(mapCustomDetectionRule) ?? [];
 
   return {
-    customRules: state.customRules,
-    addCustomRule,
-    updateCustomRule,
-    removeCustomRule,
+    customRules,
+    isLoading: rulesQuery.isLoading,
+    error: rulesQuery.error,
+    addCustomRule: (
+      rule: Omit<CustomDetectionRule, "dbId" | "createdAt" | "updatedAt">,
+    ) =>
+      createMutation.mutate({
+        request: {
+          createCustomDetectionRuleRequestBody: {
+            ruleId: rule.id,
+            title: rule.title,
+            description: rule.description,
+            regex: rule.regex,
+            severity: rule.severity,
+          },
+        },
+      }),
+    updateCustomRule: (
+      id: string,
+      patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
+    ) => {
+      const rule = customRules.find((r) => r.id === id);
+      if (!rule) return;
+      updateMutation.mutate({
+        request: {
+          updateCustomDetectionRuleRequestBody: {
+            id: rule.dbId,
+            title: patch.title ?? rule.title,
+            description: patch.description ?? rule.description,
+            regex: patch.regex ?? rule.regex,
+            severity: patch.severity ?? rule.severity,
+          },
+        },
+      });
+    },
+    removeCustomRule: (id: string) => {
+      const rule = customRules.find((r) => r.id === id);
+      if (!rule) return;
+      deleteMutation.mutate({
+        request: {
+          deleteCustomDetectionRuleRequestBody: {
+            id: rule.dbId,
+          },
+        },
+      });
+    },
   };
 }
 

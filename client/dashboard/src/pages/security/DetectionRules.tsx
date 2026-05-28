@@ -95,8 +95,14 @@ export default function DetectionRules() {
 }
 
 function DetectionRulesContent() {
-  const { customRules, addCustomRule, updateCustomRule, removeCustomRule } =
-    useDetectionRulesStore();
+  const {
+    customRules,
+    isLoading: customRulesLoading,
+    error: customRulesError,
+    addCustomRule,
+    updateCustomRule,
+    removeCustomRule,
+  } = useDetectionRulesStore();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedRule | null>(null);
@@ -116,11 +122,21 @@ function DetectionRulesContent() {
         <Page.Section.CTA>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            New Custom Detection Rule
+            Custom Detection Rule
           </Button>
         </Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-8">
+            {customRulesLoading && (
+              <div className="text-muted-foreground text-sm">
+                Loading custom rules...
+              </div>
+            )}
+            {customRulesError && (
+              <div className="text-destructive text-sm">
+                Failed to load custom rules.
+              </div>
+            )}
             {customRules.length > 0 && (
               <CustomRulesSection
                 rules={customRules}
@@ -370,7 +386,7 @@ function RuleDetailSheet({
   onClose: () => void;
   onUpdateCustomRule: (
     id: string,
-    patch: Partial<Omit<CustomDetectionRule, "id" | "createdAt">>,
+    patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
   ) => void;
   onDeleteCustomRule: (id: string) => void;
 }) {
@@ -382,6 +398,7 @@ function RuleDetailSheet({
         )}
         {selection?.kind === "custom" && (
           <CustomRuleDetail
+            key={selection.rule.id}
             rule={selection.rule}
             onUpdate={(patch) => onUpdateCustomRule(selection.rule.id, patch)}
             onDelete={() => onDeleteCustomRule(selection.rule.id)}
@@ -430,21 +447,19 @@ function CustomRuleDetail({
 }: {
   rule: CustomDetectionRule;
   onUpdate: (
-    patch: Partial<Omit<CustomDetectionRule, "id" | "createdAt">>,
+    patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
   ) => void;
   onDelete: () => void;
 }) {
   const [title, setTitle] = useState(rule.title);
   const [description, setDescription] = useState(rule.description);
   const [regex, setRegex] = useState(rule.regex);
-  const [severity, setSeverity] = useState<SeverityLevel>(rule.severity);
 
   const regexError = useMemo(() => validateRegex(regex), [regex]);
   const dirty =
     title !== rule.title ||
     description !== rule.description ||
-    regex !== rule.regex ||
-    severity !== rule.severity;
+    regex !== rule.regex;
 
   return (
     <>
@@ -497,7 +512,7 @@ function CustomRuleDetail({
         </Button>
         <Button
           disabled={!dirty || !!regexError || !title.trim()}
-          onClick={() => onUpdate({ title, description, regex, severity })}
+          onClick={() => onUpdate({ title, description, regex })}
         >
           Save changes
         </Button>
@@ -672,7 +687,7 @@ type ChatMessageResult = {
   role: string;
   textPreview: string;
   fullText: string;
-  createdAt: string;
+  createdAt: Date | string;
   status: "pending" | "done" | "error";
   result?: TestDetectionRuleResult;
   errorMessage?: string;
@@ -712,10 +727,10 @@ function ChatPlayground({
       map.set(key, list);
     }
     for (const list of map.values()) {
-      list.sort((a, b) =>
-        (b.lastMessageTimestamp ?? "").localeCompare(
-          a.lastMessageTimestamp ?? "",
-        ),
+      list.sort(
+        (a, b) =>
+          timestampMs(b.lastMessageTimestamp) -
+          timestampMs(a.lastMessageTimestamp),
       );
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
@@ -734,8 +749,8 @@ function ChatPlayground({
     setOverflowWarning(null);
     try {
       const chat = await unwrapAsync(chatLoad(client, { id: selectedChat }));
-      const sorted = [...chat.messages].sort((a, b) =>
-        (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+      const sorted = [...chat.messages].sort(
+        (a, b) => timestampMs(b.createdAt) - timestampMs(a.createdAt),
       );
       if (sorted.length > CHAT_MESSAGE_CAP) {
         setOverflowWarning(
@@ -775,15 +790,13 @@ function ChatPlayground({
           continue;
         }
         try {
-          const data = await unwrapAsync(
-            client.risk.rules.test({
-              testDetectionRuleRequestBody: {
-                ruleId,
-                text: item.fullText,
-                ...(regex ? { regex } : {}),
-              },
-            }),
-          );
+          const data = await client.risk.rules.test({
+            testDetectionRuleRequestBody: {
+              ruleId,
+              text: item.fullText,
+              ...(regex ? { regex } : {}),
+            },
+          });
           setResults((prev) =>
             prev.map((r) =>
               r.messageId === item.messageId
@@ -1019,9 +1032,16 @@ function stringifyMessage(m: {
   return parts.join("\n");
 }
 
-function formatTimestamp(ts: string | undefined | null): string {
+function timestampMs(ts: Date | string | undefined | null): number {
+  if (!ts) return 0;
+  const d = ts instanceof Date ? ts : new Date(ts);
+  const ms = d.getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function formatTimestamp(ts: Date | string | undefined | null): string {
   if (!ts) return "";
-  const d = new Date(ts);
+  const d = ts instanceof Date ? ts : new Date(ts);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleString([], {
     month: "short",
@@ -1198,7 +1218,6 @@ function CreateCustomRuleSheet({
                   onChange={setAskPrompt}
                   rows={5}
                   placeholder="e.g. internal Acme service tokens that look like acme_ followed by 32 lowercase hex characters"
-                  autoFocus
                 />
                 <p className="text-muted-foreground text-xs">
                   Tip: include a sample value or the format so the model picks a
