@@ -30,8 +30,15 @@ func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
-		MessageIDs: nil,
-		Sources:    []string{"gitleaks"},
+		ProjectID:            uuid.Nil,
+		OrganizationID:       "",
+		RiskPolicyID:         uuid.Nil,
+		PolicyVersion:        0,
+		MessageIDs:           nil,
+		Sources:              []string{"gitleaks"},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		CustomRuleIds:        nil,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Processed)
@@ -80,12 +87,15 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:      td.projectID,
-		OrganizationID: td.orgID,
-		RiskPolicyID:   td.policyID,
-		PolicyVersion:  td.policyVersion,
-		MessageIDs:     []uuid.UUID{msgID},
-		Sources:        []string{"gitleaks", "presidio"},
+		ProjectID:            td.projectID,
+		OrganizationID:       td.orgID,
+		RiskPolicyID:         td.policyID,
+		PolicyVersion:        td.policyVersion,
+		MessageIDs:           []uuid.UUID{msgID},
+		Sources:              []string{"gitleaks", "presidio"},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		CustomRuleIds:        nil,
 	})
 	require.NoError(t, err, "should not fail when presidio is down")
 
@@ -315,6 +325,69 @@ func TestAnalyzeBatch_CLIDestructive_BenignBash(t *testing.T) {
 	require.Equal(t, 0, result.Findings)
 }
 
+func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `ACME-[A-Z0-9]{8}`)
+
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "deploy with ACME-ABC12345 today",
+	})
+	require.NoError(t, err)
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil)
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 1, result.Findings)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.True(t, rows[0].Found)
+	assert.Equal(t, risk_analysis.SourceCustom, rows[0].Source)
+	assert.Equal(t, "custom.acme_token", rows[0].RuleID.String)
+	assert.Equal(t, "ACME token", rows[0].Description.String)
+	assert.Equal(t, "ACME-ABC12345", rows[0].Match.String)
+}
+
+func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.future_rule", "")
+
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "future rule content",
+	})
+	require.NoError(t, err)
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil)
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 0, result.Findings)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
 // CLI scenarios where the recorded arguments don't carry a Gram toolset id —
 // the cli_destructive scanner is content-driven, so the args field is the
@@ -401,18 +474,64 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:      td.projectID,
-		OrganizationID: td.orgID,
-		RiskPolicyID:   td.policyID,
-		PolicyVersion:  td.policyVersion,
-		MessageIDs:     messageIDs,
-		Sources:        sources,
+		ProjectID:            td.projectID,
+		OrganizationID:       td.orgID,
+		RiskPolicyID:         td.policyID,
+		PolicyVersion:        td.policyVersion,
+		MessageIDs:           messageIDs,
+		Sources:              sources,
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		CustomRuleIds:        nil,
 	})
 	require.NoError(t, err)
 
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
 	return result
+}
+
+func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, regex string) testData {
+	t.Helper()
+
+	regexValue := pgtype.Text{}
+	if regex != "" {
+		regexValue = pgtype.Text{String: regex, Valid: true}
+	}
+	_, err := riskrepo.New(conn).CreateCustomDetectionRule(t.Context(), riskrepo.CreateCustomDetectionRuleParams{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		RuleID:         ruleID,
+		Title:          "ACME token",
+		Description:    "ACME token",
+		Regex:          regexValue,
+		Severity:       "high",
+	})
+	require.NoError(t, err)
+
+	policy, err := riskrepo.New(conn).GetRiskPolicy(t.Context(), riskrepo.GetRiskPolicyParams{
+		ID:        td.policyID,
+		ProjectID: td.projectID,
+	})
+	require.NoError(t, err)
+
+	updated, err := riskrepo.New(conn).UpdateRiskPolicy(t.Context(), riskrepo.UpdateRiskPolicyParams{
+		ID:                   policy.ID,
+		ProjectID:            policy.ProjectID,
+		Name:                 policy.Name,
+		Sources:              []string{},
+		PresidioEntities:     policy.PresidioEntities,
+		PromptInjectionRules: policy.PromptInjectionRules,
+		DisabledRules:        policy.DisabledRules,
+		CustomRuleIds:        []string{ruleID},
+		Enabled:              policy.Enabled,
+		Action:               "flag",
+		AutoName:             policy.AutoName,
+		UserMessage:          policy.UserMessage,
+	})
+	require.NoError(t, err)
+	td.policyVersion = updated.Version
+	return td
 }
 
 func seedHTTPToolset(t *testing.T, conn *pgxpool.Pool, td testData, toolName string, destructiveHint *bool) uuid.UUID {

@@ -93,9 +93,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const observeActive = [routes.insights, routes.logs].some((r) => r.active);
 
-  const securityActive = [routes.riskOverview, routes.policyCenter].some(
-    (r) => r.active,
-  );
+  const securityActive = [
+    routes.riskOverview,
+    routes.detectionRules,
+    routes.policyCenter,
+  ].some((r) => r.active);
 
   let activeGroup: string | undefined;
   switch (true) {
@@ -128,6 +130,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     routes.insights,
     routes.logs,
     routes.riskOverview,
+    routes.detectionRules,
     routes.policyCenter,
     routes.settings,
   ];
@@ -217,6 +220,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Secure"
               Icon={(p) => <Icon {...p} name="shield" />}
               defaultHref={routes.riskOverview.href()}
+              stage="beta"
             >
               <ScopeGatedNavItem
                 item={routes.riskOverview}
@@ -224,6 +228,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               />
               <ScopeGatedNavItem
                 item={routes.policyCenter}
+                scope={["project:read", "project:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.detectionRules}
                 scope={["project:read", "project:write"]}
               />
             </CollapsibleNavGroup>

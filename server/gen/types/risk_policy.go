@@ -27,6 +27,8 @@ type RiskPolicy struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string
+	// Custom detection rule ids enabled for this policy.
+	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).
