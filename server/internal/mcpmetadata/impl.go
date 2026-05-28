@@ -656,9 +656,14 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 		}
 	}
 
+	var toolsetIDStr string
+	if record.ToolsetID.Valid {
+		toolsetIDStr = record.ToolsetID.UUID.String()
+	}
+
 	metadata := &types.McpMetadata{
 		ID:                        record.ID.String(),
-		ToolsetID:                 record.ToolsetID.UUID.String(),
+		ToolsetID:                 toolsetIDStr,
 		CreatedAt:                 record.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                 record.UpdatedAt.Time.Format(time.RFC3339),
 		ExternalDocumentationURL:  conv.FromPGText[string](record.ExternalDocumentationUrl),
