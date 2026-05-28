@@ -350,8 +350,8 @@ const ROUTE_STRUCTURE = {
       // MCP data moves to mcp_servers/mcp_endpoints. Until then this route is
       // distinct so the new mcp_servers-backed details page renders against
       // mcp_servers without disturbing the existing toolset-backed path. The
-      // `x/` prefix is the generic experimental namespace shared with the
-      // `/x/mcp/{slug}` runtime path that already serves these servers.
+      // `x/` prefix is the dashboard's generic experimental namespace; the
+      // runtime path for these servers is `/mcp/{slug}` (see AGE-2555).
       x: {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",
