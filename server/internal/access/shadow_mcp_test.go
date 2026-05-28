@@ -53,6 +53,7 @@ func TestService_CreateShadowMCPApprovalRequest_Idempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, first.ID, second.ID)
+	require.Equal(t, shadowMCPResourceType, first.ResourceType)
 	require.Equal(t, shadowMCPRequestStatusRequested, first.Status)
 	require.Equal(t, project.ID.String(), first.ProjectID)
 	require.Equal(t, fullURL, *first.ObservedFullURL)
@@ -298,6 +299,7 @@ func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 		Reason:       conv.PtrEmpty("Manual approval"),
 	})
 	require.Equal(t, shadowMCPRuleAllowed, rule.Disposition)
+	require.Equal(t, shadowMCPResourceType, rule.ResourceType)
 	require.Equal(t, shadowMCPAccessScopeOrganization, rule.AccessScope)
 	require.Nil(t, rule.ProjectID)
 
@@ -312,6 +314,7 @@ func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, shadowMCPRuleDenied, updated.Disposition)
+	require.Equal(t, shadowMCPResourceType, updated.ResourceType)
 
 	err = ti.service.DeleteShadowMCPAccessRule(ctx, &gen.DeleteShadowMCPAccessRulePayload{ID: rule.ID})
 	require.NoError(t, err)

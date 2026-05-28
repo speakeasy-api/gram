@@ -266,6 +266,7 @@ type CreateShadowMCPApprovalRequestResponseBody struct {
 	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ResourceType           *string `form:"resource_type,omitempty" json:"resource_type,omitempty" xml:"resource_type,omitempty"`
 	RequesterUserID        *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
 	RequesterEmail         *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
 	RequesterDisplayName   *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
@@ -327,6 +328,7 @@ type UpdateShadowMCPAccessRuleResponseBody struct {
 	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	AccessScope            *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
+	ResourceType           *string `form:"resource_type,omitempty" json:"resource_type,omitempty" xml:"resource_type,omitempty"`
 	Disposition            *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
 	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
@@ -4730,6 +4732,7 @@ type ShadowMCPApprovalRequestResponseBody struct {
 	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	ResourceType           *string `form:"resource_type,omitempty" json:"resource_type,omitempty" xml:"resource_type,omitempty"`
 	RequesterUserID        *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
 	RequesterEmail         *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
 	RequesterDisplayName   *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
@@ -4761,6 +4764,7 @@ type ShadowMCPAccessRuleResponseBody struct {
 	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	AccessScope            *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
+	ResourceType           *string `form:"resource_type,omitempty" json:"resource_type,omitempty" xml:"resource_type,omitempty"`
 	Disposition            *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
 	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
@@ -6768,6 +6772,7 @@ func NewCreateShadowMCPApprovalRequestShadowMCPApprovalRequestCreated(body *Crea
 		ID:                     *body.ID,
 		OrganizationID:         *body.OrganizationID,
 		ProjectID:              *body.ProjectID,
+		ResourceType:           *body.ResourceType,
 		RequesterUserID:        body.RequesterUserID,
 		RequesterEmail:         body.RequesterEmail,
 		RequesterDisplayName:   body.RequesterDisplayName,
@@ -7629,6 +7634,7 @@ func NewUpdateShadowMCPAccessRuleShadowMCPAccessRuleOK(body *UpdateShadowMCPAcce
 		OrganizationID:         *body.OrganizationID,
 		ProjectID:              body.ProjectID,
 		AccessScope:            *body.AccessScope,
+		ResourceType:           *body.ResourceType,
 		Disposition:            *body.Disposition,
 		MatchBreadth:           *body.MatchBreadth,
 		MatchValue:             *body.MatchValue,
@@ -9163,6 +9169,9 @@ func ValidateCreateShadowMCPApprovalRequestResponseBody(body *CreateShadowMCPApp
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.ResourceType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -9317,6 +9326,9 @@ func ValidateUpdateShadowMCPAccessRuleResponseBody(body *UpdateShadowMCPAccessRu
 	}
 	if body.AccessScope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	}
+	if body.ResourceType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
 	}
 	if body.Disposition == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
@@ -15201,6 +15213,9 @@ func ValidateShadowMCPApprovalRequestResponseBody(body *ShadowMCPApprovalRequest
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.ResourceType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -15265,6 +15280,9 @@ func ValidateShadowMCPAccessRuleResponseBody(body *ShadowMCPAccessRuleResponseBo
 	}
 	if body.AccessScope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	}
+	if body.ResourceType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
 	}
 	if body.Disposition == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))

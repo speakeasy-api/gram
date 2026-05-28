@@ -614,6 +614,7 @@ type ShadowMCPAccessRule struct {
 	OrganizationID         string
 	ProjectID              *string
 	AccessScope            string
+	ResourceType           string
 	Disposition            string
 	MatchBreadth           string
 	MatchValue             string
@@ -643,6 +644,7 @@ type ShadowMCPApprovalRequest struct {
 	ID                     string
 	OrganizationID         string
 	ProjectID              string
+	ResourceType           string
 	RequesterUserID        *string
 	RequesterEmail         *string
 	RequesterDisplayName   *string

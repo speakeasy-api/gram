@@ -266,6 +266,7 @@ type CreateShadowMCPApprovalRequestResponseBody struct {
 	ID                     string  `form:"id" json:"id" xml:"id"`
 	OrganizationID         string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	ProjectID              string  `form:"project_id" json:"project_id" xml:"project_id"`
+	ResourceType           string  `form:"resource_type" json:"resource_type" xml:"resource_type"`
 	RequesterUserID        *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
 	RequesterEmail         *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
 	RequesterDisplayName   *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
@@ -327,6 +328,7 @@ type UpdateShadowMCPAccessRuleResponseBody struct {
 	OrganizationID         string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	ResourceType           string  `form:"resource_type" json:"resource_type" xml:"resource_type"`
 	Disposition            string  `form:"disposition" json:"disposition" xml:"disposition"`
 	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
 	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
@@ -4704,6 +4706,7 @@ type ShadowMCPApprovalRequestResponseBody struct {
 	ID                     string  `form:"id" json:"id" xml:"id"`
 	OrganizationID         string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	ProjectID              string  `form:"project_id" json:"project_id" xml:"project_id"`
+	ResourceType           string  `form:"resource_type" json:"resource_type" xml:"resource_type"`
 	RequesterUserID        *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
 	RequesterEmail         *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
 	RequesterDisplayName   *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
@@ -4735,6 +4738,7 @@ type ShadowMCPAccessRuleResponseBody struct {
 	OrganizationID         string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	ResourceType           string  `form:"resource_type" json:"resource_type" xml:"resource_type"`
 	Disposition            string  `form:"disposition" json:"disposition" xml:"disposition"`
 	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
 	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
@@ -5104,6 +5108,7 @@ func NewCreateShadowMCPApprovalRequestResponseBody(res *access.ShadowMCPApproval
 		ID:                     res.ID,
 		OrganizationID:         res.OrganizationID,
 		ProjectID:              res.ProjectID,
+		ResourceType:           res.ResourceType,
 		RequesterUserID:        res.RequesterUserID,
 		RequesterEmail:         res.RequesterEmail,
 		RequesterDisplayName:   res.RequesterDisplayName,
@@ -5233,6 +5238,7 @@ func NewUpdateShadowMCPAccessRuleResponseBody(res *access.ShadowMCPAccessRule) *
 		OrganizationID:         res.OrganizationID,
 		ProjectID:              res.ProjectID,
 		AccessScope:            res.AccessScope,
+		ResourceType:           res.ResourceType,
 		Disposition:            res.Disposition,
 		MatchBreadth:           res.MatchBreadth,
 		MatchValue:             res.MatchValue,

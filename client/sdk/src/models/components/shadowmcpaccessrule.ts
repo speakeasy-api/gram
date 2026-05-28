@@ -49,6 +49,7 @@ export type ShadowMCPAccessRule = {
   organizationId: string;
   projectId?: string | undefined;
   reason?: string | undefined;
+  resourceType: string;
   sourceRequestId?: string | undefined;
   updatedAt: Date;
   updatedBy?: string | undefined;
@@ -92,6 +93,7 @@ export const ShadowMCPAccessRule$inboundSchema: z.ZodMiniType<
     organization_id: z.string(),
     project_id: z.optional(z.string()),
     reason: z.optional(z.string()),
+    resource_type: z.string(),
     source_request_id: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -112,6 +114,7 @@ export const ShadowMCPAccessRule$inboundSchema: z.ZodMiniType<
       "observed_url_host": "observedUrlHost",
       "organization_id": "organizationId",
       "project_id": "projectId",
+      "resource_type": "resourceType",
       "source_request_id": "sourceRequestId",
       "updated_at": "updatedAt",
       "updated_by": "updatedBy",

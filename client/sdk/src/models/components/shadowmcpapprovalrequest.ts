@@ -36,6 +36,7 @@ export type ShadowMCPApprovalRequest = {
   requesterDisplayName?: string | undefined;
   requesterEmail?: string | undefined;
   requesterUserId?: string | undefined;
+  resourceType: string;
   riskPolicyId?: string | undefined;
   riskResultId?: string | undefined;
   status: Status;
@@ -86,6 +87,7 @@ export const ShadowMCPApprovalRequest$inboundSchema: z.ZodMiniType<
     requester_display_name: z.optional(z.string()),
     requester_email: z.optional(z.string()),
     requester_user_id: z.optional(z.string()),
+    resource_type: z.string(),
     risk_policy_id: z.optional(z.string()),
     risk_result_id: z.optional(z.string()),
     status: Status$inboundSchema,
@@ -116,6 +118,7 @@ export const ShadowMCPApprovalRequest$inboundSchema: z.ZodMiniType<
       "requester_display_name": "requesterDisplayName",
       "requester_email": "requesterEmail",
       "requester_user_id": "requesterUserId",
+      "resource_type": "resourceType",
       "risk_policy_id": "riskPolicyId",
       "risk_result_id": "riskResultId",
       "tool_call": "toolCall",

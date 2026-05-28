@@ -39005,6 +39005,8 @@ components:
           format: uuid
         reason:
           type: string
+        resource_type:
+          type: string
         source_request_id:
           type: string
           format: uuid
@@ -39017,6 +39019,7 @@ components:
         - id
         - organization_id
         - access_scope
+        - resource_type
         - disposition
         - match_breadth
         - match_value
@@ -39150,6 +39153,8 @@ components:
           type: string
         requester_user_id:
           type: string
+        resource_type:
+          type: string
         risk_policy_id:
           type: string
           format: uuid
@@ -39173,6 +39178,7 @@ components:
         - id
         - organization_id
         - project_id
+        - resource_type
         - status
         - blocked_count
         - requested_at

@@ -821,7 +821,7 @@ var UpdateMemberRolesForm = Type("UpdateMemberRolesForm", func() {
 })
 
 var ShadowMCPApprovalRequestModel = Type("ShadowMCPApprovalRequest", func() {
-	Required("id", "organization_id", "project_id", "status", "blocked_count", "requested_at", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "resource_type", "status", "blocked_count", "requested_at", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Format(FormatUUID)
@@ -830,6 +830,7 @@ var ShadowMCPApprovalRequestModel = Type("ShadowMCPApprovalRequest", func() {
 	Attribute("project_id", String, func() {
 		Format(FormatUUID)
 	})
+	Attribute("resource_type", String)
 	Attribute("requester_user_id", String)
 	Attribute("requester_email", String)
 	Attribute("requester_display_name", String)
@@ -879,7 +880,7 @@ var ListShadowMCPApprovalRequestsResult = Type("ListShadowMCPApprovalRequestsRes
 })
 
 var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
-	Required("id", "organization_id", "access_scope", "disposition", "match_breadth", "match_value", "display_name", "created_at", "updated_at")
+	Required("id", "organization_id", "access_scope", "resource_type", "disposition", "match_breadth", "match_value", "display_name", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Format(FormatUUID)
@@ -891,6 +892,7 @@ var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
 	Attribute("access_scope", String, func() {
 		Enum("organization", "project")
 	})
+	Attribute("resource_type", String)
 	Attribute("disposition", String, func() {
 		Enum("allowed", "denied")
 	})

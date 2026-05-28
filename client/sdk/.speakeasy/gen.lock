@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 073068ded091ad3f53463de95d36857e
+  docChecksum: 7223b93e14569b8e5832ab0d94613189
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -223,7 +223,7 @@ trackedFiles:
   docs/models/components/createshadowmcpaccessruleformmatchbreadth.md:
     last_write_checksum: sha1:3e498eeeaaacd86e8484fb91e3750602ee635588
   docs/models/components/createshadowmcpaccessruleresult.md:
-    last_write_checksum: sha1:94baa69d351691bff75352a3f45ca606ff262097
+    last_write_checksum: sha1:2b4767d277278b14fafcf933a7ab21141591abe2
   docs/models/components/createshadowmcpapprovalrequestform.md:
     last_write_checksum: sha1:ab3c403b692b734cf63c66f50f99c2ac8e4bdaf3
   docs/models/components/createsignedchatattachmenturlform2.md:
@@ -519,7 +519,7 @@ trackedFiles:
   docs/models/components/listshadowmcpaccessrulesresult.md:
     last_write_checksum: sha1:f011ccb9580c0eb7a6b11002d66aeee5a87f92f8
   docs/models/components/listshadowmcpapprovalrequestsresult.md:
-    last_write_checksum: sha1:e4a284b559b473e86f7035e9552163817388e6ee
+    last_write_checksum: sha1:dc00dd569eafedbd3d48727828877765265b7335
   docs/models/components/listshadowmcpapprovalsresult.md:
     last_write_checksum: sha1:eb0d324287bef612d6a1f734364a5b8c6b78bf77
   docs/models/components/listslackappsresult.md:
@@ -881,7 +881,7 @@ trackedFiles:
   docs/models/components/severitytext.md:
     last_write_checksum: sha1:15969d4a62e02ba012c6724258259371a0a81bbb
   docs/models/components/shadowmcpaccessrule.md:
-    last_write_checksum: sha1:bc7c2fb790a1256dc49f41f851ce7e64ee4960a2
+    last_write_checksum: sha1:8fb09a82bce557eeec32e499f99aced04ab62a02
   docs/models/components/shadowmcpaccessruleaccessscope.md:
     last_write_checksum: sha1:4df9ba762a2e251b5ca31d9e2f41d314e4d7c96d
   docs/models/components/shadowmcpaccessruledisposition.md:
@@ -891,9 +891,9 @@ trackedFiles:
   docs/models/components/shadowmcpapproval.md:
     last_write_checksum: sha1:57d85c033e341c25323dd480af4f00e8b9a8409f
   docs/models/components/shadowmcpapprovaldecisionresult.md:
-    last_write_checksum: sha1:5d886b00a28f8b9a026ecb3705ae9e77d392d673
+    last_write_checksum: sha1:51e0fd0aa09c05f5c84c96490d4eed6a577b03bf
   docs/models/components/shadowmcpapprovalrequest.md:
-    last_write_checksum: sha1:e5e7abf4a9b215af122cd8039814506c07f07e37
+    last_write_checksum: sha1:7d6e31873cf467ae16ae40318257ebf0efaa05a0
   docs/models/components/skillbreakdownrow.md:
     last_write_checksum: sha1:4a37e350016d376a6b095c115bb5c2a36c000ade
   docs/models/components/skillsummary.md:
@@ -4337,13 +4337,13 @@ trackedFiles:
   src/models/components/setusersessionissuerrequestbody.ts:
     last_write_checksum: sha1:7c356da0075d8d9895abaa7cd04b5d9b2d6d3cb8
   src/models/components/shadowmcpaccessrule.ts:
-    last_write_checksum: sha1:410c19fca0dd2919599bdcb645ae8cd8969f49f0
+    last_write_checksum: sha1:2e7e80265c187ac04d91b72af71dbade895b3020
   src/models/components/shadowmcpapproval.ts:
     last_write_checksum: sha1:e46372f2c565a2dea072ed50685f681e9d653820
   src/models/components/shadowmcpapprovaldecisionresult.ts:
     last_write_checksum: sha1:5fc2c665e6a5219424abb1af91813856ff8acda0
   src/models/components/shadowmcpapprovalrequest.ts:
-    last_write_checksum: sha1:b1c3d37c10e415760a51718de6e73429561ef53c
+    last_write_checksum: sha1:6f094232a13253c74e5d2f309d62f1301320d589
   src/models/components/skillbreakdownrow.ts:
     last_write_checksum: sha1:553768c909bc6d4953baff1dfbf71111768c1bb5
   src/models/components/skillsummary.ts:
@@ -8949,7 +8949,7 @@ examples:
         application/json: {"access_scope": "organization", "display_name": "Danny75", "id": "07e9687f-f01e-43f5-9a11-0ddd8f277af1", "match_breadth": "full_url", "match_value": "<value>"}
       responses:
         "200":
-          application/json: {"request": {"blocked_count": 680208, "created_at": "2025-07-06T20:55:40.446Z", "id": "93aa2893-caab-40eb-99a3-ed7a02422b42", "organization_id": "<id>", "project_id": "6bb2bf61-7094-446d-8636-eb666b7bc260", "requested_at": "2024-07-17T23:41:34.538Z", "status": "approved", "updated_at": "2026-07-13T13:51:25.190Z"}, "rules": []}
+          application/json: {"request": {"blocked_count": 680208, "created_at": "2025-07-06T20:55:40.446Z", "id": "93aa2893-caab-40eb-99a3-ed7a02422b42", "organization_id": "<id>", "project_id": "6bb2bf61-7094-446d-8636-eb666b7bc260", "requested_at": "2024-07-17T23:41:34.538Z", "resource_type": "<value>", "status": "approved", "updated_at": "2026-07-13T13:51:25.190Z"}, "rules": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8960,7 +8960,7 @@ examples:
         application/json: {"request_token": "<value>"}
       responses:
         "201":
-          application/json: {"blocked_count": 969788, "created_at": "2025-04-29T20:29:04.035Z", "id": "1526e0a7-4af4-4689-bfa4-1c4665678cb5", "organization_id": "<id>", "project_id": "b16e3cbd-e4c1-43e0-831a-9241c2751328", "requested_at": "2026-01-30T06:35:05.422Z", "status": "denied", "updated_at": "2025-08-11T11:46:57.662Z"}
+          application/json: {"blocked_count": 969788, "created_at": "2025-04-29T20:29:04.035Z", "id": "1526e0a7-4af4-4689-bfa4-1c4665678cb5", "organization_id": "<id>", "project_id": "b16e3cbd-e4c1-43e0-831a-9241c2751328", "requested_at": "2026-01-30T06:35:05.422Z", "resource_type": "<value>", "status": "denied", "updated_at": "2025-08-11T11:46:57.662Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8971,7 +8971,7 @@ examples:
         application/json: {"create_deny_rule": true, "id": "3be6c4bf-a350-4f31-b5c7-6008bf1bb80a"}
       responses:
         "200":
-          application/json: {"request": {"blocked_count": 949718, "created_at": "2026-05-06T09:57:36.921Z", "id": "31ffc4f9-7bab-4ebb-84ab-b4efc861adac", "organization_id": "<id>", "project_id": "b54042f0-758a-47ff-80d2-da01ef9e6380", "requested_at": "2024-05-30T23:20:20.940Z", "status": "requested", "updated_at": "2025-09-27T12:24:51.852Z"}, "rules": [{"access_scope": "organization", "created_at": "2026-07-17T16:04:04.975Z", "display_name": "Rickie12", "disposition": "allowed", "id": "fc4c2c94-c6b7-4652-a545-4c2e8572831d", "match_breadth": "server_identity", "match_value": "<value>", "organization_id": "<id>", "updated_at": "2026-04-22T20:46:34.139Z"}]}
+          application/json: {"request": {"blocked_count": 949718, "created_at": "2026-05-06T09:57:36.921Z", "id": "31ffc4f9-7bab-4ebb-84ab-b4efc861adac", "organization_id": "<id>", "project_id": "b54042f0-758a-47ff-80d2-da01ef9e6380", "requested_at": "2024-05-30T23:20:20.940Z", "resource_type": "<value>", "status": "requested", "updated_at": "2025-09-27T12:24:51.852Z"}, "rules": [{"access_scope": "organization", "created_at": "2026-07-17T16:04:04.975Z", "display_name": "Rickie12", "disposition": "allowed", "id": "fc4c2c94-c6b7-4652-a545-4c2e8572831d", "match_breadth": "server_identity", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2026-04-22T20:46:34.139Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8983,7 +8983,7 @@ examples:
           limit: 50
       responses:
         "200":
-          application/json: {"requests": [{"blocked_count": 313365, "created_at": "2024-10-01T16:26:19.462Z", "id": "ad376aad-3f61-4fbd-9934-1517ea94af9d", "organization_id": "<id>", "project_id": "8b2912f8-2396-4e08-ab06-db8c539f1d8e", "requested_at": "2024-09-04T12:31:04.746Z", "status": "requested", "updated_at": "2024-08-07T11:27:04.392Z"}]}
+          application/json: {"requests": [{"blocked_count": 313365, "created_at": "2024-10-01T16:26:19.462Z", "id": "ad376aad-3f61-4fbd-9934-1517ea94af9d", "organization_id": "<id>", "project_id": "8b2912f8-2396-4e08-ab06-db8c539f1d8e", "requested_at": "2024-09-04T12:31:04.746Z", "resource_type": "<value>", "status": "requested", "updated_at": "2024-08-07T11:27:04.392Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9027,7 +9027,7 @@ examples:
         application/json: {"access_scope": "project", "display_name": "Cecile_Bechtelar72", "disposition": "denied", "id": "013dc837-fd7a-4500-ac0e-c11de541d779", "match_breadth": "full_url", "match_value": "<value>"}
       responses:
         "200":
-          application/json: {"access_scope": "organization", "created_at": "2024-04-22T09:20:11.013Z", "display_name": "Shaina_Schmidt80", "disposition": "denied", "id": "ce1a95e1-fad1-45e7-a293-f4458397746f", "match_breadth": "server_identity", "match_value": "<value>", "organization_id": "<id>", "updated_at": "2025-08-18T21:43:39.221Z"}
+          application/json: {"access_scope": "organization", "created_at": "2024-04-22T09:20:11.013Z", "display_name": "Shaina_Schmidt80", "disposition": "denied", "id": "ce1a95e1-fad1-45e7-a293-f4458397746f", "match_breadth": "server_identity", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2025-08-18T21:43:39.221Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
