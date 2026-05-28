@@ -9,7 +9,7 @@ import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Type } from "./ui/type";
 
-const NAV_LOADING_DURATION_MS = 600;
+export const NAV_LOADING_DURATION_MS = 600;
 
 export function NavMenu({
   items,
