@@ -7,6 +7,7 @@ import { TextArea } from "@/components/ui/textarea";
 import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useLatestDeployment } from "@/hooks/toolTypes";
+import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
@@ -29,25 +30,15 @@ import { Type } from "../ui/type";
 import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
-export type ToolListUpdateFields = {
-  name?: string;
-  description?: string;
-  title?: string;
-  readOnlyHint?: boolean;
-  destructiveHint?: boolean;
-  idempotentHint?: boolean;
-  openWorldHint?: boolean;
-  // tri-state:
-  //   undefined = no override (use source tags)
-  //   []        = explicit empty override
-  //   [...]     = explicit override
-  tags?: string[] | undefined;
-};
-
 interface ToolListProps {
   tools: Tool[]; // Accepts all tool types, filters to Tool internally
   toolset?: Toolset; // Optionally specificy the toolset to provide rows with additional context
-  onToolUpdate?: (tool: Tool, updates: ToolListUpdateFields) => void;
+  onToolUpdate?: (
+    tool: Tool,
+    updates: ToolUpdateFields,
+  ) => void | Promise<void>;
+  /** True while a tool update is in flight; disables Save in the edit dialog. */
+  isToolUpdating?: boolean;
   onToolsRemove?: (toolUrns: string[]) => void;
   onAddToToolset?: (toolUrns: string[]) => void;
   onCreateToolset?: (toolUrns: string[]) => void;
@@ -268,6 +259,7 @@ function ToolRow({
   availableToolUrns, // Context for the subtools badge
   groupName,
   onUpdate,
+  isUpdating,
   isSelected,
   isFocused,
   onCheckboxChange,
@@ -279,7 +271,8 @@ function ToolRow({
   tool: Tool;
   availableToolUrns?: string[];
   groupName: string;
-  onUpdate?: (updates: ToolListUpdateFields) => void;
+  onUpdate?: (updates: ToolUpdateFields) => void | Promise<void>;
+  isUpdating?: boolean;
   isSelected: boolean;
   isFocused: boolean;
   onCheckboxChange: (checked: boolean) => void;
@@ -350,29 +343,38 @@ function ToolRow({
     setEditDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (editType === "name" && !TOOL_NAME_REGEX.test(editValue)) {
       setError("Tool name may only contain letters, numbers, and underscores");
       return;
     }
 
+    let updates: ToolUpdateFields;
     if (editType === "annotations") {
-      onUpdate?.({
+      updates = {
         title: annotTitle || undefined,
         readOnlyHint: annotReadOnly,
         destructiveHint: annotDestructive,
         idempotentHint: annotIdempotent,
         openWorldHint: annotOpenWorld,
-      });
+      };
     } else if (editType === "tags") {
       // tags key must always be present so the upsert form spread correctly
       // overwrites any prior variation tags (sending undefined drops the key
       // from the wire body, signalling no override).
-      onUpdate?.({ tags: tagsValue });
+      updates = { tags: tagsValue };
     } else {
-      onUpdate?.({ [editType]: editValue });
+      updates = { [editType]: editValue };
     }
-    setEditDialogOpen(false);
+
+    try {
+      await onUpdate?.(updates);
+      setEditDialogOpen(false);
+    } catch (err) {
+      // Toast is surfaced by useToolUpdate's onError; keep inline message for
+      // dialog visibility.
+      setError(err instanceof Error ? err.message : "Unknown error");
+    }
   };
 
   const handleCopyName = async () => {
@@ -648,10 +650,16 @@ function ToolRow({
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
           <Dialog.Footer>
-            <Button variant="ghost" onClick={() => setEditDialogOpen(false)}>
+            <Button
+              variant="ghost"
+              onClick={() => setEditDialogOpen(false)}
+              disabled={isUpdating}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save</Button>
+            <Button onClick={handleSave} disabled={isUpdating}>
+              Save
+            </Button>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
@@ -742,6 +750,7 @@ export function ToolList({
   tools,
   toolset,
   onToolUpdate,
+  isToolUpdating,
   onToolsRemove,
   onAddToToolset,
   onCreateToolset,
@@ -1097,6 +1106,7 @@ export function ToolList({
                           .filter((urn) => !selectedForRemoval.has(urn))}
                         tool={tool}
                         onUpdate={(updates) => onToolUpdate?.(tool, updates)}
+                        isUpdating={isToolUpdating}
                         isSelected={
                           selectionMode === "add"
                             ? selectedSet.has(toolId)
