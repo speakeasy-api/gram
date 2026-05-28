@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"testing"
@@ -10,9 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 // newToolsListResponse constructs a typed view with the given tools and
@@ -48,7 +48,7 @@ func newToolsListResponse(t *testing.T, tools []*mcp.Tool) *proxy.ToolsListRespo
 func TestToolsListMCPConnectFilterInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 	require.Equal(t, "tools-list-mcp-connect-filter", interceptor.Name())
 }
 
@@ -56,7 +56,7 @@ func TestToolsListMCPConnectFilterInterceptor_NilEnginePassesThrough(t *testing.
 	t.Parallel()
 
 	// A nil engine must not panic; pass the response through unchanged.
-	interceptor := xmcp.NewToolsListMCPConnectFilterInterceptor(nil, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(nil, testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
@@ -79,7 +79,7 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsOnlyGrantedTools(t *testing.T
 		}),
 	)
 
-	interceptor := xmcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "search_tickets", InputSchema: map[string]any{}},
@@ -102,7 +102,7 @@ func TestToolsListMCPConnectFilterInterceptor_EmptyArrayWhenNoGrantsMatch(t *tes
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := xmcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
@@ -133,7 +133,7 @@ func TestToolsListMCPConnectFilterInterceptor_PreservesInputOrderInFilteredResul
 		}),
 	)
 
-	interceptor := xmcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
@@ -154,7 +154,7 @@ func TestToolsListMCPConnectFilterInterceptor_NilResultPassesThrough(t *testing.
 	// An error-shaped response (no Result) must short-circuit without
 	// touching the typed view. The downstream relay surfaces the
 	// upstream's JSON-RPC error envelope to the user unchanged.
-	interceptor := xmcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := &proxy.ToolsListResponse{
 		Error:         &jsonrpc.Error{Code: -32601, Message: "method not found", Data: nil},
@@ -175,7 +175,7 @@ func TestToolsListMCPConnectFilterInterceptor_EmptyToolsListShortCircuits(t *tes
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := xmcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, nil)
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))

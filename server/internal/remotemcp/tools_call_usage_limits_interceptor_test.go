@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 // fakeBillingRepo implements the subset of [billing.Repository] exercised by
-// ToolsCallUsageLimitsInterceptor. Methods the interceptor does not call panic so
+// remotemcp.ToolsCallUsageLimitsInterceptor. Methods the interceptor does not call panic so
 // accidental use is loud in tests. Tests set storedUsage / storedErr to
 // control what GetStoredPeriodUsage returns.
 type fakeBillingRepo struct {
@@ -49,7 +49,7 @@ func newToolsCallRequestForInterceptor(t *testing.T, ctx context.Context) *proxy
 func TestToolsCallUsageLimitsInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(&fakeBillingRepo{storedUsage: nil, storedErr: nil}, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(&fakeBillingRepo{storedUsage: nil, storedErr: nil}, testenv.NewLogger(t))
 	require.Equal(t, "tools-call-usage-limits", interceptor.Name())
 }
 
@@ -59,7 +59,7 @@ func TestToolsCallUsageLimitsInterceptor_NoAuthContextPassesThrough(t *testing.T
 	// Billing repo deliberately left without behavior: the interceptor must
 	// not reach it when auth context is missing.
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := t.Context()
 	call := newToolsCallRequestForInterceptor(t, ctx)
@@ -71,7 +71,7 @@ func TestToolsCallUsageLimitsInterceptor_NonBaseTierPassesThrough(t *testing.T) 
 	t.Parallel()
 
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-pro",
@@ -88,7 +88,7 @@ func TestToolsCallUsageLimitsInterceptor_BillingErrorPassesThrough(t *testing.T)
 	// Billing cache miss must not take down tool invocation — the interceptor
 	// logs and continues.
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("cache miss")}
-	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -110,7 +110,7 @@ func TestToolsCallUsageLimitsInterceptor_ActiveSubscriptionPassesThrough(t *test
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free-with-sub",
@@ -133,7 +133,7 @@ func TestToolsCallUsageLimitsInterceptor_UnderHardLimitPassesThrough(t *testing.
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -157,7 +157,7 @@ func TestToolsCallUsageLimitsInterceptor_AtOrOverHardLimitRejects(t *testing.T) 
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -185,7 +185,7 @@ func TestToolsCallUsageLimitsInterceptor_ZeroIncludedUsesDefaultLimit(t *testing
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",

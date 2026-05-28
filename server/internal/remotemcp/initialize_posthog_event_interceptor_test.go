@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"net/http"
@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 // newPosthogForTest mirrors the pattern used elsewhere in the codebase
@@ -52,14 +52,14 @@ func newInitializeRequest(t *testing.T, sessionID string) *proxy.InitializeReque
 func TestInitializePostHogEventInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
+	interceptor := remotemcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
 	require.Equal(t, "initialize-posthog-event", interceptor.Name())
 }
 
 func TestInitializePostHogEventInterceptor_MissingRequestContextPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
+	interceptor := remotemcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptInitializeRequest(t.Context(), newInitializeRequest(t, "session-1")))
 }
@@ -67,7 +67,7 @@ func TestInitializePostHogEventInterceptor_MissingRequestContextPassesThrough(t 
 func TestInitializePostHogEventInterceptor_PassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
+	interceptor := remotemcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
@@ -85,7 +85,7 @@ func TestInitializePostHogEventInterceptor_PassesThrough(t *testing.T) {
 func TestInitializePostHogEventInterceptor_MissingSessionIDPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
+	interceptor := remotemcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
 
 	// When Mcp-Session-Id is absent on the inbound request — common for the
 	// initial initialize handshake — the interceptor synthesizes a UUID for
@@ -101,7 +101,7 @@ func TestInitializePostHogEventInterceptor_MissingSessionIDPassesThrough(t *test
 func TestInitializePostHogEventInterceptor_UnauthenticatedPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
+	interceptor := remotemcp.NewInitializePostHogEventInterceptor(newPosthogForTest(t), testenv.NewLogger(t))
 
 	// No auth context — the interceptor still emits with authenticated=false
 	// and an empty project_id rather than rejecting.

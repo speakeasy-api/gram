@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"net/http"
@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 func newToolsListRequest(t *testing.T, sessionID string) *proxy.ToolsListRequest {
@@ -34,14 +34,14 @@ func newToolsListRequest(t *testing.T, sessionID string) *proxy.ToolsListRequest
 func TestToolsListPostHogEventInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsListPostHogEventInterceptor(newPosthogForTest(t), testServerID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListPostHogEventInterceptor(newPosthogForTest(t), testServerID, testenv.NewLogger(t))
 	require.Equal(t, "tools-list-posthog-event", interceptor.Name())
 }
 
 func TestToolsListPostHogEventInterceptor_MissingRequestContextPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsListPostHogEventInterceptor(newPosthogForTest(t), testServerID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListPostHogEventInterceptor(newPosthogForTest(t), testServerID, testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptToolsListRequest(t.Context(), newToolsListRequest(t, "session-1")))
 }
@@ -49,7 +49,7 @@ func TestToolsListPostHogEventInterceptor_MissingRequestContextPassesThrough(t *
 func TestToolsListPostHogEventInterceptor_PassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsListPostHogEventInterceptor(newPosthogForTest(t), testServerID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListPostHogEventInterceptor(newPosthogForTest(t), testServerID, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
@@ -67,7 +67,7 @@ func TestToolsListPostHogEventInterceptor_PassesThrough(t *testing.T) {
 func TestToolsListPostHogEventInterceptor_MissingSessionIDPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsListPostHogEventInterceptor(newPosthogForTest(t), testServerID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListPostHogEventInterceptor(newPosthogForTest(t), testServerID, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetRequestContext(t.Context(), &contextvalues.RequestContext{
 		Host:   "x.example.com",

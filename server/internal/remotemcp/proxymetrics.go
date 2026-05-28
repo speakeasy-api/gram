@@ -1,4 +1,4 @@
-package xmcp
+package remotemcp
 
 import (
 	"context"
@@ -10,24 +10,26 @@ import (
 )
 
 // instrumentMCPToolCall is the OTel instrument name for the per-tool MCP
-// call counter. The `/mcp` endpoint publishes the same name from a different
-// meter scope (`server/internal/mcp`); OpenTelemetry separates instruments by
-// meter, so the two emit independently.
+// call counter emitted by the remote-MCP proxy stack. The `/mcp` endpoint
+// publishes the same name from a different meter scope
+// (`server/internal/mcp`); OpenTelemetry separates instruments by meter, so
+// the two emit independently.
 const instrumentMCPToolCall = "mcp.tool.call"
 
-// metrics holds the xmcp-level OpenTelemetry instruments. The proxy package's
-// own [proxy.Metrics] is intentionally transport-shaped (method and
-// status_class only); method-aware dimensions like the per-tool call counter
-// live here so xmcp can publish them without leaking method-awareness into
-// the proxy.
-type metrics struct {
+// ProxyMetrics holds the proxy-level OpenTelemetry instruments published by
+// the MCP-aware remote-proxy stack. The proxy package's own [proxy.Metrics]
+// is intentionally transport-shaped (method and status_class only);
+// method-aware dimensions like the per-tool call counter live here so the
+// MCP-aware layer can publish them without leaking method-awareness into the
+// proxy.
+type ProxyMetrics struct {
 	mcpToolCallCounter metric.Int64Counter
 }
 
-// newMetrics constructs the xmcp metrics object. Instrument creation failures
-// log and produce a metrics value with a nil counter so callers can record
-// safely without checking for setup errors at every call site.
-func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
+// NewProxyMetrics constructs the proxy metrics object. Instrument creation
+// failures log and produce a metrics value with a nil counter so callers can
+// record safely without checking for setup errors at every call site.
+func NewProxyMetrics(meter metric.Meter, logger *slog.Logger) *ProxyMetrics {
 	counter, err := meter.Int64Counter(
 		instrumentMCPToolCall,
 		metric.WithDescription("MCP tool call"),
@@ -37,7 +39,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		logger.ErrorContext(context.Background(), "failed to create mcp tool call counter", attr.SlogError(err))
 	}
 
-	return &metrics{
+	return &ProxyMetrics{
 		mcpToolCallCounter: counter,
 	}
 }
@@ -54,7 +56,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 // `outcome` attribute today; consumers that need to distinguish accepted
 // from rejected attempts should aggregate this counter alongside the
 // proxy-level request status histogram in [proxy.Metrics].
-func (m *metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, remoteMCPServerID string, toolName string) {
+func (m *ProxyMetrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, remoteMCPServerID string, toolName string) {
 	if m.mcpToolCallCounter == nil {
 		return
 	}

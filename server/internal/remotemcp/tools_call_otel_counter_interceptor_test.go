@@ -1,4 +1,4 @@
-package xmcp
+package remotemcp
 
 import (
 	"net/http"
@@ -21,7 +21,7 @@ import (
 func newCounterInterceptorForTest(t *testing.T) *ToolsCallOTELCounterInterceptor {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	return NewToolsCallOTELCounterInterceptor(newMetrics(testenv.NewMeterProvider(t).Meter("test"), logger), "srv-test", logger)
+	return NewToolsCallOTELCounterInterceptor(NewProxyMetrics(testenv.NewMeterProvider(t).Meter("test"), logger), "srv-test", logger)
 }
 
 func newToolsCallRequestForCounter(t *testing.T, toolName string) *proxy.ToolsCallRequest {

@@ -786,6 +786,19 @@ func newStartCommand() *cli.Command {
 
 			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, remoteChallengeManager, externalMcpOAuthConfig)
 
+			remoteProxyManager := remotemcp.NewProxyManager(
+				logger,
+				tracerProvider,
+				meterProvider,
+				guardianPolicy,
+				authzEngine,
+				shadowMCPClient,
+				posthogClient,
+				telemLogger,
+				billingRepo,
+				billingTracker,
+			)
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -818,6 +831,7 @@ func newStartCommand() *cli.Command {
 				identityResolver,
 				userSessionSigner,
 				remoteChallengeManager,
+				remoteProxyManager,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -1013,7 +1027,7 @@ func newStartCommand() *cli.Command {
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, userSessionSigner, serverURL.String()))
 			remotesessions.Attach(mux, remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger))
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
-			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, encryptionClient, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingRepo, billingTracker, telemLogger, mcpService, serverURL), mcpMetadataService)
+			xmcp.Attach(mux, xmcp.NewService(logger, db, encryptionClient, mcpService), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, memoryTools))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))

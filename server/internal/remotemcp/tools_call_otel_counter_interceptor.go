@@ -1,4 +1,4 @@
-package xmcp
+package remotemcp
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // `/mcp` (which records before forwarding to the upstream tool executor) so
 // the same metric tracks attempted calls regardless of upstream success.
 type ToolsCallOTELCounterInterceptor struct {
-	metrics  *metrics
+	metrics  *ProxyMetrics
 	serverID string
 	logger   *slog.Logger
 }
@@ -22,10 +22,10 @@ type ToolsCallOTELCounterInterceptor struct {
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallOTELCounterInterceptor)(nil)
 
 // NewToolsCallOTELCounterInterceptor constructs an interceptor bound to the
-// given xmcp metrics object and Remote MCP Server id. Construct one per
-// request so the counter's `gram.remote_mcp_server.id` label is closed over
-// without re-deriving it from the URL path on every call.
-func NewToolsCallOTELCounterInterceptor(m *metrics, serverID string, logger *slog.Logger) *ToolsCallOTELCounterInterceptor {
+// given metrics object and Remote MCP Server id. Construct one per request
+// so the counter's `gram.remote_mcp_server.id` label is closed over without
+// re-deriving it from the URL path on every call.
+func NewToolsCallOTELCounterInterceptor(m *ProxyMetrics, serverID string, logger *slog.Logger) *ToolsCallOTELCounterInterceptor {
 	return &ToolsCallOTELCounterInterceptor{
 		metrics:  m,
 		serverID: serverID,

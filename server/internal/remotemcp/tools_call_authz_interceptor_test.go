@@ -1,4 +1,4 @@
-package xmcp_test
+package remotemcp_test
 
 import (
 	"testing"
@@ -10,10 +10,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 const (
@@ -51,7 +51,7 @@ func newToolsCallRequest(toolName string) *proxy.ToolsCallRequest {
 func TestToolsCallAuthzInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolsCallAuthzInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
 	require.Equal(t, "tools-call-authz", interceptor.Name())
 }
 
@@ -59,7 +59,7 @@ func TestToolsCallAuthzInterceptor_NilEnginePassesThrough(t *testing.T) {
 	t.Parallel()
 
 	// Defensive: a nil engine must not panic and must not reject.
-	interceptor := xmcp.NewToolsCallAuthzInterceptor(nil, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(nil, testServerID, testProjectID, testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequest("any_tool")))
 }
@@ -77,7 +77,7 @@ func TestToolsCallAuthzInterceptor_GrantsAllowMatchingTool(t *testing.T) {
 		}),
 	)
 
-	interceptor := xmcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("search_tickets")))
 }
@@ -95,7 +95,7 @@ func TestToolsCallAuthzInterceptor_GrantsRejectNonMatchingTool(t *testing.T) {
 		}),
 	)
 
-	interceptor := xmcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
 
 	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("delete_ticket"))
 
@@ -111,7 +111,7 @@ func TestToolsCallAuthzInterceptor_NoGrantsRejects(t *testing.T) {
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := xmcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
 
 	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("any_tool"))
 
