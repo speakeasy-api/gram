@@ -140,6 +140,20 @@ VALUES (
 )
 RETURNING *;
 
+-- name: AttachRemoteSessionClientToUserSessionIssuer :one
+INSERT INTO remote_session_client_user_session_issuers (
+    remote_session_client_id,
+    user_session_issuer_id
+) VALUES (
+    @remote_session_client_id,
+    @user_session_issuer_id
+)
+RETURNING *;
+
+-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
+DELETE FROM remote_session_client_user_session_issuers 
+WHERE remote_session_client_id = @remote_session_client_id;
+
 -- name: GetRemoteSessionClientByID :one
 SELECT *
 FROM remote_session_clients

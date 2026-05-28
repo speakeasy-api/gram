@@ -13,6 +13,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const attachRemoteSessionClientToUserSessionIssuer = `-- name: AttachRemoteSessionClientToUserSessionIssuer :one
+INSERT INTO remote_session_client_user_session_issuers (
+    remote_session_client_id,
+    user_session_issuer_id
+) VALUES (
+    $1,
+    $2
+)
+RETURNING remote_session_client_id, user_session_issuer_id, created_at
+`
+
+type AttachRemoteSessionClientToUserSessionIssuerParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) AttachRemoteSessionClientToUserSessionIssuer(ctx context.Context, arg AttachRemoteSessionClientToUserSessionIssuerParams) (RemoteSessionClientUserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, attachRemoteSessionClientToUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	var i RemoteSessionClientUserSessionIssuer
+	err := row.Scan(&i.RemoteSessionClientID, &i.UserSessionIssuerID, &i.CreatedAt)
+	return i, err
+}
+
 const countActiveRemoteSessionsByClientID = `-- name: CountActiveRemoteSessionsByClientID :one
 SELECT COUNT(*)
 FROM remote_sessions
@@ -280,6 +303,16 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const deleteUserSessionIssuerAttachmentsForRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
+DELETE FROM remote_session_client_user_session_issuers 
+WHERE remote_session_client_id = $1
+`
+
+func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForRemoteSessionClient, remoteSessionClientID)
+	return err
 }
 
 const getActiveRemoteSession = `-- name: GetActiveRemoteSession :one

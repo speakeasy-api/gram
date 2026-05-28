@@ -45,6 +45,12 @@ type RemoteSessionClient struct {
 	Deleted                 bool
 }
 
+type RemoteSessionClientUserSessionIssuer struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	CreatedAt             pgtype.Timestamptz
+}
+
 type RemoteSessionIssuer struct {
 	ID                                uuid.UUID
 	ProjectID                         uuid.UUID

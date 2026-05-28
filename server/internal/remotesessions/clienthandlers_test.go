@@ -242,10 +242,10 @@ func TestListRemoteSessionClients(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-list", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list").String()
 
 	for _, c := range []string{"list-client-1", "list-client-2"} {
 		clientID := c
+		userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list-"+clientID).String()
 		_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 			RemoteSessionIssuerID: issuerID,
 			UserSessionIssuerID:   userIssuerID,
@@ -280,12 +280,13 @@ func TestListRemoteSessionClients_PaginationTraversal(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-page", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-page").String()
 
 	const total = 5
 	wantIDs := make(map[string]bool, total)
 	for range total {
-		id := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, uuid.NewString())
+		clientID := uuid.NewString()
+		userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-page-"+clientID).String()
+		id := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, clientID)
 		wantIDs[id] = true
 	}
 
