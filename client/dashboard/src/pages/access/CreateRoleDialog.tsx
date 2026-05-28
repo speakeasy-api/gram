@@ -910,126 +910,128 @@ export function CreateRoleDialog({
                 )}
               </div>
 
-              {/* ─── Assign Members ─── */}
-              <div className="border-border border-t pt-4 pb-4">
-                <button
-                  type="button"
-                  onClick={() => setShowMembers(!showMembers)}
-                  className="flex w-full items-center gap-1 text-left"
-                >
-                  <ChevronRight
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      showMembers && "rotate-90",
-                    )}
-                  />
-                  <Type variant="body" className="font-medium">
-                    Assign Members
-                  </Type>
-                  <Type variant="body" className="text-muted-foreground ml-1">
-                    (optional, {selectedMembers.size} selected)
-                  </Type>
-                </button>
+              {/* ─── Assign Members (hidden when directory sync manages assignment) ─── */}
+              {!organization.scimEnabled && (
+                <div className="border-border border-t pt-4 pb-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowMembers(!showMembers)}
+                    className="flex w-full items-center gap-1 text-left"
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        showMembers && "rotate-90",
+                      )}
+                    />
+                    <Type variant="body" className="font-medium">
+                      Assign Members
+                    </Type>
+                    <Type variant="body" className="text-muted-foreground ml-1">
+                      (optional, {selectedMembers.size} selected)
+                    </Type>
+                  </button>
 
-                {showMembers && (
-                  <div className="border-border divide-border mt-3 divide-y rounded-md border">
-                    {/* Select-all header */}
-                    {(() => {
-                      const selectableMembers = getSelectableMembers(
-                        members,
-                        isEditing,
-                        editingRole?.id,
-                      );
-                      const allSelected =
-                        selectableMembers.length > 0 &&
-                        selectableMembers.every((m) =>
-                          selectedMembers.has(m.id),
+                  {showMembers && (
+                    <div className="border-border divide-border mt-3 divide-y rounded-md border">
+                      {/* Select-all header */}
+                      {(() => {
+                        const selectableMembers = getSelectableMembers(
+                          members,
+                          isEditing,
+                          editingRole?.id,
                         );
-                      const someSelected =
-                        !allSelected &&
-                        selectableMembers.some((m) =>
-                          selectedMembers.has(m.id),
+                        const allSelected =
+                          selectableMembers.length > 0 &&
+                          selectableMembers.every((m) =>
+                            selectedMembers.has(m.id),
+                          );
+                        const someSelected =
+                          !allSelected &&
+                          selectableMembers.some((m) =>
+                            selectedMembers.has(m.id),
+                          );
+                        return (
+                          <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
+                            <Checkbox
+                              checked={
+                                allSelected
+                                  ? true
+                                  : someSelected
+                                    ? "indeterminate"
+                                    : false
+                              }
+                              onCheckedChange={() => toggleAllMembers()}
+                            />
+                            <Type
+                              variant="body"
+                              className="text-muted-foreground text-sm font-medium"
+                            >
+                              Select all
+                            </Type>
+                          </label>
                         );
-                      return (
-                        <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
-                          <Checkbox
-                            checked={
-                              allSelected
-                                ? true
-                                : someSelected
-                                  ? "indeterminate"
-                                  : false
-                            }
-                            onCheckedChange={() => toggleAllMembers()}
-                          />
-                          <Type
-                            variant="body"
-                            className="text-muted-foreground text-sm font-medium"
-                          >
-                            Select all
-                          </Type>
-                        </label>
-                      );
-                    })()}
-                    {members.map((member) => {
-                      const alreadyHasRole = isMemberLockedToRole(
-                        isEditing,
-                        editingRole?.id,
-                        member.roleIds,
-                      );
-                      return (
-                        <label
-                          key={member.id}
-                          className={cn(
-                            "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
-                            alreadyHasRole && "cursor-default opacity-50",
-                          )}
-                        >
-                          <Checkbox
-                            checked={
-                              alreadyHasRole || selectedMembers.has(member.id)
-                            }
-                            disabled={alreadyHasRole}
-                            onCheckedChange={() =>
-                              !alreadyHasRole && toggleMember(member.id)
-                            }
-                          />
-                          <Avatar className="h-7 w-7">
-                            {member.photoUrl && (
-                              <AvatarImage
-                                src={member.photoUrl}
-                                alt={member.name}
-                              />
+                      })()}
+                      {members.map((member) => {
+                        const alreadyHasRole = isMemberLockedToRole(
+                          isEditing,
+                          editingRole?.id,
+                          member.roleIds,
+                        );
+                        return (
+                          <label
+                            key={member.id}
+                            className={cn(
+                              "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
+                              alreadyHasRole && "cursor-default opacity-50",
                             )}
-                            <AvatarFallback className="text-xs">
-                              {member.name
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")
-                                .toUpperCase()
-                                .slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1 space-y-0.5">
-                            <Type
-                              variant="body"
-                              className="text-sm font-medium"
-                            >
-                              {member.name}
-                            </Type>
-                            <Type
-                              variant="body"
-                              className="text-muted-foreground text-xs"
-                            >
-                              {member.email}
-                            </Type>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                          >
+                            <Checkbox
+                              checked={
+                                alreadyHasRole || selectedMembers.has(member.id)
+                              }
+                              disabled={alreadyHasRole}
+                              onCheckedChange={() =>
+                                !alreadyHasRole && toggleMember(member.id)
+                              }
+                            />
+                            <Avatar className="h-7 w-7">
+                              {member.photoUrl && (
+                                <AvatarImage
+                                  src={member.photoUrl}
+                                  alt={member.name}
+                                />
+                              )}
+                              <AvatarFallback className="text-xs">
+                                {member.name
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .join("")
+                                  .toUpperCase()
+                                  .slice(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <Type
+                                variant="body"
+                                className="text-sm font-medium"
+                              >
+                                {member.name}
+                              </Type>
+                              <Type
+                                variant="body"
+                                className="text-muted-foreground text-xs"
+                              >
+                                {member.email}
+                              </Type>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ─── Panel 2: Rule editor (slides in from right) ─── */}

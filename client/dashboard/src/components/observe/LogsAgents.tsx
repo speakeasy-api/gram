@@ -20,7 +20,7 @@ import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsFilters } from "@/pages/chatLogs/ChatLogsFilters";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
 import {
@@ -28,7 +28,6 @@ import {
   type DateRangePreset,
   getPresetRange,
 } from "@gram-ai/elements";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   Select,
   SelectContent,
@@ -597,21 +596,11 @@ function AgentSessionsPageContent({
         </div>
       </div>
 
-      <Drawer
-        open={!!selectedChat}
-        onOpenChange={(open) => !open && setSelectedChat(null)}
-        direction="right"
-      >
-        <DrawerContent className="w-[720px]! sm:max-w-[720px]!">
-          {selectedChat && (
-            <ChatDetailPanel
-              chatId={selectedChat.id}
-              onClose={() => setSelectedChat(null)}
-              onDelete={onDeleteChat}
-            />
-          )}
-        </DrawerContent>
-      </Drawer>
+      <ChatDetailSheet
+        chatId={selectedChat?.id ?? null}
+        onClose={() => setSelectedChat(null)}
+        onDelete={onDeleteChat}
+      />
     </>
   );
 }

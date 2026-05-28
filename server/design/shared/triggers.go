@@ -48,7 +48,7 @@ var TriggerInstance = Type("TriggerInstance", func() {
 	Attribute("target_display", String, "The user-facing target display value.")
 	Attribute("config", MapOf(String, Any), "The trigger config payload.")
 	Attribute("status", String, "The trigger instance status.", func() {
-		Enum("active", "paused")
+		Enum("active", "paused", "fired", "cancelled")
 	})
 	Attribute("webhook_url", String, "Webhook URL for webhook-backed triggers.")
 	Attribute("created_at", String, "Creation timestamp.", func() {

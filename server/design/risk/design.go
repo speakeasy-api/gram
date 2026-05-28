@@ -25,6 +25,8 @@ var _ = Service("risk", func() {
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
+			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -143,6 +145,8 @@ var _ = Service("risk", func() {
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
+			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -612,11 +616,263 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
 		Meta("openapi:extension:x-speakeasy-name-override", "trigger")
 	})
+
+	Method("createCustomDetectionRule", func() {
+		Description("Create a custom regex-backed detection rule for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
+			Attribute("title", String, "Human-readable title for the rule.")
+			Attribute("description", String, "Description of what the rule detects.")
+			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
+				Enum("info", "low", "medium", "high", "critical")
+				Default("medium")
+			})
+			Required("rule_id", "title", "regex")
+		})
+
+		Result(shared.RiskCustomDetectionRule)
+
+		HTTP(func() {
+			POST("/rpc/risk.customRules.create")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createCustomDetectionRule")
+		Meta("openapi:extension:x-speakeasy-group", "risk.customRules")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreateCustomDetectionRule", "type": "mutation"}`)
+	})
+
+	Method("listCustomDetectionRules", func() {
+		Description("List custom detection rules for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListCustomDetectionRulesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.customRules.list")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listCustomDetectionRules")
+		Meta("openapi:extension:x-speakeasy-group", "risk.customRules")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListCustomDetectionRules", "type": "query"}`)
+	})
+
+	Method("getCustomDetectionRule", func() {
+		Description("Get a custom detection rule by ID.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The custom detection rule ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(shared.RiskCustomDetectionRule)
+
+		HTTP(func() {
+			GET("/rpc/risk.customRules.get")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getCustomDetectionRule")
+		Meta("openapi:extension:x-speakeasy-group", "risk.customRules")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetCustomDetectionRule", "type": "query"}`)
+	})
+
+	Method("updateCustomDetectionRule", func() {
+		Description("Update a custom detection rule.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The custom detection rule ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("title", String, "Human-readable title for the rule.")
+			Attribute("description", String, "Description of what the rule detects.")
+			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
+				Enum("info", "low", "medium", "high", "critical")
+			})
+			Required("id", "title", "regex", "severity")
+		})
+
+		Result(shared.RiskCustomDetectionRule)
+
+		HTTP(func() {
+			POST("/rpc/risk.customRules.update")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateCustomDetectionRule")
+		Meta("openapi:extension:x-speakeasy-group", "risk.customRules")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUpdateCustomDetectionRule", "type": "mutation"}`)
+	})
+
+	Method("deleteCustomDetectionRule", func() {
+		Description("Delete a custom detection rule.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The custom detection rule ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.customRules.delete")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteCustomDetectionRule")
+		Meta("openapi:extension:x-speakeasy-group", "risk.customRules")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeleteCustomDetectionRule", "type": "mutation"}`)
+	})
+
+	Method("suggestCustomDetectionRule", func() {
+		Description("Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("prompt", String, "Natural-language description of what the rule should detect.", func() {
+				MinLength(3)
+				MaxLength(500)
+			})
+			Attribute("existing_rule_ids", ArrayOf(String), "Existing built-in and custom rule ids the suggested id must avoid colliding with.")
+			Required("prompt")
+		})
+
+		Result(SuggestCustomDetectionRuleResult)
+
+		HTTP(func() {
+			POST("/rpc/risk.customRules.suggest")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "suggestCustomDetectionRule")
+		Meta("openapi:extension:x-speakeasy-group", "risk.customRules")
+		Meta("openapi:extension:x-speakeasy-name-override", "suggest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestCustomRule", "type": "mutation"}`)
+	})
+
+	Method("testDetectionRule", func() {
+		Description("Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("rule_id", String, "Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).", func() {
+				MinLength(1)
+				MaxLength(200)
+			})
+			Attribute("text", String, "Sample text to scan.", func() {
+				MinLength(1)
+				MaxLength(50000)
+			})
+			Attribute("regex", String, "Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.")
+			Required("rule_id", "text")
+		})
+
+		Result(TestDetectionRuleResult)
+
+		HTTP(func() {
+			POST("/rpc/risk.rules.test")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "testDetectionRule")
+		Meta("openapi:extension:x-speakeasy-group", "risk.rules")
+		Meta("openapi:extension:x-speakeasy-name-override", "test")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskTestDetectionRule", "type": "mutation"}`)
+	})
+})
+
+var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", func() {
+	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
+	Attribute("title", String, "Short, human-friendly title for the rule.")
+	Attribute("description", String, "Description of what the rule detects and why it matters.")
+	Attribute("regex", String, "RE2-compatible regex pattern the rule should match against.")
+	Attribute("severity", String, "Suggested severity level.", func() {
+		Enum("info", "low", "medium", "high", "critical")
+	})
+	Required("rule_id", "title", "description", "regex", "severity")
+})
+
+var TestDetectionRuleMatch = Type("TestDetectionRuleMatch", func() {
+	Attribute("rule_id", String, "Canonical rule id of the match (may differ from the requested rule id when one input matches multiple rules).")
+	Attribute("description", String, "Human-readable description of why this match was flagged.")
+	Attribute("match", String, "Matched substring of the sample.")
+	Attribute("start_pos", Int, "Inclusive start byte offset of the match in the sample.")
+	Attribute("end_pos", Int, "Exclusive end byte offset of the match in the sample.")
+	Attribute("source", String, "Detection source (e.g. `gitleaks`, `presidio`, `prompt_injection`, `custom`).")
+	Attribute("confidence", Float64, "Confidence score in the range 0.0 to 1.0.")
+	Attribute("tags", ArrayOf(String), "Tags from the underlying rule.")
+	Required("rule_id", "match", "start_pos", "end_pos", "source", "confidence")
+})
+
+var TestDetectionRuleResult = Type("TestDetectionRuleResult", func() {
+	Attribute("matches", ArrayOf(TestDetectionRuleMatch), "Matches the rule found in the sample.")
+	Attribute("supported", Boolean, "False when the rule has no text-only detector (e.g. `shadow_mcp`, `destructive_tool`).")
+	Attribute("reason", String, "Why the rule isn't supported when `supported` is false.")
+	Required("matches", "supported")
 })
 
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Attribute("policies", ArrayOf(shared.RiskPolicy), "The list of risk policies.")
 	Required("policies")
+})
+
+var ListCustomDetectionRulesResult = Type("ListCustomDetectionRulesResult", func() {
+	Attribute("rules", ArrayOf(shared.RiskCustomDetectionRule), "The list of custom detection rules.")
+	Required("rules")
 })
 
 var RiskCapabilitiesResult = Type("RiskCapabilitiesResult", func() {

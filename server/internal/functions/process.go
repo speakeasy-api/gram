@@ -313,6 +313,11 @@ func processManifestToolV0(
 	variables := tool.Variables
 	metaTags := tool.Meta
 
+	tags := tool.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
 	if variables == nil {
 		variables = map[string]*ManifestVariableAttributeV0{}
 	}
@@ -375,6 +380,7 @@ func processManifestToolV0(
 		InputSchema:     inputSchema,
 		Variables:       varBs,
 		AuthInput:       authInput,
+		Tags:            tags,
 		Meta:            metaBs,
 		ReadOnlyHint:    readOnlyHint,
 		DestructiveHint: destructiveHint,

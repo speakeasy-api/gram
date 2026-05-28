@@ -85,6 +85,7 @@ import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter from "./pages/security/PolicyCenter";
+import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
 import {
@@ -349,8 +350,8 @@ const ROUTE_STRUCTURE = {
       // MCP data moves to mcp_servers/mcp_endpoints. Until then this route is
       // distinct so the new mcp_servers-backed details page renders against
       // mcp_servers without disturbing the existing toolset-backed path. The
-      // `x/` prefix is the generic experimental namespace shared with the
-      // `/x/mcp/{slug}` runtime path that already serves these servers.
+      // `x/` prefix is the dashboard's generic experimental namespace; the
+      // runtime path for these servers is `/mcp/{slug}` (see AGE-2555).
       x: {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",
@@ -467,7 +468,6 @@ const ROUTE_STRUCTURE = {
     title: "Risk Overview",
     url: "risk-overview",
     icon: "shield",
-    stage: "beta",
     component: RiskOverviewRoot,
     indexComponent: SecurityOverview,
     subPages: {
@@ -498,11 +498,16 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  detectionRules: {
+    title: "Detection Rules",
+    url: "detection-rules",
+    icon: "scan-search",
+    component: DetectionRules,
+  },
   policyCenter: {
     title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
-    stage: "beta",
     component: PolicyCenter,
   },
   sdks: {

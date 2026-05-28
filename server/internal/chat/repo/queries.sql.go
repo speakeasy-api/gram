@@ -550,7 +550,7 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, chatID uuid.UUID)
 }
 
 const getToolCallMessages = `-- name: GetToolCallMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at FROM chat_messages
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at, risk_analyzed_at FROM chat_messages
 WHERE chat_id = $1
   AND role = 'tool'
 ORDER BY created_at ASC
@@ -595,6 +595,7 @@ func (q *Queries) GetToolCallMessages(ctx context.Context, chatID uuid.UUID) ([]
 			&i.ContentHash,
 			&i.Generation,
 			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -765,7 +766,7 @@ func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedback
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at FROM chat_messages 
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at, risk_analyzed_at FROM chat_messages 
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid) 
 ORDER BY seq ASC
 `
@@ -814,6 +815,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.ContentHash,
 			&i.Generation,
 			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -826,7 +828,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 }
 
 const listChatMessagesByGeneration = `-- name: ListChatMessagesByGeneration :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
@@ -881,6 +883,7 @@ func (q *Queries) ListChatMessagesByGeneration(ctx context.Context, arg ListChat
 			&i.ContentHash,
 			&i.Generation,
 			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1132,7 +1135,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 }
 
 const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = $1)
@@ -1184,6 +1187,7 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			&i.ContentHash,
 			&i.Generation,
 			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -191,13 +191,19 @@ func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *s
 }
 
 func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosUserEventPayload) (*workosUserExternalIDUpdate, error) {
-	gramUserID, err := resolveGramUserIDForWorkOSUser(ctx, dbtx, payload)
+	userQueries := usersrepo.New(dbtx)
+	resolved, err := resolveWorkOSUser(ctx, logger, userQueries, payload)
 	if err != nil {
 		return nil, err
 	}
+	if resolved.needsLink {
+		if err := linkExistingUserToWorkOS(ctx, userQueries, resolved.userID, payload.ID); err != nil {
+			return nil, err
+		}
+	}
 
-	if _, err := usersrepo.New(dbtx).UpsertSyncedUser(ctx, usersrepo.UpsertSyncedUserParams{
-		ID:              gramUserID,
+	if _, err := userQueries.UpsertSyncedUser(ctx, usersrepo.UpsertSyncedUserParams{
+		ID:              resolved.userID,
 		Email:           payload.Email,
 		DisplayName:     displayNameFromWorkOSUser(payload),
 		PhotoUrl:        conv.ToPGTextEmpty(payload.ProfilePictureURL),
@@ -210,25 +216,25 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 
 	organizationQueries := organizationsrepo.New(dbtx)
 	if err := organizationQueries.LinkRoleAssignmentsToUser(ctx, organizationsrepo.LinkRoleAssignmentsToUserParams{
-		UserID:       conv.ToPGText(gramUserID),
+		UserID:       conv.ToPGText(resolved.userID),
 		WorkosUserID: payload.ID,
 	}); err != nil {
 		return nil, fmt.Errorf("link role assignments to user: %w", err)
 	}
 	if err := organizationQueries.LinkRelationshipsToUser(ctx, organizationsrepo.LinkRelationshipsToUserParams{
-		UserID:       conv.ToPGText(gramUserID),
+		UserID:       conv.ToPGText(resolved.userID),
 		WorkosUserID: conv.ToPGText(payload.ID),
 	}); err != nil {
 		return nil, fmt.Errorf("link organization relationships to user: %w", err)
 	}
-	if err := logRoleAssignmentLinkedToDifferentWorkOSUser(ctx, logger, organizationQueries, gramUserID, payload.ID); err != nil {
+	if err := logRoleAssignmentLinkedToDifferentWorkOSUser(ctx, logger, organizationQueries, resolved.userID, payload.ID); err != nil {
 		return nil, err
 	}
 
-	if payload.ExternalID == "" {
+	if resolved.needsExternalIDUpdate {
 		return &workosUserExternalIDUpdate{
 			workosUserID: payload.ID,
-			externalID:   gramUserID,
+			externalID:   resolved.userID,
 		}, nil
 	}
 
@@ -268,19 +274,80 @@ func (p *ProcessWorkOSUserEvents) handleUserDeleted(ctx context.Context, dbtx da
 	return nil
 }
 
-func resolveGramUserIDForWorkOSUser(ctx context.Context, dbtx database.DBTX, payload workosUserEventPayload) (string, error) {
-	if payload.ExternalID != "" {
-		return payload.ExternalID, nil
-	}
+type resolvedWorkOSUser struct {
+	userID                string
+	needsLink             bool
+	needsExternalIDUpdate bool
+}
 
-	existingID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.ID))
+func resolveWorkOSUser(ctx context.Context, logger *slog.Logger, userQueries *usersrepo.Queries, payload workosUserEventPayload) (resolvedWorkOSUser, error) {
+	existingID, err := userQueries.GetUserIDByWorkosID(ctx, conv.ToPGText(payload.ID))
 	switch {
 	case err == nil:
-		return existingID, nil
+		return resolvedWorkOSUser{
+			userID:                existingID,
+			needsLink:             false,
+			needsExternalIDUpdate: payload.ExternalID == "",
+		}, nil
 	case errors.Is(err, pgx.ErrNoRows):
-		return users.UserIDFromWorkOSID(payload.ID), nil
 	default:
-		return "", fmt.Errorf("get user ID by WorkOS ID: %w", err)
+		return resolvedWorkOSUser{}, fmt.Errorf("get user ID by WorkOS ID: %w", err)
+	}
+
+	if payload.ExternalID == "" {
+		return resolvedWorkOSUser{
+			userID:                users.UserIDFromWorkOSID(payload.ID),
+			needsLink:             false,
+			needsExternalIDUpdate: true,
+		}, nil
+	}
+
+	existingUser, err := userQueries.GetUser(ctx, payload.ExternalID)
+	switch {
+	case err == nil:
+		if !existingUser.WorkosID.Valid {
+			return resolvedWorkOSUser{
+				userID:                existingUser.ID,
+				needsLink:             true,
+				needsExternalIDUpdate: false,
+			}, nil
+		}
+		err := fmt.Errorf("workos user %q external ID %q is already linked to workos user %q", payload.ID, payload.ExternalID, existingUser.WorkosID.String)
+		logger.ErrorContext(ctx, "WorkOS user external ID conflict", attr.SlogError(err),
+			attr.SlogUserID(existingUser.ID),
+			attr.SlogWorkOSUserID(payload.ID),
+			attr.SlogWorkOSLinkedUserID(existingUser.WorkosID.String),
+		)
+		return resolvedWorkOSUser{}, oops.Permanent(err)
+	case errors.Is(err, pgx.ErrNoRows):
+		return resolvedWorkOSUser{
+			userID:                payload.ExternalID,
+			needsLink:             false,
+			needsExternalIDUpdate: false,
+		}, nil
+	default:
+		return resolvedWorkOSUser{}, fmt.Errorf("get user %q by WorkOS external ID: %w", payload.ExternalID, err)
+	}
+}
+
+func linkExistingUserToWorkOS(ctx context.Context, userQueries *usersrepo.Queries, userID, workosUserID string) error {
+	if err := userQueries.SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		ID:       userID,
+		WorkosID: conv.ToPGText(workosUserID),
+	}); err != nil {
+		return fmt.Errorf("link existing user %q to WorkOS user %q: %w", userID, workosUserID, err)
+	}
+
+	linkedUserID, err := userQueries.GetUserIDByWorkosID(ctx, conv.ToPGText(workosUserID))
+	switch {
+	case err == nil && linkedUserID == userID:
+		return nil
+	case err == nil:
+		return fmt.Errorf("link existing user %q to WorkOS user %q: WorkOS user is linked to user %q", userID, workosUserID, linkedUserID)
+	case errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("link existing user %q to WorkOS user %q: user was not linked", userID, workosUserID)
+	default:
+		return fmt.Errorf("get linked user for WorkOS user %q: %w", workosUserID, err)
 	}
 }
 

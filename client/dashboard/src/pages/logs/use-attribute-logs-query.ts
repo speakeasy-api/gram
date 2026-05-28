@@ -103,12 +103,18 @@ export function logsToTraceSummaries(
       // containing both a 200 (e.g. MCP handshake) and a 500 (failed tool
       // call) surfaces as failed. Picking the first code latches onto
       // whichever log iterates first and can mislead the row indicator green.
-      const code = getNestedAttr(log.attributes, "http.response.status_code");
-      if (typeof code === "number") {
+      const rawCode = getNestedAttr(
+        log.attributes,
+        "http.response.status_code",
+      );
+
+      const code = typeof rawCode === "string" ? Number(rawCode) : rawCode;
+      if (typeof code === "number" && !Number.isNaN(code)) {
         if (httpStatusCode === undefined || code > httpStatusCode) {
           httpStatusCode = code;
         }
       }
+
       if (!eventSource) {
         if (typeof src === "string") eventSource = src;
       }

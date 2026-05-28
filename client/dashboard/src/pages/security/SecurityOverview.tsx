@@ -318,14 +318,22 @@ function SecurityOverviewContent() {
     );
   }
 
+  const hasHistoricActivity =
+    (overview?.messagesScanned ?? 0) > 0 || (overview?.findings ?? 0) > 0;
+
   // Only collapse to the empty state once data has actually arrived —
   // during the first fetch we render the full shell with skeletons so the
-  // layout never blinks between "Loading…" and the real page.
-  if (overview && overview.activePolicies === 0) {
+  // layout never blinks between "Loading…" and the real page. Also keep the
+  // full overview visible whenever the selected range contains historic
+  // activity, so disabling every policy doesn't hide prior scans and
+  // findings.
+  if (overview && overview.activePolicies === 0 && !hasHistoricActivity) {
     return <NoPoliciesEmptyState />;
   }
 
   const hasFindings = (overview?.findings ?? 0) > 0;
+  const policiesDisabledWithHistory =
+    !!overview && overview.activePolicies === 0 && hasHistoricActivity;
 
   // Brief security-flavoured context for the AI Insights sidebar. Numbers are
   // pulled from the current risk overview query so the assistant can reason
@@ -383,6 +391,31 @@ function SecurityOverviewContent() {
         />
       )}
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
+        {policiesDisabledWithHistory && (
+          <div className="bg-muted/30 flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
+            <Icon
+              name="circle-alert"
+              className="text-muted-foreground mt-0.5 size-4 shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <Type small className="font-medium">
+                All risk policies are disabled
+              </Type>
+              <Type small muted>
+                Showing historic findings only — new chat messages will not be
+                scanned until a policy is re-enabled.
+              </Type>
+            </div>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={routes.policyCenter.href()}>
+                <Button.Text>Manage Policies</Button.Text>
+                <Button.RightIcon>
+                  <Icon name="arrow-right" />
+                </Button.RightIcon>
+              </Link>
+            </Button>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {isOverviewLoading ? (
             <Skeleton className="h-[100px] rounded-lg" />
@@ -390,7 +423,7 @@ function SecurityOverviewContent() {
             <MetricCard
               title="Events Scanned"
               value={overview?.messagesScanned ?? 0}
-              format="number"
+              format="compact"
               icon="scan-search"
             />
           )}
@@ -400,7 +433,7 @@ function SecurityOverviewContent() {
             <MetricCard
               title="Findings"
               value={overview?.findings ?? 0}
-              format="number"
+              format="compact"
               icon="flag"
             />
           )}
@@ -410,7 +443,7 @@ function SecurityOverviewContent() {
             <MetricCard
               title="Flagged Sessions"
               value={overview?.flaggedSessions ?? 0}
-              format="number"
+              format="compact"
               icon="message-square"
             />
           )}
@@ -420,7 +453,7 @@ function SecurityOverviewContent() {
             <MetricCard
               title="Active Policies"
               value={overview?.activePolicies ?? 0}
-              format="number"
+              format="compact"
               icon="shield-check"
             />
           )}

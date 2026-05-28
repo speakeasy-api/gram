@@ -660,6 +660,10 @@ func newWorkerCommand() *cli.Command {
 				identityResolver,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 				remoteChallengeManager,
+				// remoteProxyManager is HTTP-only; the worker never serves a
+				// runtime request through mcp.Service, so the factory is
+				// intentionally nil here.
+				nil,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

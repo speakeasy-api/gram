@@ -30,6 +30,14 @@ export type UpdateRiskPolicyRequestBody = {
    */
   autoName?: boolean | undefined;
   /**
+   * Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
+   */
+  customRuleIds?: Array<string> | undefined;
+  /**
+   * Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.
+   */
+  disabledRules?: Array<string> | undefined;
+  /**
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
@@ -68,6 +76,8 @@ export const UpdateRiskPolicyRequestBodyAction$outboundSchema: z.ZodMiniEnum<
 export type UpdateRiskPolicyRequestBody$Outbound = {
   action?: string | undefined;
   auto_name?: boolean | undefined;
+  custom_rule_ids?: Array<string> | undefined;
+  disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   id: string;
   name: string;
@@ -85,6 +95,8 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     action: z.optional(UpdateRiskPolicyRequestBodyAction$outboundSchema),
     autoName: z.optional(z.boolean()),
+    customRuleIds: z.optional(z.array(z.string())),
+    disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     id: z.string(),
     name: z.string(),
@@ -96,6 +108,8 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       autoName: "auto_name",
+      customRuleIds: "custom_rule_ids",
+      disabledRules: "disabled_rules",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
       userMessage: "user_message",

@@ -5,6 +5,8 @@ type Prettify<T> = {
   [K in keyof T]: T[K];
 } & {};
 
+const MAX_TOOL_TAGS = 40;
+
 export class ResponseError extends Error {
   constructor(message?: string, options?: ErrorOptions) {
     super(message, options);
@@ -34,6 +36,10 @@ export type ToolDefinition<
    * Optional annotations describing tool behavior hints (aligned with MCP spec).
    */
   annotations?: ToolAnnotations;
+  /**
+   * Optional tags for grouping and filtering the tool. Up to 40 tags allowed.
+   */
+  tags?: string[];
   /**
    * Optional metadata for the tool. Use `"ui/resourceUri"` to link a tool
    * to a UI resource (MCP Apps / SEP-1865).
@@ -97,6 +103,7 @@ export type ManifestTool = {
     variable: string;
     gramEmail?: boolean;
   };
+  tags?: string[];
   meta?: unknown;
 };
 
@@ -535,6 +542,7 @@ export class Gram<
           variable: string;
           gramEmail?: boolean;
         };
+        tags?: string[];
         meta?: Record<string, unknown>;
       } = {
         name: tool.name,
@@ -546,6 +554,15 @@ export class Gram<
 
       if (tool.annotations != null) {
         result.annotations = tool.annotations;
+      }
+
+      if (tool.tags != null && tool.tags.length > 0) {
+        if (tool.tags.length > MAX_TOOL_TAGS) {
+          throw new Error(
+            `tool ${tool.name} has ${tool.tags.length} tags; maximum is ${MAX_TOOL_TAGS}`,
+          );
+        }
+        result.tags = tool.tags;
       }
 
       if (tool.meta != null) {

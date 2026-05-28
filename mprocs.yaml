@@ -40,10 +40,6 @@ procs:
     cmd: ["mise", "run", "start:dashboard"]
     stop:
       send-keys: ["<C-c>"]
-  elements:
-    cmd: ["mise", "run", "start:elements"]
-    stop:
-      send-keys: ["<C-c>"]
   lima:
     cmd: ["mise", "run", "start:lima"]
     stop:

@@ -1,5 +1,29 @@
 # dashboard
 
+## 0.63.0
+
+### Minor Changes
+
+- 37158f0: ingest tags declared on Gram Function tools (top-level `tags` on the manifest and `tags?: string[]` on the TS framework `ToolDefinition`) and expose them through the management API; the playground tool editor now opens for function tools the same way it does for HTTP tools
+- 7e4501e: Metric cards now display abbreviated numbers (1.5K, 2.3M) instead of raw comma-separated values.
+- 5875739: Added remote-based MCP server authentication UI
+- 50ab453: Add SSO and SCIM feature flags with WorkOS event sync. Admin settings now includes product feature toggles for SSO and SCIM. The Identity page shows connection status and gates configure buttons on these flags. Team page invite button is disabled when SSO is active. WorkOS event processing now handles all SSO connection and SCIM directory sync lifecycle events.
+
+### Patch Changes
+
+- 1871808: Fix the triggers page failing to load whenever a wake trigger has fired or been cancelled. The triggers list response advertised a status enum of `active | paused`, but wake triggers transition through `fired` and `cancelled` too, so the dashboard's response validation rejected the payload and surfaced a generic "Response validation failed" error. The status enum now includes all four states, and the triggers page renders distinct badges for fired and cancelled triggers instead of mislabelling them as "Paused".
+
+## 0.62.0
+
+### Minor Changes
+
+- 5b5dc6d: Replace Vaul drawers with Radix sheets for chat detail panels, restoring text selection in trace/log views and removing the unused drawer dependency.
+
+### Patch Changes
+
+- 5a9c1f4: expose the Destructive CLI Commands category in the risk policy form so customers can opt into `cli_destructive` scanning, and stop silently stripping the source when editing policies that had it set via the API
+- 217b173: Fix the empty "Logs" panel on a source's Deployments tab. The embedded panel was comparing a kind string (e.g. `"function"`) against log events' `attachmentId` (a UUID) and was also sending the wrong type token (`"function"` instead of the backend's `"functions"`). Now filters on `event.attachmentType` with the correct backend constants (`functions`, `openapi`, `external_mcp`), so per-source deployment logs render as expected.
+
 ## 0.61.0
 
 ### Minor Changes

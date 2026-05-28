@@ -41,6 +41,8 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.")
+	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
+	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids enabled for this policy.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
 	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
 		RiskPolicyActionEnum()
@@ -59,6 +61,29 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("total_messages", Int64, "Total number of messages in the project.")
 
 	Required("id", "project_id", "name", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+})
+
+var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The custom detection rule ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
+	Attribute("title", String, "Human-readable title for the rule.")
+	Attribute("description", String, "Description of what the rule detects.")
+	Attribute("regex", String, "RE2-compatible regex pattern.")
+	Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
+		Enum("info", "low", "medium", "high", "critical")
+	})
+	Attribute("created_at", String, "When the custom detection rule was created.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the custom detection rule was last updated.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "rule_id", "title", "description", "regex", "severity", "created_at", "updated_at")
 })
 
 var RiskResult = Type("RiskResult", func() {

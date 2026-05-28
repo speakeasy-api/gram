@@ -9,7 +9,7 @@ import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Type } from "./ui/type";
 
-const NAV_LOADING_DURATION_MS = 600;
+export const NAV_LOADING_DURATION_MS = 600;
 
 export function NavMenu({
   items,
@@ -451,11 +451,13 @@ export function CollapsibleNavGroup({
   label,
   Icon,
   defaultHref,
+  stage,
   children,
 }: {
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   defaultHref?: string;
+  stage?: ReleaseStage;
   children: React.ReactNode;
 }) {
   const { openGroups, toggleGroup, openGroup } =
@@ -500,6 +502,12 @@ export function CollapsibleNavGroup({
             <span className="flex-1 truncate transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
               {label}
             </span>
+            {stage && (
+              <ReleaseStageBadge
+                stage={stage}
+                className="transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
+              />
+            )}
           </Link>
         </div>
 

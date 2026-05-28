@@ -1,6 +1,7 @@
 -- name: GetMetadataForToolset :one
 SELECT id,
        toolset_id,
+       mcp_server_id,
        project_id,
        external_documentation_url,
        external_documentation_text,
@@ -27,7 +28,7 @@ INSERT INTO mcp_metadata (
     default_environment_id,
     installation_override_url
 ) VALUES (@toolset_id, @project_id, @external_documentation_url, @external_documentation_text, @logo_id, @instructions, @default_environment_id, @installation_override_url)
-ON CONFLICT (toolset_id)
+ON CONFLICT (toolset_id) WHERE toolset_id IS NOT NULL
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               external_documentation_text = EXCLUDED.external_documentation_text,
@@ -38,6 +39,7 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
+          mcp_server_id,
           project_id,
           external_documentation_url,
           external_documentation_text,

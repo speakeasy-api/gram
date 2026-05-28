@@ -3384,6 +3384,8 @@ type FunctionToolDefinitionResponseBody struct {
 	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 	// Variables configuration for the function
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// The tags list for this function tool
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// Meta tags for the tool
 	Meta map[string]any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// The ID of the tool

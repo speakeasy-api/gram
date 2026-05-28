@@ -185,7 +185,7 @@ INSERT INTO organization_metadata (
     $5,
     $6
 )
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
 `
 
 type CreateOrganizationMetadataFromWorkOSParams struct {
@@ -224,6 +224,8 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -359,7 +361,7 @@ func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
 `
@@ -381,6 +383,8 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -389,7 +393,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -411,6 +415,8 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -419,7 +425,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 }
 
 const getOrganizationMetadataBySlug = `-- name: GetOrganizationMetadataBySlug :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE slug = $1
 `
@@ -441,6 +447,8 @@ func (q *Queries) GetOrganizationMetadataBySlug(ctx context.Context, slug string
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -860,7 +868,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 }
 
 const listOrganizationsForUser = `-- name: ListOrganizationsForUser :many
-SELECT om.id, om.name, om.slug, om.workos_id
+SELECT om.id, om.name, om.slug, om.workos_id, om.sso_enabled, om.scim_enabled
 FROM organization_user_relationships our
 JOIN organization_metadata om ON om.id = our.organization_id
 WHERE our.user_id = $1
@@ -869,10 +877,12 @@ WHERE our.user_id = $1
 `
 
 type ListOrganizationsForUserRow struct {
-	ID       string
-	Name     string
-	Slug     string
-	WorkosID pgtype.Text
+	ID          string
+	Name        string
+	Slug        string
+	WorkosID    pgtype.Text
+	SsoEnabled  pgtype.Bool
+	ScimEnabled pgtype.Bool
 }
 
 func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID pgtype.Text) ([]ListOrganizationsForUserRow, error) {
@@ -889,6 +899,8 @@ func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID pgtype.Te
 			&i.Name,
 			&i.Slug,
 			&i.WorkosID,
+			&i.SsoEnabled,
+			&i.ScimEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -1117,7 +1129,7 @@ SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
@@ -1142,11 +1154,55 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setSCIMEnabled = `-- name: SetSCIMEnabled :exec
+UPDATE organization_metadata
+SET scim_enabled = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type SetSCIMEnabledParams struct {
+	Enabled           pgtype.Bool
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Update the SCIM/directory sync enabled flag on an organization. Called when
+// a WorkOS dsync.activated or dsync.deactivated event is processed.
+func (q *Queries) SetSCIMEnabled(ctx context.Context, arg SetSCIMEnabledParams) error {
+	_, err := q.db.Exec(ctx, setSCIMEnabled, arg.Enabled, arg.WorkosLastEventID, arg.WorkosID)
+	return err
+}
+
+const setSSOEnabled = `-- name: SetSSOEnabled :exec
+UPDATE organization_metadata
+SET sso_enabled = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type SetSSOEnabledParams struct {
+	Enabled           pgtype.Bool
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Update the SSO enabled flag on an organization. Called when a WorkOS
+// connection.activated or connection.deactivated/deleted event is processed.
+func (q *Queries) SetSSOEnabled(ctx context.Context, arg SetSSOEnabledParams) error {
+	_, err := q.db.Exec(ctx, setSSOEnabled, arg.Enabled, arg.WorkosLastEventID, arg.WorkosID)
+	return err
 }
 
 const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
@@ -1351,7 +1407,7 @@ SET name = $1,
     workos_last_event_id = $4,
     updated_at = clock_timestamp()
 WHERE id = $5
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
 `
 
 type UpdateOrganizationMetadataFromWorkOSParams struct {
@@ -1389,6 +1445,8 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1420,7 +1478,7 @@ ON CONFLICT (id) DO UPDATE SET
         ELSE organization_metadata.whitelisted
     END,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
@@ -1454,6 +1512,8 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1483,7 +1543,7 @@ ON CONFLICT (id) DO UPDATE SET
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataFromWorkOSParams struct {
@@ -1523,6 +1583,8 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,

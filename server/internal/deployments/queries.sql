@@ -345,6 +345,8 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
+  , tags
+  , meta
   , read_only_hint
   , destructive_hint
   , idempotent_hint
@@ -361,6 +363,8 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
+  , current.tags
+  , current.meta
   , current.read_only_hint
   , current.destructive_hint
   , current.idempotent_hint
@@ -595,6 +599,7 @@ INSERT INTO function_tool_definitions (
   , input_schema
   , variables
   , auth_input
+  , tags
   , meta
   , read_only_hint
   , destructive_hint
@@ -611,6 +616,7 @@ INSERT INTO function_tool_definitions (
   , @input_schema
   , @variables
   , @auth_input
+  , @tags
   , @meta
   , @read_only_hint
   , @destructive_hint

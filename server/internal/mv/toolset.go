@@ -1075,6 +1075,7 @@ func readToolsetTools(
 				UpdatedAt:     def.FunctionToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:     nil,
 				Variation:     nil,
+				Tags:          def.FunctionToolDefinition.Tags,
 				Meta:          meta,
 				Annotations: conv.AnnotationsFromColumns(
 					def.FunctionToolDefinition.ReadOnlyHint,
@@ -1422,7 +1423,7 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 	// Fetch header display names from MCP metadata (if available)
 	headerDisplayNames := make(map[string]string)
 	if toolsetID != uuid.Nil {
-		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, toolsetID)
+		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
 		if err == nil && len(displayNamesJSON) > 0 {
 			// Parse the JSONB data into a map
 			_ = json.Unmarshal(displayNamesJSON, &headerDisplayNames)

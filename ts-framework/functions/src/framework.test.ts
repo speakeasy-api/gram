@@ -328,6 +328,70 @@ test("generates a manifest", () => {
   });
 });
 
+test("manifest emits tags when provided", () => {
+  const g = new Gram().tool({
+    name: "tagged",
+    description: "A tool with tags",
+    inputSchema: {},
+    tags: ["search", "web"],
+    async execute(ctx) {
+      return ctx.json({});
+    },
+  });
+
+  const manifest = g.manifest();
+  expect(manifest.tools).toBeDefined();
+  const tool = manifest.tools![0];
+  expect(tool).toBeDefined();
+  expect(tool!.tags).toEqual(["search", "web"]);
+});
+
+test("manifest omits tags when not provided", () => {
+  const g = new Gram().tool({
+    name: "untagged",
+    description: "A tool without tags",
+    inputSchema: {},
+    async execute(ctx) {
+      return ctx.json({});
+    },
+  });
+
+  const tool = g.manifest().tools![0];
+  expect(tool).toBeDefined();
+  expect(tool).not.toHaveProperty("tags");
+});
+
+test("manifest omits tags when empty array", () => {
+  const g = new Gram().tool({
+    name: "empty_tags",
+    description: "A tool with empty tags",
+    inputSchema: {},
+    tags: [],
+    async execute(ctx) {
+      return ctx.json({});
+    },
+  });
+
+  const tool = g.manifest().tools![0];
+  expect(tool).toBeDefined();
+  expect(tool).not.toHaveProperty("tags");
+});
+
+test("manifest throws when tags exceed maximum", () => {
+  const tooMany = Array.from({ length: 41 }, (_, i) => `tag${i}`);
+  const g = new Gram().tool({
+    name: "too_many",
+    description: "A tool with too many tags",
+    inputSchema: {},
+    tags: tooMany,
+    async execute(ctx) {
+      return ctx.json({});
+    },
+  });
+
+  expect(() => g.manifest()).toThrow(/maximum is 40/);
+});
+
 test("assert throws response with default status 500", () => {
   expect(() => {
     assert(false, { error: "Something went wrong" });

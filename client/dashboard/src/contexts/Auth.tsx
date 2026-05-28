@@ -6,6 +6,7 @@ import {
 import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
 import { createContext, useContext, useEffect } from "react";
+import { initializePylon, PYLON_APP_ID } from "@/lib/pylon";
 
 // We don't include accountType here because it is actively confusing. See useProductTier
 type Session = Omit<
@@ -163,27 +164,29 @@ export const useIsAdmin = () => {
 
 export function usePylonInAppChat(user: User | undefined) {
   useEffect(() => {
-    if (!user) {
+    if (!user || !import.meta.env.PROD) {
       return;
     }
-    const random = Math.random().toString(36).substring(7) + "-anonymous";
     const email = user.email;
-    const displayName = user.displayName || random;
+    const displayName = user.displayName || email;
 
-    window.pylon = {
-      chat_settings: {
-        app_id: "f9cade16-8d3c-4826-9a2a-034fad495102",
-        email: email,
-        name: displayName,
-        avatar_url: user?.photoUrl,
-        ...(user?.signature && { email_hash: user.signature }),
-        hide_default_launcher: true,
-      },
+    const chatSettings = {
+      app_id: PYLON_APP_ID,
+      email,
+      name: displayName,
+      avatar_url: user.photoUrl,
+      // email_hash is the server-signed HMAC of the email — Pylon uses it
+      // to recognize the returning user and replay their thread history.
+      // Without it the visitor is treated as anonymous on every refresh.
+      ...(user.signature && { email_hash: user.signature }),
+      hide_default_launcher: true,
     };
 
-    if (window.Pylon) {
-      window.Pylon("setNewIssueCustomFields", { gram: true });
-    }
+    // Set chat_settings *before* the Pylon script is injected so the
+    // widget sees the identified user on first execution. initializePylon
+    // is idempotent; re-running it just refreshes chat_settings.
+    initializePylon(chatSettings);
+    window.Pylon?.("setNewIssueCustomFields", { gram: true });
 
     // This is for the marketing site
     localStorage.setItem("pylon_user_email", email);

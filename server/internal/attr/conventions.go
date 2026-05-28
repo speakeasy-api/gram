@@ -219,6 +219,8 @@ const (
 	WorkOSOrganizationIDKey         = attribute.Key("gram.workos.organization_id")
 	WorkOSLinkedUserIDKey           = attribute.Key("gram.workos.linked_user_id")
 	WorkOSUserIDKey                 = attribute.Key("gram.workos.user_id")
+	WorkOSSSOEnabledKey             = attribute.Key("gram.workos.sso_enabled")
+	WorkOSSCIMEnabledKey            = attribute.Key("gram.workos.scim_enabled")
 	OutcomeKey                      = attribute.Key("gram.outcome")
 	PackageNameKey                  = attribute.Key("gram.package.name")
 	PackageVersionKey               = attribute.Key("gram.package.version")
@@ -958,6 +960,12 @@ func WorkOSLinkedUserID(v string) attribute.KeyValue { return WorkOSLinkedUserID
 func SlogWorkOSLinkedUserID(v string) slog.Attr {
 	return slog.String(string(WorkOSLinkedUserIDKey), v)
 }
+
+func WorkOSSSOEnabled(v bool) attribute.KeyValue { return WorkOSSSOEnabledKey.Bool(v) }
+func SlogWorkOSSSOEnabled(v bool) slog.Attr      { return slog.Bool(string(WorkOSSSOEnabledKey), v) }
+
+func WorkOSSCIMEnabled(v bool) attribute.KeyValue { return WorkOSSCIMEnabledKey.Bool(v) }
+func SlogWorkOSSCIMEnabled(v bool) slog.Attr      { return slog.Bool(string(WorkOSSCIMEnabledKey), v) }
 
 func OutboxID(v int64) attribute.KeyValue { return OutboxIDKey.Int64(v) }
 func SlogOutboxID(v int64) slog.Attr      { return slog.Int64(string(OutboxIDKey), v) }

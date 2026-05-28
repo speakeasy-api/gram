@@ -126,6 +126,11 @@ type OrganizationEntry struct {
 	Slug               string
 	Projects           []*ProjectEntry
 	UserWorkspaceSlugs []string
+	// Whether SSO is enabled for this organization (synced from WorkOS)
+	SsoEnabled *bool
+	// Whether SCIM directory sync is enabled for this organization (synced from
+	// WorkOS)
+	ScimEnabled *bool
 }
 
 type ProjectEntry struct {

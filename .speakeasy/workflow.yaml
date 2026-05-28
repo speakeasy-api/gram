@@ -7,8 +7,6 @@ sources:
         overlays:
             - location: overlays/goa.yaml
         output: .speakeasy/out.openapi.yaml
-        registry:
-            location: registry.speakeasyapi.dev/gram/gram/gram-api-description
     Gram-Public:
         inputs:
             - location: server/gen/http/openapi3.yaml
@@ -23,9 +21,3 @@ targets:
         target: typescript
         source: Gram-Internal
         output: client/sdk
-        codeSamples:
-            registry:
-                location: registry.speakeasyapi.dev/gram/gram/gram-api-description-typescript-code-samples
-            labelOverride:
-                fixedValue: Typescript (SDK)
-            blocking: false
