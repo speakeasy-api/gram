@@ -78,6 +78,11 @@ func logRemoteSessionClientLegacyBindingFallback(
 	)
 }
 
+// ensureLegacyRemoteSessionClientRowsBackfilled opportunistically writes join-table
+// bindings for legacy remote_session_clients that still only reference a
+// user_session_issuer through the old column. The join table currently enforces
+// one client per issuer, so detect legacy drift before inserting and only warn
+// on transient backfill failures after returning the legacy rows to the caller.
 func ensureLegacyRemoteSessionClientRowsBackfilled(
 	ctx context.Context,
 	db *pgxpool.Pool,
@@ -121,6 +126,11 @@ func ensureLegacyRemoteSessionClientRowsBackfilled(
 	return nil
 }
 
+// listRemoteSessionClientsByProjectID reads project-scoped clients from the
+// join table when filtering by user_session_issuer_id, falling back to the
+// legacy column for rows created before AGE-2520 dual-write. The fallback keeps
+// old configs visible and triggers an opportunistic backfill so future reads use
+// the new relationship table.
 func (s *Service) listRemoteSessionClientsByProjectID(
 	ctx context.Context,
 	projectID uuid.UUID,
