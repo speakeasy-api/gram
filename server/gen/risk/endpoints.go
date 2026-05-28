@@ -16,24 +16,26 @@ import (
 
 // Endpoints wraps the "risk" service endpoints.
 type Endpoints struct {
-	CreateRiskPolicy        goa.Endpoint
-	ListRiskPolicies        goa.Endpoint
-	GetRiskCapabilities     goa.Endpoint
-	GetRiskPolicy           goa.Endpoint
-	UpdateRiskPolicy        goa.Endpoint
-	DeleteRiskPolicy        goa.Endpoint
-	ListRiskResults         goa.Endpoint
-	ListRiskResultsForAgent goa.Endpoint
-	ListRiskResultsByChat   goa.Endpoint
-	GetRiskOverview         goa.Endpoint
-	ListRiskCategories      goa.Endpoint
-	GetRiskUserBreakdown    goa.Endpoint
-	GetRiskRuleBreakdown    goa.Endpoint
-	GetRiskPolicyStatus     goa.Endpoint
-	ListShadowMCPApprovals  goa.Endpoint
-	ApproveShadowMCP        goa.Endpoint
-	RevokeShadowMCPApproval goa.Endpoint
-	TriggerRiskAnalysis     goa.Endpoint
+	CreateRiskPolicy           goa.Endpoint
+	ListRiskPolicies           goa.Endpoint
+	GetRiskCapabilities        goa.Endpoint
+	GetRiskPolicy              goa.Endpoint
+	UpdateRiskPolicy           goa.Endpoint
+	DeleteRiskPolicy           goa.Endpoint
+	ListRiskResults            goa.Endpoint
+	ListRiskResultsForAgent    goa.Endpoint
+	ListRiskResultsByChat      goa.Endpoint
+	GetRiskOverview            goa.Endpoint
+	ListRiskCategories         goa.Endpoint
+	GetRiskUserBreakdown       goa.Endpoint
+	GetRiskRuleBreakdown       goa.Endpoint
+	GetRiskPolicyStatus        goa.Endpoint
+	ListShadowMCPApprovals     goa.Endpoint
+	ApproveShadowMCP           goa.Endpoint
+	RevokeShadowMCPApproval    goa.Endpoint
+	TriggerRiskAnalysis        goa.Endpoint
+	SuggestCustomDetectionRule goa.Endpoint
+	TestDetectionRule          goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "risk" service with endpoints.
@@ -41,24 +43,26 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateRiskPolicy:        NewCreateRiskPolicyEndpoint(s, a.APIKeyAuth),
-		ListRiskPolicies:        NewListRiskPoliciesEndpoint(s, a.APIKeyAuth),
-		GetRiskCapabilities:     NewGetRiskCapabilitiesEndpoint(s, a.APIKeyAuth),
-		GetRiskPolicy:           NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
-		UpdateRiskPolicy:        NewUpdateRiskPolicyEndpoint(s, a.APIKeyAuth),
-		DeleteRiskPolicy:        NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
-		ListRiskResults:         NewListRiskResultsEndpoint(s, a.APIKeyAuth),
-		ListRiskResultsForAgent: NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
-		ListRiskResultsByChat:   NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
-		GetRiskOverview:         NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
-		ListRiskCategories:      NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
-		GetRiskUserBreakdown:    NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
-		GetRiskRuleBreakdown:    NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
-		GetRiskPolicyStatus:     NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
-		ListShadowMCPApprovals:  NewListShadowMCPApprovalsEndpoint(s, a.APIKeyAuth),
-		ApproveShadowMCP:        NewApproveShadowMCPEndpoint(s, a.APIKeyAuth),
-		RevokeShadowMCPApproval: NewRevokeShadowMCPApprovalEndpoint(s, a.APIKeyAuth),
-		TriggerRiskAnalysis:     NewTriggerRiskAnalysisEndpoint(s, a.APIKeyAuth),
+		CreateRiskPolicy:           NewCreateRiskPolicyEndpoint(s, a.APIKeyAuth),
+		ListRiskPolicies:           NewListRiskPoliciesEndpoint(s, a.APIKeyAuth),
+		GetRiskCapabilities:        NewGetRiskCapabilitiesEndpoint(s, a.APIKeyAuth),
+		GetRiskPolicy:              NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
+		UpdateRiskPolicy:           NewUpdateRiskPolicyEndpoint(s, a.APIKeyAuth),
+		DeleteRiskPolicy:           NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
+		ListRiskResults:            NewListRiskResultsEndpoint(s, a.APIKeyAuth),
+		ListRiskResultsForAgent:    NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
+		ListRiskResultsByChat:      NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
+		GetRiskOverview:            NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
+		ListRiskCategories:         NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
+		GetRiskUserBreakdown:       NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
+		GetRiskRuleBreakdown:       NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
+		GetRiskPolicyStatus:        NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
+		ListShadowMCPApprovals:     NewListShadowMCPApprovalsEndpoint(s, a.APIKeyAuth),
+		ApproveShadowMCP:           NewApproveShadowMCPEndpoint(s, a.APIKeyAuth),
+		RevokeShadowMCPApproval:    NewRevokeShadowMCPApprovalEndpoint(s, a.APIKeyAuth),
+		TriggerRiskAnalysis:        NewTriggerRiskAnalysisEndpoint(s, a.APIKeyAuth),
+		SuggestCustomDetectionRule: NewSuggestCustomDetectionRuleEndpoint(s, a.APIKeyAuth),
+		TestDetectionRule:          NewTestDetectionRuleEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -82,6 +86,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ApproveShadowMCP = m(e.ApproveShadowMCP)
 	e.RevokeShadowMCPApproval = m(e.RevokeShadowMCPApproval)
 	e.TriggerRiskAnalysis = m(e.TriggerRiskAnalysis)
+	e.SuggestCustomDetectionRule = m(e.SuggestCustomDetectionRule)
+	e.TestDetectionRule = m(e.TestDetectionRule)
 }
 
 // NewCreateRiskPolicyEndpoint returns an endpoint function that calls the
@@ -1143,5 +1149,123 @@ func NewTriggerRiskAnalysisEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return nil, s.TriggerRiskAnalysis(ctx, p)
+	}
+}
+
+// NewSuggestCustomDetectionRuleEndpoint returns an endpoint function that
+// calls the method "suggestCustomDetectionRule" of service "risk".
+func NewSuggestCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SuggestCustomDetectionRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SuggestCustomDetectionRule(ctx, p)
+	}
+}
+
+// NewTestDetectionRuleEndpoint returns an endpoint function that calls the
+// method "testDetectionRule" of service "risk".
+func NewTestDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TestDetectionRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.TestDetectionRule(ctx, p)
 	}
 }
