@@ -380,7 +380,7 @@ export function InsightsEmployeesContent() {
         mcpConfig={mcpConfig}
         title="What would you like to know about employee enrollment?"
         subtitle="Ask who is enrolled, who still needs setup, and how platform adoption is tracking across the team"
-        contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have platform hooks activity in ${rangeLabel} and are enrolled; ${notEnrolledEmployees} employees have no platform hooks activity and are not enrolled.`}
+        contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have hooks activity in ${rangeLabel} and are enrolled; ${notEnrolledEmployees} employees have no hooks activity and are not enrolled.`}
         suggestions={[
           {
             title: "Enrollment Coverage",
