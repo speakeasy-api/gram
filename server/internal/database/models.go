@@ -267,6 +267,7 @@ type ChatMessage struct {
 	ContentHash      []byte
 	Generation       int32
 	CreatedAt        pgtype.Timestamptz
+	RiskAnalyzedAt   pgtype.Timestamptz
 }
 
 type ChatResolution struct {
