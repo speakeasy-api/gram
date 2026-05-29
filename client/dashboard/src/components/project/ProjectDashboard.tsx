@@ -82,6 +82,10 @@ export function ProjectDashboard() {
 
   const { data: membersData, isPending: isMembersPending } = useMembers();
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
+  const memberById = useMemo(
+    () => new Map(members.map((m) => [m.id, m])),
+    [members],
+  );
 
   const { data: topUsersSearchData, isPending: isTopUsersPending } = useQuery({
     queryKey: ["project", "topUsers", from.toISOString(), to.toISOString()],
@@ -111,7 +115,6 @@ export function ProjectDashboard() {
 
   const topUsersByTokens = useMemo(() => {
     if (!topUsersSearchData) return [];
-    const memberById = new Map(members.map((m) => [m.id, m]));
     return [...topUsersSearchData]
       .sort(
         (a, b) =>
@@ -125,7 +128,7 @@ export function ProjectDashboard() {
         label: memberById.get(u.userId)?.name ?? u.userId,
         value: u.totalInputTokens + u.totalOutputTokens,
       }));
-  }, [topUsersSearchData, members]);
+  }, [topUsersSearchData, memberById]);
 
   const isTopUsersLoading =
     logsEnabled && (isTopUsersPending || isMembersPending);
@@ -398,31 +401,39 @@ export function ProjectDashboard() {
                     <ul className="divide-border divide-y">
                       {(overview?.summary.topUsers ?? [])
                         .slice(0, 5)
-                        .map((user, i) => (
-                          <li
-                            key={user.userId}
-                            className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                          >
-                            <Avatar className="size-8 shrink-0">
-                              <AvatarFallback
-                                className={cn(
-                                  "text-xs font-medium",
-                                  avatarColor(i),
-                                )}
-                              >
-                                {emailInitials(user.userId)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">
-                                {user.userId}
-                              </p>
-                              <p className="text-muted-foreground text-xs">
-                                {user.activityCount.toLocaleString()} calls
-                              </p>
-                            </div>
-                          </li>
-                        ))}
+                        .map((user, i) => {
+                          const member = memberById.get(user.userId);
+                          const displayName = member?.name ?? user.userId;
+                          return (
+                            <li
+                              key={user.userId}
+                              className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                            >
+                              <Avatar className="size-8 shrink-0">
+                                <AvatarFallback
+                                  className={cn(
+                                    "text-xs font-medium",
+                                    avatarColor(i),
+                                  )}
+                                >
+                                  {emailInitials(
+                                    member?.email ??
+                                      member?.name ??
+                                      user.userId,
+                                  )}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium">
+                                  {displayName}
+                                </p>
+                                <p className="text-muted-foreground text-xs">
+                                  {user.activityCount.toLocaleString()} calls
+                                </p>
+                              </div>
+                            </li>
+                          );
+                        })}
                     </ul>
                   )}
                 </DashboardCard>
