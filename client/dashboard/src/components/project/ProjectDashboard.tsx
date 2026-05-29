@@ -317,8 +317,11 @@ export function ProjectDashboard() {
       .map((t) => ({
         key: t.key,
         label: t.label,
-        value: Math.round(t.rate),
-        valueLabel: `${Math.round(t.rate)}%`,
+        // Keep the raw rate for the bar width: every tool here has ≥1 failure,
+        // so rounding (e.g. 0.4% → 0) would zero out the bar and the label.
+        value: t.rate,
+        // Never render "0%" in a failures-only list; show "<1%" below 1%.
+        valueLabel: t.rate < 1 ? "<1%" : `${Math.round(t.rate)}%`,
       }));
   }, [externalUsersData]);
 
