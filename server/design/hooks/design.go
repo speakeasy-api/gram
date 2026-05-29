@@ -113,6 +113,7 @@ var CodexHookPayload = Type("CodexHookPayload", func() {
 		Enum("SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop")
 	})
 	Attribute("session_id", String, "The Codex session ID")
+	Attribute("user_email", String, "Email of the authenticated Codex user, if available")
 	Attribute("transcript_path", String, "Path to the conversation transcript file")
 	Attribute("cwd", String, "The working directory when the event fired")
 	Attribute("model", String, "The model identifier")
