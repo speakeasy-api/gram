@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.33.2
+
+### Patch Changes
+
+- faaab73: Upgrade pnpm to v11
+
 ## 1.33.1
 
 ### Patch Changes

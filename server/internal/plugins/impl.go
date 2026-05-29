@@ -1372,7 +1372,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 			// toolset without an mcp_metadata row simply has no user-provided
 			// env vars — UpsertMetadata is explicit, not auto-created on publish.
 			if r.ToolsetIsPublic {
-				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
+				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: r.ToolsetID, Valid: true})
 				switch {
 				case errors.Is(metaErr, pgx.ErrNoRows):
 					// No metadata configured → no env configs to surface.

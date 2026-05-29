@@ -612,6 +612,8 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   cert_secret_name TEXT,
   -- Discriminates which K8s API provisioned this domain. Gateway rows write NULL cert_secret_name.
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
+  -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
+  ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -828,7 +830,8 @@ WHERE deleted IS FALSE;
 -- MCP backend
 CREATE TABLE IF NOT EXISTS remote_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   slug TEXT NOT NULL,
   issuer TEXT NOT NULL,
@@ -851,18 +854,23 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT remote_session_issuers_pkey PRIMARY KEY (id),
-  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
 ON remote_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS remote_session_issuers_organization_id_idx
+ON remote_session_issuers (organization_id)
+WHERE deleted IS FALSE;
+
 -- Remote Session Clients are records of Gram's client registrations with
 -- upstream authorization servers
 CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
   remote_session_issuer_id uuid NOT NULL,
   user_session_issuer_id uuid NOT NULL,
 
@@ -895,6 +903,22 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   CONSTRAINT remote_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
+  remote_session_client_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT remote_session_client_user_session_issuers_pkey PRIMARY KEY (remote_session_client_id, user_session_issuer_id),
+  CONSTRAINT remote_session_client_user_session_issuers_client_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_client_user_session_issuers_issuer_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
+ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_one_per_issuer
+ON remote_session_client_user_session_issuers (user_session_issuer_id);
+
 -- Remote sessions represent credentials for an external resource that have
 -- been granted to a single Gram subject
 CREATE TABLE IF NOT EXISTS remote_sessions (
@@ -921,6 +945,10 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
 ON remote_sessions (subject_urn, remote_session_client_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_key
+ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolsets (
@@ -1287,6 +1315,11 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
+  -- Set when all active risk policies have analyzed this message.
+  -- NULL means unanalyzed (or analysis was reset). Best-effort: policy
+  -- version rescans and backfills are coordinated outside this field.
+  risk_analyzed_at timestamptz,
+
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
@@ -1297,6 +1330,12 @@ CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_mess
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
+
+-- Partial index over unanalyzed messages only. Shrinks toward zero at steady
+-- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.
+CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
+ON chat_messages (project_id, id)
+WHERE risk_analyzed_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1522,46 +1561,6 @@ CREATE TABLE IF NOT EXISTS toolset_prompts (
 -- Ensure a toolset can only have one prompt template per name
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_prompts_toolset_id_prompt_name_key
 ON toolset_prompts (toolset_id, prompt_name);
-
-CREATE TABLE IF NOT EXISTS mcp_metadata (
-  id UUID NOT NULL DEFAULT generate_uuidv7(),
-  toolset_id UUID NOT NULL,
-  project_id UUID NOT NULL,
-  external_documentation_url TEXT,
-  external_documentation_text TEXT,
-  logo_id UUID,
-  instructions TEXT,
-  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
-  default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
-  installation_override_url TEXT, -- URL to redirect to instead of the default installation page
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT mcp_metadata_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_metadata_toolset_id_key UNIQUE (toolset_id),
-  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
-);
-
-CREATE TABLE IF NOT EXISTS mcp_environment_configs (
-  id UUID NOT NULL DEFAULT generate_uuidv7(),
-  project_id UUID NOT NULL,
-  mcp_metadata_id UUID NOT NULL,
-  variable_name TEXT NOT NULL,
-  header_display_name TEXT,
-  provided_by TEXT NOT NULL DEFAULT 'user', -- 'user', 'system', 'none'
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT mcp_environment_configs_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_environment_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_environment_configs_mcp_metadata_id_fkey FOREIGN KEY (mcp_metadata_id) REFERENCES mcp_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
-);
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT NOT NULL,
@@ -2460,6 +2459,57 @@ CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)
 WHERE toolset_id IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS mcp_metadata (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  toolset_id UUID,
+  mcp_server_id UUID,
+  project_id UUID NOT NULL,
+  external_documentation_url TEXT,
+  external_documentation_text TEXT,
+  logo_id UUID,
+  instructions TEXT,
+  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
+  default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
+  installation_override_url TEXT, -- URL to redirect to instead of the default installation page
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  -- Exactly one backend must be set: either a toolset or an MCP server.
+  CONSTRAINT mcp_metadata_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_toolset_id_key
+ON mcp_metadata (toolset_id)
+WHERE toolset_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_mcp_server_id_key
+ON mcp_metadata (mcp_server_id)
+WHERE mcp_server_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS mcp_environment_configs (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  project_id UUID NOT NULL,
+  mcp_metadata_id UUID NOT NULL,
+  variable_name TEXT NOT NULL,
+  header_display_name TEXT,
+  provided_by TEXT NOT NULL DEFAULT 'user', -- 'user', 'system', 'none'
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_environment_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_environment_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_environment_configs_mcp_metadata_id_fkey FOREIGN KEY (mcp_metadata_id) REFERENCES mcp_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
+);
+
 -- MCP Endpoints: addressable slugs for an MCP server. A NULL custom_domain_id
 -- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL
 -- custom_domain_id represents a custom-domain endpoint (resolved by the
@@ -2657,6 +2707,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- Empty/NULL means every rule in the selected categories runs. Scanner
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
+  custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
   action TEXT NOT NULL DEFAULT 'flag',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
@@ -2674,6 +2725,30 @@ CREATE TABLE IF NOT EXISTS risk_policies (
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  regex TEXT,
+  severity TEXT NOT NULL DEFAULT 'medium',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_custom_detection_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_custom_detection_rules_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_custom_detection_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_custom_detection_rules_project_rule_id_key
+ON risk_custom_detection_rules (project_id, rule_id)
 WHERE deleted IS FALSE;
 
 -- Individual findings produced by scanning a chat message against a risk policy.

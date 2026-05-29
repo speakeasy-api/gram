@@ -61,10 +61,9 @@ func TestService_CreatePortalSession(t *testing.T) {
 	ti.svixSrv.AssertExpectations(t)
 }
 
-// TestService_CreatePortalSession_AdminGrantGetsViewBaseAccess verifies that a user with
-// org:admin gets a portal session. Admins receive VIEW_BASE capabilities only (they manage
-// webhooks through Gram's own UI, not the Svix portal).
-func TestService_CreatePortalSession_AdminGrantGetsViewBaseAccess(t *testing.T) {
+// TestService_CreatePortalSession_AdminGrantGetsFullAccess verifies that a user with
+// org:admin gets a portal session with full Svix capabilities.
+func TestService_CreatePortalSession_AdminGrantGetsFullAccess(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
@@ -87,10 +86,9 @@ func TestService_CreatePortalSession_AdminGrantGetsViewBaseAccess(t *testing.T) 
 	ti.svixSrv.AssertExpectations(t)
 }
 
-// TestService_CreatePortalSession_ReadGrantGetsFullAccess verifies that a user with org:read
-// but not org:admin gets a portal session with full Svix capabilities (they are a webhook
-// consumer configuring their own endpoints).
-func TestService_CreatePortalSession_ReadGrantGetsFullAccess(t *testing.T) {
+// TestService_CreatePortalSession_ReadGrantGetsMinimumAccess verifies that a user with org:read
+// but not org:admin gets a portal session with VIEW_BASE capabilities only.
+func TestService_CreatePortalSession_ReadGrantGetsMinimumAccess(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)

@@ -14,8 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// FetchUnanalyzed retrieves a batch of chat message IDs that have not yet been
-// analyzed for a given risk policy at its current version.
+// FetchUnanalyzed retrieves all active policies for a project and the batch
+// of chat message IDs that have not yet been marked as analyzed
+// (risk_analyzed_at IS NULL) within the configured lookback window.
 type FetchUnanalyzed struct {
 	logger *slog.Logger
 	tracer trace.Tracer
@@ -30,25 +31,32 @@ func NewFetchUnanalyzed(logger *slog.Logger, tracerProvider trace.TracerProvider
 	}
 }
 
+// PolicyForAnalysis carries the policy metadata the coordinator needs to
+// construct AnalyzeBatchArgs for each active policy.
+type PolicyForAnalysis struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	Version              int64
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
+	CustomRuleIds        []string
+}
+
 type FetchUnanalyzedArgs struct {
 	ProjectID    uuid.UUID
-	RiskPolicyID uuid.UUID
+	IDLowerBound uuid.UUID // UUIDv7 lower bound derived from lookback window
 	BatchLimit   int32
 }
 
 type FetchUnanalyzedResult struct {
-	MessageIDs           []uuid.UUID
-	OrganizationID       string
-	PolicyVersion        int64
-	Sources              []string
-	PresidioEntities     []string
-	PromptInjectionRules []string
+	MessageIDs []uuid.UUID
+	Policies   []PolicyForAnalysis
 }
 
 func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *FetchUnanalyzedResult, err error) {
 	ctx, span := a.tracer.Start(ctx, "risk.fetchUnanalyzed", trace.WithAttributes(
 		attribute.String("risk.project_id", args.ProjectID.String()),
-		attribute.String("risk.policy_id", args.RiskPolicyID.String()),
 	))
 	defer func() {
 		if err != nil {
@@ -57,50 +65,49 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		span.End()
 	}()
 
-	// Always read the current policy to get the latest version and sources.
 	queries := repo.New(a.db)
-	policy, err := queries.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
-		ID:        args.RiskPolicyID,
-		ProjectID: args.ProjectID,
-	})
+
+	policies, err := queries.ListEnabledRiskPoliciesByProject(ctx, args.ProjectID)
 	if err != nil {
-		return nil, fmt.Errorf("get risk policy: %w", err)
+		return nil, fmt.Errorf("list enabled risk policies: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int64("risk.policy_version", policy.Version))
-
-	if !policy.Enabled {
-		// No work to do — results for disabled policies are already hidden
-		// by the list queries (JOIN rp.enabled IS TRUE).
-		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
+	if len(policies) == 0 {
 		return &FetchUnanalyzedResult{
-			MessageIDs:           nil,
-			OrganizationID:       policy.OrganizationID,
-			PolicyVersion:        policy.Version,
-			Sources:              policy.Sources,
-			PresidioEntities:     policy.PresidioEntities,
-			PromptInjectionRules: policy.PromptInjectionRules,
+			MessageIDs: nil,
+			Policies:   nil,
 		}, nil
 	}
 
 	ids, err := queries.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
-		ProjectID:         uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		RiskPolicyID:      args.RiskPolicyID,
-		RiskPolicyVersion: policy.Version,
-		BatchLimit:        args.BatchLimit,
+		ProjectID:    uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound: args.IDLowerBound,
+		BatchLimit:   args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed message IDs: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int("risk.unanalyzed_count", len(ids)))
+	span.SetAttributes(
+		attribute.Int("risk.unanalyzed_count", len(ids)),
+		attribute.Int("risk.active_policies", len(policies)),
+	)
 
-	return &FetchUnanalyzedResult{
-		MessageIDs:           ids,
-		OrganizationID:       policy.OrganizationID,
-		PolicyVersion:        policy.Version,
-		Sources:              policy.Sources,
-		PresidioEntities:     policy.PresidioEntities,
-		PromptInjectionRules: policy.PromptInjectionRules,
-	}, nil
+	result := &FetchUnanalyzedResult{
+		MessageIDs: ids,
+		Policies:   make([]PolicyForAnalysis, len(policies)),
+	}
+	for i, p := range policies {
+		result.Policies[i] = PolicyForAnalysis{
+			ID:                   p.ID,
+			OrganizationID:       p.OrganizationID,
+			Version:              p.Version,
+			Sources:              p.Sources,
+			PresidioEntities:     p.PresidioEntities,
+			PromptInjectionRules: p.PromptInjectionRules,
+			CustomRuleIds:        p.CustomRuleIds,
+		}
+	}
+
+	return result, nil
 }

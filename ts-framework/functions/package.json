@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@gram-ai/functions",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "",
   "author": "Georges Haidar <georges@speakeasyapi.dev>",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "packageManager": "pnpm@10.30.2",
+  "packageManager": "pnpm@11.3.0",
   "files": [
     "src",
     "dist"

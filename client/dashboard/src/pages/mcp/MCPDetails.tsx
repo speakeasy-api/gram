@@ -39,12 +39,13 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useToolset } from "@/hooks/toolTypes";
+import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isNotFoundError } from "@/lib/route-errors";
-import { Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
+import { Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import {
   useAttachServer,
@@ -55,13 +56,11 @@ import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
-import { Confirm } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllListToolsets,
   invalidateAllToolset,
-  invalidateTemplate,
   buildCollectionsListServersQuery,
   useAddOAuthProxyServerMutation,
   useExportMcpMetadataMutation,
@@ -1149,48 +1148,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recalculate only when the set of group keys changes
   }, [groupKeysJoined]);
 
-  const handleToolUpdate = async (
-    tool: Tool,
-    updates: {
-      name?: string;
-      description?: string;
-      title?: string;
-      readOnlyHint?: boolean;
-      destructiveHint?: boolean;
-      idempotentHint?: boolean;
-      openWorldHint?: boolean;
-      tags?: string[] | undefined;
-    },
-  ) => {
-    if (tool.type === "prompt") {
-      await client.templates.update({
-        updatePromptTemplateForm: {
-          ...tool,
-          ...updates,
-        },
-      });
-      invalidateTemplate(queryClient, [{ name: tool.name }]);
-    } else {
-      await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: {
-          ...tool.variation,
-          confirm: tool.variation?.confirm as Confirm,
-          ...updates,
-          srcToolName: tool.canonicalName,
-          srcToolUrn: tool.toolUrn,
-        },
-      });
-    }
-
-    telemetry.capture("toolset_event", {
-      action: "tool_variation_updated",
-      tool_name: tool.name,
-      overridden_fields: Object.keys(updates).join(", "),
-    });
-
-    toast.success("Tool updated");
-    refetch();
-  };
+  const { updateTool, isUpdating } = useToolUpdate({
+    telemetryEvent: "toolset_event",
+    onSuccess: refetch,
+  });
 
   // For external MCP proxy servers, show the server info instead of tools list
   if (isExternalMcpProxy && fullToolset) {
@@ -1277,7 +1238,8 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         <ToolList
           tools={toolsToDisplay}
           toolset={fullToolset}
-          onToolUpdate={canWrite ? handleToolUpdate : undefined}
+          onToolUpdate={canWrite ? updateTool : undefined}
+          isToolUpdating={isUpdating}
           onToolsRemove={canWrite ? handleToolsRemove : undefined}
           onTestInPlayground={handleTestInPlayground}
           readOnly={!canWrite}

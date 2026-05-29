@@ -29,6 +29,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/organizations/server"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -60,7 +61,6 @@ type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
-	ListRoles(ctx context.Context, workosOrgID string) ([]workos.Role, error)
 	GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent workos.PortalIntent, returnURL string) (string, error)
 }
 
@@ -362,26 +362,26 @@ func (s *Service) resolveInviteRoleSlug(ctx context.Context, organizationID stri
 		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role id is required").Log(ctx, logger)
 	}
 
-	// Resolve the WorkOS role ID sent by the dashboard into a WorkOS role slug
-	// so the invite stores the slug needed at acceptance time.
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	// The dashboard sends a Gram local role UUID (as returned by
+	// /rpc/access.listRoles). Resolve it against the local roles table to
+	// recover the WorkOS slug stored on the invite for acceptance time.
+	roleUUID, err := uuid.Parse(roleID)
 	if err != nil {
-		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
-	}
-	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, logger)
-	}
-	roles, err := s.orgs.ListRoles(ctx, org.WorkosID.String)
-	if err != nil {
-		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeUnexpected, err, "list roles for invite").Log(ctx, logger)
-	}
-	for _, r := range roles {
-		if r.ID == roleID {
-			return conv.ToPGText(r.Slug), nil
-		}
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
 	}
 
-	return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
+	role, err := accessrepo.New(s.db).GetOrganizationRoleByID(ctx, accessrepo.GetOrganizationRoleByIDParams{
+		OrganizationID: organizationID,
+		ID:             roleUUID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
+	case err != nil:
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeUnexpected, err, "get role for invite").Log(ctx, logger)
+	}
+
+	return conv.ToPGText(role.WorkosSlug), nil
 }
 
 func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePayload) error {
@@ -853,7 +853,7 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	// capabilities in svix.
 	var caps *[]models.AppPortalCapability
 	readCheckErr := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err == nil {
 		caps = new(fullSvixAppPortalCapabilities())
 	} else if readCheckErr == nil {
 		caps = new(minimumSvixAppPortalCapabilities())
@@ -1315,7 +1315,14 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 }
 
 func fullSvixAppPortalCapabilities() []models.AppPortalCapability {
-	return []models.AppPortalCapability{}
+	return []models.AppPortalCapability{
+		models.APPPORTALCAPABILITY_VIEW_BASE,
+		models.APPPORTALCAPABILITY_VIEW_ENDPOINT_SECRET,
+		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT_SECRET,
+		models.APPPORTALCAPABILITY_MANAGE_TRANSFORMATIONS,
+		models.APPPORTALCAPABILITY_CREATE_ATTEMPTS,
+		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT,
+	}
 }
 func minimumSvixAppPortalCapabilities() []models.AppPortalCapability {
 	return []models.AppPortalCapability{models.APPPORTALCAPABILITY_VIEW_BASE}

@@ -1,6 +1,7 @@
 import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import type { TypesToInclude } from "@gram/client/models/components";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 import {
@@ -14,9 +15,19 @@ import {
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
+import { useGramContext } from "@gram/client/react-query";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { useQuery } from "@tanstack/react-query";
 
 const SERVER_FILTER_PATH = "gram.tool_call.source";
 const USER_EMAIL_FILTER_PATH = "user.email";
+
+// Sentinel labels the hooks summary substitutes for empty values. They are
+// display-only ("local" for a missing server, "Unknown" for a missing email)
+// and do not round-trip as real filter values, so they are excluded from the
+// dropdown options.
+const SERVER_SENTINEL = "local";
+const USER_EMAIL_SENTINEL = "Unknown";
 
 function parseHookTypesParam(raw: string | null): TypesToInclude[] {
   if (!raw) return [...DEFAULT_HOOK_TYPES];
@@ -65,9 +76,7 @@ export function useObserveFilters() {
     () => parseHookTypesParam(searchParams.get("hookTypes")),
     [searchParams],
   );
-  const [knownServers, setKnownServers] = useState<string[]>([]);
-  const [knownUserEmails, setKnownUserEmails] = useState<string[]>([]);
-
+  const client = useGramContext();
   const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData } = useRoles();
 
@@ -157,11 +166,6 @@ export function useObserveFilters() {
     [customRange, dateRange],
   );
 
-  useEffect(() => {
-    setKnownServers([]);
-    setKnownUserEmails([]);
-  }, [from, to]);
-
   const logFilters = useMemo(
     () => buildLogFilters(activeFilters, roleEmails),
     [activeFilters, roleEmails],
@@ -169,37 +173,44 @@ export function useObserveFilters() {
 
   const roleFilterPending = selectedRoleIds.length > 0 && membersLoading;
 
-  const addKnownServers = useCallback((names: string[]) => {
-    if (names.length === 0) return;
-    setKnownServers((prev) => {
-      const merged = [...new Set([...prev, ...names])];
-      return merged.length === prev.length ? prev : merged;
-    });
-  }, []);
-
-  const addKnownUserEmails = useCallback((emails: string[]) => {
-    if (emails.length === 0) return;
-    setKnownUserEmails((prev) => {
-      const merged = [...new Set([...prev, ...emails])];
-      return merged.length === prev.length ? prev : merged;
-    });
-  }, []);
+  // Fetch the full universe of servers and users for the selected time range.
+  // Deliberately omits the active server/email/role/type filters so the
+  // dropdowns always offer every value in the window — otherwise a filter that
+  // returns no results would leave the dropdown empty and the user stuck,
+  // unable to pivot to a different value. Keyed only on the range so the query
+  // is shared across every page that uses this hook.
+  const { data: filterOptionsSummary } = useQuery({
+    queryKey: ["hooks-filter-options", from.toISOString(), to.toISOString()],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetHooksSummary(client, {
+          getHooksSummaryPayload: { from, to },
+        }),
+      ),
+    throwOnError: false,
+  });
 
   const serverOptions = useMemo(() => {
     const selected = activeFilters
       .filter((f) => f.path === SERVER_FILTER_PATH)
       .flatMap((f) => f.filters)
       .filter(Boolean);
-    return [...new Set([...knownServers, ...selected])];
-  }, [knownServers, activeFilters]);
+    const known = (filterOptionsSummary?.servers ?? [])
+      .map((s) => s.serverName)
+      .filter((name) => name && name !== SERVER_SENTINEL);
+    return [...new Set([...known, ...selected])];
+  }, [filterOptionsSummary, activeFilters]);
 
   const userEmailOptions = useMemo(() => {
     const selected = activeFilters
       .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
       .flatMap((f) => f.filters)
       .filter(Boolean);
-    return [...new Set([...knownUserEmails, ...selected])];
-  }, [knownUserEmails, activeFilters]);
+    const known = (filterOptionsSummary?.users ?? [])
+      .map((u) => u.userEmail)
+      .filter((email) => email && email !== USER_EMAIL_SENTINEL);
+    return [...new Set([...known, ...selected])];
+  }, [filterOptionsSummary, activeFilters]);
 
   const handleUserEmailSelectionChange = useCallback(
     (values: string[]) => {
@@ -318,10 +329,8 @@ export function useObserveFilters() {
     to,
     logFilters,
     serverOptions,
-    addKnownServers,
     handleServerSelectionChange,
     userEmailOptions,
-    addKnownUserEmails,
     handleUserEmailSelectionChange,
     addFilter,
     handleHookTypesChange,

@@ -17,6 +17,11 @@ func CreateDomainDomainsPath() string {
 	return "/rpc/domain.register"
 }
 
+// UpdateDomainDomainsPath returns the URL path to the domains service updateDomain HTTP endpoint.
+func UpdateDomainDomainsPath() string {
+	return "/rpc/domain.update"
+}
+
 // DeleteDomainDomainsPath returns the URL path to the domains service deleteDomain HTTP endpoint.
 func DeleteDomainDomainsPath() string {
 	return "/rpc/domain.delete"

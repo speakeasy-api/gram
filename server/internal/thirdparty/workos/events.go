@@ -15,7 +15,6 @@ const (
 	EventKindConnectionDeleted     EventKind = "connection.deleted"
 
 	EventKindDirectorySyncActivated        EventKind = "dsync.activated"
-	EventKindDirectorySyncDeactivated      EventKind = "dsync.deactivated"
 	EventKindDirectorySyncDeleted          EventKind = "dsync.deleted"
 	EventKindDirectorySyncGroupCreated     EventKind = "dsync.group.created"
 	EventKindDirectorySyncGroupDeleted     EventKind = "dsync.group.deleted"

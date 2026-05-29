@@ -17,6 +17,15 @@ import (
 type CreateDomainRequestBody struct {
 	// The custom domain
 	Domain string `form:"domain" json:"domain" xml:"domain"`
+	// IP addresses or CIDR ranges to allow. Leave empty for unrestricted access.
+	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
+}
+
+// UpdateDomainRequestBody is the type of the "domains" service "updateDomain"
+// endpoint HTTP request body.
+type UpdateDomainRequestBody struct {
+	// Replacement IP allowlist. Pass an empty list to remove all restrictions.
+	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
 }
 
 // GetDomainResponseBody is the type of the "domains" service "getDomain"
@@ -38,6 +47,33 @@ type GetDomainResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// The custom domain is actively being registered
 	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
+}
+
+// UpdateDomainResponseBody is the type of the "domains" service "updateDomain"
+// endpoint HTTP response body.
+type UpdateDomainResponseBody struct {
+	// The ID of the custom domain
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the organization this domain belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The custom domain name
+	Domain *string `form:"domain,omitempty" json:"domain,omitempty" xml:"domain,omitempty"`
+	// Whether the domain is verified
+	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
+	// Whether the domain is activated in ingress
+	Activated *bool `form:"activated,omitempty" json:"activated,omitempty" xml:"activated,omitempty"`
+	// When the custom domain was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the custom domain was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The custom domain is actively being registered
+	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
 }
 
 // ListMcpEndpointsResponseBody is the type of the "domains" service
@@ -393,6 +429,188 @@ type CreateDomainUnexpectedResponseBody struct {
 // CreateDomainGatewayErrorResponseBody is the type of the "domains" service
 // "createDomain" endpoint HTTP response body for the "gateway_error" error.
 type CreateDomainGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainUnauthorizedResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "unauthorized" error.
+type UpdateDomainUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainForbiddenResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "forbidden" error.
+type UpdateDomainForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainBadRequestResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "bad_request" error.
+type UpdateDomainBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainNotFoundResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "not_found" error.
+type UpdateDomainNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainConflictResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "conflict" error.
+type UpdateDomainConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainUnsupportedMediaResponseBody is the type of the "domains"
+// service "updateDomain" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateDomainUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainInvalidResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "invalid" error.
+type UpdateDomainInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainInvariantViolationResponseBody is the type of the "domains"
+// service "updateDomain" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateDomainInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainUnexpectedResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "unexpected" error.
+type UpdateDomainUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateDomainGatewayErrorResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "gateway_error" error.
+type UpdateDomainGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -803,6 +1021,27 @@ func NewCreateDomainRequestBody(p *domains.CreateDomainPayload) *CreateDomainReq
 	body := &CreateDomainRequestBody{
 		Domain: p.Domain,
 	}
+	if p.IPAllowlist != nil {
+		body.IPAllowlist = make([]string, len(p.IPAllowlist))
+		for i, val := range p.IPAllowlist {
+			body.IPAllowlist[i] = val
+		}
+	}
+	return body
+}
+
+// NewUpdateDomainRequestBody builds the HTTP request body from the payload of
+// the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainRequestBody(p *domains.UpdateDomainPayload) *UpdateDomainRequestBody {
+	body := &UpdateDomainRequestBody{}
+	if p.IPAllowlist != nil {
+		body.IPAllowlist = make([]string, len(p.IPAllowlist))
+		for i, val := range p.IPAllowlist {
+			body.IPAllowlist[i] = val
+		}
+	} else {
+		body.IPAllowlist = []string{}
+	}
 	return body
 }
 
@@ -818,6 +1057,10 @@ func NewGetDomainCustomDomainOK(body *GetDomainResponseBody) *domains.CustomDoma
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 		IsUpdating:     *body.IsUpdating,
+	}
+	v.IPAllowlist = make([]string, len(body.IPAllowlist))
+	for i, val := range body.IPAllowlist {
+		v.IPAllowlist[i] = val
 	}
 
 	return v
@@ -1111,6 +1354,177 @@ func NewCreateDomainUnexpected(body *CreateDomainUnexpectedResponseBody) *goa.Se
 // NewCreateDomainGatewayError builds a domains service createDomain endpoint
 // gateway_error error.
 func NewCreateDomainGatewayError(body *CreateDomainGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainCustomDomainOK builds a "domains" service "updateDomain"
+// endpoint result from a HTTP "OK" response.
+func NewUpdateDomainCustomDomainOK(body *UpdateDomainResponseBody) *domains.CustomDomain {
+	v := &domains.CustomDomain{
+		ID:             *body.ID,
+		OrganizationID: *body.OrganizationID,
+		Domain:         *body.Domain,
+		Verified:       *body.Verified,
+		Activated:      *body.Activated,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+		IsUpdating:     *body.IsUpdating,
+	}
+	v.IPAllowlist = make([]string, len(body.IPAllowlist))
+	for i, val := range body.IPAllowlist {
+		v.IPAllowlist[i] = val
+	}
+
+	return v
+}
+
+// NewUpdateDomainUnauthorized builds a domains service updateDomain endpoint
+// unauthorized error.
+func NewUpdateDomainUnauthorized(body *UpdateDomainUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainForbidden builds a domains service updateDomain endpoint
+// forbidden error.
+func NewUpdateDomainForbidden(body *UpdateDomainForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainBadRequest builds a domains service updateDomain endpoint
+// bad_request error.
+func NewUpdateDomainBadRequest(body *UpdateDomainBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainNotFound builds a domains service updateDomain endpoint
+// not_found error.
+func NewUpdateDomainNotFound(body *UpdateDomainNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainConflict builds a domains service updateDomain endpoint
+// conflict error.
+func NewUpdateDomainConflict(body *UpdateDomainConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainUnsupportedMedia builds a domains service updateDomain
+// endpoint unsupported_media error.
+func NewUpdateDomainUnsupportedMedia(body *UpdateDomainUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainInvalid builds a domains service updateDomain endpoint
+// invalid error.
+func NewUpdateDomainInvalid(body *UpdateDomainInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainInvariantViolation builds a domains service updateDomain
+// endpoint invariant_violation error.
+func NewUpdateDomainInvariantViolation(body *UpdateDomainInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainUnexpected builds a domains service updateDomain endpoint
+// unexpected error.
+func NewUpdateDomainUnexpected(body *UpdateDomainUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateDomainGatewayError builds a domains service updateDomain endpoint
+// gateway_error error.
+func NewUpdateDomainGatewayError(body *UpdateDomainGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1465,6 +1879,48 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 	}
 	if body.IsUpdating == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
+	}
+	if body.IPAllowlist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpdateDomainResponseBody runs the validations defined on
+// UpdateDomainResponseBody
+func ValidateUpdateDomainResponseBody(body *UpdateDomainResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Domain == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("domain", "body"))
+	}
+	if body.Verified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verified", "body"))
+	}
+	if body.Activated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activated", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.IsUpdating == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
+	}
+	if body.IPAllowlist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -1950,6 +2406,246 @@ func ValidateCreateDomainUnexpectedResponseBody(body *CreateDomainUnexpectedResp
 // ValidateCreateDomainGatewayErrorResponseBody runs the validations defined on
 // createDomain_gateway_error_response_body
 func ValidateCreateDomainGatewayErrorResponseBody(body *CreateDomainGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainUnauthorizedResponseBody runs the validations defined on
+// updateDomain_unauthorized_response_body
+func ValidateUpdateDomainUnauthorizedResponseBody(body *UpdateDomainUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainForbiddenResponseBody runs the validations defined on
+// updateDomain_forbidden_response_body
+func ValidateUpdateDomainForbiddenResponseBody(body *UpdateDomainForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainBadRequestResponseBody runs the validations defined on
+// updateDomain_bad_request_response_body
+func ValidateUpdateDomainBadRequestResponseBody(body *UpdateDomainBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainNotFoundResponseBody runs the validations defined on
+// updateDomain_not_found_response_body
+func ValidateUpdateDomainNotFoundResponseBody(body *UpdateDomainNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainConflictResponseBody runs the validations defined on
+// updateDomain_conflict_response_body
+func ValidateUpdateDomainConflictResponseBody(body *UpdateDomainConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainUnsupportedMediaResponseBody runs the validations
+// defined on updateDomain_unsupported_media_response_body
+func ValidateUpdateDomainUnsupportedMediaResponseBody(body *UpdateDomainUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainInvalidResponseBody runs the validations defined on
+// updateDomain_invalid_response_body
+func ValidateUpdateDomainInvalidResponseBody(body *UpdateDomainInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainInvariantViolationResponseBody runs the validations
+// defined on updateDomain_invariant_violation_response_body
+func ValidateUpdateDomainInvariantViolationResponseBody(body *UpdateDomainInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainUnexpectedResponseBody runs the validations defined on
+// updateDomain_unexpected_response_body
+func ValidateUpdateDomainUnexpectedResponseBody(body *UpdateDomainUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainGatewayErrorResponseBody runs the validations defined on
+// updateDomain_gateway_error_response_body
+func ValidateUpdateDomainGatewayErrorResponseBody(body *UpdateDomainGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

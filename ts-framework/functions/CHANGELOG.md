@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.16.1
+
+### Patch Changes
+
+- faaab73: Upgrade pnpm to v11
+
 ## 0.16.0
 
 ### Minor Changes

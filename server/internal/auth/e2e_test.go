@@ -365,20 +365,20 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 }
 
 // TestE2E_Callback_ExistingUserWithDBOrgs verifies the happy path: user
-// already has orgs in the DB, so the WorkOS fallback is skipped entirely.
+// already has an org in the DB and WorkOS confirms the same membership.
+// Sync runs on every login; when WorkOS and DB agree the active org is unchanged.
 func TestE2E_Callback_ExistingUserWithDBOrgs(t *testing.T) {
 	t.Parallel()
 
 	const workosUserID = "user_01WORKOS_EXISTING"
 
-	// Fetcher has memberships, but they should NOT be consulted because the DB
-	// already has org data.
+	// WorkOS returns the same org that already exists in the DB.
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
-			workosUserID: {{ID: "om_99", UserID: workosUserID, OrganizationID: "org_SHOULD_NOT_APPEAR", Organization: "Ghost", RoleSlugs: []string{"admin"}}},
+			workosUserID: {{ID: "om_99", UserID: workosUserID, OrganizationID: "org_01DB_EXISTING", Organization: "DB Corp", RoleSlugs: []string{"admin"}}},
 		},
 		orgs: map[string]*workos.Organization{
-			"org_SHOULD_NOT_APPEAR": {ID: "org_SHOULD_NOT_APPEAR", Name: "Ghost"},
+			"org_01DB_EXISTING": {ID: "org_01DB_EXISTING", Name: "DB Corp"},
 		},
 	}
 

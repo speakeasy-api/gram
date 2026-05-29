@@ -126,7 +126,7 @@ func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
 	projectID uuid.UUID,
 	toolsetID uuid.UUID,
 ) (map[string]string, error) {
-	mcpMetadata, err := e.mcpMetadataRepo.GetMetadataForToolset(ctx, toolsetID)
+	mcpMetadata, err := e.mcpMetadataRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return map[string]string{}, nil

@@ -735,6 +735,88 @@ func TestProxy_Post_OversizedUserBodyReturnsError(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestProxy_Post_BatchRequestBodyReturnsJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	// MCP Streamable HTTP § Sending Messages to the Server disallows
+	// batched (array) request bodies. The proxy must reject ahead of the
+	// decoder with a spec-shaped JSON-RPC envelope (code -32600, HTTP 400,
+	// no "id" field since no id can be extracted from a batch body) rather
+	// than the generic decode-error envelope a stray array would otherwise
+	// produce.
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("upstream must not be called when the user request body is a batch")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	batchBody := `[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}]`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(batchBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req), "batch rejection writes a JSON-RPC envelope rather than returning an error")
+	require.Equal(t, http.StatusBadRequest, rr.Code, "batch bodies have no decodable id; writeRejection uses the invalid-id branch (HTTP 400)")
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Contains(t, rr.Body.String(), `"code":-32600`, "JSON-RPC InvalidRequest code per spec for malformed/disallowed request shapes")
+	require.Contains(t, rr.Body.String(), "batch requests are not supported")
+	require.NotContains(t, rr.Body.String(), `"id":`, "no id is present on batch bodies; envelope omits the id field")
+}
+
+func TestProxy_Post_BatchRequestBodyWithLeadingWhitespaceReturnsJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	// JSON permits leading whitespace (RFC 8259 § 2) so the peek must
+	// skip it before checking for the array marker — otherwise a batch
+	// body with a leading newline would slip past detection and fall
+	// through to the generic decode error.
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("upstream must not be called when the user request body is a batch")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	batchBody := "  \n\t\r [{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}]"
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(batchBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	require.Contains(t, rr.Body.String(), `"code":-32600`)
+	require.Contains(t, rr.Body.String(), "batch requests are not supported")
+}
+
+func TestProxy_Post_SingleMessageBodyWithLeadingWhitespaceStillParses(t *testing.T) {
+	t.Parallel()
+
+	// Defensive: the whitespace-aware batch peek must not false-positive
+	// on a valid single-message body whose JSON object happens to be
+	// preceded by whitespace. The first non-whitespace byte for a
+	// well-formed request is '{', which falls through to the decoder.
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	paddedBody := "  \n  " + initializeRequest
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(paddedBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, paddedBody, gotBody, "leading whitespace is forwarded verbatim along with the body")
+}
+
 func TestProxy_Get_LongStreamsAreNotSubjectToCumulativeCap(t *testing.T) {
 	t.Parallel()
 

@@ -39,12 +39,11 @@ import {
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useRiskListPolicies,
-  useRiskCreatePolicyMutation,
-  useRiskPoliciesUpdateMutation,
-  useRiskPoliciesDeleteMutation,
-  useRiskPoliciesTriggerMutation,
   invalidateAllRiskListPolicies,
+  useRiskCreatePolicyMutation,
+  useRiskListPolicies,
+  useRiskPoliciesDeleteMutation,
+  useRiskPoliciesUpdateMutation,
 } from "@gram/client/react-query/index.js";
 import {
   useRiskPoliciesStatus,
@@ -59,6 +58,7 @@ import {
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
+import { useDetectionRulesStore } from "./detection-rules-data";
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -76,6 +76,7 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
   "prompt_injection",
+  "custom",
 ]);
 
 /** All rule categories in display order */
@@ -199,6 +200,8 @@ function PolicyCenterContent() {
   const { data, isLoading } = useRiskListPolicies();
   const policies = data?.policies ?? [];
 
+  const { customRules } = useDetectionRulesStore();
+
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
   const [formName, setFormName] = useState("");
@@ -207,6 +210,9 @@ function PolicyCenterContent() {
     Set<RuleCategory>
   >(new Set<RuleCategory>(["secrets", "pii"]));
   const [disabledRules, setDisabledRules] = useState<Set<string>>(new Set());
+  const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
+    Set<string>
+  >(new Set<string>());
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
@@ -236,16 +242,13 @@ function PolicyCenterContent() {
     onSuccess: invalidate,
   });
 
-  const triggerMutation = useRiskPoliciesTriggerMutation({
-    onSuccess: invalidate,
-  });
-
   const handleCreate = () => {
     setEditingPolicy(null);
     setFormName("");
     setFormEnabled(true);
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setDisabledRules(new Set());
+    setSelectedCustomRuleIds(new Set<string>());
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
@@ -253,13 +256,20 @@ function PolicyCenterContent() {
   };
 
   const handleEdit = (policy: RiskPolicy) => {
+    const customRuleIds = policy.customRuleIds ?? [];
     setEditingPolicy(policy);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
-    setSelectedCategories(
-      policyToCategories(policy.sources, policy.presidioEntities),
+    const categories = policyToCategories(
+      policy.sources,
+      policy.presidioEntities,
     );
+    if (customRuleIds.length > 0) {
+      categories.add("custom");
+    }
+    setSelectedCategories(categories);
     setDisabledRules(new Set(policy.disabledRules ?? []));
+    setSelectedCustomRuleIds(new Set<string>(customRuleIds));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
@@ -288,6 +298,7 @@ function PolicyCenterContent() {
             presidioEntities,
             promptInjectionRules,
             disabledRules: payloadDisabled,
+            customRuleIds: [...selectedCustomRuleIds],
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -304,6 +315,7 @@ function PolicyCenterContent() {
             presidioEntities,
             promptInjectionRules,
             disabledRules: payloadDisabled,
+            customRuleIds: [...selectedCustomRuleIds],
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -315,12 +327,6 @@ function PolicyCenterContent() {
 
   const handleDelete = (id: string) => {
     deleteMutation.mutate({ request: { id } });
-  };
-
-  const handleTrigger = (id: string) => {
-    triggerMutation.mutate({
-      request: { triggerRiskAnalysisRequestBody: { id } },
-    });
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
@@ -388,6 +394,7 @@ function PolicyCenterContent() {
                       presidioEntities,
                       promptInjectionRules,
                       disabledRules: payloadDisabled,
+                      customRuleIds: [],
                     },
                   },
                 });
@@ -471,6 +478,9 @@ function PolicyCenterContent() {
           policy.sources,
           policy.presidioEntities,
         );
+        if (policy.customRuleIds?.length) {
+          categories.push("custom");
+        }
 
         return (
           <div className="flex flex-wrap gap-1">
@@ -592,6 +602,9 @@ function PolicyCenterContent() {
                 setSelectedCategories={setSelectedCategories}
                 disabledRules={disabledRules}
                 setDisabledRules={setDisabledRules}
+                customRules={customRules}
+                selectedCustomRuleIds={selectedCustomRuleIds}
+                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
                 formAction={formAction}
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
@@ -634,13 +647,7 @@ function PolicyCenterContent() {
           }}
         >
           <SheetContent side="right" className="sm:max-w-md">
-            {runPanelPolicy && (
-              <RunPanel
-                policy={runPanelPolicy}
-                onTrigger={() => handleTrigger(runPanelPolicy.id)}
-                isTriggerPending={triggerMutation.isPending}
-              />
-            )}
+            {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
           </SheetContent>
         </Sheet>
       </Page.Body>
@@ -661,6 +668,9 @@ function PolicySheetBody({
   setSelectedCategories,
   disabledRules,
   setDisabledRules,
+  customRules,
+  selectedCustomRuleIds,
+  setSelectedCustomRuleIds,
   formAction,
   setFormAction,
   formAutoName,
@@ -676,6 +686,9 @@ function PolicySheetBody({
   setSelectedCategories: (v: Set<RuleCategory>) => void;
   disabledRules: Set<string>;
   setDisabledRules: (v: Set<string>) => void;
+  customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
+  selectedCustomRuleIds: Set<string>;
+  setSelectedCustomRuleIds: (v: Set<string>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
@@ -683,9 +696,9 @@ function PolicySheetBody({
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
 }) {
-  const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
-    null,
-  );
+  const [expandedCategory, setExpandedCategory] = useState<
+    RuleCategory | "custom" | null
+  >(null);
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
@@ -909,6 +922,18 @@ function PolicySheetBody({
         </div>
       </div>
 
+      {customRules.length > 0 && (
+        <CustomRulesPicker
+          customRules={customRules}
+          selectedCustomRuleIds={selectedCustomRuleIds}
+          setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+          expanded={expandedCategory === "custom"}
+          onToggle={() =>
+            setExpandedCategory(expandedCategory === "custom" ? null : "custom")
+          }
+        />
+      )}
+
       {/* Action */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">Action</Label>
@@ -1000,15 +1025,7 @@ function PolicySheetBody({
 /*  RunPanel                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function RunPanel({
-  policy,
-  onTrigger,
-  isTriggerPending,
-}: {
-  policy: RiskPolicy;
-  onTrigger: () => void;
-  isTriggerPending: boolean;
-}) {
+function RunPanel({ policy }: { policy: RiskPolicy }) {
   const {
     data: status,
     isLoading,
@@ -1126,21 +1143,6 @@ function RunPanel({
           </>
         ) : null}
       </div>
-
-      <SheetFooter className="border-border border-t px-6 py-4">
-        <Button
-          onClick={onTrigger}
-          disabled={isTriggerPending}
-          className="w-full"
-        >
-          {isTriggerPending && (
-            <Button.LeftIcon>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            </Button.LeftIcon>
-          )}
-          <Button.Text>Trigger Analysis</Button.Text>
-        </Button>
-      </SheetFooter>
     </>
   );
 }
@@ -1171,4 +1173,113 @@ const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
 function ActionBadge({ action }: { action: PolicyAction }) {
   const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
   return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  CustomRulesPicker                                                          */
+/* -------------------------------------------------------------------------- */
+
+function CustomRulesPicker({
+  customRules,
+  selectedCustomRuleIds,
+  setSelectedCustomRuleIds,
+  expanded,
+  onToggle,
+}: {
+  customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
+  selectedCustomRuleIds: Set<string>;
+  setSelectedCustomRuleIds: (v: Set<string>) => void;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const meta = RULE_CATEGORY_META.custom;
+  const allSelected =
+    customRules.length > 0 &&
+    customRules.every((r) => selectedCustomRuleIds.has(r.id));
+  const someSelected =
+    !allSelected && customRules.some((r) => selectedCustomRuleIds.has(r.id));
+  return (
+    <div className="space-y-3">
+      <Label className="text-sm font-medium">Custom Rules</Label>
+      <div className="border-border divide-border divide-y rounded-lg border">
+        <div
+          className="flex cursor-pointer items-center gap-3 px-4 py-3"
+          onClick={onToggle}
+        >
+          <ChevronRight
+            className={cn(
+              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+              expanded && "rotate-90",
+            )}
+          />
+          <Icon
+            name={meta.icon as IconName}
+            className="text-muted-foreground size-4 shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <span className="text-sm font-medium">{meta.label}</span>
+            <p className="text-muted-foreground text-xs">
+              {customRules.length} organization-defined rule
+              {customRules.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <Checkbox
+            checked={
+              allSelected ? true : someSelected ? "indeterminate" : false
+            }
+            onCheckedChange={(checked) => {
+              const next = new Set(selectedCustomRuleIds);
+              if (checked) {
+                customRules.forEach((r) => next.add(r.id));
+              } else {
+                customRules.forEach((r) => next.delete(r.id));
+              }
+              setSelectedCustomRuleIds(next);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+        {expanded && (
+          <div className="bg-muted/30 border-border border-t px-4 py-2">
+            <div className="space-y-2 py-1">
+              {customRules.map((rule) => {
+                const checked = selectedCustomRuleIds.has(rule.id);
+                return (
+                  <div
+                    key={rule.id}
+                    className="flex items-center gap-3 py-1 pl-8"
+                  >
+                    <Checkbox
+                      id={`custom-${rule.id}`}
+                      checked={checked}
+                      onCheckedChange={(next) => {
+                        const set = new Set(selectedCustomRuleIds);
+                        if (next) {
+                          set.add(rule.id);
+                        } else {
+                          set.delete(rule.id);
+                        }
+                        setSelectedCustomRuleIds(set);
+                      }}
+                    />
+                    <label
+                      htmlFor={`custom-${rule.id}`}
+                      className="cursor-pointer text-xs"
+                    >
+                      <span className="text-foreground">
+                        {rule.title || rule.id}
+                      </span>
+                      <span className="text-muted-foreground ml-2 font-mono text-[10px]">
+                        {rule.id}
+                      </span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

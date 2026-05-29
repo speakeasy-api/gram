@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -259,6 +260,12 @@ func newWorkerCommand() *cli.Command {
 			Name:    "custom-domain-cname",
 			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-provisioner",
+			Usage:   "Kubernetes provisioner kind for custom domains: ingress or gateway (default: ingress)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_PROVISIONER"},
+			Value:   "ingress",
 		},
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
@@ -606,7 +613,8 @@ func newWorkerCommand() *cli.Command {
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
-			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
+			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore)
 
 			memorySvc := memory.NewMemoryService(
 				logger,
@@ -660,6 +668,10 @@ func newWorkerCommand() *cli.Command {
 				identityResolver,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 				remoteChallengeManager,
+				// remoteProxyManager is HTTP-only; the worker never serves a
+				// runtime request through mcp.Service, so the factory is
+				// intentionally nil here.
+				nil,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -700,38 +712,39 @@ func newWorkerCommand() *cli.Command {
 			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, featureFlags)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				GuardianPolicy:      guardianPolicy,
-				DB:                  db,
-				EncryptionClient:    encryptionClient,
-				FeatureProvider:     featureFlags,
-				AssetStorage:        assetStorage,
-				SlackClient:         slackClient,
-				ChatClient:          chatClient,
-				OpenRouter:          openRouter,
-				K8sClient:           k8sClient,
-				ExpectedTargetCNAME: c.String("custom-domain-cname"),
-				BillingTracker:      billingTracker,
-				BillingRepository:   billingRepo,
-				RedisClient:         redisClient,
-				PosthogClient:       posthogClient,
-				FunctionsDeployer:   functionsOrchestrator,
-				FunctionsVersion:    runnerVersion,
-				RagService:          ragService,
-				MCPRegistryClient:   mcpRegistryClient,
-				TelemetryLogger:     telemetryLogger,
-				ClickhouseConn:      chDB,
-				TelemetryRepo:       telemetryrepo.New(chDB),
-				TriggersApp:         triggerApp,
-				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
-				AssistantsCore:      assistantsCore,
-				TemporalEnv:         temporalEnv,
-				PIIScanner:          piiScanner,
-				PIScanner:           piScanner,
-				ShadowMCPClient:     shadowMCPClient,
-				AuditLogger:         auditLogger,
-				WorkOSClient:        backgroundWorkOSClient,
-				SvixClient:          svixClient,
-				ProductFeatures:     productFeatures,
+				GuardianPolicy:                 guardianPolicy,
+				DB:                             db,
+				EncryptionClient:               encryptionClient,
+				FeatureProvider:                featureFlags,
+				AssetStorage:                   assetStorage,
+				SlackClient:                    slackClient,
+				ChatClient:                     chatClient,
+				OpenRouter:                     openRouter,
+				K8sClient:                      k8sClient,
+				DefaultCustomDomainProvisioner: k8s.ProvisionerKind(c.String("custom-domain-provisioner")),
+				ExpectedTargetCNAME:            c.String("custom-domain-cname"),
+				BillingTracker:                 billingTracker,
+				BillingRepository:              billingRepo,
+				RedisClient:                    redisClient,
+				PosthogClient:                  posthogClient,
+				FunctionsDeployer:              functionsOrchestrator,
+				FunctionsVersion:               runnerVersion,
+				RagService:                     ragService,
+				MCPRegistryClient:              mcpRegistryClient,
+				TelemetryLogger:                telemetryLogger,
+				ClickhouseConn:                 chDB,
+				TelemetryRepo:                  telemetryrepo.New(chDB),
+				TriggersApp:                    triggerApp,
+				CacheAdapter:                   cache.NewRedisCacheAdapter(redisClient),
+				AssistantsCore:                 assistantsCore,
+				TemporalEnv:                    temporalEnv,
+				PIIScanner:                     piiScanner,
+				PIScanner:                      piScanner,
+				ShadowMCPClient:                shadowMCPClient,
+				AuditLogger:                    auditLogger,
+				WorkOSClient:                   backgroundWorkOSClient,
+				SvixClient:                     svixClient,
+				ProductFeatures:                productFeatures,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

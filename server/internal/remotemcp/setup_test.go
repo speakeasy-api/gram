@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -59,9 +61,10 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *remotemcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
+	service         *remotemcp.Service
+	conn            *pgxpool.Pool
+	sessionManager  *sessions.Manager
+	shadowMCPClient *shadowmcp.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -108,10 +111,15 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 
 	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
 
+	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
+
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
+		service:         svc,
+		conn:            conn,
+		sessionManager:  sessionManager,
+		shadowMCPClient: shadowMCPClient,
 	}
 }
 

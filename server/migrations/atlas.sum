@@ -1,4 +1,4 @@
-h1:xX5JREqrIXFlfNvuTS45vPMJc04adL5Z3BMOUkSRXLg=
+h1:bWNUF/j/PeS88sFeT9TJDC4JR3DbA4wwS3WrBispc80=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -191,4 +191,10 @@ h1:xX5JREqrIXFlfNvuTS45vPMJc04adL5Z3BMOUkSRXLg=
 20260526132630_add_custom_domain_provisioner_kind.sql h1:XoZWJ1F8RtKzAlz18m9242K03La7QV3hDlDRfWO5wQM=
 20260526164519_add-risk-policies-disabled-rules.sql h1:SmIuD/9RiaBWGHZBadLnVzwVdQ7x0riPTboR6+M0GLE=
 20260527093220_org-metadata-add-scim-sso-enabled.sql h1:Nq+Q4qTzQijE3X3vl2YDbZkq+8o0EHA0rA/5cFk0hlw=
-20260528190515_plugin-assignments-org-principal-index.sql h1:PZJJnPD5W+IxQZW4YJSQ9+hMV9Pnfn1nbUvLKKVCdvM=
+20260527214516_remote_session_client_user_session_issuers.sql h1:FR8pLqwNWxorR6HIc3DbE/dSytFx44OpPXTEvErcIRM=
+20260528094046_chat-messages-add-risk-analyzed-at.sql h1:p0/C4C1jFr/WH5l/W4fSLi+yqBP0EQYYWD5j6WB3Stk=
+20260528120324_add-custom-detection-rules.sql h1:nvGeihJOJMbo8CUamKuoMlHi6D8r9jJtMK80c+X60NU=
+20260528145659_add-mcp-server-id-to-mcp-metadata.sql h1:fnNq7bTqxCG1Ipb70XLaZh9oZcypAonT/OvqOlQH8oI=
+20260528190515_plugin-assignments-org-principal-index.sql h1:Cm1LqFTOXnrKQ4/E/GrdnJPP/thCkLEjs5L4IdvqYCs=
+20260528192406_age-2484-remote-session-issuers-organization-id.sql h1:vwhjC/FFux9+NUNQRoqFB6wll43xRuFd5iX7RUFT9Qw=
+20260529114006_add-ip-allowlist-to-custom-domains.sql h1:dZzvxxODTj7M60rOjxsQWzjBxO5xaY5sgH0mxosZN9o=

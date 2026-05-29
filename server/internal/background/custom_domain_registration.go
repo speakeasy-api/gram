@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.temporal.io/api/enums/v1"
@@ -16,17 +17,20 @@ import (
 )
 
 type CustomDomainRegistrationParams struct {
-	OrgID         string
-	Domain        string
-	CreatedBy     urn.Principal
-	CreatedByName *string
+	OrgID           string
+	Domain          string
+	CreatedBy       urn.Principal
+	CreatedByName   *string
+	ProvisionerKind k8s.ProvisionerKind
+	IPAllowlist     []string
 }
 
 type CustomDomainDeletionParams struct {
-	OrgID          string
-	Domain         string
-	IngressName    string
-	CertSecretName string
+	OrgID           string
+	Domain          string
+	IngressName     string
+	CertSecretName  string
+	ProvisionerKind k8s.ProvisionerKind
 }
 
 type CustomDomainRegistrationClient struct {
@@ -51,7 +55,7 @@ func (c *CustomDomainRegistrationClient) GetDeletionID(orgID string, domain stri
 	return fmt.Sprintf("v1:custom-domain-deletion:%s:%s", orgID, domain)
 }
 
-func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string) (client.WorkflowRun, error) {
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error) {
 	id := c.GetDeletionID(orgID, domain)
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
@@ -59,14 +63,15 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    5 * time.Minute,
 	}, CustomDomainDeletionWorkflow, CustomDomainDeletionParams{
-		OrgID:          orgID,
-		Domain:         domain,
-		IngressName:    ingressName,
-		CertSecretName: certSecretName,
+		OrgID:           orgID,
+		Domain:          domain,
+		IngressName:     ingressName,
+		CertSecretName:  certSecretName,
+		ProvisionerKind: provisionerKind,
 	})
 }
 
-func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string) (client.WorkflowRun, error) {
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error) {
 	id := c.GetID(orgID, domain)
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
@@ -74,10 +79,12 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx con
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowRunTimeout:    5 * time.Minute,
 	}, CustomDomainRegistrationWorkflow, CustomDomainRegistrationParams{
-		OrgID:         orgID,
-		Domain:        domain,
-		CreatedBy:     createdBy,
-		CreatedByName: createdByName,
+		OrgID:           orgID,
+		Domain:          domain,
+		CreatedBy:       createdBy,
+		CreatedByName:   createdByName,
+		ProvisionerKind: provisionerKind,
+		IPAllowlist:     ipAllowlist,
 	})
 }
 
@@ -95,10 +102,12 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 		ctx,
 		a.VerifyCustomDomain,
 		activities.VerifyCustomDomainArgs{
-			OrgID:         params.OrgID,
-			Domain:        params.Domain,
-			CreatedBy:     params.CreatedBy,
-			CreatedByName: params.CreatedByName,
+			OrgID:           params.OrgID,
+			Domain:          params.Domain,
+			CreatedBy:       params.CreatedBy,
+			CreatedByName:   params.CreatedByName,
+			ProvisionerKind: params.ProvisionerKind,
+			IPAllowlist:     params.IPAllowlist,
 		},
 	).Get(ctx, nil)
 	if err != nil {
@@ -116,7 +125,15 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	err = workflow.ExecuteActivity(
 		ingressCreateCtx,
 		a.CustomDomainIngress,
-		activities.CustomDomainIngressArgs{OrgID: params.OrgID, Domain: params.Domain, Action: activities.CustomDomainIngressActionSetup, IngressName: "", CertSecretName: ""},
+		activities.CustomDomainIngressArgs{
+			OrgID:           params.OrgID,
+			Domain:          params.Domain,
+			Action:          activities.CustomDomainIngressActionSetup,
+			IngressName:     "",
+			ResourceName:    "",
+			CertSecretName:  "",
+			ProvisionerKind: params.ProvisionerKind,
+		},
 	).Get(ingressCreateCtx, nil)
 	if err != nil {
 		logger.Error("failed to create custom domain ingress", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
@@ -140,11 +157,13 @@ func CustomDomainDeletionWorkflow(ctx workflow.Context, params CustomDomainDelet
 		ctx,
 		a.CustomDomainIngress,
 		activities.CustomDomainIngressArgs{
-			OrgID:          params.OrgID,
-			Domain:         params.Domain,
-			Action:         activities.CustomDomainIngressActionDelete,
-			IngressName:    params.IngressName,
-			CertSecretName: params.CertSecretName,
+			OrgID:           params.OrgID,
+			Domain:          params.Domain,
+			Action:          activities.CustomDomainIngressActionDelete,
+			IngressName:     params.IngressName,
+			ResourceName:    "",
+			CertSecretName:  params.CertSecretName,
+			ProvisionerKind: params.ProvisionerKind,
 		},
 	).Get(ctx, nil)
 	if err != nil {

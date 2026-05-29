@@ -179,7 +179,7 @@ func (m *ChallengeManager) ListClients(
 ) ([]Client, error) {
 	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           projectID,
+		ProjectID:           conv.ToNullUUID(projectID),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
@@ -368,7 +368,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	queries := remotesessions_repo.New(m.db)
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
 		ID:        state.RemoteSessionClientID,
-		ProjectID: state.ProjectID,
+		ProjectID: conv.ToNullUUID(state.ProjectID),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load remote session client").Log(ctx, logger)
