@@ -20,6 +20,7 @@ import (
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -44,14 +45,61 @@ func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Po
 func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {
 	t.Helper()
 
-	var count int
-	err := conn.QueryRow(ctx, `
-SELECT COUNT(remote_session_client_id)
-FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1
-  AND user_session_issuer_id = $2`, clientID, userIssuerID).Scan(&count)
+	count, err := repo.New(conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userIssuerID,
+	})
 	require.NoError(t, err)
-	return count
+	return int(count)
+}
+
+// createProject creates a second project in the test's organization so tests
+// can exercise cross-project (cross-tenant) rejection paths.
+func createProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	p, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	return p.ID
+}
+
+// createUserSessionIssuerInProject creates a user session issuer owned by an
+// arbitrary project rather than the one on the auth context.
+func createUserSessionIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               slug,
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// createRemoteIssuerInProject creates a remote session issuer owned by an
+// arbitrary project rather than the one on the auth context.
+func createRemoteIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         projectID,
+		Slug:                              slug,
+		Issuer:                            "https://idp.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://idp.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	return issuer.ID
 }
 
 func createRemoteIssuer(t *testing.T, ctx context.Context, svc *remoteServiceUnderTest, slug, regEndpoint string) string {
@@ -213,6 +261,92 @@ func TestCreateRemoteSessionClient_RBACForbidden(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestCreateRemoteSessionClient_RejectsCrossProjectUserIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-xproj-usi", "")
+	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
+	foreignUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-foreign").String()
+
+	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   foreignUserIssuer,
+		ClientID:              "xproj-usi-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestCreateRemoteSessionClient_RejectsCrossProjectRemoteIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
+	foreignRemoteIssuer := createRemoteIssuerInProject(t, ctx, ti.conn, otherProject, "rsi-foreign").String()
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-xproj-rsi").String()
+
+	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: foreignRemoteIssuer,
+		UserSessionIssuerID:   userIssuerID,
+		ClientID:              "xproj-rsi-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestUpdateRemoteSessionClient_RejectsCrossProjectUserIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-update-xproj", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-update-xproj").String()
+
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		ClientID:              "update-xproj-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
+	foreignUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-update-foreign").String()
+
+	_, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
+		ID:                      created.ID,
+		ClientSecret:            nil,
+		UserSessionIssuerID:     &foreignUserIssuer,
+		TokenEndpointAuthMethod: nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	// The rejected update rolls back: the original binding is untouched.
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	userIssuerUUID, err := uuid.Parse(userIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
 }
 
 func TestGetRemoteSessionClient(t *testing.T) {

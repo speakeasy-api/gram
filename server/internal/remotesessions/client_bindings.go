@@ -73,8 +73,8 @@ func logRemoteSessionClientLegacyBindingFallback(
 		ctx,
 		"using legacy remote session client user_session_issuer binding",
 		attr.SlogProjectID(projectID.String()),
-		slog.String("user_session_issuer_id", userSessionIssuerID.String()),
-		slog.Int("legacy_row_count", rowCount),
+		attr.SlogUserSessionIssuerID(userSessionIssuerID.String()),
+		attr.SlogRemoteSessionClientLegacyRowCount(rowCount),
 	)
 }
 
@@ -89,9 +89,9 @@ func ensureLegacyRemoteSessionClientRowsBackfilled(
 	logger *slog.Logger,
 	projectID uuid.UUID,
 	userSessionIssuerID uuid.UUID,
-	rows []repo.RemoteSessionClient,
+	clientIDs []uuid.UUID,
 ) error {
-	if len(rows) == 0 {
+	if len(clientIDs) == 0 {
 		return nil
 	}
 
@@ -107,8 +107,8 @@ func ensureLegacyRemoteSessionClientRowsBackfilled(
 		return &remoteSessionClientIssuerDriftError{UserSessionIssuerID: userSessionIssuerID, Count: count}
 	}
 
-	for _, row := range rows {
-		if err := backfillRemoteSessionClientUserSessionIssuer(ctx, db, row.ID, userSessionIssuerID); err != nil {
+	for _, clientID := range clientIDs {
+		if err := backfillRemoteSessionClientUserSessionIssuer(ctx, db, clientID, userSessionIssuerID); err != nil {
 			if isRemoteSessionClientIssuerDrift(err) {
 				return err
 			}
@@ -116,8 +116,8 @@ func ensureLegacyRemoteSessionClientRowsBackfilled(
 				ctx,
 				"failed to backfill remote session client user_session_issuer binding",
 				attr.SlogProjectID(projectID.String()),
-				slog.String("remote_session_client_id", row.ID.String()),
-				slog.String("user_session_issuer_id", userSessionIssuerID.String()),
+				attr.SlogRemoteSessionClientID(clientID.String()),
+				attr.SlogUserSessionIssuerID(userSessionIssuerID.String()),
 				attr.SlogError(err),
 			)
 		}
@@ -141,12 +141,16 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 ) ([]repo.RemoteSessionClient, error) {
 	q := repo.New(s.db)
 	if !userSessionIssuerID.Valid {
-		return q.ListRemoteSessionClientsByProjectID(ctx, repo.ListRemoteSessionClientsByProjectIDParams{
+		clients, err := q.ListRemoteSessionClientsByProjectID(ctx, repo.ListRemoteSessionClientsByProjectIDParams{
 			ProjectID:             conv.ToNullUUID(projectID),
 			RemoteSessionIssuerID: remoteSessionIssuerID,
 			Cursor:                cursor,
 			LimitValue:            limit,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("list remote session clients by project: %w", err)
+		}
+		return clients, nil
 	}
 
 	rows, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
@@ -178,7 +182,11 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 	}
 
 	logRemoteSessionClientLegacyBindingFallback(ctx, s.logger, projectID, userSessionIssuerID.UUID, len(legacyRows))
-	if err := ensureLegacyRemoteSessionClientRowsBackfilled(ctx, s.db, s.logger, projectID, userSessionIssuerID.UUID, legacyRows); err != nil {
+	legacyClientIDs := make([]uuid.UUID, 0, len(legacyRows))
+	for _, row := range legacyRows {
+		legacyClientIDs = append(legacyClientIDs, row.ID)
+	}
+	if err := ensureLegacyRemoteSessionClientRowsBackfilled(ctx, s.db, s.logger, projectID, userSessionIssuerID.UUID, legacyClientIDs); err != nil {
 		return nil, err
 	}
 
@@ -219,16 +227,11 @@ func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 	}
 
 	logRemoteSessionClientLegacyBindingFallback(ctx, m.logger, projectID, userSessionIssuerID, len(legacyRows))
-	legacyClientRows := make([]repo.RemoteSessionClient, 0, len(legacyRows))
+	legacyClientIDs := make([]uuid.UUID, 0, len(legacyRows))
 	for _, row := range legacyRows {
-		legacyClientRows = append(legacyClientRows, repo.RemoteSessionClient{
-			ID:                    row.ClientID,
-			ProjectID:             conv.ToNullUUID(projectID),
-			RemoteSessionIssuerID: row.RemoteSessionIssuerID,
-			UserSessionIssuerID:   row.UserSessionIssuerID,
-		})
+		legacyClientIDs = append(legacyClientIDs, row.ClientID)
 	}
-	if err := ensureLegacyRemoteSessionClientRowsBackfilled(ctx, m.db, m.logger, projectID, userSessionIssuerID, legacyClientRows); err != nil {
+	if err := ensureLegacyRemoteSessionClientRowsBackfilled(ctx, m.db, m.logger, projectID, userSessionIssuerID, legacyClientIDs); err != nil {
 		if isRemoteSessionClientIssuerDrift(err) {
 			return nil, err
 		}
@@ -241,23 +244,7 @@ func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 func legacyRuntimeRowsToJoinRows(rows []repo.ListRemoteSessionClientsForUserSessionIssuerLegacyRow) []repo.ListRemoteSessionClientsForUserSessionIssuerRow {
 	out := make([]repo.ListRemoteSessionClientsForUserSessionIssuerRow, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, repo.ListRemoteSessionClientsForUserSessionIssuerRow{
-			ClientID:                row.ClientID,
-			ExternalClientID:        row.ExternalClientID,
-			ClientSecretEncrypted:   row.ClientSecretEncrypted,
-			TokenEndpointAuthMethod: row.TokenEndpointAuthMethod,
-			ClientScope:             row.ClientScope,
-			ClientAudience:          row.ClientAudience,
-			RemoteSessionIssuerID:   row.RemoteSessionIssuerID,
-			UserSessionIssuerID:     row.UserSessionIssuerID,
-			IssuerSlug:              row.IssuerSlug,
-			IssuerUrl:               row.IssuerUrl,
-			AuthorizationEndpoint:   row.AuthorizationEndpoint,
-			TokenEndpoint:           row.TokenEndpoint,
-			ScopesSupported:         row.ScopesSupported,
-			Passthrough:             row.Passthrough,
-			Oidc:                    row.Oidc,
-		})
+		out = append(out, repo.ListRemoteSessionClientsForUserSessionIssuerRow(row))
 	}
 	return out
 }

@@ -70,6 +70,25 @@ func (q *Queries) CountLegacyRemoteSessionClientsForUserSessionIssuer(ctx contex
 	return count, err
 }
 
+const countRemoteSessionClientUserSessionIssuerBindings = `-- name: CountRemoteSessionClientUserSessionIssuerBindings :one
+SELECT COUNT(remote_session_client_id)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+  AND user_session_issuer_id = $2
+`
+
+type CountRemoteSessionClientUserSessionIssuerBindingsParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) CountRemoteSessionClientUserSessionIssuerBindings(ctx context.Context, arg CountRemoteSessionClientUserSessionIssuerBindingsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRemoteSessionClientUserSessionIssuerBindings, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRemoteSessionClientsByIssuerID = `-- name: CountRemoteSessionClientsByIssuerID :one
 SELECT COUNT(*)
 FROM remote_session_clients

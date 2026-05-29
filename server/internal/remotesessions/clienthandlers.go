@@ -72,8 +72,20 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	// Prevent binding in the event that the issuer does not belong to the
-	// current project.
+	// Reject the remote session issuer if it belongs to a different project, so
+	// a client can't be attached to another tenant's issuer.
+	if _, err = txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
+		ID:        issuerID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").Log(ctx, logger)
+	}
+
+	// Reject the user session issuer if it belongs to a different project, so
+	// the binding can't cross a tenant boundary.
 	if _, err = txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
 		ID:        userIssuerID,
 		ProjectID: *authCtx.ProjectID,

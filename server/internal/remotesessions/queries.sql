@@ -150,6 +150,12 @@ INSERT INTO remote_session_client_user_session_issuers (
 )
 ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING;
 
+-- name: CountRemoteSessionClientUserSessionIssuerBindings :one
+SELECT COUNT(remote_session_client_id)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id
+  AND user_session_issuer_id = @user_session_issuer_id;
+
 -- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
 USING remote_session_clients AS c
