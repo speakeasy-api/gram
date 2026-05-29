@@ -162,9 +162,9 @@ export function ProjectDashboard() {
   // Total agent sessions = sum of per-user distinct hook sessions (totalChats).
   // Each session id (gen_ai.conversation.id) belongs to a single user, so summing
   // per-user counts gives the project-wide distinct-session total.
-  const totalSessions = useMemo(
-    () => (topUsersSearchData ?? []).reduce((sum, u) => sum + u.totalChats, 0),
-    [topUsersSearchData],
+  const totalSessions = (topUsersSearchData ?? []).reduce(
+    (sum, u) => sum + u.totalChats,
+    0,
   );
 
   // Most Used Agents: aggregate per-user hook-source breakdowns (hookSources)
@@ -218,9 +218,9 @@ export function ProjectDashboard() {
     placeholderData: keepPreviousData,
   });
 
-  const totalSpend = useMemo(
-    () => (allUsersSpendData ?? []).reduce((sum, u) => sum + u.totalCost, 0),
-    [allUsersSpendData],
+  const totalSpend = (allUsersSpendData ?? []).reduce(
+    (sum, u) => sum + u.totalCost,
+    0,
   );
 
   // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
