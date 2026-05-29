@@ -762,8 +762,15 @@ print(json.dumps(data, separators=(",", ":")), end="")
 ' 2>/dev/null) || true
 fi
 
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
+
 response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
 %s  -H "Content-Type: application/json" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   --data-binary @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.codex")
@@ -807,8 +814,15 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
+
 response=$(curl -s -w "\n%%{http_code}" -X POST \
 %s  -H "Content-Type: application/json" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.%s")
@@ -914,6 +928,12 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
+
 payload=$(cat)
 
 mcp_inventory_claude_code=""
@@ -1008,6 +1028,7 @@ print(json.dumps(p))
 
 curl -s -o /dev/null -X POST \
 %s  -H "Content-Type: application/json" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d "$enriched" \
   --max-time 30 \
   "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true
