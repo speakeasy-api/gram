@@ -108,6 +108,7 @@ func TestVerifyCustomDomain_ExistingDomainSameOrg(t *testing.T) {
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 
@@ -134,6 +135,7 @@ func TestVerifyCustomDomain_ExistingDomainDifferentOrg(t *testing.T) {
 		OrganizationID:  ownerOrg,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 

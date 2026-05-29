@@ -42,7 +42,7 @@ func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, 
 	return nil, nil
 }
 
-func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind) (client.WorkflowRun, error) {
+func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.registrationCalls++
 	s.lastDomain = domain
 	return stubTemporalRun{}, nil

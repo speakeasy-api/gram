@@ -248,6 +248,7 @@ run();
 * [getDomain](docs/sdks/domains/README.md#getdomain) - getDomain domains
 * [listMcpEndpoints](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 * [registerDomain](docs/sdks/domains/README.md#registerdomain) - createDomain domains
+* [updateDomain](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 
 ### [Environments](docs/sdks/environments/README.md)
 
@@ -678,6 +679,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`domainsGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`domainsListMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 - [`domainsRegisterDomain`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
+- [`domainsUpdateDomain`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`environmentsClone`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
@@ -1155,6 +1157,7 @@ To learn about this feature and how to get started, check
 - [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
+- [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
 - [`useUpdateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints

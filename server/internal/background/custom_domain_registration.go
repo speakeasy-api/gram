@@ -22,6 +22,7 @@ type CustomDomainRegistrationParams struct {
 	CreatedBy       urn.Principal
 	CreatedByName   *string
 	ProvisionerKind k8s.ProvisionerKind
+	IPAllowlist     []string
 }
 
 type CustomDomainDeletionParams struct {
@@ -70,7 +71,7 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context
 	})
 }
 
-func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error) {
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error) {
 	id := c.GetID(orgID, domain)
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
@@ -83,6 +84,7 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx con
 		CreatedBy:       createdBy,
 		CreatedByName:   createdByName,
 		ProvisionerKind: provisionerKind,
+		IPAllowlist:     ipAllowlist,
 	})
 }
 
@@ -105,6 +107,7 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 			CreatedBy:       params.CreatedBy,
 			CreatedByName:   params.CreatedByName,
 			ProvisionerKind: params.ProvisionerKind,
+			IPAllowlist:     params.IPAllowlist,
 		},
 	).Get(ctx, nil)
 	if err != nil {

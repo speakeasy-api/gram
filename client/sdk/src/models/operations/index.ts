@@ -255,6 +255,7 @@ export * from "./triggerriskanalysis.js";
 export * from "./updateassistant.js";
 export * from "./updatecollection.js";
 export * from "./updatecustomdetectionrule.js";
+export * from "./updatedomain.js";
 export * from "./updateenvironment.js";
 export * from "./updateinviterole.js";
 export * from "./updatemcpendpoint.js";
