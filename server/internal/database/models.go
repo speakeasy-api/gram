@@ -1214,6 +1214,7 @@ type RiskPolicy struct {
 	DisabledRules        []string
 	CustomRuleIds        []string
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Version              int64
