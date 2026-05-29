@@ -22,8 +22,9 @@ var CustomDomain = Type("CustomDomain", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
+	Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.")
 
-	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating")
+	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist")
 })
 
 var _ = Service("domains", func() {
@@ -57,6 +58,7 @@ var _ = Service("domains", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("domain", String, "The custom domain")
+			Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges to allow. Leave empty for unrestricted access.")
 			Required("domain")
 		})
 
@@ -69,6 +71,28 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "registerDomain")
 		Meta("openapi:extension:x-speakeasy-name-override", "registerDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "registerDomain"}`)
+	})
+
+	Method("updateDomain", func() {
+		Description("Update the IP allowlist for the organization's custom domain")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("ip_allowlist", ArrayOf(String), "Replacement IP allowlist. Pass an empty list to remove all restrictions.")
+			Required("ip_allowlist")
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.update")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateDomain")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateDomain")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "updateDomain"}`)
 	})
 
 	Method("deleteDomain", func() {

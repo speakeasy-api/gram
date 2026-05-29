@@ -10,8 +10,9 @@ import { useEffect, useState } from "react";
 // (the canonical check for the mcp_endpoints table) AND
 // `toolsets.checkMCPSlugAvailability` (which spans the legacy toolsets table).
 // The dual check is intentional and temporary while toolsets-backed MCP
-// servers continue to live under `/mcp/<mcpSlug>` and Remote-MCP-backed
-// servers live under `/x/mcp/<slug>` — until the AGE-1902 / AGE-1880 cutover
+// servers and mcp_endpoints-backed servers share the same `/mcp/<slug>`
+// runtime path (the runtime resolves mcp_endpoints first, then falls back to
+// toolsets.mcp_slug — see AGE-2555). Until the AGE-1902 / AGE-1880 cutover
 // consolidates both onto mcp_servers/mcp_endpoints, a slug taken by either
 // namespace would collide at runtime if reused.
 //

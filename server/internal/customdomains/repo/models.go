@@ -10,15 +10,17 @@ import (
 )
 
 type CustomDomain struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Domain         string
-	Verified       bool
-	Activated      bool
-	IngressName    pgtype.Text
-	CertSecretName pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	OrganizationID  string
+	Domain          string
+	Verified        bool
+	Activated       bool
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	IpAllowlist     []string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }

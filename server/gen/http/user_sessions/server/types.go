@@ -12,12 +12,30 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// MintUserSessionRequestBody is the type of the "userSessions" service
+// "mintUserSession" endpoint HTTP request body.
+type MintUserSessionRequestBody struct {
+	// The toolset to bind the minted JWT to. Must be issuer-gated and live in the
+	// caller's project.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+}
+
 // ListUserSessionsResponseBody is the type of the "userSessions" service
 // "listUserSessions" endpoint HTTP response body.
 type ListUserSessionsResponseBody struct {
 	Items []*UserSessionResponseBody `form:"items" json:"items" xml:"items"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// MintUserSessionResponseBody is the type of the "userSessions" service
+// "mintUserSession" endpoint HTTP response body.
+type MintUserSessionResponseBody struct {
+	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
+	// to the toolset's /mcp/{slug} surface.
+	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
+	// Lifetime of the access token in seconds.
+	ExpiresIn int `form:"expires_in" json:"expires_in" xml:"expires_in"`
 }
 
 // ListUserSessionsUnauthorizedResponseBody is the type of the "userSessions"
@@ -195,6 +213,195 @@ type ListUserSessionsUnexpectedResponseBody struct {
 // service "listUserSessions" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListUserSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionUnauthorizedResponseBody is the type of the "userSessions"
+// service "mintUserSession" endpoint HTTP response body for the "unauthorized"
+// error.
+type MintUserSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionForbiddenResponseBody is the type of the "userSessions"
+// service "mintUserSession" endpoint HTTP response body for the "forbidden"
+// error.
+type MintUserSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionBadRequestResponseBody is the type of the "userSessions"
+// service "mintUserSession" endpoint HTTP response body for the "bad_request"
+// error.
+type MintUserSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionNotFoundResponseBody is the type of the "userSessions"
+// service "mintUserSession" endpoint HTTP response body for the "not_found"
+// error.
+type MintUserSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionConflictResponseBody is the type of the "userSessions"
+// service "mintUserSession" endpoint HTTP response body for the "conflict"
+// error.
+type MintUserSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionUnsupportedMediaResponseBody is the type of the
+// "userSessions" service "mintUserSession" endpoint HTTP response body for the
+// "unsupported_media" error.
+type MintUserSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionInvalidResponseBody is the type of the "userSessions" service
+// "mintUserSession" endpoint HTTP response body for the "invalid" error.
+type MintUserSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionInvariantViolationResponseBody is the type of the
+// "userSessions" service "mintUserSession" endpoint HTTP response body for the
+// "invariant_violation" error.
+type MintUserSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionUnexpectedResponseBody is the type of the "userSessions"
+// service "mintUserSession" endpoint HTTP response body for the "unexpected"
+// error.
+type MintUserSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintUserSessionGatewayErrorResponseBody is the type of the "userSessions"
+// service "mintUserSession" endpoint HTTP response body for the
+// "gateway_error" error.
+type MintUserSessionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -440,6 +647,16 @@ func NewListUserSessionsResponseBody(res *usersessions.ListUserSessionsResult) *
 	return body
 }
 
+// NewMintUserSessionResponseBody builds the HTTP response body from the result
+// of the "mintUserSession" endpoint of the "userSessions" service.
+func NewMintUserSessionResponseBody(res *usersessions.MintUserSessionResult) *MintUserSessionResponseBody {
+	body := &MintUserSessionResponseBody{
+		AccessToken: res.AccessToken,
+		ExpiresIn:   res.ExpiresIn,
+	}
+	return body
+}
+
 // NewListUserSessionsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listUserSessions" endpoint of the "userSessions"
 // service.
@@ -574,6 +791,150 @@ func NewListUserSessionsUnexpectedResponseBody(res *goa.ServiceError) *ListUserS
 // service.
 func NewListUserSessionsGatewayErrorResponseBody(res *goa.ServiceError) *ListUserSessionsGatewayErrorResponseBody {
 	body := &ListUserSessionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "mintUserSession" endpoint of the "userSessions"
+// service.
+func NewMintUserSessionUnauthorizedResponseBody(res *goa.ServiceError) *MintUserSessionUnauthorizedResponseBody {
+	body := &MintUserSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionForbiddenResponseBody builds the HTTP response body from
+// the result of the "mintUserSession" endpoint of the "userSessions" service.
+func NewMintUserSessionForbiddenResponseBody(res *goa.ServiceError) *MintUserSessionForbiddenResponseBody {
+	body := &MintUserSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionBadRequestResponseBody builds the HTTP response body from
+// the result of the "mintUserSession" endpoint of the "userSessions" service.
+func NewMintUserSessionBadRequestResponseBody(res *goa.ServiceError) *MintUserSessionBadRequestResponseBody {
+	body := &MintUserSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionNotFoundResponseBody builds the HTTP response body from
+// the result of the "mintUserSession" endpoint of the "userSessions" service.
+func NewMintUserSessionNotFoundResponseBody(res *goa.ServiceError) *MintUserSessionNotFoundResponseBody {
+	body := &MintUserSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionConflictResponseBody builds the HTTP response body from
+// the result of the "mintUserSession" endpoint of the "userSessions" service.
+func NewMintUserSessionConflictResponseBody(res *goa.ServiceError) *MintUserSessionConflictResponseBody {
+	body := &MintUserSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "mintUserSession" endpoint of the "userSessions"
+// service.
+func NewMintUserSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *MintUserSessionUnsupportedMediaResponseBody {
+	body := &MintUserSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionInvalidResponseBody builds the HTTP response body from the
+// result of the "mintUserSession" endpoint of the "userSessions" service.
+func NewMintUserSessionInvalidResponseBody(res *goa.ServiceError) *MintUserSessionInvalidResponseBody {
+	body := &MintUserSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "mintUserSession" endpoint of the "userSessions"
+// service.
+func NewMintUserSessionInvariantViolationResponseBody(res *goa.ServiceError) *MintUserSessionInvariantViolationResponseBody {
+	body := &MintUserSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "mintUserSession" endpoint of the "userSessions" service.
+func NewMintUserSessionUnexpectedResponseBody(res *goa.ServiceError) *MintUserSessionUnexpectedResponseBody {
+	body := &MintUserSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintUserSessionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "mintUserSession" endpoint of the "userSessions"
+// service.
+func NewMintUserSessionGatewayErrorResponseBody(res *goa.ServiceError) *MintUserSessionGatewayErrorResponseBody {
+	body := &MintUserSessionGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -745,6 +1106,18 @@ func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string,
 	return v
 }
 
+// NewMintUserSessionPayload builds a userSessions service mintUserSession
+// endpoint payload.
+func NewMintUserSessionPayload(body *MintUserSessionRequestBody, sessionToken *string, projectSlugInput *string) *usersessions.MintUserSessionPayload {
+	v := &usersessions.MintUserSessionPayload{
+		ToolsetID: *body.ToolsetID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewRevokeUserSessionPayload builds a userSessions service revokeUserSession
 // endpoint payload.
 func NewRevokeUserSessionPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.RevokeUserSessionPayload {
@@ -755,4 +1128,16 @@ func NewRevokeUserSessionPayload(id string, sessionToken *string, apikeyToken *s
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateMintUserSessionRequestBody runs the validations defined on
+// MintUserSessionRequestBody
+func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err error) {
+	if body.ToolsetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	return
 }

@@ -2,7 +2,6 @@ import { InsightsConfig } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,21 +16,16 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Type } from "@/components/ui/type";
 import {
+  Button,
+  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
+  Table,
 } from "@speakeasy-api/moonshine";
 import type { IconName } from "@speakeasy-api/moonshine";
 import {
@@ -45,12 +39,11 @@ import {
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useRiskListPolicies,
-  useRiskCreatePolicyMutation,
-  useRiskPoliciesUpdateMutation,
-  useRiskPoliciesDeleteMutation,
-  useRiskPoliciesTriggerMutation,
   invalidateAllRiskListPolicies,
+  useRiskCreatePolicyMutation,
+  useRiskListPolicies,
+  useRiskPoliciesDeleteMutation,
+  useRiskPoliciesUpdateMutation,
 } from "@gram/client/react-query/index.js";
 import {
   useRiskPoliciesStatus,
@@ -65,6 +58,7 @@ import {
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
+import { useDetectionRulesStore } from "./detection-rules-data";
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -80,7 +74,9 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "cli_destructive",
   "prompt_injection",
+  "custom",
 ]);
 
 /** All rule categories in display order */
@@ -89,9 +85,18 @@ const ALL_CATEGORIES: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "cli_destructive",
   "prompt_injection",
   "off_policy",
 ];
+
+/** Categories whose source the server rejects with action=block; the form
+ * must force flag when any of these are selected. Mirrors validateSourceAction
+ * in server/internal/risk/impl.go. */
+const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
+  "destructive_tool",
+  "cli_destructive",
+]);
 
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
@@ -106,6 +111,7 @@ function policyToCategories(
   if (sources.includes("gitleaks")) cats.add("secrets");
   if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
+  if (sources.includes("cli_destructive")) cats.add("cli_destructive");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     const wireEntities = DETECTION_RULES[cat].map((r) =>
@@ -118,30 +124,59 @@ function policyToCategories(
   return cats;
 }
 
-/** Derive sources, presidioEntities, and promptInjectionRules from selected
- * categories. Prompt-injection is a single category-level toggle; the
- * detection engine (deberta classifier vs L0 regex) is chosen per-org via
- * a feature flag, not by the policy author. promptInjectionRules is left
- * empty here for backward compatibility with the policy schema.
+/** Derive sources, presidioEntities, promptInjectionRules, and disabledRules
+ * from selected categories + per-rule disable set.
  *
- * `presidioEntities` is translated to UPPER_SNAKE for Presidio's HTTP API. */
-function categoriesToPayload(cats: Set<RuleCategory>) {
+ * - `sources` selects which scanners run (category-level).
+ * - `presidioEntities` (UPPER_SNAKE) narrows the Presidio query to only the
+ *   entities the user has enabled across selected presidio-backed categories.
+ *   Rules in `disabledRules` are omitted from this list so the scanner is
+ *   never even asked about them.
+ * - `disabledRules` (canonical ids like `secret.aws_access_token`) is the
+ *   per-rule allowlist applied post-scan for sources without entity-level
+ *   query support (gitleaks). It also serves as a redundancy net for
+ *   presidio in case of API drift.
+ * - `promptInjectionRules` stays empty for backward compatibility — the
+ *   detection engine (deberta classifier vs L0 regex) is chosen per-org
+ *   via a feature flag, not by the policy author. */
+function categoriesToPayload(
+  cats: Set<RuleCategory>,
+  disabledRules: Set<string>,
+) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
   const promptInjectionRules: string[] = [];
+
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
+  if (cats.has("cli_destructive")) sources.push("cli_destructive");
   if (cats.has("prompt_injection")) sources.push("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
+        if (disabledRules.has(rule.id)) continue;
         presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
     }
   }
   if (presidioEntities.length > 0) sources.push("presidio");
-  return { sources, presidioEntities, promptInjectionRules };
+
+  // Persist disabled ids only for currently-selected categories. If a user
+  // unselects a category they shouldn't carry over its per-rule overrides.
+  const persistedDisabled: string[] = [];
+  for (const cat of cats) {
+    for (const rule of DETECTION_RULES[cat] ?? []) {
+      if (disabledRules.has(rule.id)) persistedDisabled.push(rule.id);
+    }
+  }
+
+  return {
+    sources,
+    presidioEntities,
+    promptInjectionRules,
+    disabledRules: persistedDisabled,
+  };
 }
 
 /** Map sources to display categories for the table row badges. */
@@ -165,6 +200,8 @@ function PolicyCenterContent() {
   const { data, isLoading } = useRiskListPolicies();
   const policies = data?.policies ?? [];
 
+  const { customRules } = useDetectionRulesStore();
+
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
   const [formName, setFormName] = useState("");
@@ -172,6 +209,10 @@ function PolicyCenterContent() {
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(new Set<RuleCategory>(["secrets", "pii"]));
+  const [disabledRules, setDisabledRules] = useState<Set<string>>(new Set());
+  const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
+    Set<string>
+  >(new Set<string>());
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
@@ -201,15 +242,13 @@ function PolicyCenterContent() {
     onSuccess: invalidate,
   });
 
-  const triggerMutation = useRiskPoliciesTriggerMutation({
-    onSuccess: invalidate,
-  });
-
   const handleCreate = () => {
     setEditingPolicy(null);
     setFormName("");
     setFormEnabled(true);
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
+    setDisabledRules(new Set());
+    setSelectedCustomRuleIds(new Set<string>());
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
@@ -217,12 +256,20 @@ function PolicyCenterContent() {
   };
 
   const handleEdit = (policy: RiskPolicy) => {
+    const customRuleIds = policy.customRuleIds ?? [];
     setEditingPolicy(policy);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
-    setSelectedCategories(
-      policyToCategories(policy.sources, policy.presidioEntities),
+    const categories = policyToCategories(
+      policy.sources,
+      policy.presidioEntities,
     );
+    if (customRuleIds.length > 0) {
+      categories.add("custom");
+    }
+    setSelectedCategories(categories);
+    setDisabledRules(new Set(policy.disabledRules ?? []));
+    setSelectedCustomRuleIds(new Set<string>(customRuleIds));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
@@ -230,8 +277,12 @@ function PolicyCenterContent() {
   };
 
   const handleSave = () => {
-    const { sources, presidioEntities, promptInjectionRules } =
-      categoriesToPayload(selectedCategories);
+    const {
+      sources,
+      presidioEntities,
+      promptInjectionRules,
+      disabledRules: payloadDisabled,
+    } = categoriesToPayload(selectedCategories, disabledRules);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
@@ -246,6 +297,8 @@ function PolicyCenterContent() {
             sources,
             presidioEntities,
             promptInjectionRules,
+            disabledRules: payloadDisabled,
+            customRuleIds: [...selectedCustomRuleIds],
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -261,6 +314,8 @@ function PolicyCenterContent() {
             sources,
             presidioEntities,
             promptInjectionRules,
+            disabledRules: payloadDisabled,
+            customRuleIds: [...selectedCustomRuleIds],
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -272,12 +327,6 @@ function PolicyCenterContent() {
 
   const handleDelete = (id: string) => {
     deleteMutation.mutate({ request: { id } });
-  };
-
-  const handleTrigger = (id: string) => {
-    triggerMutation.mutate({
-      request: { triggerRiskAnalysisRequestBody: { id } },
-    });
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
@@ -327,32 +376,41 @@ function PolicyCenterContent() {
             </Type>
             <Button
               onClick={() => {
-                const { sources, presidioEntities, promptInjectionRules } =
-                  categoriesToPayload(
-                    new Set<RuleCategory>(["secrets", "pii"]),
-                  );
+                const {
+                  sources,
+                  presidioEntities,
+                  promptInjectionRules,
+                  disabledRules: payloadDisabled,
+                } = categoriesToPayload(
+                  new Set<RuleCategory>(["secrets", "pii"]),
+                  new Set(),
+                );
                 createMutation.mutate({
                   request: {
                     createRiskPolicyRequestBody: {
-                      name: "Risk Scanner",
+                      autoName: true,
                       enabled: true,
                       sources,
                       presidioEntities,
                       promptInjectionRules,
+                      disabledRules: payloadDisabled,
+                      customRuleIds: [],
                     },
                   },
                 });
               }}
               disabled={createMutation.isPending}
             >
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Get Started"
-              )}
+              <Button.Text>
+                {createMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Get Started"
+                )}
+              </Button.Text>
             </Button>
           </div>
         </Page.Body>
@@ -396,6 +454,96 @@ function PolicyCenterContent() {
     },
   ];
 
+  const policyColumns: Column<RiskPolicy>[] = [
+    {
+      key: "name",
+      header: "Name",
+      width: "1fr",
+      render: (policy) => <span className="font-medium">{policy.name}</span>,
+    },
+    {
+      key: "action",
+      header: "Action",
+      width: "0.5fr",
+      render: (policy) => (
+        <ActionBadge action={(policy.action as PolicyAction) ?? "flag"} />
+      ),
+    },
+    {
+      key: "sources",
+      header: "Categories",
+      width: "3fr",
+      render: (policy) => {
+        const categories = sourcesToCategories(
+          policy.sources,
+          policy.presidioEntities,
+        );
+        if (policy.customRuleIds?.length) {
+          categories.push("custom");
+        }
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            {categories.map((cat) => (
+              <Badge key={cat} variant="secondary">
+                {RULE_CATEGORY_META[cat].label}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: "enabled",
+      header: "Status",
+      width: "0.5fr",
+      render: (policy) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Switch
+            checked={policy.enabled}
+            onCheckedChange={(checked) => handleToggle(policy, checked)}
+          />
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "0.3fr",
+      render: (policy) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Button.Icon>
+                  <Ellipsis className="h-4 w-4" />
+                </Button.Icon>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() => setTimeout(() => setRunPanelPolicy(policy), 0)}
+              >
+                View Progress
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive cursor-pointer"
+                onSelect={() => handleDelete(policy.id)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <Page>
       <Page.Header>
@@ -417,90 +565,19 @@ function PolicyCenterContent() {
             </p>
           </div>
           <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Policy
+            <Button.LeftIcon>
+              <Plus className="mr-2 h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New Policy</Button.Text>
           </Button>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Categories</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-[60px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {policies.map((policy) => {
-              const categories = sourcesToCategories(
-                policy.sources,
-                policy.presidioEntities,
-              );
-              return (
-                <TableRow
-                  key={policy.id}
-                  className="cursor-pointer"
-                  onClick={() => handleEdit(policy)}
-                >
-                  <TableCell className="font-medium">{policy.name}</TableCell>
-                  <TableCell>
-                    <ActionBadge
-                      action={(policy.action as PolicyAction) ?? "flag"}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {categories.map((cat) => (
-                        <Badge key={cat} variant="secondary">
-                          {RULE_CATEGORY_META[cat].label}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      checked={policy.enabled}
-                      onCheckedChange={(checked) =>
-                        handleToggle(policy, checked)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Ellipsis className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="cursor-pointer"
-                          onSelect={() =>
-                            setTimeout(() => setRunPanelPolicy(policy), 0)
-                          }
-                        >
-                          View Progress
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive cursor-pointer"
-                          onSelect={() => handleDelete(policy.id)}
-                        >
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <Table
+          columns={policyColumns}
+          data={policies}
+          rowKey={(policy) => policy.id}
+          onRowClick={handleEdit}
+        />
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -523,6 +600,11 @@ function PolicyCenterContent() {
                 setFormEnabled={setFormEnabled}
                 selectedCategories={selectedCategories}
                 setSelectedCategories={setSelectedCategories}
+                disabledRules={disabledRules}
+                setDisabledRules={setDisabledRules}
+                customRules={customRules}
+                selectedCustomRuleIds={selectedCustomRuleIds}
+                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
                 formAction={formAction}
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
@@ -540,16 +622,18 @@ function PolicyCenterContent() {
                   updateMutation.isPending
                 }
               >
-                {createMutation.isPending || updateMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : editingPolicy ? (
-                  "Update"
-                ) : (
-                  "Create"
+                {(createMutation.isPending || updateMutation.isPending) && (
+                  <Button.LeftIcon>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </Button.LeftIcon>
                 )}
+                <Button.Text>
+                  {createMutation.isPending || updateMutation.isPending
+                    ? "Saving..."
+                    : editingPolicy
+                      ? "Update"
+                      : "Create"}
+                </Button.Text>
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -563,13 +647,7 @@ function PolicyCenterContent() {
           }}
         >
           <SheetContent side="right" className="sm:max-w-md">
-            {runPanelPolicy && (
-              <RunPanel
-                policy={runPanelPolicy}
-                onTrigger={() => handleTrigger(runPanelPolicy.id)}
-                isTriggerPending={triggerMutation.isPending}
-              />
-            )}
+            {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
           </SheetContent>
         </Sheet>
       </Page.Body>
@@ -588,6 +666,11 @@ function PolicySheetBody({
   setFormEnabled,
   selectedCategories,
   setSelectedCategories,
+  disabledRules,
+  setDisabledRules,
+  customRules,
+  selectedCustomRuleIds,
+  setSelectedCustomRuleIds,
   formAction,
   setFormAction,
   formAutoName,
@@ -601,6 +684,11 @@ function PolicySheetBody({
   setFormEnabled: (v: boolean) => void;
   selectedCategories: Set<RuleCategory>;
   setSelectedCategories: (v: Set<RuleCategory>) => void;
+  disabledRules: Set<string>;
+  setDisabledRules: (v: Set<string>) => void;
+  customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
+  selectedCustomRuleIds: Set<string>;
+  setSelectedCustomRuleIds: (v: Set<string>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
@@ -608,12 +696,14 @@ function PolicySheetBody({
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
 }) {
-  const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
-    null,
+  const [expandedCategory, setExpandedCategory] = useState<
+    RuleCategory | "custom" | null
+  >(null);
+  const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
+    selectedCategories.has(c),
   );
-  const destructiveToolsSelected = selectedCategories.has("destructive_tool");
   const actionValue =
-    destructiveToolsSelected && formAction === "block" ? "flag" : formAction;
+    flagOnlySelected && formAction === "block" ? "flag" : formAction;
 
   return (
     <div className="space-y-6 py-4">
@@ -650,6 +740,55 @@ function PolicySheetBody({
             const isExpanded = expandedCategory === cat;
             const rules = DETECTION_RULES[cat];
             const isExpandable = isAvailable && rules.length > 0;
+            const categorySelected = selectedCategories.has(cat);
+            const enabledRuleCount = categorySelected
+              ? rules.filter((r) => !disabledRules.has(r.id)).length
+              : 0;
+            const hasPartialSelection =
+              categorySelected &&
+              rules.length > 0 &&
+              enabledRuleCount > 0 &&
+              enabledRuleCount < rules.length;
+            const headerChecked: boolean | "indeterminate" = hasPartialSelection
+              ? "indeterminate"
+              : categorySelected &&
+                (rules.length === 0 || enabledRuleCount > 0);
+
+            const toggleCategory = (checked: boolean) => {
+              const nextCats = new Set(selectedCategories);
+              const nextDisabled = new Set(disabledRules);
+              if (checked) {
+                nextCats.add(cat);
+                for (const rule of rules) nextDisabled.delete(rule.id);
+              } else {
+                nextCats.delete(cat);
+                for (const rule of rules) nextDisabled.delete(rule.id);
+              }
+              setSelectedCategories(nextCats);
+              setDisabledRules(nextDisabled);
+              if (
+                checked &&
+                cat === "destructive_tool" &&
+                formAction === "block"
+              ) {
+                setFormAction("flag");
+              }
+            };
+
+            const toggleRule = (ruleId: string, enabled: boolean) => {
+              const nextDisabled = new Set(disabledRules);
+              const nextCats = new Set(selectedCategories);
+              if (enabled) {
+                nextDisabled.delete(ruleId);
+                // Enabling any rule inside a category implies the category is
+                // selected. Otherwise the rule wouldn't actually run.
+                nextCats.add(cat);
+              } else {
+                nextDisabled.add(ruleId);
+              }
+              setSelectedCategories(nextCats);
+              setDisabledRules(nextDisabled);
+            };
 
             return (
               <div key={cat}>
@@ -692,6 +831,11 @@ function PolicySheetBody({
                           Coming Soon
                         </Badge>
                       )}
+                      {isExpandable && categorySelected && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {enabledRuleCount}/{rules.length} on
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-muted-foreground text-xs">
                       {meta.description}
@@ -700,51 +844,75 @@ function PolicySheetBody({
 
                   {/* Category checkbox */}
                   <Checkbox
-                    checked={selectedCategories.has(cat)}
+                    checked={headerChecked}
                     disabled={!isAvailable}
-                    onCheckedChange={(checked) => {
-                      const next = new Set(selectedCategories);
-                      if (checked) {
-                        next.add(cat);
-                      } else {
-                        next.delete(cat);
-                      }
-                      setSelectedCategories(next);
-                      if (
-                        checked &&
-                        cat === "destructive_tool" &&
-                        formAction === "block"
-                      ) {
-                        setFormAction("flag");
-                      }
-                    }}
+                    onCheckedChange={(checked) => toggleCategory(!!checked)}
                     onClick={(e) => e.stopPropagation()}
                   />
                 </div>
 
-                {/* Expanded rules list — category-level toggle is the only
-                    user-facing control; sub-rules ride along with it. */}
+                {/* Expanded per-rule toggles. Each rule is independently
+                    toggleable; unchecking adds the canonical rule_id to the
+                    policy's disabled_rules list and the scanner drops matching
+                    findings. */}
                 {isAvailable && isExpanded && rules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
-                    <div className="space-y-2 py-1">
-                      {rules.map((rule) => (
-                        <div
-                          key={rule.id}
-                          className="flex items-center gap-3 py-1 pl-8"
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-muted-foreground text-xs">
+                        {enabledRuleCount} of {rules.length} rules enabled
+                      </span>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={enabledRuleCount === rules.length}
+                          onClick={() => {
+                            const nextDisabled = new Set(disabledRules);
+                            for (const r of rules) nextDisabled.delete(r.id);
+                            setDisabledRules(nextDisabled);
+                            const nextCats = new Set(selectedCategories);
+                            nextCats.add(cat);
+                            setSelectedCategories(nextCats);
+                          }}
                         >
-                          <Checkbox
-                            id={rule.id}
-                            checked={selectedCategories.has(cat)}
-                            disabled
-                          />
-                          <label
-                            htmlFor={rule.id}
-                            className="text-muted-foreground text-xs"
+                          Enable all
+                        </button>
+                        <button
+                          type="button"
+                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={!categorySelected || enabledRuleCount === 0}
+                          onClick={() => {
+                            const nextDisabled = new Set(disabledRules);
+                            for (const r of rules) nextDisabled.add(r.id);
+                            setDisabledRules(nextDisabled);
+                          }}
+                        >
+                          Disable all
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2 py-1">
+                      {rules.map((rule) => {
+                        const ruleEnabled =
+                          categorySelected && !disabledRules.has(rule.id);
+                        return (
+                          <div
+                            key={rule.id}
+                            className="flex items-center gap-3 py-1 pl-8"
                           >
-                            {rule.title}
-                          </label>
-                        </div>
-                      ))}
+                            <Checkbox
+                              id={rule.id}
+                              checked={ruleEnabled}
+                              onCheckedChange={(checked) =>
+                                toggleRule(rule.id, !!checked)
+                              }
+                            />
+                            <label htmlFor={rule.id} className="text-xs">
+                              {rule.title}
+                            </label>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -754,13 +922,25 @@ function PolicySheetBody({
         </div>
       </div>
 
+      {customRules.length > 0 && (
+        <CustomRulesPicker
+          customRules={customRules}
+          selectedCustomRuleIds={selectedCustomRuleIds}
+          setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+          expanded={expandedCategory === "custom"}
+          onToggle={() =>
+            setExpandedCategory(expandedCategory === "custom" ? null : "custom")
+          }
+        />
+      )}
+
       {/* Action */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">Action</Label>
         <RadioGroup
           value={actionValue}
           onValueChange={(v) => {
-            if (destructiveToolsSelected && v === "block") {
+            if (flagOnlySelected && v === "block") {
               return;
             }
             setFormAction(v as PolicyAction);
@@ -768,8 +948,7 @@ function PolicySheetBody({
         >
           <div className="border-border divide-border divide-y rounded-lg border">
             {ACTION_OPTIONS.map((opt) => {
-              const disabled =
-                destructiveToolsSelected && opt.value === "block";
+              const disabled = flagOnlySelected && opt.value === "block";
 
               return (
                 <label
@@ -797,7 +976,8 @@ function PolicySheetBody({
                     </div>
                     {disabled && (
                       <div className="text-destructive mt-1 text-xs font-medium">
-                        Destructive Tools supports flagging only.
+                        Destructive Tools and Destructive CLI Commands support
+                        flagging only.
                       </div>
                     )}
                   </div>
@@ -845,15 +1025,7 @@ function PolicySheetBody({
 /*  RunPanel                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function RunPanel({
-  policy,
-  onTrigger,
-  isTriggerPending,
-}: {
-  policy: RiskPolicy;
-  onTrigger: () => void;
-  isTriggerPending: boolean;
-}) {
+function RunPanel({ policy }: { policy: RiskPolicy }) {
   const {
     data: status,
     isLoading,
@@ -922,16 +1094,16 @@ function RunPanel({
                 <p className="text-sm font-medium">Analysis Progress</p>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="tertiary"
                     onClick={() => refetch()}
                     disabled={isFetching}
-                    tooltip="Refresh"
                     className="h-6 w-6"
                   >
-                    <RefreshCw
-                      className={cn("h-3 w-3", isFetching && "animate-spin")}
-                    />
+                    <Button.Icon>
+                      <RefreshCw
+                        className={cn("h-3 w-3", isFetching && "animate-spin")}
+                      />
+                    </Button.Icon>
                   </Button>
                   <span className="text-muted-foreground text-xs font-medium">
                     {pct}%
@@ -971,19 +1143,6 @@ function RunPanel({
           </>
         ) : null}
       </div>
-
-      <SheetFooter className="border-border border-t px-6 py-4">
-        <Button
-          onClick={onTrigger}
-          disabled={isTriggerPending}
-          className="w-full"
-        >
-          {isTriggerPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
-          Trigger Analysis
-        </Button>
-      </SheetFooter>
     </>
   );
 }
@@ -1014,4 +1173,113 @@ const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
 function ActionBadge({ action }: { action: PolicyAction }) {
   const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
   return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  CustomRulesPicker                                                          */
+/* -------------------------------------------------------------------------- */
+
+function CustomRulesPicker({
+  customRules,
+  selectedCustomRuleIds,
+  setSelectedCustomRuleIds,
+  expanded,
+  onToggle,
+}: {
+  customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
+  selectedCustomRuleIds: Set<string>;
+  setSelectedCustomRuleIds: (v: Set<string>) => void;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const meta = RULE_CATEGORY_META.custom;
+  const allSelected =
+    customRules.length > 0 &&
+    customRules.every((r) => selectedCustomRuleIds.has(r.id));
+  const someSelected =
+    !allSelected && customRules.some((r) => selectedCustomRuleIds.has(r.id));
+  return (
+    <div className="space-y-3">
+      <Label className="text-sm font-medium">Custom Rules</Label>
+      <div className="border-border divide-border divide-y rounded-lg border">
+        <div
+          className="flex cursor-pointer items-center gap-3 px-4 py-3"
+          onClick={onToggle}
+        >
+          <ChevronRight
+            className={cn(
+              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+              expanded && "rotate-90",
+            )}
+          />
+          <Icon
+            name={meta.icon as IconName}
+            className="text-muted-foreground size-4 shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <span className="text-sm font-medium">{meta.label}</span>
+            <p className="text-muted-foreground text-xs">
+              {customRules.length} organization-defined rule
+              {customRules.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <Checkbox
+            checked={
+              allSelected ? true : someSelected ? "indeterminate" : false
+            }
+            onCheckedChange={(checked) => {
+              const next = new Set(selectedCustomRuleIds);
+              if (checked) {
+                customRules.forEach((r) => next.add(r.id));
+              } else {
+                customRules.forEach((r) => next.delete(r.id));
+              }
+              setSelectedCustomRuleIds(next);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+        {expanded && (
+          <div className="bg-muted/30 border-border border-t px-4 py-2">
+            <div className="space-y-2 py-1">
+              {customRules.map((rule) => {
+                const checked = selectedCustomRuleIds.has(rule.id);
+                return (
+                  <div
+                    key={rule.id}
+                    className="flex items-center gap-3 py-1 pl-8"
+                  >
+                    <Checkbox
+                      id={`custom-${rule.id}`}
+                      checked={checked}
+                      onCheckedChange={(next) => {
+                        const set = new Set(selectedCustomRuleIds);
+                        if (next) {
+                          set.add(rule.id);
+                        } else {
+                          set.delete(rule.id);
+                        }
+                        setSelectedCustomRuleIds(set);
+                      }}
+                    />
+                    <label
+                      htmlFor={`custom-${rule.id}`}
+                      className="cursor-pointer text-xs"
+                    >
+                      <span className="text-foreground">
+                        {rule.title || rule.id}
+                      </span>
+                      <span className="text-muted-foreground ml-2 font-mono text-[10px]">
+                        {rule.id}
+                      </span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

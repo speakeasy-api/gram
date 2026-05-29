@@ -6,9 +6,11 @@ import { ClientSDK } from "../lib/sdks.js";
 import { Approvals } from "./approvals.js";
 import { Capabilities } from "./capabilities.js";
 import { Categories } from "./categories.js";
+import { CustomRules } from "./customrules.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { Results } from "./results.js";
+import { Rules } from "./rules.js";
 
 export class Risk extends ClientSDK {
   private _approvals?: Approvals;
@@ -26,6 +28,11 @@ export class Risk extends ClientSDK {
     return (this._categories ??= new Categories(this._options));
   }
 
+  private _customRules?: CustomRules;
+  get customRules(): CustomRules {
+    return (this._customRules ??= new CustomRules(this._options));
+  }
+
   private _overview?: Overview;
   get overview(): Overview {
     return (this._overview ??= new Overview(this._options));
@@ -39,5 +46,10 @@ export class Risk extends ClientSDK {
   private _results?: Results;
   get results(): Results {
     return (this._results ??= new Results(this._options));
+  }
+
+  private _rules?: Rules;
+  get rules(): Rules {
+    return (this._rules ??= new Rules(this._options));
   }
 }

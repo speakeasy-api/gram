@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // stubBlockingShadowMCPScanner is a RiskScanner that always reports a
@@ -180,10 +180,9 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	assert.Equal(t, "deny", *output.PermissionDecision)
 }
 
-// Once a stdio command is explicitly approved for the active policy, the
-// guard must let calls to that server through — verifying the
-// Command-keyed allowlist actually wires into PreToolUse.
-func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
+// Server identity rules are ignored for Shadow MCP access enforcement; local
+// stdio servers without URL evidence should still be governed by policy.
+func TestClaude_PreToolUse_DoesNotAllowLocalStdioServerByIdentityRule(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -201,10 +200,7 @@ func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
-	require.NoError(t, shadowmcp.AddShadowMCPApproval(ctx, ti.service.cache, authCtx.ProjectID.String(), "stub-policy-id", shadowmcp.ShadowMCPApproval{
-		Match:      "mise mcp",
-		ServerName: "mise",
-	}))
+	createHookAccessRule(t, ctx, ti, authCtx.ProjectID.String(), accesscontrol.AccessScopeProject, accesscontrol.DispositionAllowed, accesscontrol.MatchKindServerIdentity, "mise mcp", "mise")
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
@@ -219,7 +215,45 @@ func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+}
+
+func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__github__search"
+	toolUseID := "toolu_unconfigured_identity"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "linear", Command: "linear mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+	createHookAccessRule(t, ctx, ti, authCtx.ProjectID.String(), accesscontrol.AccessScopeProject, accesscontrol.DispositionAllowed, accesscontrol.MatchKindServerIdentity, "github", "GitHub")
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, `MCP server "github" is not in the active configuration`)
 }
 
 // Allow path: a cached entry that resolves the tool's server prefix and
@@ -253,6 +287,38 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "allow", *output.PermissionDecision)
+}
+
+func TestMergeClaudeAuthContextMetadata_PreservesAuthUserIDWhenCacheIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	metadata := mergeClaudeAuthContextMetadata(
+		SessionMetadata{
+			SessionID:   "session_test",
+			ServiceName: "",
+			UserEmail:   "",
+			UserID:      "user_from_auth",
+			ClaudeOrgID: "",
+			GramOrgID:   "org_from_auth",
+			ProjectID:   "project_from_auth",
+		},
+		SessionMetadata{
+			SessionID:   "session_test",
+			ServiceName: "claude-code",
+			UserEmail:   "local-hook-testing@example.com",
+			UserID:      "",
+			ClaudeOrgID: "claude_org",
+			GramOrgID:   "org_from_cache",
+			ProjectID:   "project_from_cache",
+		},
+	)
+
+	assert.Equal(t, "user_from_auth", metadata.UserID)
+	assert.Equal(t, "org_from_auth", metadata.GramOrgID)
+	assert.Equal(t, "project_from_auth", metadata.ProjectID)
+	assert.Equal(t, "claude-code", metadata.ServiceName)
+	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
+	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
 }
 
 // When plugin auth headers are present but the API key is invalid/expired,
@@ -290,10 +356,10 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
 
-// Sanity check the OTEL fallback path: with no auth context and no Redis
-// cached metadata, handlePreToolUse should still gracefully allow the call
-// rather than erroring (the buffered hook will be re-persisted later).
-func TestClaude_PreToolUse_AllowsWhenNoAuthAndNoCachedMetadata(t *testing.T) {
+// When Claude PreToolUse cannot resolve org/project metadata for an MCP call,
+// fail closed. Buffered telemetry can be replayed later, but it cannot undo an
+// already-allowed tool call.
+func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -316,8 +382,10 @@ func TestClaude_PreToolUse_AllowsWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok)
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision,
-		"OTEL path with no metadata should default to allow so first call isn't blocked")
+	assert.Equal(t, "deny", *output.PermissionDecision,
+		"MCP tool calls without enforcement metadata must fail closed")
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
 }
 
 // Claude Code's hook output schema only permits hookSpecificOutput for

@@ -3334,6 +3334,8 @@ type ToolVariationResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The description of the tool variation
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The tags of the tool variation
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The summarizer of the tool variation
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// Display name override for the tool
@@ -3382,6 +3384,8 @@ type FunctionToolDefinitionResponseBody struct {
 	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 	// Variables configuration for the function
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// The tags list for this function tool
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// Meta tags for the tool
 	Meta map[string]any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// The ID of the tool

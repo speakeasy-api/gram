@@ -267,6 +267,7 @@ type ChatMessage struct {
 	ContentHash      []byte
 	Generation       int32
 	CreatedAt        pgtype.Timestamptz
+	RiskAnalyzedAt   pgtype.Timestamptz
 }
 
 type ChatResolution struct {
@@ -297,17 +298,19 @@ type ChatUserFeedback struct {
 }
 
 type CustomDomain struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Domain         string
-	Verified       bool
-	Activated      bool
-	IngressName    pgtype.Text
-	CertSecretName pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	OrganizationID  string
+	Domain          string
+	Verified        bool
+	Activated       bool
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	IpAllowlist     []string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type Deployment struct {
@@ -673,7 +676,8 @@ type McpEnvironmentConfig struct {
 
 type McpMetadatum struct {
 	ID                        uuid.UUID
-	ToolsetID                 uuid.UUID
+	ToolsetID                 uuid.NullUUID
+	McpServerID               uuid.NullUUID
 	ProjectID                 uuid.UUID
 	ExternalDocumentationUrl  pgtype.Text
 	ExternalDocumentationText pgtype.Text
@@ -847,6 +851,8 @@ type OrganizationMetadatum struct {
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -1136,7 +1142,7 @@ type RemoteSession struct {
 
 type RemoteSessionClient struct {
 	ID                      uuid.UUID
-	ProjectID               uuid.UUID
+	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	ClientID                string
@@ -1153,9 +1159,16 @@ type RemoteSessionClient struct {
 	Deleted                 bool
 }
 
+type RemoteSessionClientUserSessionIssuer struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	CreatedAt             pgtype.Timestamptz
+}
+
 type RemoteSessionIssuer struct {
 	ID                                uuid.UUID
-	ProjectID                         uuid.UUID
+	ProjectID                         uuid.NullUUID
+	OrganizationID                    pgtype.Text
 	Slug                              string
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
@@ -1174,6 +1187,21 @@ type RemoteSessionIssuer struct {
 	Deleted                           bool
 }
 
+type RiskCustomDetectionRule struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RuleID         string
+	Title          string
+	Description    string
+	Regex          pgtype.Text
+	Severity       string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
@@ -1183,6 +1211,8 @@ type RiskPolicy struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	DisabledRules        []string
+	CustomRuleIds        []string
 	Action               string
 	AutoName             bool
 	UserMessage          pgtype.Text

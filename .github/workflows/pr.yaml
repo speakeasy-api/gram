@@ -229,7 +229,7 @@ jobs:
     if: needs.changes.outputs.pi_classifier == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -299,6 +299,18 @@ jobs:
             echo "enabled=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(mise run hash:assistant-runtime-image)
+          if [ -z "$hash" ]; then
+            echo "runtime image hash is empty" >&2
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
       - name: "[DEV] Create fly app"
         id: assistantFlyCreateDev
         shell: bash
@@ -333,7 +345,7 @@ jobs:
 
       - name: "[DEV] Extract assistant runtime metadata"
         id: assistantMetaDev
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
           tags: |
@@ -341,6 +353,7 @@ jobs:
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
             type=schedule,pattern=nightly
             type=sha
             type=sha,format=long
@@ -362,7 +375,7 @@ jobs:
 
       - name: "[PROD] Extract assistant runtime metadata"
         id: assistantMetaProd
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
           tags: |
@@ -370,6 +383,7 @@ jobs:
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
             type=schedule,pattern=nightly
             type=sha
             type=sha,format=long
@@ -603,11 +617,25 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(mise run hash:assistant-runtime-image)
+          if [ -z "$hash" ]; then
+            echo "runtime image hash is empty" >&2
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
       - name: Build
+        env:
+          GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
         run: mise run build:server --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: server
@@ -694,7 +722,7 @@ jobs:
         run: mise run build:cli --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: cli
@@ -752,7 +780,7 @@ jobs:
         run: mise run build:plog --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: plog
@@ -1150,7 +1178,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Regenerate SDK
-        run: mise run gen:sdk --skip-upload-spec
+        run: mise run gen:sdk
 
       # Prevent perpetual failure for code samples digest.
       - name: Restore .speakeasy/workflow.lock
@@ -1273,7 +1301,7 @@ jobs:
         run: pnpm type-check
 
       - name: Lint Go server
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: functions
@@ -1407,7 +1435,7 @@ jobs:
       - name: Extract Docker metadata
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: |
             ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
@@ -1735,7 +1763,7 @@ jobs:
     steps:
       - name: Generate GitHub App Token
         id: generate-token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}

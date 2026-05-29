@@ -2281,6 +2281,242 @@ func DecodeCreatePortalSessionResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildGenerateWorkOSAdminPortalLinkRequest instantiates a HTTP request object
+// with method and path set to call the "organizations" service
+// "generateWorkOSAdminPortalLink" endpoint
+func (c *Client) BuildGenerateWorkOSAdminPortalLinkRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GenerateWorkOSAdminPortalLinkOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "generateWorkOSAdminPortalLink", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGenerateWorkOSAdminPortalLinkRequest returns an encoder for requests
+// sent to the organizations generateWorkOSAdminPortalLink server.
+func EncodeGenerateWorkOSAdminPortalLinkRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.GenerateWorkOSAdminPortalLinkPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "generateWorkOSAdminPortalLink", "*organizations.GenerateWorkOSAdminPortalLinkPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewGenerateWorkOSAdminPortalLinkRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "generateWorkOSAdminPortalLink", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGenerateWorkOSAdminPortalLinkResponse returns a decoder for responses
+// returned by the organizations generateWorkOSAdminPortalLink endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeGenerateWorkOSAdminPortalLinkResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGenerateWorkOSAdminPortalLinkResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GenerateWorkOSAdminPortalLinkResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			res := NewGenerateWorkOSAdminPortalLinkResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GenerateWorkOSAdminPortalLinkForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GenerateWorkOSAdminPortalLinkBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GenerateWorkOSAdminPortalLinkNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GenerateWorkOSAdminPortalLinkConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GenerateWorkOSAdminPortalLinkInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GenerateWorkOSAdminPortalLinkInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+				}
+				err = ValidateGenerateWorkOSAdminPortalLinkInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+				}
+				return nil, NewGenerateWorkOSAdminPortalLinkInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GenerateWorkOSAdminPortalLinkUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+				}
+				err = ValidateGenerateWorkOSAdminPortalLinkUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+				}
+				return nil, NewGenerateWorkOSAdminPortalLinkUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "generateWorkOSAdminPortalLink", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GenerateWorkOSAdminPortalLinkGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "generateWorkOSAdminPortalLink", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalOrganizationInvitationResponseBodyToOrganizationsOrganizationInvitation
 // builds a value of type *organizations.OrganizationInvitation from a value of
 // type *OrganizationInvitationResponseBody.

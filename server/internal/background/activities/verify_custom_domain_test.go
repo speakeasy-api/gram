@@ -105,8 +105,10 @@ func TestVerifyCustomDomain_ExistingDomainSameOrg(t *testing.T) {
 
 	// Pre-create the domain
 	_, err := ti.repo.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
-		OrganizationID: orgID,
-		Domain:         domain,
+		OrganizationID:  orgID,
+		Domain:          domain,
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 
@@ -130,8 +132,10 @@ func TestVerifyCustomDomain_ExistingDomainDifferentOrg(t *testing.T) {
 
 	// Pre-create the domain owned by a different org
 	_, err := ti.repo.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
-		OrganizationID: ownerOrg,
-		Domain:         domain,
+		OrganizationID:  ownerOrg,
+		Domain:          domain,
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 

@@ -32,7 +32,7 @@ type FlyRuntimeConfig struct {
 	DefaultFlyOrg      string
 	DefaultFlyRegion   string
 	OCIImage           string
-	ImageVersion       string
+	ImageTag           string
 	AppNamePrefix      string
 	ServerURL          *url.URL
 }
@@ -46,9 +46,6 @@ func (c FlyRuntimeConfig) Validate() error {
 	}
 	if c.OCIImage == "" {
 		return fmt.Errorf("--assistant-runtime-oci-image is required")
-	}
-	if c.ImageVersion == "" {
-		return fmt.Errorf("--assistant-runtime-image-version is required")
 	}
 	if c.ServerURL == nil {
 		return fmt.Errorf("assistant fly runtime server URL is not configured")

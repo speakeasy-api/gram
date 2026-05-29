@@ -40,6 +40,7 @@ import { useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
+import { AuthenticationTab } from "./tabs/authentication/AuthenticationTab";
 import { EndpointsTab } from "./tabs/EndpointsTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SettingsTab } from "./tabs/SettingsTab";
@@ -47,6 +48,7 @@ import { SettingsTab } from "./tabs/SettingsTab";
 const VALID_TABS = [
   "overview",
   "endpoints",
+  "authentication",
   "team-access",
   "settings",
 ] as const;
@@ -63,12 +65,16 @@ export default function MCPServerDetails() {
   const isRemoteMcpEnabled =
     telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  const isUserSessionManagementEnabled =
+    telemetry.isFeatureEnabled("gram-user-session-management") ?? false;
   const idOrSlug = mcpServerSlug ?? "";
 
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
     const hash = window.location.hash.replace("#", "");
     if (!isValidTab(hash)) return "overview";
     if (hash === "team-access" && !isRbacEnabled) return "overview";
+    if (hash === "authentication" && !isUserSessionManagementEnabled)
+      return "overview";
     return hash;
   });
 
@@ -136,6 +142,11 @@ export default function MCPServerDetails() {
                   Endpoints
                   {endpoints.length > 0 && ` (${endpoints.length})`}
                 </PageTabsTrigger>
+                {isUserSessionManagementEnabled && (
+                  <PageTabsTrigger value="authentication">
+                    Authentication
+                  </PageTabsTrigger>
+                )}
                 {isRbacEnabled && (
                   <PageTabsTrigger value="team-access">
                     Team Access
@@ -155,6 +166,8 @@ export default function MCPServerDetails() {
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
               onShowEndpoints={() => handleTabChange("endpoints")}
+              showAuthentication={isUserSessionManagementEnabled}
+              onShowAuthentication={() => handleTabChange("authentication")}
             />
           </TabsContent>
 
@@ -170,6 +183,15 @@ export default function MCPServerDetails() {
               />
             )}
           </TabsContent>
+
+          {isUserSessionManagementEnabled && mcpServer && (
+            <TabsContent
+              value="authentication"
+              className="mt-0 min-h-0 flex-1 overflow-y-auto"
+            >
+              <AuthenticationTab mcpServer={mcpServer} />
+            </TabsContent>
+          )}
 
           {isRbacEnabled && mcpServer && (
             <TabsContent
@@ -204,6 +226,9 @@ export default function MCPServerDetails() {
   );
 }
 
+// The dropdown only offers the two states that gate whether the server
+// serves traffic. Any other stored visibility values render their label via
+// currentLabel below.
 const VISIBILITY_OPTIONS: {
   value: McpServerVisibility;
   label: string;
@@ -221,16 +246,9 @@ const VISIBILITY_OPTIONS: {
   {
     value: "private",
     label: "Private",
-    description: "Requires Gram platform authentication.",
+    description: "The server serves traffic.",
     dotClass: "bg-blue-400",
     hoverDotClass: "group-hover:bg-blue-400",
-  },
-  {
-    value: "public",
-    label: "Public",
-    description: "Relies solely on the server's configured authentication.",
-    dotClass: "bg-green-400",
-    hoverDotClass: "group-hover:bg-green-400",
   },
 ];
 
@@ -272,6 +290,10 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
+          // updateMcpServer is a full-record replace for the optional UUID
+          // references. Forwarding userSessionIssuerId keeps the stored
+          // value intact across a visibility-only update.
+          userSessionIssuerId: server.userSessionIssuerId ?? undefined,
           visibility: next,
         },
       },

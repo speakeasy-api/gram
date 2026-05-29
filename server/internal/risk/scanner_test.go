@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -180,4 +181,56 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	require.GreaterOrEqual(t, pii.cancellations.Load(), int32(1),
 		"expected at least one slow policy to observe ctx cancellation")
+}
+
+func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	_, err := riskrepo.New(ti.conn).CreateCustomDetectionRule(ctx, riskrepo.CreateCustomDetectionRuleParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RuleID:         "custom.acme_token",
+		Title:          "ACME token",
+		Description:    "ACME token",
+		Regex:          pgtype.Text{String: `ACME-[A-Z0-9]{8}`, Valid: true},
+		Severity:       "high",
+	})
+	require.NoError(t, err)
+
+	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   uuid.New(),
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "custom block",
+		Sources:              []string{},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        []string{"custom.acme_token"},
+		Enabled:              true,
+		Action:               "block",
+		AutoName:             false,
+		UserMessage:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		nil,
+		nil,
+		testenv.NewMeterProvider(t),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "deploy ACME-ABC12345 now")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "custom block", result.PolicyName)
+	require.Equal(t, risk_analysis.SourceCustom, result.Source)
+	require.Equal(t, "custom.acme_token", result.RuleID)
+	require.Equal(t, "ACME token", result.Description)
 }

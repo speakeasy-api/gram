@@ -7,6 +7,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { capitalize, cn } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
+import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
 
 function PageHeaderComponent({
@@ -85,11 +86,13 @@ function PageHeaderBreadcrumbs({
   className,
   substitutions = {}, // Any segment and how it should be displayed, for example toolset slug -> toolset name
   skipSegments = [], // Segments to skip/hide from breadcrumbs
+  stage,
 }: {
   fullWidth?: boolean;
   className?: string;
   substitutions?: Record<string, string | undefined>;
   skipSegments?: string[];
+  stage?: ReleaseStage;
 }) {
   const params = useParams();
   const { orgSlug, projectSlug } = useSlugs();
@@ -217,6 +220,7 @@ function PageHeaderBreadcrumbs({
             )}
           </React.Fragment>
         ))}
+        {stage && <ReleaseStageBadge stage={stage} />}
       </div>
     </PageHeader.Title>
   );

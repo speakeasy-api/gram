@@ -39,17 +39,6 @@ func (m *MockOrganizationProvider) CreateOrganizationMembership(ctx context.Cont
 	return args.String(0), nil
 }
 
-func (m *MockOrganizationProvider) ListRoles(ctx context.Context, workosOrgID string) ([]thirdpartyworkos.Role, error) {
-	args := m.Called(ctx, workosOrgID)
-	if err := args.Error(1); err != nil {
-		return nil, fmt.Errorf("mock ListRoles: %w", err)
-	}
-	if roles, ok := args.Get(0).([]thirdpartyworkos.Role); ok {
-		return roles, nil
-	}
-	return nil, nil
-}
-
 func (m *MockOrganizationProvider) GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*thirdpartyworkos.OrganizationDomainPolicy, error) {
 	for _, call := range m.ExpectedCalls {
 		if call.Method == "GetOrganizationDomainPolicy" {
@@ -75,6 +64,14 @@ func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Cont
 		return fmt.Errorf("mock DeleteOrganizationMembership: %w", err)
 	}
 	return nil
+}
+
+func (m *MockOrganizationProvider) GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent thirdpartyworkos.PortalIntent, returnURL string) (string, error) {
+	args := m.Called(ctx, workosOrgID, intent, returnURL)
+	if err := args.Error(1); err != nil {
+		return "", fmt.Errorf("mock GenerateAdminPortalLink: %w", err)
+	}
+	return args.String(0), nil
 }
 
 // stubUserProvisioner is a no-op implementation of UserProvisioner for tests

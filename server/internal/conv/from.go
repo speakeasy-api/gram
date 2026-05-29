@@ -85,6 +85,11 @@ func PtrToNullUUID(s *string) (uuid.NullUUID, error) {
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
+// ToNullUUID converts a required UUID into a valid uuid.NullUUID.
+func ToNullUUID(id uuid.UUID) uuid.NullUUID {
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
 // FromNullableUUID converts a uuid.NullUUID to a *string. If the NullUUID is
 // not valid, it returns nil.
 func FromNullableUUID(u uuid.NullUUID) *string {

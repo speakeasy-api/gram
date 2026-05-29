@@ -31,6 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -881,7 +883,22 @@ type ProxyRegisterResponse struct {
 func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	if _, err := s.sessions.AuthenticateWithCookie(ctx); err != nil {
+	// The session cookie is SameSite=Lax so it does not flow on cross-origin
+	// fetch from the dashboard in dev (where the dashboard and API run on
+	// different origins). Goa-generated endpoints accept the Gram-Session
+	// header, so this raw handler falls back to the header when context has
+	// no token, keeping the four UI surfaces that hit /oauth/proxy-register
+	// (OAuth wizard, external-MCP onboarding, wire-user-session-issuer
+	// modal, MCP authentication sheet) functional in dev.
+	//
+	// SessionMiddleware could populate the session token in context from the
+	// Gram-Session header when the cookie is absent — every raw handler
+	// would then pick it up without per-handler fallback.
+	sessionToken, _ := contextvalues.GetSessionTokenFromContext(ctx)
+	if sessionToken == "" {
+		sessionToken = r.Header.Get(constants.SessionHeader)
+	}
+	if _, err := s.sessions.Authenticate(ctx, sessionToken); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authentication required").Log(ctx, s.logger)
 	}
 

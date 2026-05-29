@@ -22,7 +22,12 @@ import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
-import { DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Popover,
   PopoverContent,
@@ -57,11 +62,45 @@ interface ChatDetailPanelProps {
   collapseNonRisk?: boolean;
 }
 
+interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
+  chatId: string | null;
+}
+
 function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
 }
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
+export function ChatDetailSheet({
+  chatId,
+  onClose,
+  onDelete,
+  collapseNonRisk,
+}: ChatDetailSheetProps) {
+  return (
+    <Sheet
+      open={Boolean(chatId)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent
+        className="w-[min(720px,calc(100vw-2rem))] sm:max-w-[720px]"
+        showCloseButton={false}
+      >
+        {chatId && (
+          <ChatDetailPanel
+            chatId={chatId}
+            onClose={onClose}
+            onDelete={onDelete}
+            collapseNonRisk={collapseNonRisk}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 function downloadJsonFile(filename: string, data: unknown) {
   const json = JSON.stringify(data, null, 2);
@@ -1011,8 +1050,8 @@ export function ChatDetailPanel({
   if (chatLoading) {
     return (
       <div className="p-8">
-        <DrawerTitle>Loading</DrawerTitle>
-        <DrawerDescription>Fetching chat session details...</DrawerDescription>
+        <SheetTitle>Loading</SheetTitle>
+        <SheetDescription>Fetching chat session details...</SheetDescription>
       </div>
     );
   }
@@ -1020,10 +1059,10 @@ export function ChatDetailPanel({
   if (!chat) {
     return (
       <div className="p-8">
-        <DrawerTitle>Not found</DrawerTitle>
-        <DrawerDescription>
+        <SheetTitle>Not found</SheetTitle>
+        <SheetDescription>
           The selected chat session could not be found.
-        </DrawerDescription>
+        </SheetDescription>
       </div>
     );
   }
@@ -1045,7 +1084,7 @@ export function ChatDetailPanel({
       <div className="border-b p-6">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <DrawerTitle className="text-xl">{getTraceId(chatId)}</DrawerTitle>
+            <SheetTitle className="text-xl">{getTraceId(chatId)}</SheetTitle>
             {status !== "unresolved" && (
               <Badge
                 variant={
@@ -1106,7 +1145,7 @@ export function ChatDetailPanel({
         <div className="text-muted-foreground mb-3 font-mono text-sm">
           {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
         </div>
-        <DrawerDescription className="text-sm">{chat.title}</DrawerDescription>
+        <SheetDescription className="text-sm">{chat.title}</SheetDescription>
       </div>
 
       {/* Tabs */}

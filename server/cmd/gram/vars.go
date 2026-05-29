@@ -1,7 +1,8 @@
 package gram
 
 var (
-	GitSHA = "dev"
+	GitSHA                    = "dev"
+	AssistantRuntimeImageHash = "dev"
 )
 
 func shortGitSHA() string {

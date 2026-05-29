@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
+import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsAdminRef } from "@/contexts/Sdk";
@@ -41,9 +42,19 @@ import type { ProjectEntry } from "@gram/client/models/components";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
-const UNAUTHENTICATED_PATHS = ["/login", "/register", "/book-demo"];
+const UNAUTHENTICATED_PATHS = [
+  "/login",
+  "/register",
+  "/invite",
+  "/book-demo",
+  "/shadow-mcp/request",
+];
 
-const SLUG_EXEMPT_PATHS = ["/slack/register"];
+const SLUG_EXEMPT_PATHS = [
+  "/slack/register",
+  "/switch-org",
+  "/shadow-mcp/request",
+];
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -95,6 +106,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
   if (session.activeOrganizationId && !session.whitelisted) {
+    if (session.organizations.length > 1) {
+      return <SwitchOrg gate />;
+    }
     return <BookDemo />;
   }
 

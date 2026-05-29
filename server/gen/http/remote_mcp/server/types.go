@@ -44,6 +44,13 @@ type UpdateServerRequestBody struct {
 	Headers []*HeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
+// DiscoverProtectedResourceMetadataRequestBody is the type of the "remoteMcp"
+// service "discoverProtectedResourceMetadata" endpoint HTTP request body.
+type DiscoverProtectedResourceMetadataRequestBody struct {
+	// The ID of the remote MCP server to probe.
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+}
+
 // VerifyURLRequestBody is the type of the "remoteMcp" service "verifyURL"
 // endpoint HTTP request body.
 type VerifyURLRequestBody struct {
@@ -126,6 +133,22 @@ type UpdateServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the remote MCP server was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// DiscoverProtectedResourceMetadataResponseBody is the type of the "remoteMcp"
+// service "discoverProtectedResourceMetadata" endpoint HTTP response body.
+type DiscoverProtectedResourceMetadataResponseBody struct {
+	// True when the upstream advertised an RFC 9728 document. False for any
+	// unavailability reason — see the unavailable field for the cause.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// Parsed RFC 9728 document. Present when available is true.
+	Metadata *ProtectedResourceMetadataResponseBody `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// Reason the probe was unavailable. Present when available is false.
+	Unavailable *ProtectedResourceMetadataUnavailableResponseBody `form:"unavailable,omitempty" json:"unavailable,omitempty" xml:"unavailable,omitempty"`
+	// Informational deviations from RFC 9728 detected on a successful probe (e.g.
+	// missing resource field, mismatched resource value). Empty when available is
+	// false.
+	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
 }
 
 // VerifyURLResponseBody is the type of the "remoteMcp" service "verifyURL"
@@ -866,6 +889,196 @@ type UpdateServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DiscoverProtectedResourceMetadataUnauthorizedResponseBody is the type of the
+// "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "unauthorized" error.
+type DiscoverProtectedResourceMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataForbiddenResponseBody is the type of the
+// "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "forbidden" error.
+type DiscoverProtectedResourceMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataBadRequestResponseBody is the type of the
+// "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "bad_request" error.
+type DiscoverProtectedResourceMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataNotFoundResponseBody is the type of the
+// "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "not_found" error.
+type DiscoverProtectedResourceMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataConflictResponseBody is the type of the
+// "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "conflict" error.
+type DiscoverProtectedResourceMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataUnsupportedMediaResponseBody is the type of
+// the "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DiscoverProtectedResourceMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataInvalidResponseBody is the type of the
+// "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "invalid" error.
+type DiscoverProtectedResourceMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataInvariantViolationResponseBody is the type
+// of the "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DiscoverProtectedResourceMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataUnexpectedResponseBody is the type of the
+// "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "unexpected" error.
+type DiscoverProtectedResourceMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DiscoverProtectedResourceMetadataGatewayErrorResponseBody is the type of the
+// "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
+// response body for the "gateway_error" error.
+type DiscoverProtectedResourceMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // VerifyURLUnauthorizedResponseBody is the type of the "remoteMcp" service
 // "verifyURL" endpoint HTTP response body for the "unauthorized" error.
 type VerifyURLUnauthorizedResponseBody struct {
@@ -1274,6 +1487,33 @@ type RemoteMcpServerResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ProtectedResourceMetadataResponseBody is used to define fields on response
+// body types.
+type ProtectedResourceMetadataResponseBody struct {
+	// The resource server's identifier.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+	// Authorization servers that can issue access tokens for this resource.
+	AuthorizationServers []string `form:"authorization_servers,omitempty" json:"authorization_servers,omitempty" xml:"authorization_servers,omitempty"`
+	// Scopes advertised by the resource server.
+	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	// Bearer token presentation methods accepted by the resource server.
+	BearerMethodsSupported []string `form:"bearer_methods_supported,omitempty" json:"bearer_methods_supported,omitempty" xml:"bearer_methods_supported,omitempty"`
+	// URL of human-readable documentation for the resource server.
+	ResourceDocumentation *string `form:"resource_documentation,omitempty" json:"resource_documentation,omitempty" xml:"resource_documentation,omitempty"`
+}
+
+// ProtectedResourceMetadataUnavailableResponseBody is used to define fields on
+// response body types.
+type ProtectedResourceMetadataUnavailableResponseBody struct {
+	// Machine-readable failure code (e.g. not_found, http_error, transport_error,
+	// timeout, malformed, host_blocked, invalid_url). Intentionally a free-form
+	// string so adding new failure modes is not a breaking SDK change.
+	Code string `form:"code" json:"code" xml:"code"`
+	// Human-readable summary of the unavailability reason, composed by the
+	// backend. Dashboards should render verbatim.
+	Message string `form:"message" json:"message" xml:"message"`
+}
+
 // HeaderInputRequestBody is used to define fields on request body types.
 type HeaderInputRequestBody struct {
 	// The header name
@@ -1390,6 +1630,30 @@ func NewUpdateServerResponseBody(res *types.RemoteMcpServer) *UpdateServerRespon
 		}
 	} else {
 		body.Headers = []*RemoteMcpServerHeaderResponseBody{}
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataResponseBody builds the HTTP response
+// body from the result of the "discoverProtectedResourceMetadata" endpoint of
+// the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataResponseBody(res *remotemcp.ProtectedResourceMetadataDiscovery) *DiscoverProtectedResourceMetadataResponseBody {
+	body := &DiscoverProtectedResourceMetadataResponseBody{
+		Available: res.Available,
+	}
+	if res.Metadata != nil {
+		body.Metadata = marshalRemotemcpProtectedResourceMetadataToProtectedResourceMetadataResponseBody(res.Metadata)
+	}
+	if res.Unavailable != nil {
+		body.Unavailable = marshalRemotemcpProtectedResourceMetadataUnavailableToProtectedResourceMetadataUnavailableResponseBody(res.Unavailable)
+	}
+	if res.DiscoveryWarnings != nil {
+		body.DiscoveryWarnings = make([]string, len(res.DiscoveryWarnings))
+		for i, val := range res.DiscoveryWarnings {
+			body.DiscoveryWarnings[i] = val
+		}
+	} else {
+		body.DiscoveryWarnings = []string{}
 	}
 	return body
 }
@@ -1965,6 +2229,156 @@ func NewUpdateServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateServe
 	return body
 }
 
+// NewDiscoverProtectedResourceMetadataUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "discoverProtectedResourceMetadata"
+// endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataUnauthorizedResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataUnauthorizedResponseBody {
+	body := &DiscoverProtectedResourceMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataForbiddenResponseBody builds the HTTP
+// response body from the result of the "discoverProtectedResourceMetadata"
+// endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataForbiddenResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataForbiddenResponseBody {
+	body := &DiscoverProtectedResourceMetadataForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataBadRequestResponseBody builds the HTTP
+// response body from the result of the "discoverProtectedResourceMetadata"
+// endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataBadRequestResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataBadRequestResponseBody {
+	body := &DiscoverProtectedResourceMetadataBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataNotFoundResponseBody builds the HTTP
+// response body from the result of the "discoverProtectedResourceMetadata"
+// endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataNotFoundResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataNotFoundResponseBody {
+	body := &DiscoverProtectedResourceMetadataNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataConflictResponseBody builds the HTTP
+// response body from the result of the "discoverProtectedResourceMetadata"
+// endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataConflictResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataConflictResponseBody {
+	body := &DiscoverProtectedResourceMetadataConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "discoverProtectedResourceMetadata" endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataUnsupportedMediaResponseBody {
+	body := &DiscoverProtectedResourceMetadataUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataInvalidResponseBody builds the HTTP
+// response body from the result of the "discoverProtectedResourceMetadata"
+// endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataInvalidResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataInvalidResponseBody {
+	body := &DiscoverProtectedResourceMetadataInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "discoverProtectedResourceMetadata" endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataInvariantViolationResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataInvariantViolationResponseBody {
+	body := &DiscoverProtectedResourceMetadataInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataUnexpectedResponseBody builds the HTTP
+// response body from the result of the "discoverProtectedResourceMetadata"
+// endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataUnexpectedResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataUnexpectedResponseBody {
+	body := &DiscoverProtectedResourceMetadataUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDiscoverProtectedResourceMetadataGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "discoverProtectedResourceMetadata"
+// endpoint of the "remoteMcp" service.
+func NewDiscoverProtectedResourceMetadataGatewayErrorResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataGatewayErrorResponseBody {
+	body := &DiscoverProtectedResourceMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewVerifyURLUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "verifyURL" endpoint of the "remoteMcp" service.
 func NewVerifyURLUnauthorizedResponseBody(res *goa.ServiceError) *VerifyURLUnauthorizedResponseBody {
@@ -2317,6 +2731,19 @@ func NewUpdateServerPayload(body *UpdateServerRequestBody, sessionToken *string,
 	return v
 }
 
+// NewDiscoverProtectedResourceMetadataPayload builds a remoteMcp service
+// discoverProtectedResourceMetadata endpoint payload.
+func NewDiscoverProtectedResourceMetadataPayload(body *DiscoverProtectedResourceMetadataRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.DiscoverProtectedResourceMetadataPayload {
+	v := &remotemcp.DiscoverProtectedResourceMetadataPayload{
+		RemoteMcpServerID: *body.RemoteMcpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewVerifyURLPayload builds a remoteMcp service verifyURL endpoint payload.
 func NewVerifyURLPayload(body *VerifyURLRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.VerifyURLPayload {
 	v := &remotemcp.VerifyURLPayload{
@@ -2382,6 +2809,18 @@ func ValidateUpdateServerRequestBody(body *UpdateServerRequestBody) (err error) 
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateDiscoverProtectedResourceMetadataRequestBody runs the validations
+// defined on DiscoverProtectedResourceMetadataRequestBody
+func ValidateDiscoverProtectedResourceMetadataRequestBody(body *DiscoverProtectedResourceMetadataRequestBody) (err error) {
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
 	}
 	return
 }

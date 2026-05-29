@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
+import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import {
   Tool,
   getToolSourceLabel,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/toolTypes";
 import { Button } from "@speakeasy-api/moonshine";
 import { FileCode, PencilRuler, SquareFunction } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { McpIcon } from "@/components/ui/mcp-icon";
 
 function getToolIcon(tool: Tool) {
@@ -45,7 +46,23 @@ export type ToolUpdatePayload = {
   destructiveHint?: boolean;
   idempotentHint?: boolean;
   openWorldHint?: boolean;
+  // tri-state:
+  //   undefined = no override (use source tags)
+  //   []        = explicit empty override
+  //   [...]     = explicit override
+  // Key is always present for HTTP tools (so the spread in the upsert form
+  // correctly overwrites a prior variation), absent for other tool types.
+  tags?: string[] | undefined;
 };
+
+function tagsEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+  if (a === undefined && b === undefined) return true;
+  if (a === undefined || b === undefined) return false;
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((v, i) => v === sb[i]);
+}
 
 interface EditToolDialogProps {
   open: boolean;
@@ -73,10 +90,20 @@ export function EditToolDialog({
   const [destructiveHint, setDestructiveHint] = useState<boolean | undefined>();
   const [idempotentHint, setIdempotentHint] = useState<boolean | undefined>();
   const [openWorldHint, setOpenWorldHint] = useState<boolean | undefined>();
+  // TODO: extend tag variations to prompt tools once they support tags.
+  const [tags, setTags] = useState<string[] | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const hasAnnotations = tool ? toolSupportsAnnotations(tool) : false;
+  const supportsTags = tool?.type === "http" || tool?.type === "function";
+  // Memoize: the inline `[]` fallback would produce a fresh reference per
+  // render and invalidate downstream memoization in TagsVariationEditor.
+  const baseTags = useMemo(
+    () => (tool?.type === "http" || tool?.type === "function" ? tool.tags : []),
+    [tool],
+  );
+  const origTags = supportsTags ? tool?.variation?.tags : undefined;
 
   // Reset form when tool changes
   useEffect(() => {
@@ -88,6 +115,11 @@ export function EditToolDialog({
       setDestructiveHint(getAnnotationValue(tool, "destructiveHint"));
       setIdempotentHint(getAnnotationValue(tool, "idempotentHint"));
       setOpenWorldHint(getAnnotationValue(tool, "openWorldHint"));
+      setTags(
+        tool.type === "http" || tool.type === "function"
+          ? tool.variation?.tags
+          : undefined,
+      );
     }
   }, [tool]);
 
@@ -125,6 +157,7 @@ export function EditToolDialog({
     destructiveHint,
     idempotentHint,
     openWorldHint,
+    tags,
   ]);
 
   const handleSave = async () => {
@@ -141,6 +174,11 @@ export function EditToolDialog({
           idempotentHint,
           openWorldHint,
         }),
+        // tags key must always be present for HTTP tools so the upsert form
+        // spread correctly overwrites any prior variation tags (including
+        // when the user resets to source — sending undefined drops the key
+        // from the wire body, signalling no override).
+        ...(supportsTags && { tags }),
       });
       onOpenChange(false);
     } finally {
@@ -179,7 +217,8 @@ export function EditToolDialog({
     readOnlyHint !== origReadOnly ||
     destructiveHint !== origDestructive ||
     idempotentHint !== origIdempotent ||
-    openWorldHint !== origOpenWorld;
+    openWorldHint !== origOpenWorld ||
+    (supportsTags && !tagsEqual(tags, origTags));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -235,6 +274,15 @@ export function EditToolDialog({
               rows={4}
             />
           </div>
+
+          {supportsTags && (
+            <TagsVariationEditor
+              id="tool-tags"
+              baseTags={baseTags}
+              value={tags}
+              onChange={setTags}
+            />
+          )}
 
           {/* Behavior Hints */}
           {hasAnnotations && (

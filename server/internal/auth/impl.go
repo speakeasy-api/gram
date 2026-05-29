@@ -264,7 +264,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 
-	if idpUser.OrganizationID != "" {
+	if idpUser.Sub != "" {
 		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
@@ -604,19 +604,18 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
-	// For admins we only return the active organization to avoid overloaded returns.
-	// The active org may not be in the admin's membership list (admin override),
-	// so fall back to a DB lookup.
+	// For admins overriding into a foreign org (one not in their own membership list),
+	// return only that org to avoid overloaded returns. When admins are in one of their
+	// own orgs, return all real memberships so the org-switcher works normally.
 	if userInfo.Admin {
-		found := false
+		inOwnOrg := false
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
-				userInfo.Organizations = []sessions.Organization{org}
-				found = true
+				inOwnOrg = true
 				break
 			}
 		}
-		if !found {
+		if !inOwnOrg {
 			orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
 			if err == nil {
 				userInfo.Organizations = []sessions.Organization{{
@@ -625,6 +624,8 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 					Slug:               orgMeta.Slug,
 					WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
 					UserWorkspaceSlugs: nil,
+					SSOEnabled:         orgMeta.SsoEnabled.Bool,
+					SCIMEnabled:        orgMeta.ScimEnabled.Bool,
 				}}
 			}
 		}
@@ -681,6 +682,8 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			Slug:               org.Slug,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           orgProjects,
+			SsoEnabled:         &org.SSOEnabled,
+			ScimEnabled:        &org.SCIMEnabled,
 		})
 	}
 
@@ -724,10 +727,8 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").Log(ctx, s.logger)
 	}
 
-	gramOrgID := "org_" + uuid.New().String()
-
-	// Provision the WorkOS org first so it exists before we create the Gram org.
-	workosOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, gramOrgID, payload.OrgName, authCtx.UserID)
+	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
+	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, payload.OrgName, authCtx.UserID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").Log(ctx, s.logger)
 	}
@@ -774,10 +775,8 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 		return "", fmt.Errorf("find unique slug: %w", err)
 	}
 
-	gramOrgID := "org_" + uuid.New().String()
-
-	// Provision the WorkOS org first so it exists before we create the Gram org.
-	workosOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, gramOrgID, orgName, userInfo.UserID)
+	// Provision the WorkOS org first, then derive a deterministic UUIDv5 org ID from the WorkOS ID.
+	workosOrgID, gramOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userInfo.UserID)
 	if err != nil {
 		return "", fmt.Errorf("provision org in WorkOS: %w", err)
 	}

@@ -49,7 +49,7 @@ export function useCustomDomains(enabled = true): {
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
 // row. Platform-domain endpoints (`custom_domain_id` empty) resolve under the
-// Gram-hosted `/x/mcp/<slug>` runtime path; custom-domain endpoints resolve
+// Gram-hosted `/mcp/<slug>` runtime path; custom-domain endpoints resolve
 // under the matching `custom_domains.domain` value with the same suffix.
 // Returns `undefined` when the endpoint has no slug or when its custom domain
 // hasn't resolved yet (loading or denied), so callers can gracefully render an
@@ -78,7 +78,7 @@ export function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
     serverURL = `https://${match.domain}`;
   }
 
-  const mcpUrl = `${serverURL}/x/mcp/${endpoint.slug}`;
+  const mcpUrl = `${serverURL}/mcp/${endpoint.slug}`;
   return { mcpUrl, installPageUrl: `${mcpUrl}/install` };
 }
 

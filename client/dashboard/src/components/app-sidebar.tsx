@@ -11,6 +11,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useSidebar } from "@/components/ui/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@/hooks/useRBAC";
@@ -66,16 +67,20 @@ function ScopeGatedTopLevelItem({
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
+  const { state } = useSidebar();
   const telemetry = useTelemetry();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
+  // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
+  const isDeploymentsPageEnabled =
+    telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
 
   const connectActive = [
     routes.sources,
     routes.catalog,
     routes.playground,
-    routes.deployments,
+    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
   ].some((r) => r.active);
 
   const buildActive = [
@@ -88,9 +93,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const observeActive = [routes.insights, routes.logs].some((r) => r.active);
 
-  const securityActive = [routes.riskOverview, routes.policyCenter].some(
-    (r) => r.active,
-  );
+  const securityActive = [
+    routes.riskOverview,
+    routes.policyCenter,
+    routes.approvalRequests,
+    routes.detectionRules,
+  ].some((r) => r.active);
 
   let activeGroup: string | undefined;
   switch (true) {
@@ -114,7 +122,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     routes.sources,
     routes.catalog,
     routes.playground,
-    routes.deployments,
+    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
     routes.mcp,
     ...(isAssistantsEnabled ? [routes.assistants] : []),
     routes.clis,
@@ -124,10 +132,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     routes.logs,
     routes.riskOverview,
     routes.policyCenter,
+    routes.approvalRequests,
+    routes.detectionRules,
     routes.settings,
   ];
   const activeRoute = allNavRoutes.find((r) => r.active);
-  const activeItem = activeRoute?.title;
+  // In collapsed mode, sub-items are hidden — fall back to group highlight.
+  // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
+  const activeItem =
+    state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -137,7 +150,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           defaultOpenGroups={!activeGroup ? ["Connect", "Build"] : undefined}
           activeItem={activeItem}
         >
-          <SidebarMenu className="gap-1 px-2">
+          <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
             {/* Home — top-level, no group */}
             <ScopeGatedTopLevelItem item={routes.home} scope="project:read" />
 
@@ -159,10 +172,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.playground}
                 scope={["mcp:read", "mcp:write", "mcp:connect"]}
               />
-              <ScopeGatedNavItem
-                item={routes.deployments}
-                scope={["project:read", "project:write"]}
-              />
+              {isDeploymentsPageEnabled && (
+                <ScopeGatedNavItem
+                  item={routes.deployments}
+                  scope={["project:read", "project:write"]}
+                />
+              )}
             </CollapsibleNavGroup>
 
             {/* Build group */}
@@ -207,6 +222,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Secure"
               Icon={(p) => <Icon {...p} name="shield" />}
               defaultHref={routes.riskOverview.href()}
+              stage="beta"
             >
               <ScopeGatedNavItem
                 item={routes.riskOverview}
@@ -214,6 +230,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               />
               <ScopeGatedNavItem
                 item={routes.policyCenter}
+                scope={["project:read", "project:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.approvalRequests}
+                scope={["project:read", "project:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.detectionRules}
                 scope={["project:read", "project:write"]}
               />
             </CollapsibleNavGroup>

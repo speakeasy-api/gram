@@ -68,7 +68,6 @@ function isExistingConfigComplete(): boolean {
     "GRAM_ASSISTANT_RUNTIME_FLYIO_ORG",
     "GRAM_ASSISTANT_RUNTIME_FLYIO_REGION",
     "GRAM_ASSISTANT_RUNTIME_OCI_IMAGE",
-    "GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION",
     "GRAM_FUNCTIONS_TIGRIS_BUCKET_URI",
     "GRAM_FUNCTIONS_TIGRIS_KEY",
     "GRAM_FUNCTIONS_TIGRIS_SECRET",
@@ -112,7 +111,6 @@ async function fallbackToMockFlyio() {
     GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN: "TODO",
     GRAM_ASSISTANT_RUNTIME_FLYIO_REGION: "us",
     GRAM_ASSISTANT_RUNTIME_OCI_IMAGE: "gram-assistant-runtime",
-    GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION: "dev",
   });
   outro(
     "Defaulted Gram Functions to the local provider and wrote TODO assistant runtime Fly.io placeholders. To configure real Fly.io credentials later, run `mise run zero:fly --restart`.",
@@ -565,7 +563,6 @@ To deploy Gram Functions and assistant runtimes to Fly.io, you'll need:
     GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN: token,
     GRAM_ASSISTANT_RUNTIME_FLYIO_REGION: "us",
     GRAM_ASSISTANT_RUNTIME_OCI_IMAGE: `registry.fly.io/${app}`,
-    GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION: "dev",
     GRAM_FUNCTIONS_TIGRIS_BUCKET_URI: `s3://${bucket}`,
     GRAM_FUNCTIONS_TIGRIS_KEY: tigrisKey,
     GRAM_FUNCTIONS_TIGRIS_SECRET: tigrisSecret,

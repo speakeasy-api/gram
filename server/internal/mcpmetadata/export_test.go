@@ -161,6 +161,7 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 		Domain:         "mcp.example.com",
 		IngressName:    pgtype.Text{String: "test-ingress", Valid: true},
 		CertSecretName: pgtype.Text{String: "test-cert", Valid: true},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err, "create custom domain")
 

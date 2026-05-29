@@ -13,6 +13,10 @@ export type ListChatsResult = {
    * The list of chats
    */
   chats: Array<ChatOverview>;
+  /**
+   * Total number of chats (before pagination)
+   */
+  total: number;
 };
 
 /** @internal */
@@ -21,6 +25,7 @@ export const ListChatsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   chats: z.array(ChatOverview$inboundSchema),
+  total: z.int(),
 });
 
 export function listChatsResultFromJSON(

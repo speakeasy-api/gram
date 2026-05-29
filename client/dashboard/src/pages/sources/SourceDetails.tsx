@@ -23,13 +23,16 @@ import {
 } from "@gram/client/react-query/index.js";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { useGramContext } from "@gram/client/react-query/_context";
-import { useQuery } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useListTools } from "@/hooks/toolTypes";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useToolUpdate } from "@/hooks/useToolUpdate";
+import { invalidateAllListTools } from "@gram/client/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button } from "@speakeasy-api/moonshine";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
@@ -38,6 +41,20 @@ import { SourceOverviewTab } from "./SourceOverviewTab";
 import { SourceToolsTab } from "./SourceToolsTab";
 import { SourceMCPServersTab } from "./SourceMCPServersTab";
 import { SourceSettingsTab } from "./SourceSettingsTab";
+
+// Map dashboard source kinds to backend deployment_logs.attachment_type values.
+// See server/internal/deployments/events/log.go.
+function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
+  switch (sourceKind) {
+    case "function":
+      return "functions";
+    case "externalmcp":
+    case "remotemcp":
+      return "external_mcp";
+    default:
+      return "openapi";
+  }
+}
 
 export default function SourceDetails() {
   const { sourceKind, sourceSlug } = useParams<{
@@ -160,6 +177,18 @@ export default function SourceDetails() {
 
   const isOpenAPI = sourceKind === "http" || sourceKind === "openapi";
   const sourceType = isOpenAPI ? "OpenAPI" : "Function";
+
+  const { hasScope } = useRBAC();
+  const canWriteTools = hasScope("mcp:write");
+  const queryClient = useQueryClient();
+  const refetchTools = useCallback(
+    () => invalidateAllListTools(queryClient),
+    [queryClient],
+  );
+  const { updateTool, isUpdating } = useToolUpdate({
+    telemetryEvent: "source_event",
+    onSuccess: refetchTools,
+  });
 
   const uniqueRuntimes = useMemo(() => {
     if (isOpenAPI) return [];
@@ -295,6 +324,8 @@ export default function SourceDetails() {
               relatedTools={relatedTools}
               isOpenAPI={isOpenAPI}
               uniqueRuntimes={uniqueRuntimes}
+              onToolUpdate={canWriteTools ? updateTool : undefined}
+              isToolUpdating={isUpdating}
             />
           </TabsContent>
 
@@ -345,9 +376,7 @@ export default function SourceDetails() {
             >
               <SourceDeploymentsPanel
                 sourceKind={sourceKind}
-                attachmentType={
-                  sourceKind === "function" ? "function" : "openapi"
-                }
+                attachmentType={attachmentTypeForSourceKind(sourceKind)}
               />
             </Suspense>
           </TabsContent>

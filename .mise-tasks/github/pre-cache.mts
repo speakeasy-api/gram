@@ -52,6 +52,9 @@ async function setupGoCaching() {
 
 async function setupPNPMCaching() {
   const storePath = execSync("pnpm store path", { encoding: "utf8" }).trim();
+  const pnpmMajorVersion = execSync("pnpm --version", { encoding: "utf8" })
+    .trim()
+    .split(".")[0];
 
   await fs.appendFile(env, `PNPM_STORE_PATH=${storePath}\n`);
 
@@ -67,8 +70,8 @@ async function setupPNPMCaching() {
   const pnpmHash = hash.digest("hex");
 
   const version = 1; // Increment this if you need to bust the cache
-  const cacheKey = `${version}-${os}-${arch}-${pnpmHash}`;
-  const partialKey = `${version}-${os}-${arch}-`;
+  const cacheKey = `${version}-${os}-${arch}-pnpm${pnpmMajorVersion}-${pnpmHash}`;
+  const partialKey = `${version}-${os}-${arch}-pnpm${pnpmMajorVersion}-`;
   await fs.appendFile(env, `GH_CACHE_PNPM_KEY=pnpm-${cacheKey}\n`);
   await fs.appendFile(env, `GH_CACHE_PNPM_KEY_PARTIAL=pnpm-${partialKey}\n`);
 
