@@ -612,6 +612,8 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   cert_secret_name TEXT,
   -- Discriminates which K8s API provisioned this domain. Gateway rows write NULL cert_secret_name.
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
+  -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
+  ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
