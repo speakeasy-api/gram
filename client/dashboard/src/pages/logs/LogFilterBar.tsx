@@ -192,8 +192,13 @@ export function LogFilterBar({
         }
       }
       onSearchInputChange(value);
+      // Emptying the box clears the applied search without needing the ×
+      // button, so results refresh as soon as the query is gone.
+      if (step === "key" && value === "") {
+        onSearchSubmit("");
+      }
     },
-    [step, onSearchInputChange, handleOpSelect],
+    [step, onSearchInputChange, handleOpSelect, onSearchSubmit],
   );
 
   const handleValueSubmit = () => {
@@ -264,10 +269,17 @@ export function LogFilterBar({
         }
         break;
       case "Escape":
-        if (popoverOpen) {
-          e.preventDefault();
+        e.preventDefault();
+        if (step === "operator") {
+          // Cancel an in-progress filter build without touching the applied
+          // search.
+          resetFlow();
+        } else {
+          // Key step: mirror the × button — clear the box and the applied
+          // search so results refresh without forcing a click.
           onSearchInputChange("");
           resetFlow();
+          onSearchSubmit("");
         }
         break;
       case "Backspace":
