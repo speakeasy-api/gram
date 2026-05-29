@@ -1465,6 +1465,8 @@ type GetEmployeeDataFlowGraphParams struct {
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
 }
 
+const employeeDataFlowMaxPathTuples uint64 = 100
+
 type employeeDataFlowExpressions struct {
 	origin      string
 	client      string
@@ -1563,7 +1565,7 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 
 	sb = sb.GroupBy("origin", "client", "server", "server_class", "tool").
 		OrderBy("call_count DESC").
-		Limit(1000)
+		Limit(employeeDataFlowMaxPathTuples)
 
 	query, args, err := sb.ToSql()
 	if err != nil {

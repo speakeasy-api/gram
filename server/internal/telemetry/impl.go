@@ -811,6 +811,11 @@ type employeeGraphEdgeAccumulator struct {
 	failureCount uint64
 }
 
+type employeeGraphEdgeKey struct {
+	sourceID string
+	targetID string
+}
+
 var employeeDataFlowTierOrder = map[string]int{
 	"origin": 0,
 	"client": 1,
@@ -820,7 +825,7 @@ var employeeDataFlowTierOrder = map[string]int{
 
 func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.EmployeeDataFlowNode, []*telem_gen.EmployeeDataFlowEdge) {
 	nodeAccs := make(map[string]*employeeGraphNodeAccumulator)
-	edgeAccs := make(map[string]*employeeGraphEdgeAccumulator)
+	edgeAccs := make(map[employeeGraphEdgeKey]*employeeGraphEdgeAccumulator)
 
 	for _, row := range rows {
 		callCount := row.CallCount
@@ -855,12 +860,12 @@ func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.E
 		for i := 0; i < len(path)-1; i++ {
 			sourceID := employeeDataFlowNodeID(path[i])
 			targetID := employeeDataFlowNodeID(path[i+1])
-			edgeID := sourceID + "->" + targetID
-			acc, ok := edgeAccs[edgeID]
+			edgeKey := employeeGraphEdgeKey{sourceID: sourceID, targetID: targetID}
+			acc, ok := edgeAccs[edgeKey]
 			if !ok {
 				acc = &employeeGraphEdgeAccumulator{
 					edge: &telem_gen.EmployeeDataFlowEdge{
-						ID:           edgeID,
+						ID:           employeeDataFlowEdgeID(sourceID, targetID),
 						Source:       sourceID,
 						Target:       targetID,
 						CallCount:    0,
@@ -871,7 +876,7 @@ func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.E
 					successCount: 0,
 					failureCount: 0,
 				}
-				edgeAccs[edgeID] = acc
+				edgeAccs[edgeKey] = acc
 			}
 			acc.callCount += row.CallCount
 			acc.successCount += row.SuccessCount
@@ -936,6 +941,10 @@ func employeeDataFlowNodeID(node employeeGraphTupleNode) string {
 		return node.tier + ":" + node.serverClass + ":" + node.label
 	}
 	return node.tier + ":" + node.label
+}
+
+func employeeDataFlowEdgeID(sourceID, targetID string) string {
+	return strconv.Itoa(len(sourceID)) + ":" + sourceID + "->" + strconv.Itoa(len(targetID)) + ":" + targetID
 }
 
 func uint64ToInt64(v uint64) int64 {
