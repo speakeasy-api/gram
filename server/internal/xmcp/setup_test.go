@@ -333,6 +333,7 @@ func seedCustomDomain(t *testing.T, ctx context.Context, ti *testInstance, organ
 		Domain:         domainName,
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
