@@ -93,12 +93,12 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		urn.PrincipalWildcard,
 	}
 
-	rows, err := s.repo.GetAssignedPluginsForAgent(ctx, repo.GetAssignedPluginsForAgentParams{
+	rows, err := s.repo.GetAgentPluginSet(ctx, repo.GetAgentPluginSetParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrns:  principals,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving assigned plugins").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin set").Log(ctx, s.logger)
 	}
 
 	base := strings.TrimRight(s.serverURL, "/")

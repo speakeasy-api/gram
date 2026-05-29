@@ -12,74 +12,80 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getAssignedPluginsForAgent = `-- name: GetAssignedPluginsForAgent :many
+const getAgentPluginSet = `-- name: GetAgentPluginSet :many
 SELECT
+  pr.id AS project_id,
+  pr.slug AS project_slug,
+  om.slug AS organization_slug,
+  om.name AS organization_name,
+  pgc.marketplace_token,
+  pgc.updated_at AS marketplace_updated_at,
   p.id AS plugin_id,
   p.slug AS plugin_slug,
-  p.updated_at AS plugin_updated_at,
-  p.organization_id,
-  p.project_id,
-  om.slug AS organization_slug,
-  pr.slug AS project_slug,
-  pgc.marketplace_token,
-  pgc.updated_at AS marketplace_updated_at
-FROM plugin_assignments pa
-JOIN plugins p
-  ON p.id = pa.plugin_id
-  AND p.deleted IS FALSE
+  p.updated_at AS plugin_updated_at
+FROM plugin_github_connections pgc
 JOIN projects pr
-  ON pr.id = p.project_id
+  ON pr.id = pgc.project_id
   AND pr.deleted IS FALSE
 JOIN organization_metadata om
-  ON om.id = p.organization_id
-JOIN plugin_github_connections pgc
-  ON pgc.project_id = p.project_id
+  ON om.id = pr.organization_id
+LEFT JOIN plugins p
+  ON p.project_id = pr.id
+  AND p.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.principal_urn = ANY($1::text[])
+  )
+WHERE pr.organization_id = $2
   AND pgc.marketplace_token IS NOT NULL
-WHERE pa.organization_id = $1
-  AND pa.principal_urn = ANY($2::text[])
-ORDER BY p.project_id, p.slug
+ORDER BY pr.slug, p.slug
 `
 
-type GetAssignedPluginsForAgentParams struct {
-	OrganizationID string
+type GetAgentPluginSetParams struct {
 	PrincipalUrns  []string
+	OrganizationID string
 }
 
-type GetAssignedPluginsForAgentRow struct {
-	PluginID             uuid.UUID
-	PluginSlug           string
-	PluginUpdatedAt      pgtype.Timestamptz
-	OrganizationID       string
+type GetAgentPluginSetRow struct {
 	ProjectID            uuid.UUID
-	OrganizationSlug     string
 	ProjectSlug          string
+	OrganizationSlug     string
+	OrganizationName     string
 	MarketplaceToken     pgtype.Text
 	MarketplaceUpdatedAt pgtype.Timestamptz
+	PluginID             uuid.NullUUID
+	PluginSlug           pgtype.Text
+	PluginUpdatedAt      pgtype.Timestamptz
 }
 
-// Resolves plugins assigned to any of the given principal URNs within an org,
-// joining the per-project marketplace token so the agent can register the
-// marketplace in Claude Code's settings. Plugins whose project has no
-// marketplace_token (the admin has not published yet) are excluded.
-func (q *Queries) GetAssignedPluginsForAgent(ctx context.Context, arg GetAssignedPluginsForAgentParams) ([]GetAssignedPluginsForAgentRow, error) {
-	rows, err := q.db.Query(ctx, getAssignedPluginsForAgent, arg.OrganizationID, arg.PrincipalUrns)
+// Returns the device agent's full plugin set for an org, marketplace-first.
+//
+// The base is every *published* marketplace in the org (a
+// plugin_github_connections row with a marketplace_token), so a marketplace —
+// and its always-required observability plugin, synthesized in the view layer —
+// is returned even when the user has no explicit assignments. Plugins the user
+// is assigned to (via principal_urn) are LEFT JOINed on top; projects with no
+// matching assignment still yield one row with null plugin columns.
+func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetParams) ([]GetAgentPluginSetRow, error) {
+	rows, err := q.db.Query(ctx, getAgentPluginSet, arg.PrincipalUrns, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetAssignedPluginsForAgentRow
+	var items []GetAgentPluginSetRow
 	for rows.Next() {
-		var i GetAssignedPluginsForAgentRow
+		var i GetAgentPluginSetRow
 		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ProjectSlug,
+			&i.OrganizationSlug,
+			&i.OrganizationName,
+			&i.MarketplaceToken,
+			&i.MarketplaceUpdatedAt,
 			&i.PluginID,
 			&i.PluginSlug,
 			&i.PluginUpdatedAt,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.OrganizationSlug,
-			&i.ProjectSlug,
-			&i.MarketplaceToken,
-			&i.MarketplaceUpdatedAt,
 		); err != nil {
 			return nil, err
 		}
