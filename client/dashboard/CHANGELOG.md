@@ -1,5 +1,24 @@
 # dashboard
 
+## 0.64.0
+
+### Minor Changes
+
+- 67be909: add tool variations menu to source detail Tools tab
+- 6039fe5: Add `risk.customRules.suggest` endpoint that calls OpenRouter to turn a one-line description ("what do you want to detect?") into a prefilled custom detection rule. The dashboard's New Custom Detection Rule sheet now opens on a single textarea, calls the new endpoint, and lands the operator in the editable review form with the suggested rule_id, title, description, regex, and severity.
+- 6f176bb: Add dashboard UI for reviewing Shadow MCP requests and managing project-scoped access rules.
+- 6039fe5: Add a rule playground: from the Detection Rules detail sheet, the operator pastes a sample into a textarea and the dashboard calls the new `risk.rules.test` endpoint which dispatches to the same scanner code (gitleaks, Presidio, prompt-injection, regex) the worker uses. The response is a list of `TestDetectionRuleMatch`es mirroring the runtime risk_result shape.
+
+  Drop the severity-override UI from the rule detail sheet. The override edit / reset affordances will return in a follow-up PR; default severity continues to render as a row badge for context.
+
+### Patch Changes
+
+- e4c2bfb: Logs filter search bars can now be cleared with the Escape key or by emptying the box, not just the × button. This applies to the MCP Server Logs filter bar and the shared SearchBar (Agent Sessions, etc.). Escape only clears when there is text to clear, so an empty box lets the key bubble to close a surrounding popover.
+- 649a7cb: Fixed sidebar nav hover highlight snapping back to active route when moving between items.
+- 72ccf7b: Fixes login journey for allowed orgs
+- Updated dependencies [faaab73]
+  - @gram-ai/elements@1.33.2
+
 ## 0.63.0
 
 ### Minor Changes
