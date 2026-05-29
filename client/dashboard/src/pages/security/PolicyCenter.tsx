@@ -91,6 +91,13 @@ const ALL_CATEGORIES: RuleCategory[] = [
   "off_policy",
 ];
 
+const VISIBLE_CATEGORIES = ALL_CATEGORIES.filter(
+  (cat) =>
+    AVAILABLE_CATEGORIES.has(cat) &&
+    (DETECTION_RULES[cat].length === 0 ||
+      DETECTION_RULES[cat].some(isRuleAvailable)),
+);
+
 /** Categories whose source the server rejects with action=block; the form
  * must force flag when any of these are selected. Mirrors validateSourceAction
  * in server/internal/risk/impl.go. */
@@ -741,13 +748,12 @@ function PolicySheetBody({
       <div className="space-y-3">
         <Label className="text-sm font-medium">Detection Rules</Label>
         <div className="border-border divide-border divide-y rounded-lg border">
-          {ALL_CATEGORIES.map((cat) => {
+          {VISIBLE_CATEGORIES.map((cat) => {
             const meta = RULE_CATEGORY_META[cat];
-            const isAvailable = AVAILABLE_CATEGORIES.has(cat);
             const isExpanded = expandedCategory === cat;
             const rules = DETECTION_RULES[cat];
             const availableRules = rules.filter(isRuleAvailable);
-            const isExpandable = isAvailable && rules.length > 0;
+            const isExpandable = availableRules.length > 0;
             const categorySelected = selectedCategories.has(cat);
             const enabledRuleCount = categorySelected
               ? availableRules.filter((r) => !disabledRules.has(r.id)).length
@@ -834,11 +840,6 @@ function PolicySheetBody({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{meta.label}</span>
-                      {!isAvailable && (
-                        <Badge variant="outline" className="text-[10px]">
-                          Coming Soon
-                        </Badge>
-                      )}
                       {isExpandable && categorySelected && (
                         <Badge variant="outline" className="text-[10px]">
                           {enabledRuleCount}/{availableRules.length} on
@@ -853,7 +854,6 @@ function PolicySheetBody({
                   {/* Category checkbox */}
                   <Checkbox
                     checked={headerChecked}
-                    disabled={!isAvailable}
                     onCheckedChange={(checked) => toggleCategory(!!checked)}
                     onClick={(e) => e.stopPropagation()}
                   />
@@ -863,12 +863,12 @@ function PolicySheetBody({
                     toggleable; unchecking adds the canonical rule_id to the
                     policy's disabled_rules list and the scanner drops matching
                     findings. */}
-                {isAvailable && isExpanded && rules.length > 0 && (
+                {isExpanded && availableRules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
                     <div className="flex items-center justify-between py-1">
                       <span className="text-muted-foreground text-xs">
-                        {enabledRuleCount} of {availableRules.length} available
-                        {" rules enabled"}
+                        {enabledRuleCount} of {availableRules.length} rules
+                        {" enabled"}
                       </span>
                       <div className="flex gap-3">
                         <button
@@ -904,12 +904,9 @@ function PolicySheetBody({
                       </div>
                     </div>
                     <div className="space-y-2 py-1">
-                      {rules.map((rule) => {
-                        const ruleAvailable = isRuleAvailable(rule);
+                      {availableRules.map((rule) => {
                         const ruleEnabled =
-                          ruleAvailable &&
-                          categorySelected &&
-                          !disabledRules.has(rule.id);
+                          categorySelected && !disabledRules.has(rule.id);
                         return (
                           <div
                             key={rule.id}
@@ -918,25 +915,13 @@ function PolicySheetBody({
                             <Checkbox
                               id={rule.id}
                               checked={ruleEnabled}
-                              disabled={!ruleAvailable}
                               onCheckedChange={(checked) =>
                                 toggleRule(rule.id, !!checked)
                               }
                             />
-                            <label
-                              htmlFor={rule.id}
-                              className={cn(
-                                "text-xs",
-                                !ruleAvailable && "text-muted-foreground",
-                              )}
-                            >
+                            <label htmlFor={rule.id} className="text-xs">
                               {rule.title}
                             </label>
-                            {!ruleAvailable && (
-                              <Badge variant="outline" className="text-[10px]">
-                                Coming Soon
-                              </Badge>
-                            )}
                           </div>
                         );
                       })}

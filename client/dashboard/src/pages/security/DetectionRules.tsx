@@ -254,11 +254,13 @@ function BuiltinRulesSection({
       <div className="border-border divide-border divide-y rounded-lg border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
-          const rules = BUILTIN_RULES_BY_CATEGORY[cat];
+          const rules = BUILTIN_RULES_BY_CATEGORY[cat].filter(
+            (rule) => rule.available,
+          );
+          if (rules.length === 0) {
+            return null;
+          }
           const isExpanded = expanded === cat;
-          const unavailableCount = rules.filter(
-            (rule) => !rule.available,
-          ).length;
           return (
             <div key={cat}>
               <CategoryHeader
@@ -268,7 +270,6 @@ function BuiltinRulesSection({
                 expanded={isExpanded}
                 onClick={() => onToggle(cat)}
                 count={rules.length}
-                unavailableCount={unavailableCount}
               />
               {isExpanded && rules.length > 0 && (
                 <div className="bg-muted/30 divide-border divide-y">
@@ -278,7 +279,6 @@ function BuiltinRulesSection({
                       title={rule.title}
                       subtitle={rule.id}
                       severity={rule.defaultSeverity}
-                      available={rule.available}
                       onClick={() => onSelect(rule)}
                     />
                   ))}
@@ -302,7 +302,6 @@ function CategoryHeader({
   description,
   expanded,
   count,
-  unavailableCount = 0,
   onClick,
 }: {
   icon: IconName;
@@ -310,7 +309,6 @@ function CategoryHeader({
   description: string;
   expanded: boolean;
   count: number;
-  unavailableCount?: number;
   onClick: () => void;
 }) {
   return (
@@ -327,14 +325,7 @@ function CategoryHeader({
       />
       <Icon name={icon} className="text-muted-foreground size-4 shrink-0" />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <span>{label}</span>
-          {unavailableCount > 0 && (
-            <Badge variant="outline" className="text-[10px]">
-              {unavailableCount} Coming Soon
-            </Badge>
-          )}
-        </div>
+        <div className="text-sm font-medium">{label}</div>
         <div className="text-muted-foreground line-clamp-1 text-xs">
           {description}
         </div>
@@ -350,13 +341,11 @@ function RuleRow({
   title,
   subtitle,
   severity,
-  available,
   onClick,
 }: {
   title: string;
   subtitle: string;
   severity: SeverityLevel;
-  available: boolean;
   onClick: () => void;
 }) {
   return (
@@ -371,11 +360,6 @@ function RuleRow({
           {subtitle}
         </div>
       </div>
-      {!available && (
-        <Badge variant="outline" className="shrink-0 text-[10px]">
-          Coming Soon
-        </Badge>
-      )}
       <SeverityBadge severity={severity} />
       <ChevronRight className="text-muted-foreground size-4 shrink-0" />
     </button>
@@ -458,23 +442,7 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
           <p className="text-sm leading-relaxed">{rule.description}</p>
         </DetailField>
 
-        <DetailField label="Availability">
-          {rule.available ? (
-            <p className="text-sm">Available now.</p>
-          ) : (
-            <div className="space-y-2">
-              <Badge variant="outline" className="text-[10px]">
-                Coming Soon
-              </Badge>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                This built-in rule is visible in the catalog but is not
-                supported by the current production detector yet.
-              </p>
-            </div>
-          )}
-        </DetailField>
-
-        {rule.available && <RulePlayground ruleId={rule.id} regex={null} />}
+        <RulePlayground ruleId={rule.id} regex={null} />
       </div>
     </>
   );
