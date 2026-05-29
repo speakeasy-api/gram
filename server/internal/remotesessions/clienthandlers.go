@@ -76,7 +76,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 	// a client can't be attached to another tenant's issuer.
 	if _, err = txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
 		ID:        issuerID,
-		ProjectID: *authCtx.ProjectID,
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)

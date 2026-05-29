@@ -88,7 +88,7 @@ func createUserSessionIssuerInProject(t *testing.T, ctx context.Context, conn *p
 func createRemoteIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) uuid.UUID {
 	t.Helper()
 	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         projectID,
+		ProjectID:                         conv.ToNullUUID(projectID),
 		Slug:                              slug,
 		Issuer:                            "https://idp.example.com",
 		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
