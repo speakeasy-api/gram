@@ -327,9 +327,9 @@ export function OrgApiKeysInner() {
                         <RadioGroupItem value="agent" id="r5" />
                         <Label className="leading-normal" htmlFor="r5">
                           Agent: presents to the Speakeasy device agent endpoint
-                          to fetch the user's assigned plugins. Store in{" "}
-                          <code>managed.json</code> as <code>org_token</code> or
-                          hand to a dev for <code>speakeasy enroll</code>.
+                          to fetch the user's assigned plugins. Store it in
+                          managed.json as org_token, or hand it to a dev for
+                          speakeasy enroll.
                         </Label>
                       </div>
                     </RadioGroup>
