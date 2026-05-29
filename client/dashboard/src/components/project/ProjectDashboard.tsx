@@ -152,8 +152,73 @@ export function ProjectDashboard() {
       });
   }, [topUsersSearchData, memberById]);
 
+  // Total agent sessions = sum of per-user distinct hook sessions (totalChats).
+  // Each session id (gen_ai.conversation.id) belongs to a single user, so summing
+  // per-user counts gives the project-wide distinct-session total.
+  const totalSessions = useMemo(
+    () => (topUsersSearchData ?? []).reduce((sum, u) => sum + u.totalChats, 0),
+    [topUsersSearchData],
+  );
+
+  // Most Used Agents: aggregate per-user hook-source breakdowns (hookSources)
+  // across all users, ranking agents (claude-code, cursor, ...) by total events.
+  // Replaces overview.summary.llmClientBreakdown, whose tool-call-only count
+  // reads 0 for hook events (they carry no `tools:` URN).
+  const mostUsedAgents = useMemo(() => {
+    const bySource = new Map<string, number>();
+    for (const u of topUsersSearchData ?? []) {
+      for (const h of u.hookSources) {
+        bySource.set(h.source, (bySource.get(h.source) ?? 0) + h.eventCount);
+      }
+    }
+    return [...bySource.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([source, eventCount]) => ({
+        key: source,
+        label: source,
+        value: eventCount,
+      }));
+  }, [topUsersSearchData]);
+
+  // Total Spend mirrors the Employees ("cost") page exactly: internal users,
+  // all event sources (no eventSource filter), summing per-user totalCost — so
+  // this card shows the same figure as that page.
+  const { data: allUsersSpendData, isPending: isSpendPending } = useQuery({
+    queryKey: ["project", "totalSpend", from.toISOString(), to.toISOString()],
+    queryFn: async () => {
+      const users = [];
+      let cursor: string | undefined;
+      do {
+        const result = await unwrapAsync(
+          telemetrySearchUsers(client, {
+            searchUsersPayload: {
+              cursor,
+              filter: { from, to },
+              limit: 1000,
+              sort: "desc",
+              userType: "internal",
+            },
+          }),
+        );
+        users.push(...result.users);
+        cursor = result.nextCursor;
+      } while (cursor);
+      return users;
+    },
+    enabled: logsEnabled,
+    placeholderData: keepPreviousData,
+  });
+
+  const totalSpend = useMemo(
+    () => (allUsersSpendData ?? []).reduce((sum, u) => sum + u.totalCost, 0),
+    [allUsersSpendData],
+  );
+
   const isTopUsersLoading =
     logsEnabled && (isTopUsersPending || isMembersPending);
+
+  const isSpendLoading = logsEnabled && isSpendPending;
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
@@ -273,24 +338,25 @@ export function ProjectDashboard() {
                     tooltip="Total tool invocations recorded across all servers and sources in the selected period."
                   />
                 )}
-                {isOverviewPending ? (
+                {isSpendLoading ? (
                   <Skeleton className="h-[100px] rounded-lg" />
                 ) : (
                   <MetricCard
-                    title="End Users"
-                    value={overview?.summary.activeUsersCount ?? 0}
-                    icon="users"
-                    tooltip="Unique end users identified during the selected period. If agent sessions are captured they are counted from chat messages; otherwise they are counted from tool-call events."
+                    title="Total Spend"
+                    value={totalSpend}
+                    format="currency"
+                    icon="dollar-sign"
+                    tooltip="Total LLM spend by project members in the selected period, summed from per-user cost. Matches the figure on the Employees page."
                   />
                 )}
-                {isOverviewPending ? (
+                {isTopUsersLoading ? (
                   <Skeleton className="h-[100px] rounded-lg" />
                 ) : (
                   <MetricCard
                     title="Sessions"
-                    value={overview?.summary.totalChats ?? 0}
+                    value={totalSessions}
                     icon="message-circle"
-                    tooltip="Agent sessions started in the selected period."
+                    tooltip="Distinct agent sessions across project members in the selected period."
                   />
                 )}
               </div>
@@ -477,21 +543,12 @@ export function ProjectDashboard() {
                     </CardActions>
                   }
                 >
-                  {isOverviewPending ? (
+                  {isTopUsersLoading ? (
                     <SkeletonList />
-                  ) : (overview?.summary.llmClientBreakdown.length ?? 0) ===
-                    0 ? (
-                    <EmptyState message="No LLM activity recorded" />
+                  ) : mostUsedAgents.length === 0 ? (
+                    <EmptyState message="No agent activity recorded" />
                   ) : (
-                    <RankedBarList
-                      items={(overview?.summary.llmClientBreakdown ?? [])
-                        .slice(0, 5)
-                        .map((m) => ({
-                          key: m.clientName,
-                          label: m.clientName,
-                          value: m.activityCount,
-                        }))}
-                    />
+                    <RankedBarList items={mostUsedAgents} />
                   )}
                 </DashboardCard>
               </div>
