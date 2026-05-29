@@ -95,8 +95,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const securityActive = [
     routes.riskOverview,
-    routes.detectionRules,
     routes.policyCenter,
+    routes.approvalRequests,
+    routes.detectionRules,
   ].some((r) => r.active);
 
   let activeGroup: string | undefined;
@@ -130,8 +131,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     routes.insights,
     routes.logs,
     routes.riskOverview,
-    routes.detectionRules,
     routes.policyCenter,
+    routes.approvalRequests,
+    routes.detectionRules,
     routes.settings,
   ];
   const activeRoute = allNavRoutes.find((r) => r.active);
@@ -228,6 +230,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               />
               <ScopeGatedNavItem
                 item={routes.policyCenter}
+                scope={["project:read", "project:write"]}
+              />
+              <ScopeGatedNavItem
+                item={routes.approvalRequests}
                 scope={["project:read", "project:write"]}
               />
               <ScopeGatedNavItem

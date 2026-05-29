@@ -79,6 +79,7 @@ import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
+import ApprovalRequests from "./pages/security/ApprovalRequests";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
 import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
@@ -503,6 +504,12 @@ const ROUTE_STRUCTURE = {
     url: "detection-rules",
     icon: "scan-search",
     component: DetectionRules,
+  },
+  approvalRequests: {
+    title: "Approval Requests",
+    url: "approval-requests",
+    icon: "inbox",
+    component: ApprovalRequests,
   },
   policyCenter: {
     title: "Risk Policies",
