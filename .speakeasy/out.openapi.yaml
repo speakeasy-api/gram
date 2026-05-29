@@ -31047,6 +31047,9 @@ components:
         transcript_path:
           type: string
           description: Path to the conversation transcript file
+        user_email:
+          type: string
+          description: Email of the authenticated Codex user, if available
       description: Payload for Codex hook events
       required:
         - hook_event_name

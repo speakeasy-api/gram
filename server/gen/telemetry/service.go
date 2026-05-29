@@ -30,8 +30,8 @@ type Service interface {
 	GetProjectMetricsSummary(context.Context, *GetProjectMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
 	// Get aggregated metrics summary grouped by user
 	GetUserMetricsSummary(context.Context, *GetUserMetricsSummaryPayload) (res *GetUserMetricsSummaryResult, err error)
-	// Get an employee's MCP data flow graph across origins, clients, servers,
-	// and tools
+	// Get an employee's MCP data flow graph across origins, clients, servers, and
+	// tools
 	GetEmployeeDataFlowGraph(context.Context, *GetEmployeeDataFlowGraphPayload) (res *GetEmployeeDataFlowGraphResult, err error)
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
