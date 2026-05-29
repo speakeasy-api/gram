@@ -1432,12 +1432,12 @@ type GetEmployeeDataFlowGraphParams struct {
 }
 
 // GetEmployeeDataFlowGraph aggregates an employee's tool-call telemetry into
-// path tuples: endpoint identity -> MCP client -> MCP server -> tool.
+// path tuples: origin -> MCP client -> MCP server -> tool.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeDataFlowGraphParams) ([]EmployeeDataFlowRow, error) {
 	externalMCPNameExpr := "multiIf(toString(attributes.gram.external_mcp.name) != '', toString(attributes.gram.external_mcp.name), toString(attributes.gram.external_mcp.slug) != '', toString(attributes.gram.external_mcp.slug), toString(attributes.gram.external_mcp.id) != '', toString(attributes.gram.external_mcp.id), '')"
-	endpointExpr := "toString(attributes.gram.hook.hostname)"
+	originExpr := "toString(attributes.gram.hook.hostname)"
 	urnSourceExpr := "arrayElement(splitByChar(':', gram_urn), 3)"
 	serverExpr := fmt.Sprintf("multiIf(remote_mcp_server_id != '', multiIf(tool_source != '', tool_source, %s != '', %s, remote_mcp_server_id), %s != '', %s, toString(attributes.gram.mcp.match) != '', toString(attributes.gram.mcp.match), tool_source != '', tool_source, startsWith(gram_urn, 'tools:'), %s, 'local')", externalMCPNameExpr, externalMCPNameExpr, externalMCPNameExpr, externalMCPNameExpr, urnSourceExpr)
 	serverClassExpr := fmt.Sprintf("multiIf(remote_mcp_server_id != '' OR (startsWith(gram_urn, 'tools:') AND event_source != 'hook'), 'gram', %s != '' OR toString(attributes.gram.mcp.server_url) != '' OR toString(attributes.gram.mcp.match) != '', 'external', %s = 'local', 'local', tool_source = '', 'local', 'external')", externalMCPNameExpr, serverExpr)
@@ -1451,7 +1451,7 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 	failureExpr := fmt.Sprintf("((event_source = 'hook' AND tool_name != '' AND toString(attributes.gram.hook.event) = 'PostToolUseFailure') OR (%s AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))", gramCallExpr)
 
 	sb := sq.Select(
-		endpointExpr+" AS endpoint",
+		originExpr+" AS origin",
 		clientExpr+" AS client",
 		serverExpr+" AS server",
 		serverClassExpr+" AS server_class",
@@ -1472,7 +1472,7 @@ func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeD
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
 
-	sb = sb.GroupBy("endpoint", "client", "server", "server_class", "tool").
+	sb = sb.GroupBy("origin", "client", "server", "server_class", "tool").
 		OrderBy("call_count DESC").
 		Limit(1000)
 

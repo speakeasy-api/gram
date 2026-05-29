@@ -23,16 +23,16 @@ export const ServerClass = {
 export type ServerClass = ClosedEnum<typeof ServerClass>;
 
 /**
- * Graph tier. Endpoint nodes identify the originating device or client context from telemetry, not the MCP server URL.
+ * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
  */
 export const Tier = {
-  Endpoint: "endpoint",
+  Origin: "origin",
   Client: "client",
   Server: "server",
   Tool: "tool",
 } as const;
 /**
- * Graph tier. Endpoint nodes identify the originating device or client context from telemetry, not the MCP server URL.
+ * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
  */
 export type Tier = ClosedEnum<typeof Tier>;
 
@@ -53,7 +53,7 @@ export type EmployeeDataFlowNode = {
    */
   serverClass?: ServerClass | undefined;
   /**
-   * Graph tier. Endpoint nodes identify the originating device or client context from telemetry, not the MCP server URL.
+   * Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
    */
   tier: Tier;
   /**

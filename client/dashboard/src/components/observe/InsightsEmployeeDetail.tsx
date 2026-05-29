@@ -87,28 +87,28 @@ ChartJS.register(
 const CHART_COLOR = "#60a5fa";
 const DATA_FLOW_TIER_ORDER: DataFlowTier[] = [
   "user",
-  "endpoint",
+  "origin",
   "client",
   "server",
   "tool",
 ];
 const DATA_FLOW_TIER_LABELS: Record<string, string> = {
   user: "Employee",
-  endpoint: "Endpoint",
+  origin: "Origin",
   client: "MCP Client",
   server: "MCP Server",
   tool: "Tool",
 };
 const DATA_FLOW_TIER_ICONS: Record<string, IconName> = {
   user: "user",
-  endpoint: "monitor",
+  origin: "monitor",
   client: "terminal",
   server: "server",
   tool: "wrench",
 };
 const DATA_FLOW_TIER_TONES: Record<string, string> = {
   user: "bg-slate-500/10 text-slate-600 ring-slate-500/20",
-  endpoint: "bg-blue-500/10 text-blue-600 ring-blue-500/20",
+  origin: "bg-blue-500/10 text-blue-600 ring-blue-500/20",
   client: "bg-purple-500/10 text-purple-600 ring-purple-500/20",
   server: "bg-amber-500/10 text-amber-600 ring-amber-500/20",
   tool: "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20",
@@ -116,7 +116,7 @@ const DATA_FLOW_TIER_TONES: Record<string, string> = {
 const SYNTHETIC_USER_NODE_ID = "synthetic:user";
 const DATA_FLOW_TIER_MINIMAP_COLOR: Record<string, string> = {
   user: "#64748b",
-  endpoint: "#3b82f6",
+  origin: "#3b82f6",
   client: "#a855f7",
   server: "#f59e0b",
   tool: "#10b981",
@@ -973,7 +973,7 @@ function augmentGraphWithUser(
   userName: string,
   userPhotoUrl?: string,
 ): DataFlowSourceGraph {
-  // Only keep nodes reachable forward from an endpoint (the entry tier). This
+  // Only keep nodes reachable forward from an origin (the entry tier). This
   // drops dangling nodes such as an MCP client with no inbound connection, and
   // anything that hangs off them.
   const adjacency = new Map<string, string[]>();
@@ -985,7 +985,7 @@ function augmentGraphWithUser(
 
   const reachable = new Set<string>();
   const queue = graph.nodes
-    .filter((node) => node.tier === "endpoint")
+    .filter((node) => node.tier === "origin")
     .map((node) => node.id);
   for (const id of queue) reachable.add(id);
   while (queue.length > 0) {
@@ -1005,24 +1005,24 @@ function augmentGraphWithUser(
     .filter((edge) => reachable.has(edge.source) && reachable.has(edge.target))
     .map((edge) => ({ ...edge }));
 
-  const endpoints = nodes.filter((node) => node.tier === "endpoint");
-  if (endpoints.length === 0) return { nodes, edges };
+  const origins = nodes.filter((node) => node.tier === "origin");
+  if (origins.length === 0) return { nodes, edges };
 
-  const outcomeByEndpoint = new Map<
+  const outcomeByOrigin = new Map<
     string,
     { success: number; failure: number }
   >();
   for (const edge of graph.edges) {
-    const outcome = outcomeByEndpoint.get(edge.source) ?? {
+    const outcome = outcomeByOrigin.get(edge.source) ?? {
       success: 0,
       failure: 0,
     };
     outcome.success += edge.successCount;
     outcome.failure += edge.failureCount;
-    outcomeByEndpoint.set(edge.source, outcome);
+    outcomeByOrigin.set(edge.source, outcome);
   }
 
-  const totalCalls = endpoints.reduce((sum, node) => sum + node.totalCalls, 0);
+  const totalCalls = origins.reduce((sum, node) => sum + node.totalCalls, 0);
   nodes.push({
     id: SYNTHETIC_USER_NODE_ID,
     label: userName || "Employee",
@@ -1031,16 +1031,16 @@ function augmentGraphWithUser(
     photoUrl: userPhotoUrl,
   });
 
-  for (const endpoint of endpoints) {
-    const outcome = outcomeByEndpoint.get(endpoint.id) ?? {
-      success: endpoint.totalCalls,
+  for (const origin of origins) {
+    const outcome = outcomeByOrigin.get(origin.id) ?? {
+      success: origin.totalCalls,
       failure: 0,
     };
     edges.push({
-      id: `synthetic:user->${endpoint.id}`,
+      id: `synthetic:user->${origin.id}`,
       source: SYNTHETIC_USER_NODE_ID,
-      target: endpoint.id,
-      callCount: endpoint.totalCalls,
+      target: origin.id,
+      callCount: origin.totalCalls,
       successCount: outcome.success,
       failureCount: outcome.failure,
     });
@@ -1666,7 +1666,7 @@ function formatToolUrn(value: string) {
 function formatDataFlowNodeLabel(node: DataFlowSourceNode) {
   if (node.tier === "client") return formatPlatform(node.label);
   if (node.tier === "tool") return formatToolUrn(node.label);
-  if (node.tier === "endpoint") return formatEndpointLabel(node.label);
+  if (node.tier === "origin") return formatOriginLabel(node.label);
   if (node.tier === "server") return formatServerLabel(node);
   return node.label;
 }
@@ -1689,7 +1689,7 @@ function formatServerLabel(node: DataFlowSourceNode) {
   return node.label;
 }
 
-function formatEndpointLabel(value: string) {
+function formatOriginLabel(value: string) {
   if (value === "local") return "local";
   if (/^https?:\/\//.test(value)) {
     try {

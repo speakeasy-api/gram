@@ -30,8 +30,8 @@ type Service interface {
 	GetProjectMetricsSummary(context.Context, *GetProjectMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
 	// Get aggregated metrics summary grouped by user
 	GetUserMetricsSummary(context.Context, *GetUserMetricsSummaryPayload) (res *GetUserMetricsSummaryResult, err error)
-	// Get an employee's MCP data flow graph across endpoint identities, clients,
-	// servers, and tools
+	// Get an employee's MCP data flow graph across origins, clients, servers,
+	// and tools
 	GetEmployeeDataFlowGraph(context.Context, *GetEmployeeDataFlowGraphPayload) (res *GetEmployeeDataFlowGraphResult, err error)
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
@@ -147,8 +147,8 @@ type EmployeeDataFlowEdge struct {
 type EmployeeDataFlowNode struct {
 	// Stable node ID
 	ID string
-	// Graph tier. Endpoint nodes identify the originating device or client context
-	// from telemetry, not the MCP server URL.
+	// Graph tier. Origin nodes identify the hostname or client context that
+	// started the call, not the MCP server URL.
 	Tier string
 	// Display label
 	Label string

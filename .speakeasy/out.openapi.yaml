@@ -22702,7 +22702,7 @@ paths:
       x-speakeasy-name-override: captureEvent
   /rpc/telemetry.getEmployeeDataFlowGraph:
     post:
-      description: Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools
+      description: Get an employee's MCP data flow graph across origins, clients, servers, and tools
       operationId: getEmployeeDataFlowGraph
       parameters:
         - allowEmptyValue: true
@@ -32635,9 +32635,9 @@ components:
             - local
         tier:
           type: string
-          description: Graph tier. Endpoint nodes identify the originating device or client context from telemetry, not the MCP server URL.
+          description: Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.
           enum:
-            - endpoint
+            - origin
             - client
             - server
             - tool

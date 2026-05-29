@@ -221,7 +221,7 @@ var _ = Service("telemetry", func() {
 	})
 
 	Method("getEmployeeDataFlowGraph", func() {
-		Description("Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools")
+		Description("Get an employee's MCP data flow graph across origins, clients, servers, and tools")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("producer")
 		})
@@ -1050,8 +1050,8 @@ var EmployeeDataFlowNode = Type("EmployeeDataFlowNode", func() {
 	Description("A node in the employee data flow graph")
 
 	Attribute("id", String, "Stable node ID")
-	Attribute("tier", String, "Graph tier. Endpoint nodes identify the originating device or client context from telemetry, not the MCP server URL.", func() {
-		Enum("endpoint", "client", "server", "tool")
+	Attribute("tier", String, "Graph tier. Origin nodes identify the hostname or client context that started the call, not the MCP server URL.", func() {
+		Enum("origin", "client", "server", "tool")
 	})
 	Attribute("label", String, "Display label")
 	Attribute("total_calls", Int64, "Total calls involving this node")

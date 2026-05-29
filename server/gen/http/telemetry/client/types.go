@@ -3296,8 +3296,8 @@ type ModelUsageResponseBody struct {
 type EmployeeDataFlowNodeResponseBody struct {
 	// Stable node ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Graph tier. Endpoint nodes identify the originating device or client context
-	// from telemetry, not the MCP server URL.
+	// Graph tier. Origin nodes identify the hostname or client context that
+	// started the call, not the MCP server URL.
 	Tier *string `form:"tier,omitempty" json:"tier,omitempty" xml:"tier,omitempty"`
 	// Display label
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
@@ -10470,8 +10470,8 @@ func ValidateEmployeeDataFlowNodeResponseBody(body *EmployeeDataFlowNodeResponse
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_calls", "body"))
 	}
 	if body.Tier != nil {
-		if !(*body.Tier == "endpoint" || *body.Tier == "client" || *body.Tier == "server" || *body.Tier == "tool") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tier", *body.Tier, []any{"endpoint", "client", "server", "tool"}))
+		if !(*body.Tier == "origin" || *body.Tier == "client" || *body.Tier == "server" || *body.Tier == "tool") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tier", *body.Tier, []any{"origin", "client", "server", "tool"}))
 		}
 	}
 	if body.ServerClass != nil {

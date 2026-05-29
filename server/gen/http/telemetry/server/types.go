@@ -3196,8 +3196,8 @@ type ModelUsageResponseBody struct {
 type EmployeeDataFlowNodeResponseBody struct {
 	// Stable node ID
 	ID string `form:"id" json:"id" xml:"id"`
-	// Graph tier. Endpoint nodes identify the originating device or client context
-	// from telemetry, not the MCP server URL.
+	// Graph tier. Origin nodes identify the hostname or client context that
+	// started the call, not the MCP server URL.
 	Tier string `form:"tier" json:"tier" xml:"tier"`
 	// Display label
 	Label string `form:"label" json:"label" xml:"label"`

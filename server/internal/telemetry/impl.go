@@ -812,10 +812,10 @@ type employeeGraphEdgeAccumulator struct {
 }
 
 var employeeDataFlowTierOrder = map[string]int{
-	"endpoint": 0,
-	"client":   1,
-	"server":   2,
-	"tool":     3,
+	"origin": 0,
+	"client": 1,
+	"server": 2,
+	"tool":   3,
 }
 
 func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.EmployeeDataFlowNode, []*telem_gen.EmployeeDataFlowEdge) {
@@ -915,7 +915,7 @@ func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.E
 
 func employeeDataFlowPath(row repo.EmployeeDataFlowRow) []employeeGraphTupleNode {
 	candidates := []employeeGraphTupleNode{
-		{tier: "endpoint", label: strings.TrimSpace(row.Endpoint), serverClass: ""},
+		{tier: "origin", label: strings.TrimSpace(row.Origin), serverClass: ""},
 		{tier: "client", label: strings.TrimSpace(row.Client), serverClass: ""},
 		{tier: "server", label: strings.TrimSpace(row.Server), serverClass: strings.TrimSpace(row.ServerClass)},
 		{tier: "tool", label: strings.TrimSpace(row.Tool), serverClass: ""},

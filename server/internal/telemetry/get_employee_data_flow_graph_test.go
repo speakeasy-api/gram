@@ -71,7 +71,7 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 	searchRepos := "search_repos"
 	hookEvent := "hook"
 	toolCallEvent := "tool_call"
-	endpointHostname := "subomi-mbp"
+	originHostname := "subomi-mbp"
 	remoteServerID := uuid.NewString()
 
 	insertTelemetryLogWithParams(t, ctx, testLogParams{
@@ -88,7 +88,7 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 			"user.id":                 userID,
 			"gram.hook.source":        cursor,
 			"gram.hook.event":         "PostToolUse",
-			"gram.hook.hostname":      endpointHostname,
+			"gram.hook.hostname":      originHostname,
 			"gram.external_mcp.name":  "GitHub",
 			"gram.mcp.server_url":     "https://api.github.com/mcp",
 			"gen_ai.response.model":   "claude-sonnet-4",
@@ -109,7 +109,7 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 			"user.id":                userID,
 			"gram.hook.source":       cursor,
 			"gram.hook.event":        "PostToolUseFailure",
-			"gram.hook.hostname":     endpointHostname,
+			"gram.hook.hostname":     originHostname,
 			"gram.external_mcp.name": "GitHub",
 			"gram.mcp.server_url":    "https://api.github.com/mcp",
 			"gen_ai.response.model":  "claude-sonnet-4",
@@ -129,7 +129,7 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 			"user.id":                 userID,
 			"gram.hook.source":        claudeCode,
 			"gram.hook.event":         "PostToolUse",
-			"gram.hook.hostname":      endpointHostname,
+			"gram.hook.hostname":      originHostname,
 			"gen_ai.tool.call.result": "ok",
 		},
 	})
@@ -180,10 +180,10 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	endpointNode := findEmployeeDataFlowNode(result.Nodes, "endpoint", endpointHostname)
-	require.NotNil(t, endpointNode)
-	require.Equal(t, int64(3), endpointNode.TotalCalls)
-	require.Nil(t, findEmployeeDataFlowNode(result.Nodes, "endpoint", "https://api.github.com/mcp"))
+	originNode := findEmployeeDataFlowNode(result.Nodes, "origin", originHostname)
+	require.NotNil(t, originNode)
+	require.Equal(t, int64(3), originNode.TotalCalls)
+	require.Nil(t, findEmployeeDataFlowNode(result.Nodes, "origin", "https://api.github.com/mcp"))
 
 	githubNode := findEmployeeDataFlowNode(result.Nodes, "server", "GitHub")
 	require.NotNil(t, githubNode)
@@ -201,7 +201,7 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 	require.NotNil(t, cursorNode)
 	require.Equal(t, int64(2), cursorNode.TotalCalls)
 
-	edge := findEmployeeDataFlowEdge(result.Edges, endpointNode.ID, cursorNode.ID)
+	edge := findEmployeeDataFlowEdge(result.Edges, originNode.ID, cursorNode.ID)
 	require.NotNil(t, edge)
 	require.Equal(t, int64(2), edge.CallCount)
 

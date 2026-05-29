@@ -210,10 +210,10 @@ type UserSummary struct {
 
 // EmployeeDataFlowRow represents an aggregated call-path tuple for an employee.
 // The service layer expands each tuple into graph nodes and edges, skipping tiers
-// that are empty for a given row. Endpoint is the originating endpoint identity
-// from telemetry, not the MCP server URL.
+// that are empty for a given row. Origin is the hostname or client context that
+// started the call, not the MCP server URL.
 type EmployeeDataFlowRow struct {
-	Endpoint    string `ch:"endpoint"`
+	Origin      string `ch:"origin"`
 	Client      string `ch:"client"`
 	Server      string `ch:"server"`
 	ServerClass string `ch:"server_class"`

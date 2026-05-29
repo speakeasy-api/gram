@@ -56,7 +56,7 @@ export type GetEmployeeDataFlowGraphQueryError =
  * getEmployeeDataFlowGraph telemetry
  *
  * @remarks
- * Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools
+ * Get an employee's MCP data flow graph across origins, clients, servers, and tools
  */
 export function useGetEmployeeDataFlowGraph(
   request: operations.GetEmployeeDataFlowGraphRequest,
@@ -85,7 +85,7 @@ export function useGetEmployeeDataFlowGraph(
  * getEmployeeDataFlowGraph telemetry
  *
  * @remarks
- * Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools
+ * Get an employee's MCP data flow graph across origins, clients, servers, and tools
  */
 export function useGetEmployeeDataFlowGraphSuspense(
   request: operations.GetEmployeeDataFlowGraphRequest,

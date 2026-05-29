@@ -10638,7 +10638,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    capture-event: Capture a telemetry event and forward it to PostHog`)
 	fmt.Fprintln(os.Stderr, `    get-project-metrics-summary: Get aggregated metrics summary for an entire project`)
 	fmt.Fprintln(os.Stderr, `    get-user-metrics-summary: Get aggregated metrics summary grouped by user`)
-	fmt.Fprintln(os.Stderr, `    get-employee-data-flow-graph: Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools`)
+	fmt.Fprintln(os.Stderr, `    get-employee-data-flow-graph: Get an employee's MCP data flow graph across origins, clients, servers, and tools`)
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
 	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    list-filter-options: List available filter options (API keys or users) for the observability overview`)
@@ -10830,7 +10830,7 @@ func telemetryGetEmployeeDataFlowGraphUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools`)
+	fmt.Fprintln(os.Stderr, `Get an employee's MCP data flow graph across origins, clients, servers, and tools`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
