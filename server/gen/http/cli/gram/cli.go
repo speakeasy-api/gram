@@ -40,6 +40,7 @@ import (
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
+	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
@@ -107,6 +108,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server)",
 		"remote-session-clients (create-remote-session-client|clone-client-fromoauth-proxy-provider|update-remote-session-client|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
+		"organization-remote-session-issuers (create-organization-remote-session-issuer|update-organization-remote-session-issuer|list-organization-remote-session-issuers|get-organization-remote-session-issuer|delete-organization-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|suggest-custom-detection-rule|test-detection-rule)",
@@ -1269,6 +1271,34 @@ func ParseEndpoint(
 		remoteSessionIssuersDeleteRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("apikey-token", "", "")
 		remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("project-slug-input", "", "")
 
+		organizationRemoteSessionIssuersFlags = flag.NewFlagSet("organization-remote-session-issuers", flag.ContinueOnError)
+
+		organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags            = flag.NewFlagSet("create-organization-remote-session-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerBodyFlag         = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerSessionTokenFlag = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags            = flag.NewFlagSet("update-organization-remote-session-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerBodyFlag         = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerSessionTokenFlag = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags            = flag.NewFlagSet("list-organization-remote-session-issuers", flag.ExitOnError)
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersCursorFlag       = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.String("cursor", "", "")
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersLimitFlag        = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.String("limit", "", "")
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersSessionTokenFlag = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersApikeyTokenFlag  = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags            = flag.NewFlagSet("get-organization-remote-session-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerIDFlag           = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags.String("id", "REQUIRED", "")
+		organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerSessionTokenFlag = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags            = flag.NewFlagSet("delete-organization-remote-session-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerIDFlag           = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags.String("id", "REQUIRED", "")
+		organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerSessionTokenFlag = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags.String("apikey-token", "", "")
+
 		remoteSessionsFlags = flag.NewFlagSet("remote-sessions", flag.ContinueOnError)
 
 		remoteSessionsListRemoteSessionsFlags                     = flag.NewFlagSet("list-remote-sessions", flag.ExitOnError)
@@ -2158,6 +2188,13 @@ func ParseEndpoint(
 	remoteSessionIssuersGetRemoteSessionIssuerFlags.Usage = remoteSessionIssuersGetRemoteSessionIssuerUsage
 	remoteSessionIssuersDeleteRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDeleteRemoteSessionIssuerUsage
 
+	organizationRemoteSessionIssuersFlags.Usage = organizationRemoteSessionIssuersUsage
+	organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags.Usage = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerUsage
+	organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags.Usage = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerUsage
+	organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.Usage = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersUsage
+	organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags.Usage = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerUsage
+	organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags.Usage = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerUsage
+
 	remoteSessionsFlags.Usage = remoteSessionsUsage
 	remoteSessionsListRemoteSessionsFlags.Usage = remoteSessionsListRemoteSessionsUsage
 	remoteSessionsRevokeRemoteSessionFlags.Usage = remoteSessionsRevokeRemoteSessionUsage
@@ -2370,6 +2407,8 @@ func ParseEndpoint(
 			svcf = remoteSessionClientsFlags
 		case "remote-session-issuers":
 			svcf = remoteSessionIssuersFlags
+		case "organization-remote-session-issuers":
+			svcf = organizationRemoteSessionIssuersFlags
 		case "remote-sessions":
 			svcf = remoteSessionsFlags
 		case "resources":
@@ -3152,6 +3191,25 @@ func ParseEndpoint(
 
 			case "delete-remote-session-issuer":
 				epf = remoteSessionIssuersDeleteRemoteSessionIssuerFlags
+
+			}
+
+		case "organization-remote-session-issuers":
+			switch epn {
+			case "create-organization-remote-session-issuer":
+				epf = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags
+
+			case "update-organization-remote-session-issuer":
+				epf = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags
+
+			case "list-organization-remote-session-issuers":
+				epf = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags
+
+			case "get-organization-remote-session-issuer":
+				epf = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags
+
+			case "delete-organization-remote-session-issuer":
+				epf = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags
 
 			}
 
@@ -4279,6 +4337,25 @@ func ParseEndpoint(
 			case "delete-remote-session-issuer":
 				endpoint = c.DeleteRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildDeleteRemoteSessionIssuerPayload(*remoteSessionIssuersDeleteRemoteSessionIssuerIDFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInputFlag)
+			}
+		case "organization-remote-session-issuers":
+			c := organizationremotesessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-organization-remote-session-issuer":
+				endpoint = c.CreateOrganizationRemoteSessionIssuer()
+				data, err = organizationremotesessionissuersc.BuildCreateOrganizationRemoteSessionIssuerPayload(*organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerBodyFlag, *organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerSessionTokenFlag, *organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerApikeyTokenFlag)
+			case "update-organization-remote-session-issuer":
+				endpoint = c.UpdateOrganizationRemoteSessionIssuer()
+				data, err = organizationremotesessionissuersc.BuildUpdateOrganizationRemoteSessionIssuerPayload(*organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerBodyFlag, *organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerSessionTokenFlag, *organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerApikeyTokenFlag)
+			case "list-organization-remote-session-issuers":
+				endpoint = c.ListOrganizationRemoteSessionIssuers()
+				data, err = organizationremotesessionissuersc.BuildListOrganizationRemoteSessionIssuersPayload(*organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersCursorFlag, *organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersLimitFlag, *organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersSessionTokenFlag, *organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersApikeyTokenFlag)
+			case "get-organization-remote-session-issuer":
+				endpoint = c.GetOrganizationRemoteSessionIssuer()
+				data, err = organizationremotesessionissuersc.BuildGetOrganizationRemoteSessionIssuerPayload(*organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerIDFlag, *organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerSessionTokenFlag, *organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerApikeyTokenFlag)
+			case "delete-organization-remote-session-issuer":
+				endpoint = c.DeleteOrganizationRemoteSessionIssuer()
+				data, err = organizationremotesessionissuersc.BuildDeleteOrganizationRemoteSessionIssuerPayload(*organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerIDFlag, *organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerSessionTokenFlag, *organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerApikeyTokenFlag)
 			}
 		case "remote-sessions":
 			c := remotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9681,6 +9758,133 @@ func remoteSessionIssuersDeleteRemoteSessionIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers delete-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// organizationRemoteSessionIssuersUsage displays the usage of the
+// organization-remote-session-issuers command and its subcommands.
+func organizationRemoteSessionIssuersUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organization-remote-session-issuers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-organization-remote-session-issuer: Create a new organization-level remote_session_issuer.`)
+	fmt.Fprintln(os.Stderr, `    update-organization-remote-session-issuer: Update fields on an existing organization-level remote_session_issuer.`)
+	fmt.Fprintln(os.Stderr, `    list-organization-remote-session-issuers: List organization-level remote_session_issuers in the caller's organization.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-remote-session-issuer: Get an organization-level remote_session_issuer by id.`)
+	fmt.Fprintln(os.Stderr, `    delete-organization-remote-session-issuer: Soft-delete an organization-level remote_session_issuer. Blocked if any remote_session_clients still reference it.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s organization-remote-session-issuers COMMAND --help\n", os.Args[0])
+}
+func organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers create-organization-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new organization-level remote_session_issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-organization-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers update-organization-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update fields on an existing organization-level remote_session_issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-organization-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers list-organization-remote-session-issuers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List organization-level remote_session_issuers in the caller's organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers list-organization-remote-session-issuers --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers get-organization-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an organization-level remote_session_issuer by id.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers get-organization-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers delete-organization-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete an organization-level remote_session_issuer. Blocked if any remote_session_clients still reference it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers delete-organization-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // remoteSessionsUsage displays the usage of the remote-sessions command and
