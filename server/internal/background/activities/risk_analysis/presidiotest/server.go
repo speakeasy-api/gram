@@ -17,8 +17,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -39,9 +37,9 @@ type Result struct {
 type Detector func(text string, entities []string) []Result
 
 // MockServer is an in-process HTTP server that responds on the Presidio
-// Analyzer endpoints (/health, /analyze). The default detector recognises the
-// Presidio entity types Gram currently relies on in tests; callers can swap it
-// out with SetDetector for failure-mode coverage.
+// Analyzer endpoints (/health, /analyze). The default detector recognises
+// EMAIL_ADDRESS, CREDIT_CARD, PHONE_NUMBER, URL, and PERSON via regex; tests
+// can swap it out with SetDetector for failure-mode coverage.
 type MockServer struct {
 	logger      *slog.Logger
 	srv         *httptest.Server
@@ -177,8 +175,6 @@ func (m *MockServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 //   - URL            http(s) URLs
 //   - PERSON         two adjacent capitalised words (mirrors NER false-positive
 //     prone behaviour of real Presidio)
-//   - Plus representative literals for the rest of Gram's supported entity
-//     catalog so tests can pin entity coverage without the ML container.
 //
 // Score values are picked to roughly match what real Presidio returns so that
 // client-side confidence thresholds behave the same way.
@@ -200,54 +196,6 @@ func DefaultDetector(text string, entities []string) []Result {
 	}
 	if allowed("PERSON") {
 		out = append(out, detectPersons(text)...)
-	}
-	if allowed("CRYPTO") {
-		out = append(out, matchLiteral(text, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "CRYPTO", 0.95)...)
-	}
-	if allowed("DATE_TIME") {
-		out = append(out, matchLiteral(text, "2026-05-28 13:45", "DATE_TIME", 0.9)...)
-	}
-	if allowed("DOMAIN_NAME") {
-		out = append(out, matchLiteral(text, "example.org", "DOMAIN_NAME", 0.9)...)
-	}
-	if allowed("IBAN_CODE") {
-		out = append(out, matchLiteral(text, "GB33BUKB20201555555555", "IBAN_CODE", 0.95)...)
-	}
-	if allowed("IP_ADDRESS") {
-		out = append(out, matchLiteral(text, "203.0.113.42", "IP_ADDRESS", 0.9)...)
-	}
-	if allowed("LOCATION") {
-		out = append(out, matchLiteral(text, "New York", "LOCATION", 0.8)...)
-	}
-	if allowed("MAC_ADDRESS") {
-		out = append(out, matchLiteral(text, "00:1B:44:11:3A:B7", "MAC_ADDRESS", 0.95)...)
-	}
-	if allowed("MEDICAL_LICENSE") {
-		out = append(out, matchLiteral(text, "MD123456", "MEDICAL_LICENSE", 0.9)...)
-	}
-	if allowed("NRP") {
-		out = append(out, matchLiteral(text, "Christian", "NRP", 0.75)...)
-	}
-	if allowed("SG_NRIC_FIN") {
-		out = append(out, matchLiteral(text, "S1234567D", "SG_NRIC_FIN", 0.95)...)
-	}
-	if allowed("UK_NHS") {
-		out = append(out, matchLiteral(text, "485 777 3456", "UK_NHS", 0.95)...)
-	}
-	if allowed("US_BANK_NUMBER") {
-		out = append(out, matchLiteral(text, "123456789012", "US_BANK_NUMBER", 0.9)...)
-	}
-	if allowed("US_DRIVER_LICENSE") {
-		out = append(out, matchLiteral(text, "D1234567", "US_DRIVER_LICENSE", 0.9)...)
-	}
-	if allowed("US_ITIN") {
-		out = append(out, matchLiteral(text, "912782345", "US_ITIN", 0.95)...)
-	}
-	if allowed("US_PASSPORT") {
-		out = append(out, matchLiteral(text, "123456789", "US_PASSPORT", 0.9)...)
-	}
-	if allowed("US_SSN") {
-		out = append(out, matchLiteral(text, "123-45-6789", "US_SSN", 0.95)...)
 	}
 	return out
 }
@@ -298,49 +246,6 @@ func matchAll(text string, re *regexp.Regexp, entityType string, score float64) 
 		})
 	}
 	return out
-}
-
-func matchLiteral(text string, literal string, entityType string, score float64) []Result {
-	if literal == "" {
-		return nil
-	}
-	var out []Result
-	searchFrom := 0
-	for {
-		relative := strings.Index(text[searchFrom:], literal)
-		if relative < 0 {
-			return out
-		}
-		start := searchFrom + relative
-		end := start + len(literal)
-		if !hasTokenBoundaries(text, start, end) {
-			searchFrom = end
-			continue
-		}
-		out = append(out, Result{
-			EntityType: entityType,
-			Start:      runeIndex(text, start),
-			End:        runeIndex(text, end),
-			Score:      score,
-		})
-		searchFrom = end
-	}
-}
-
-func hasTokenBoundaries(text string, start, end int) bool {
-	if start > 0 {
-		prev, _ := utf8.DecodeLastRuneInString(text[:start])
-		if unicode.IsLetter(prev) || unicode.IsDigit(prev) {
-			return false
-		}
-	}
-	if end < len(text) {
-		next, _ := utf8.DecodeRuneInString(text[end:])
-		if unicode.IsLetter(next) || unicode.IsDigit(next) {
-			return false
-		}
-	}
-	return true
 }
 
 func detectCreditCards(text string) []Result {
