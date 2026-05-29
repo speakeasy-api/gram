@@ -100,7 +100,6 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 			string(workos.EventKindConnectionDeleted),
 
 			string(workos.EventKindDirectorySyncActivated),
-			string(workos.EventKindDirectorySyncDeactivated),
 			string(workos.EventKindDirectorySyncDeleted),
 		},
 		Limit:          workosOrgEventsPageSize,
@@ -224,7 +223,7 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 		return nil, handleSSOConnectionChange(ctx, logger, dbtx, event, false)
 	case string(workos.EventKindDirectorySyncActivated):
 		return nil, handleDSyncChange(ctx, logger, dbtx, event, true)
-	case string(workos.EventKindDirectorySyncDeactivated), string(workos.EventKindDirectorySyncDeleted):
+	case string(workos.EventKindDirectorySyncDeleted):
 		return nil, handleDSyncChange(ctx, logger, dbtx, event, false)
 	}
 
@@ -645,7 +644,7 @@ type workosDSyncEventPayload struct {
 }
 
 // handleDSyncChange sets scim_enabled on the organization when a WorkOS
-// dsync.activated, dsync.deactivated, or dsync.deleted event is received.
+// dsync.activated or dsync.deleted event is received.
 func handleDSyncChange(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, enabled bool) error {
 	var payload workosDSyncEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {

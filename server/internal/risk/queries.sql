@@ -8,6 +8,7 @@ INSERT INTO risk_policies (
   , presidio_entities
   , prompt_injection_rules
   , disabled_rules
+  , custom_rule_ids
   , enabled
   , action
   , auto_name
@@ -23,6 +24,7 @@ VALUES (
   , @presidio_entities
   , @prompt_injection_rules
   , @disabled_rules
+  , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , @enabled
   , @action
   , @auto_name
@@ -59,6 +61,7 @@ SET name = @name
   , presidio_entities = @presidio_entities
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
+  , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
@@ -68,6 +71,7 @@ SET name = @name
         OR presidio_entities IS DISTINCT FROM @presidio_entities
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
+        OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
       THEN version + 1
@@ -90,6 +94,61 @@ RETURNING *;
 
 -- name: DeleteRiskPolicy :exec
 UPDATE risk_policies
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: CreateCustomDetectionRule :one
+INSERT INTO risk_custom_detection_rules (
+    project_id
+  , organization_id
+  , rule_id
+  , title
+  , description
+  , regex
+  , severity
+)
+VALUES (
+    @project_id
+  , @organization_id
+  , @rule_id
+  , @title
+  , @description
+  , @regex
+  , @severity
+)
+RETURNING *;
+
+-- name: ListCustomDetectionRules :many
+SELECT *
+FROM risk_custom_detection_rules
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: GetCustomDetectionRule :one
+SELECT *
+FROM risk_custom_detection_rules
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: UpdateCustomDetectionRule :one
+UPDATE risk_custom_detection_rules
+SET title = @title
+  , description = @description
+  , regex = @regex
+  , severity = @severity
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteCustomDetectionRule :exec
+UPDATE risk_custom_detection_rules
 SET deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = @id
@@ -414,27 +473,24 @@ LEFT JOIN findings_by_bucket ON findings_by_bucket.bucket_start = buckets.bucket
 ORDER BY buckets.bucket_start ASC, categories.category ASC;
 
 -- name: FetchUnanalyzedMessageIDs :many
--- uuidv7 is k-sortable. The existing composite index
--- chat_messages_project_id_id_idx (project_id, id) lets Postgres satisfy
--- ORDER BY cm.id DESC with an Index Only Scan Backward, so we get
--- "most recent first" without a Sort node or any new index. Combined
--- with LIMIT this lets the planner stop scanning early when only the
--- recent tail is needed (verified via EXPLAIN ANALYZE: LIMIT 100 over a
--- 15k-message table scans ~2k rows in ~2ms).
+-- Scans the partial index chat_messages_risk_analyzed_at_null_idx
+-- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
+-- zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
+-- bound computed from the configured lookback) further limits the scan to
+-- recent messages, reusing the same partial index ordering.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
-  AND NOT EXISTS (
-    SELECT 1
-    FROM risk_results rr
-    WHERE rr.chat_message_id = cm.id
-      AND rr.project_id = @project_id
-      AND rr.risk_policy_id = @risk_policy_id
-      AND rr.risk_policy_version = @risk_policy_version
-    LIMIT 1
-  )
+  AND cm.risk_analyzed_at IS NULL
+  AND cm.id >= @id_lower_bound
 ORDER BY cm.id DESC
 LIMIT @batch_limit;
+
+-- name: MarkMessagesRiskAnalyzed :exec
+UPDATE chat_messages
+SET risk_analyzed_at = clock_timestamp()
+WHERE id = ANY(@message_ids::uuid[])
+  AND project_id = @project_id;
 
 -- name: GetMessageContentBatch :many
 SELECT id, content, tool_calls

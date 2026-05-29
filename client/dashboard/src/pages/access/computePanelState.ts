@@ -70,12 +70,13 @@ export function computePanelState(
   customTab?: CustomTab,
 ): PanelState {
   const noun = resourceType === "project" ? "project" : "server";
+  const allLabel = resourceType === "project" ? "All projects" : "All servers";
 
   // Unrestricted
   if (selectors === null) {
     return {
       activePanel: "all",
-      label: resourceType === "project" ? "All projects" : "All servers",
+      label: allLabel,
     };
   }
 

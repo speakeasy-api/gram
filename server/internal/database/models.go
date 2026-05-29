@@ -675,7 +675,8 @@ type McpEnvironmentConfig struct {
 
 type McpMetadatum struct {
 	ID                        uuid.UUID
-	ToolsetID                 uuid.UUID
+	ToolsetID                 uuid.NullUUID
+	McpServerID               uuid.NullUUID
 	ProjectID                 uuid.UUID
 	ExternalDocumentationUrl  pgtype.Text
 	ExternalDocumentationText pgtype.Text
@@ -1165,7 +1166,8 @@ type RemoteSessionClientUserSessionIssuer struct {
 
 type RemoteSessionIssuer struct {
 	ID                                uuid.UUID
-	ProjectID                         uuid.UUID
+	ProjectID                         uuid.NullUUID
+	OrganizationID                    pgtype.Text
 	Slug                              string
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text

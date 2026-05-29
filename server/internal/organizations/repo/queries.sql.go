@@ -1178,7 +1178,7 @@ type SetSCIMEnabledParams struct {
 }
 
 // Update the SCIM/directory sync enabled flag on an organization. Called when
-// a WorkOS dsync.activated or dsync.deactivated event is processed.
+// a WorkOS dsync.activated or dsync.deleted event is processed.
 func (q *Queries) SetSCIMEnabled(ctx context.Context, arg SetSCIMEnabledParams) error {
 	_, err := q.db.Exec(ctx, setSCIMEnabled, arg.Enabled, arg.WorkosLastEventID, arg.WorkosID)
 	return err

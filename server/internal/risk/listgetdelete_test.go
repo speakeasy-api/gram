@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestListRiskPolicies_Empty(t *testing.T) {
@@ -142,23 +143,13 @@ func TestGetRiskPolicyStatus_Success(t *testing.T) {
 	require.Equal(t, int64(0), status.FindingsCount)
 }
 
-func TestTriggerRiskAnalysis_BumpsVersion(t *testing.T) {
+func TestTriggerRiskAnalysis_NotSupported(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Trigger Test")})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), created.Version)
-
-	err = ti.service.TriggerRiskAnalysis(ctx, &gen.TriggerRiskAnalysisPayload{ID: created.ID})
-	require.NoError(t, err)
-
-	got, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: created.ID})
-	require.NoError(t, err)
-	require.Equal(t, int64(2), got.Version, "trigger should bump version")
+	err := ti.service.TriggerRiskAnalysis(ctx, &gen.TriggerRiskAnalysisPayload{ID: uuid.New().String()})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotImplemented, oopsErr.Code)
 }

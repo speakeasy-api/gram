@@ -645,7 +645,7 @@ WHERE workos_id = @workos_id;
 
 -- name: SetSCIMEnabled :exec
 -- Update the SCIM/directory sync enabled flag on an organization. Called when
--- a WorkOS dsync.activated or dsync.deactivated event is processed.
+-- a WorkOS dsync.activated or dsync.deleted event is processed.
 UPDATE organization_metadata
 SET scim_enabled = @enabled,
     workos_last_event_id = @workos_last_event_id,

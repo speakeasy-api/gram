@@ -297,7 +297,7 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
 	_, err = metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
-		ToolsetID:                toolset.ID,
+		ToolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
 		LogoID:                   uuid.NullUUID{Valid: false},

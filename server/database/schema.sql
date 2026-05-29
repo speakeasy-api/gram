@@ -828,7 +828,8 @@ WHERE deleted IS FALSE;
 -- MCP backend
 CREATE TABLE IF NOT EXISTS remote_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   slug TEXT NOT NULL,
   issuer TEXT NOT NULL,
@@ -851,11 +852,16 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT remote_session_issuers_pkey PRIMARY KEY (id),
-  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
 ON remote_session_issuers (project_id, slug)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS remote_session_issuers_organization_id_idx
+ON remote_session_issuers (organization_id)
 WHERE deleted IS FALSE;
 
 -- Remote Session Clients are records of Gram's client registrations with
@@ -1553,46 +1559,6 @@ CREATE TABLE IF NOT EXISTS toolset_prompts (
 -- Ensure a toolset can only have one prompt template per name
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_prompts_toolset_id_prompt_name_key
 ON toolset_prompts (toolset_id, prompt_name);
-
-CREATE TABLE IF NOT EXISTS mcp_metadata (
-  id UUID NOT NULL DEFAULT generate_uuidv7(),
-  toolset_id UUID NOT NULL,
-  project_id UUID NOT NULL,
-  external_documentation_url TEXT,
-  external_documentation_text TEXT,
-  logo_id UUID,
-  instructions TEXT,
-  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
-  default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
-  installation_override_url TEXT, -- URL to redirect to instead of the default installation page
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT mcp_metadata_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_metadata_toolset_id_key UNIQUE (toolset_id),
-  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
-);
-
-CREATE TABLE IF NOT EXISTS mcp_environment_configs (
-  id UUID NOT NULL DEFAULT generate_uuidv7(),
-  project_id UUID NOT NULL,
-  mcp_metadata_id UUID NOT NULL,
-  variable_name TEXT NOT NULL,
-  header_display_name TEXT,
-  provided_by TEXT NOT NULL DEFAULT 'user', -- 'user', 'system', 'none'
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT mcp_environment_configs_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_environment_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_environment_configs_mcp_metadata_id_fkey FOREIGN KEY (mcp_metadata_id) REFERENCES mcp_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
-);
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT NOT NULL,
@@ -2490,6 +2456,57 @@ WHERE remote_mcp_server_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)
 WHERE toolset_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS mcp_metadata (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  toolset_id UUID,
+  mcp_server_id UUID,
+  project_id UUID NOT NULL,
+  external_documentation_url TEXT,
+  external_documentation_text TEXT,
+  logo_id UUID,
+  instructions TEXT,
+  header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
+  default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
+  installation_override_url TEXT, -- URL to redirect to instead of the default installation page
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  -- Exactly one backend must be set: either a toolset or an MCP server.
+  CONSTRAINT mcp_metadata_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_toolset_id_key
+ON mcp_metadata (toolset_id)
+WHERE toolset_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_mcp_server_id_key
+ON mcp_metadata (mcp_server_id)
+WHERE mcp_server_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS mcp_environment_configs (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  project_id UUID NOT NULL,
+  mcp_metadata_id UUID NOT NULL,
+  variable_name TEXT NOT NULL,
+  header_display_name TEXT,
+  provided_by TEXT NOT NULL DEFAULT 'user', -- 'user', 'system', 'none'
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_environment_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_environment_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_environment_configs_mcp_metadata_id_fkey FOREIGN KEY (mcp_metadata_id) REFERENCES mcp_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
+);
 
 -- MCP Endpoints: addressable slugs for an MCP server. A NULL custom_domain_id
 -- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL

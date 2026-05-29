@@ -74,7 +74,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			q := repo.New(ti.conn)
 			slugSuffix := strings.ReplaceAll(tc.name, " ", "-")
 			issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-				ProjectID:                         *authCtx.ProjectID,
+				ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 				Slug:                              "auth-aud-" + slugSuffix,
 				Issuer:                            "https://idp.example.com",
 				AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),

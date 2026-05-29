@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -57,9 +58,10 @@ type Client struct {
 	repo         *risk_repo.Queries
 	cache        cache.TypedCacheObject[PolicyEnabledCache]
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
+	accessStore  accesscontrol.Store
 }
 
-func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache) *Client {
+func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, accessStore accesscontrol.Store) *Client {
 	logger = logger.With(attr.SlogComponent("shadowmcp"))
 	return &Client{
 		logger: logger,
@@ -75,6 +77,7 @@ func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache) *Cl
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		accessStore: accessStore,
 	}
 }
 

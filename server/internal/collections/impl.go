@@ -611,7 +611,7 @@ func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpm
 		)
 	}
 
-	metadataRecord, err := mcpMetaRepo.GetMetadataForToolset(ctx, toolset.ID)
+	metadataRecord, err := mcpMetaRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return headers, nil

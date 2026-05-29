@@ -179,11 +179,9 @@ export function InsightsToolsContent() {
     logFilters,
     selectedHookTypes,
     activeFilters,
-    addKnownServers,
     serverOptions,
     handleServerSelectionChange,
     userEmailOptions,
-    addKnownUserEmails,
     handleUserEmailSelectionChange,
     addFilter,
     handleHookTypesChange,
@@ -274,19 +272,6 @@ export function InsightsToolsContent() {
     enabled: !roleFilterPending,
     throwOnError: false,
   });
-
-  useEffect(() => {
-    if (!summaryData) return;
-    addKnownServers(summaryData.breakdown.map((r) => r.serverName));
-  }, [summaryData, addKnownServers]);
-
-  useEffect(() => {
-    addKnownUserEmails(
-      groupedTraces
-        .map((t) => t.userEmail)
-        .filter((e): e is string => Boolean(e)),
-    );
-  }, [groupedTraces, addKnownUserEmails]);
 
   const refetch = useCallback(() => {
     refetchLogs();

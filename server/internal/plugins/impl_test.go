@@ -671,7 +671,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 	// Create MCP metadata + environment config for the public toolset.
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID:                 toolset.ID,
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
 		ExternalDocumentationText: pgtype.Text{Valid: false},
@@ -752,7 +752,7 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID:                 toolset.ID,
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
 		ExternalDocumentationText: pgtype.Text{Valid: false},
@@ -1180,7 +1180,7 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID:                 toolset.ID,
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
 		ExternalDocumentationText: pgtype.Text{Valid: false},

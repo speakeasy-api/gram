@@ -134,7 +134,6 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		string(workos.EventKindConnectionDeactivated),
 		string(workos.EventKindConnectionDeleted),
 		string(workos.EventKindDirectorySyncActivated),
-		string(workos.EventKindDirectorySyncDeactivated),
 		string(workos.EventKindDirectorySyncDeleted):
 
 		orgID := parseOrganizationID(event)

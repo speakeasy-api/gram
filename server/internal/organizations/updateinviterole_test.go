@@ -12,8 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,13 +32,11 @@ func TestService_UpdateInviteRole(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "role-admin", Slug: "admin", Name: "Admin"},
-	}, nil).Once()
+	adminRoleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "admin", "Admin")
 
 	res, err := ti.service.UpdateInviteRole(ctx, &gen.UpdateInviteRolePayload{
 		InvitationID: row.ID.String(),
-		RoleID:       "role-admin",
+		RoleID:       adminRoleID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
@@ -71,16 +67,14 @@ func TestService_UpdateInviteRole_AuditLog(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "role-admin", Slug: "admin", Name: "Admin"},
-	}, nil).Once()
+	adminRoleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "admin", "Admin")
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationInviteRoleUpdate)
 	require.NoError(t, err)
 
 	res, err := ti.service.UpdateInviteRole(ctx, &gen.UpdateInviteRolePayload{
 		InvitationID: row.ID.String(),
-		RoleID:       "role-admin",
+		RoleID:       adminRoleID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
@@ -107,10 +101,14 @@ func TestService_UpdateInviteRole_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	adminRoleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "admin", "Admin")
 
 	res, err := ti.service.UpdateInviteRole(ctx, &gen.UpdateInviteRolePayload{
 		InvitationID: "00000000-0000-0000-0000-000000000000",
-		RoleID:       "role-admin",
+		RoleID:       adminRoleID,
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -140,9 +138,11 @@ func TestService_UpdateInviteRole_WrongOrganization(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	adminRoleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "admin", "Admin")
+
 	res, err := ti.service.UpdateInviteRole(ctx, &gen.UpdateInviteRolePayload{
 		InvitationID: row.ID.String(),
-		RoleID:       "role-admin",
+		RoleID:       adminRoleID,
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -166,13 +166,10 @@ func TestService_UpdateInviteRole_UnknownRoleID(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "role-member", Slug: "member", Name: "Member"},
-	}, nil).Once()
-
+	// A well-formed UUID that does not correspond to any role in this org.
 	res, err := ti.service.UpdateInviteRole(ctx, &gen.UpdateInviteRolePayload{
 		InvitationID: row.ID.String(),
-		RoleID:       "missing-role",
+		RoleID:       "00000000-0000-0000-0000-000000000000",
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -197,13 +194,11 @@ func TestService_UpdateInviteRole_AllowsOrgAdminGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "role-admin", Slug: "admin", Name: "Admin"},
-	}, nil).Once()
+	adminRoleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "admin", "Admin")
 
 	res, err := ti.service.UpdateInviteRole(ctx, &gen.UpdateInviteRolePayload{
 		InvitationID: row.ID.String(),
-		RoleID:       "role-admin",
+		RoleID:       adminRoleID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)

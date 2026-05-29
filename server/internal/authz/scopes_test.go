@@ -116,6 +116,9 @@ func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 
 	grant, _ = findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
 	require.NotNil(t, grant)
+
+	grant, _ = findMatchingGrant(g, Check{Scope: ScopeEnvironmentRead, ResourceID: "env_a"}.expand())
+	require.NotNil(t, grant)
 }
 
 func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {

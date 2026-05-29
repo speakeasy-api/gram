@@ -5,10 +5,12 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	svix "github.com/svix/svix-webhooks/go"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -25,6 +27,33 @@ import (
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/require"
 )
+
+// seedLocalRole inserts an organization_roles row and returns its Gram local
+// UUID — the same identifier the dashboard receives from access.listRoles and
+// sends back in invite payloads.
+func seedLocalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug, name string) string {
+	t.Helper()
+
+	now := time.Now().UTC()
+	_, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        slug,
+		WorkosName:        name,
+		WorkosDescription: conv.ToPGTextEmpty(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	row, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     slug,
+	})
+	require.NoError(t, err)
+
+	return row.ID.String()
+}
 
 // stubOrgFeatures returns false for all features — tests use the WorkOS fallback path.
 type stubOrgFeatures struct{}
