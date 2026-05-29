@@ -52,12 +52,14 @@ func TestBuildAgentPluginsView_ObservabilityWithoutAssignments(t *testing.T) {
 	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
 
 	require.Len(t, result.Marketplaces, 1)
-	require.Equal(t, "speakeasy-acme-default", result.Marketplaces[0].Name)
+	// Name must equal the published marketplace.json name (naming.MarketplaceName),
+	// or Claude Code can't resolve the enabledPlugins entries.
+	require.Equal(t, "acme-corp-gram", result.Marketplaces[0].Name)
 
 	// Observability must be present even with zero assignments.
 	require.Len(t, result.Plugins, 1)
 	require.Equal(t, "acme-corp-observability", result.Plugins[0].Slug)
-	require.Equal(t, "speakeasy-acme-default", result.Plugins[0].MarketplaceName)
+	require.Equal(t, "acme-corp-gram", result.Plugins[0].MarketplaceName)
 }
 
 func TestBuildAgentPluginsView_ObservabilityPlusAssignments(t *testing.T) {
@@ -76,16 +78,20 @@ func TestBuildAgentPluginsView_ObservabilityPlusAssignments(t *testing.T) {
 
 	slugs := make([]string, 0, len(result.Plugins))
 	for _, p := range result.Plugins {
-		require.Equal(t, "speakeasy-acme-default", p.MarketplaceName)
+		require.Equal(t, "acme-corp-gram", p.MarketplaceName)
 		slugs = append(slugs, p.Slug)
 	}
 	// Observability first (emitted with the marketplace), then the assigned ones.
 	require.Equal(t, []string{"acme-corp-observability", "engineering-tools", "sales-tools"}, slugs)
 }
 
-func TestBuildAgentPluginsView_MultipleMarketplacesEachGetObservability(t *testing.T) {
+func TestBuildAgentPluginsView_MultipleProjectsCollapseToOneOrgMarketplace(t *testing.T) {
 	t.Parallel()
 
+	// The marketplace name is org-derived (naming.MarketplaceName), and gram
+	// publishes one name per org. So two published projects in the same org
+	// collapse to a single marketplace (first token wins) — matching gram's
+	// publish limitation rather than inventing distinct per-project names.
 	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
 	rows := []repo.GetAgentPluginSetRow{
 		marketplaceRow("acme", "Acme Corp", "default", "tokA", now),
@@ -94,13 +100,11 @@ func TestBuildAgentPluginsView_MultipleMarketplacesEachGetObservability(t *testi
 
 	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
 
-	require.Len(t, result.Marketplaces, 2)
-	require.Len(t, result.Plugins, 2, "one observability plugin per marketplace")
-	require.Equal(t, "speakeasy-acme-default", result.Plugins[0].MarketplaceName)
-	require.Equal(t, "speakeasy-acme-sales", result.Plugins[1].MarketplaceName)
-	for _, p := range result.Plugins {
-		require.Equal(t, "acme-corp-observability", p.Slug)
-	}
+	require.Len(t, result.Marketplaces, 1, "both projects collapse to one org marketplace")
+	require.Equal(t, "acme-corp-gram", result.Marketplaces[0].Name)
+	require.Equal(t, "https://app.getgram.ai/marketplace/tokA.git", result.Marketplaces[0].URL, "first token wins")
+	require.Len(t, result.Plugins, 1, "one observability plugin for the one marketplace")
+	require.Equal(t, "acme-corp-observability", result.Plugins[0].Slug)
 }
 
 func TestBuildAgentPluginsView_EmptyRows(t *testing.T) {

@@ -7,15 +7,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
-
-// observabilitySlugSuffix is appended to the slugified org name to form the
-// observability plugin's slug. It must match plugins.ClaudeObservabilitySlug
-// (`conv.ToSlug(orgName) + "-observability"`) — the plugin is synthesized into
-// every published marketplace at publish time, so the agent endpoint can only
-// reference it by reconstructing the same slug here.
-const observabilitySlugSuffix = "-observability"
 
 // BuildAgentPluginsView turns the marketplace-first rows from
 // agent.GetAgentPluginSet into Claude Code's marketplaces + plugins shape.
@@ -25,6 +18,17 @@ const observabilitySlugSuffix = "-observability"
 // plugins (the non-null plugin rows). Rows arrive grouped by project
 // (`ORDER BY pr.slug, p.slug`), one row per project even when the user has no
 // assignment there (null plugin columns).
+//
+// The marketplace name and observability slug come from the shared `naming`
+// package so they match exactly what the publish path wrote into the
+// marketplace.json — Claude Code resolves marketplaces by that name, so any
+// mismatch silently fails to enable plugins.
+//
+// Note: gram publishes one marketplace name per *org* (naming.MarketplaceName
+// is org-derived, not project-scoped), and Claude Code allows only one
+// marketplace per name. So if an org ever publishes multiple projects, they
+// collapse to a single marketplace here — matching gram's existing publish
+// limitation rather than introducing a new one.
 //
 // marketplaceURL constructs the public marketplace git URL from a token; the
 // caller owns the URL shape so this builder stays free of server-side config.
@@ -38,7 +42,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			continue
 		}
 
-		name := marketplaceName(row.OrganizationSlug, row.ProjectSlug)
+		name := naming.MarketplaceName(row.OrganizationName)
 		if _, ok := seenMarketplace[name]; !ok {
 			seenMarketplace[name] = struct{}{}
 			marketplaces = append(marketplaces, &gen.AgentMarketplace{
@@ -49,7 +53,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			// Observability is required on every published marketplace,
 			// independent of assignments.
 			plugins = append(plugins, &gen.AgentPlugin{
-				Slug:            conv.ToSlug(row.OrganizationName) + observabilitySlugSuffix,
+				Slug:            naming.ObservabilitySlug(row.OrganizationName),
 				MarketplaceName: name,
 			})
 		}
@@ -68,10 +72,6 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		Marketplaces: marketplaces,
 		Plugins:      plugins,
 	}
-}
-
-func marketplaceName(orgSlug, projectSlug string) string {
-	return "speakeasy-" + orgSlug + "-" + projectSlug
 }
 
 // computeAgentPluginsETag hashes the dimensions that determine the rendered

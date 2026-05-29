@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
 // ServerEnvConfig represents a user-facing environment variable required by a server.
@@ -201,7 +202,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	}
 
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
-	marketplaceName := conv.ToSlug(cfg.OrgName) + "-gram"
+	marketplaceName := naming.MarketplaceName(cfg.OrgName)
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
 		Name:    marketplaceName,
@@ -444,7 +445,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 // use slug "observability".
 // Exported because tests need to predict the published path.
 func ClaudeObservabilitySlug(cfg GenerateConfig) string {
-	return conv.ToSlug(cfg.OrgName) + "-observability"
+	return naming.ObservabilitySlug(cfg.OrgName)
 }
 func CursorObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(cfg.OrgName) + "-observability-cursor"
@@ -583,7 +584,7 @@ func generateCodexObservabilityPluginFlat(files map[string][]byte, cfg GenerateC
 	// marketplace root (containing .agents/plugins/marketplace.json), not a bare
 	// plugin root. path "." points back to the plugin at the ZIP root.
 	marketplaceJSON, err := marshalJSON(codexMarketplaceManifest{
-		Name:      conv.ToSlug(cfg.OrgName) + "-gram",
+		Name:      naming.MarketplaceName(cfg.OrgName),
 		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: ""},
 		Plugins: []codexMarketplaceEntry{{
 			Name: CodexObservabilitySlug(cfg),
@@ -635,7 +636,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	marketplace := naming.MarketplaceName(cfg.OrgName)
 	plugin := CodexObservabilitySlug(cfg)
 	hookCmd := fmt.Sprintf(`bash "$HOME/.codex/.tmp/marketplaces/%s/%s/hooks/hook.sh"`, marketplace, plugin)
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
@@ -1048,7 +1049,7 @@ func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval,
 // the marketplace source (suitable for the ZIP-bundled install.sh). When
 // marketplaceURL is non-empty the script registers the remote URL instead.
 func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]byte, error) {
-	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	marketplace := naming.MarketplaceName(cfg.OrgName)
 	plugin := CodexObservabilitySlug(cfg)
 
 	approvals, err := computeCodexHookApprovals(marketplace, plugin)
