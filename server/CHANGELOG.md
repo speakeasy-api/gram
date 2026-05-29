@@ -1,5 +1,24 @@
 # server
 
+## 0.62.0
+
+### Minor Changes
+
+- a00e7aa: serve mcp_endpoints/mcp_servers from /mcp/{slug} with fallback to the legacy toolsets lookup
+- 6039fe5: Add `risk.customRules.suggest` endpoint that calls OpenRouter to turn a one-line description ("what do you want to detect?") into a prefilled custom detection rule. The dashboard's New Custom Detection Rule sheet now opens on a single textarea, calls the new endpoint, and lands the operator in the editable review form with the suggested rule_id, title, description, regex, and severity.
+- 6039fe5: Add a rule playground: from the Detection Rules detail sheet, the operator pastes a sample into a textarea and the dashboard calls the new `risk.rules.test` endpoint which dispatches to the same scanner code (gitleaks, Presidio, prompt-injection, regex) the worker uses. The response is a list of `TestDetectionRuleMatch`es mirroring the runtime risk_result shape.
+
+  Drop the severity-override UI from the rule detail sheet. The override edit / reset affordances will return in a follow-up PR; default severity continues to render as a row badge for context.
+
+- 05805bb: Add management APIs for Shadow MCP approval requests and access rules.
+
+### Patch Changes
+
+- 7fe4787: Svix app portal now correctly grants full capabilities to org admins and read-only access to non-admin members.
+- e60b876: Updated the create portal session endpoint for svix webhooks to request all capabilities for admins explicitly. Previously it was specifying an empty slice of capabilities, which appeared to result in a read only session.
+- 72ccf7b: Fixes login journey for allowed orgs
+- 1c428e4: Enforce Shadow MCP Access Rules at runtime, allowing approved Access Rule exceptions while preserving existing block policy behavior.
+
 ## 0.61.0
 
 ### Minor Changes
