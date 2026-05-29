@@ -130,6 +130,29 @@ func TestBuildAgentPluginsView_SkipsRowsWithMissingMarketplaceToken(t *testing.T
 	require.Empty(t, result.Plugins)
 }
 
+func TestBuildAgentPluginsView_ETagIgnoresRowsThatDoNotRender(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	base := []repo.GetAgentPluginSetRow{
+		marketplaceRow("acme", "Acme Corp", "default", "tokA", now),
+	}
+
+	skipped := marketplaceRow("acme", "Acme Corp", "empty-token", "", now.Add(time.Hour))
+	skipped.MarketplaceToken = pgtype.Text{Valid: false}
+
+	collapsed := marketplaceRow("acme", "Acme Corp", "sales", "tokB", now.Add(2*time.Hour))
+
+	baseResult := mv.BuildAgentPluginsView(base, testMarketplaceURL)
+	withSkipped := mv.BuildAgentPluginsView(append(append([]repo.GetAgentPluginSetRow{}, base...), skipped), testMarketplaceURL)
+	withCollapsed := mv.BuildAgentPluginsView(append(append([]repo.GetAgentPluginSetRow{}, base...), collapsed), testMarketplaceURL)
+
+	require.Equal(t, baseResult.Etag, withSkipped.Etag, "skipped rows should not affect the sync token")
+	require.Equal(t, baseResult.Etag, withCollapsed.Etag, "collapsed marketplace rows should not affect the sync token")
+	require.Equal(t, baseResult.Marketplaces, withCollapsed.Marketplaces)
+	require.Equal(t, baseResult.Plugins, withCollapsed.Plugins)
+}
+
 func TestBuildAgentPluginsView_ETagStableAndSensitive(t *testing.T) {
 	t.Parallel()
 

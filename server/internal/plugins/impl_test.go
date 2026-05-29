@@ -350,6 +350,36 @@ func TestPluginsService_SetPluginAssignments(t *testing.T) {
 	require.Len(t, fetched.Assignments, 1)
 }
 
+func TestPluginsService_SetPluginAssignments_NormalizesAndDeduplicatesPrincipalURNs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dedupe Assignment Test"})
+	require.NoError(t, err)
+
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID: plugin.ID,
+		PrincipalUrns: []string{
+			"email:Dev@Acme.Corp",
+			"email:dev@acme.corp",
+			"role:engineering",
+			"role:engineering",
+			"*",
+			"*",
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Assignments, 3)
+	require.Equal(t, "email:dev@acme.corp", result.Assignments[0].PrincipalUrn)
+	require.Equal(t, "role:engineering", result.Assignments[1].PrincipalUrn)
+	require.Equal(t, "*", result.Assignments[2].PrincipalUrn)
+
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.Len(t, fetched.Assignments, 3)
+}
+
 func TestPluginsService_SetPluginAssignments_NonExistentPluginReturnsNotFound(t *testing.T) {
 	t.Parallel()
 

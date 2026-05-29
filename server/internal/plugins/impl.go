@@ -743,21 +743,29 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	// The wildcard is a literal token (not a typed URN), so it takes a
 	// fast-path. Email IDs are lowercased here so the device-agent endpoint
 	// can match a lowercased lookup deterministically.
-	urns := make([]string, len(payload.PrincipalUrns))
-	for i, raw := range payload.PrincipalUrns {
+	urns := make([]string, 0, len(payload.PrincipalUrns))
+	seenURNs := make(map[string]struct{}, len(payload.PrincipalUrns))
+	for _, raw := range payload.PrincipalUrns {
+		var principalURN string
 		if raw == urn.PrincipalWildcard {
-			urns[i] = raw
+			principalURN = raw
+		} else {
+			normalized := raw
+			if addr, ok := strings.CutPrefix(raw, string(urn.PrincipalTypeEmail)+":"); ok {
+				normalized = string(urn.PrincipalTypeEmail) + ":" + strings.ToLower(strings.TrimSpace(addr))
+			}
+			parsed, err := urn.ParsePrincipal(normalized)
+			if err != nil {
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
+			}
+			principalURN = parsed.String()
+		}
+
+		if _, ok := seenURNs[principalURN]; ok {
 			continue
 		}
-		normalized := raw
-		if addr, ok := strings.CutPrefix(raw, string(urn.PrincipalTypeEmail)+":"); ok {
-			normalized = string(urn.PrincipalTypeEmail) + ":" + strings.ToLower(strings.TrimSpace(addr))
-		}
-		parsed, err := urn.ParsePrincipal(normalized)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
-		}
-		urns[i] = parsed.String()
+		seenURNs[principalURN] = struct{}{}
+		urns = append(urns, principalURN)
 	}
 
 	tx, err := s.db.Begin(ctx)

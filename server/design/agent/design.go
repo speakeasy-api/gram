@@ -53,7 +53,7 @@ var GetPluginsResult = Type("GetPluginsResult", func() {
 
 var AgentMarketplaceModel = Type("AgentMarketplace", func() {
 	Required("name", "url", "auto_update")
-	Attribute("name", String, "Stable identifier used as the key in Claude Code's `extraKnownMarketplaces` map. Derived as `speakeasy-<org-slug>-<project-slug>` so it round-trips deterministically across polls.")
+	Attribute("name", String, "Stable identifier used as the key in Claude Code's `extraKnownMarketplaces` map. Matches the name written into the published marketplace.json, derived from the organization name (for example, `<org-slug>-gram`) so plugin references resolve deterministically across polls.")
 	Attribute("url", String, "Git URL for the marketplace, served by Gram's marketplace proxy.")
 	Attribute("auto_update", Boolean, "Whether Claude Code should auto-update the marketplace.")
 })

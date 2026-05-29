@@ -14,7 +14,7 @@ export type AgentMarketplace = {
    */
   autoUpdate: boolean;
   /**
-   * Stable identifier used as the key in Claude Code's `extraKnownMarketplaces` map. Derived as `speakeasy-<org-slug>-<project-slug>` so it round-trips deterministically across polls.
+   * Stable identifier used as the key in Claude Code's `extraKnownMarketplaces` map. Matches the name written into the published marketplace.json, derived from the organization name (for example, `<org-slug>-gram`) so plugin references resolve deterministically across polls.
    */
   name: string;
   /**

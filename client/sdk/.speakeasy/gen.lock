@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: ce29df7122faf3be9fdc8858156354cd
+  docChecksum: ed872bced2fd87c68930ac8cceecd7ad
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -73,7 +73,7 @@ trackedFiles:
   docs/models/components/addpluginserverform.md:
     last_write_checksum: sha1:a2726c1edb39bdb417e5a9e65fc695f7a5abb9f2
   docs/models/components/agentmarketplace.md:
-    last_write_checksum: sha1:c27612c7509bef0987c1d3859e158e23ff2a0068
+    last_write_checksum: sha1:61c849f2ff41a9b9bbbbd91d91d4c786897b6e75
   docs/models/components/agentplugin.md:
     last_write_checksum: sha1:2bdcfd57ad5c50bf44d45ed8d8e35139ad516fa5
   docs/models/components/aiintegrationconfig.md:
@@ -3687,7 +3687,7 @@ trackedFiles:
   src/models/components/addpluginserverform.ts:
     last_write_checksum: sha1:6af5998e0f14002028123f6a8c26896c1d1f4ed8
   src/models/components/agentmarketplace.ts:
-    last_write_checksum: sha1:e404ec1b385b39050f92ca73b4cf9a3540a274a2
+    last_write_checksum: sha1:e6cd5624ac512cf1a4f1aeeb1c50be6c682983a0
   src/models/components/agentplugin.ts:
     last_write_checksum: sha1:c8625465af268540573e3063b01e82cbe07f9424
   src/models/components/aiintegrationconfig.ts:

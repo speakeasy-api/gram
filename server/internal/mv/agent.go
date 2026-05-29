@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
@@ -36,6 +37,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 	var marketplaces []*gen.AgentMarketplace
 	var plugins []*gen.AgentPlugin
 	seenMarketplace := make(map[string]struct{})
+	etag := sha256.New()
 
 	for _, row := range rows {
 		if !row.MarketplaceToken.Valid || row.MarketplaceToken.String == "" {
@@ -50,12 +52,22 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 				URL:        marketplaceURL(row.MarketplaceToken.String),
 				AutoUpdate: true,
 			})
+			writeAgentPluginsETag(
+				etag,
+				"marketplace\x00%s\x00%s\x00%s\x00%d\n",
+				name,
+				row.OrganizationName,
+				row.MarketplaceToken.String,
+				row.MarketplaceUpdatedAt.Time.UnixNano(),
+			)
 			// Observability is required on every published marketplace,
 			// independent of assignments.
+			observabilitySlug := naming.ObservabilitySlug(row.OrganizationName)
 			plugins = append(plugins, &gen.AgentPlugin{
-				Slug:            naming.ObservabilitySlug(row.OrganizationName),
+				Slug:            observabilitySlug,
 				MarketplaceName: name,
 			})
+			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, observabilitySlug, int64(0))
 		}
 
 		// Assigned plugin for this project, if the LEFT JOIN matched one.
@@ -64,33 +76,22 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 				Slug:            row.PluginSlug.String,
 				MarketplaceName: name,
 			})
+			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano())
 		}
 	}
 
 	return &gen.GetPluginsResult{
-		Etag:         computeAgentPluginsETag(rows),
+		Etag:         hex.EncodeToString(etag.Sum(nil)),
 		Marketplaces: marketplaces,
 		Plugins:      plugins,
 	}
 }
 
-// computeAgentPluginsETag hashes the dimensions that determine the rendered
-// set: the org name (drives the observability slug), marketplace tokens + their
-// updated_at, and each assigned plugin's slug + updated_at. Deployment config
-// (e.g. the server URL) is deliberately excluded so it doesn't bust the cache.
-func computeAgentPluginsETag(rows []repo.GetAgentPluginSetRow) string {
-	h := sha256.New()
-	for _, row := range rows {
-		// sha256.Hash never errors from Write; assign to _ to satisfy errcheck.
-		_, _ = fmt.Fprintf(
-			h,
-			"%s\x00%s\x00%d\x00%s\x00%d\n",
-			row.OrganizationName,
-			row.MarketplaceToken.String,
-			row.MarketplaceUpdatedAt.Time.UnixNano(),
-			row.PluginSlug.String,
-			row.PluginUpdatedAt.Time.UnixNano(),
-		)
-	}
-	return hex.EncodeToString(h.Sum(nil))
+// writeAgentPluginsETag hashes only the contributions emitted into the result:
+// the first marketplace for each rendered marketplace name, its observability
+// plugin, and each rendered assigned plugin. Deployment config (e.g. the server
+// URL) is deliberately excluded so it does not bust the cache.
+func writeAgentPluginsETag(etag io.Writer, format string, args ...any) {
+	// sha256.Hash never errors from Write; assign to _ to satisfy errcheck.
+	_, _ = fmt.Fprintf(etag, format, args...)
 }
