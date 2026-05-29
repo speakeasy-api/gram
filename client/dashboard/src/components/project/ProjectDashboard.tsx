@@ -15,6 +15,10 @@ import {
 } from "@gram/client/react-query";
 import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
+import type {
+  SearchUsersFilter,
+  UserSummary,
+} from "@gram/client/models/components";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -89,26 +93,8 @@ export function ProjectDashboard() {
 
   const { data: topUsersSearchData, isPending: isTopUsersPending } = useQuery({
     queryKey: ["project", "topUsers", from.toISOString(), to.toISOString()],
-    queryFn: async () => {
-      const users = [];
-      let cursor: string | undefined;
-      do {
-        const result = await unwrapAsync(
-          telemetrySearchUsers(client, {
-            searchUsersPayload: {
-              cursor,
-              filter: { from, to, eventSource: "hook" },
-              limit: 1000,
-              sort: "desc",
-              userType: "internal",
-            },
-          }),
-        );
-        users.push(...result.users);
-        cursor = result.nextCursor;
-      } while (cursor);
-      return users;
-    },
+    queryFn: () =>
+      fetchAllUsers(client, { from, to, eventSource: "hook" }, "internal"),
     enabled: logsEnabled,
     placeholderData: keepPreviousData,
   });
@@ -193,26 +179,7 @@ export function ProjectDashboard() {
   // this card shows the same figure as that page.
   const { data: allUsersSpendData, isPending: isSpendPending } = useQuery({
     queryKey: ["project", "totalSpend", from.toISOString(), to.toISOString()],
-    queryFn: async () => {
-      const users = [];
-      let cursor: string | undefined;
-      do {
-        const result = await unwrapAsync(
-          telemetrySearchUsers(client, {
-            searchUsersPayload: {
-              cursor,
-              filter: { from, to },
-              limit: 1000,
-              sort: "desc",
-              userType: "internal",
-            },
-          }),
-        );
-        users.push(...result.users);
-        cursor = result.nextCursor;
-      } while (cursor);
-      return users;
-    },
+    queryFn: () => fetchAllUsers(client, { from, to }, "internal"),
     // Spend is only shown in the hook/agent view.
     enabled: logsEnabled && hasHookData,
     placeholderData: keepPreviousData,
@@ -233,26 +200,7 @@ export function ProjectDashboard() {
       from.toISOString(),
       to.toISOString(),
     ],
-    queryFn: async () => {
-      const users = [];
-      let cursor: string | undefined;
-      do {
-        const result = await unwrapAsync(
-          telemetrySearchUsers(client, {
-            searchUsersPayload: {
-              cursor,
-              filter: { from, to },
-              limit: 1000,
-              sort: "desc",
-              userType: "external",
-            },
-          }),
-        );
-        users.push(...result.users);
-        cursor = result.nextCursor;
-      } while (cursor);
-      return users;
-    },
+    queryFn: () => fetchAllUsers(client, { from, to }, "external"),
     enabled: logsEnabled && hookDataLoaded && !hasHookData,
     placeholderData: keepPreviousData,
   });
@@ -865,6 +813,34 @@ const AVATAR_COLORS = [
 
 function avatarColor(index: number): string {
   return AVATAR_COLORS[index % AVATAR_COLORS.length]!;
+}
+
+// Fetch every page of telemetrySearchUsers for the given filter, following the
+// pagination cursor. Shared by the overview's hook / spend / external queries.
+async function fetchAllUsers(
+  client: Parameters<typeof telemetrySearchUsers>[0],
+  filter: SearchUsersFilter,
+  userType: "internal" | "external",
+): Promise<UserSummary[]> {
+  const users: UserSummary[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const result = await unwrapAsync(
+      telemetrySearchUsers(client, {
+        searchUsersPayload: {
+          cursor,
+          filter,
+          limit: 1000,
+          sort: "desc",
+          userType,
+        },
+      }),
+    );
+    users.push(...result.users);
+    if (!result.nextCursor) break;
+    cursor = result.nextCursor;
+  }
+  return users;
 }
 
 // Tool URNs look like `tools:externalmcp:<server>:<tool>`; show the trailing
