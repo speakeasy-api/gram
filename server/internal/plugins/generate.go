@@ -724,10 +724,47 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+payload=$(cat)
+
+if command -v python3 >/dev/null 2>&1; then
+	payload=$(printf '%%s' "$payload" | python3 -c '
+import base64
+import json
+import os
+import sys
+
+payload = sys.stdin.read()
+try:
+    data = json.loads(payload)
+except Exception:
+    print(payload, end="")
+    raise SystemExit
+
+if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
+    email = ""
+    codex_home = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
+    auth_path = os.path.join(codex_home, "auth.json")
+    try:
+        with open(auth_path, encoding="utf-8") as f:
+            token = (json.load(f).get("tokens") or {}).get("id_token") or ""
+        parts = token.split(".")
+        if len(parts) >= 2:
+            body = parts[1] + "=" * (-len(parts[1]) %% 4)
+            claims = json.loads(base64.urlsafe_b64decode(body.encode("ascii")))
+            email = str(claims.get("email") or "").strip()
+    except Exception:
+        email = ""
+
+    if email:
+        data["user_email"] = email
+
+print(json.dumps(data, separators=(",", ":")), end="")
+' 2>/dev/null) || true
+fi
 
 response=$(curl -s -w "\n%%{http_code}" -X POST \
 %s  -H "Content-Type: application/json" \
-  -d @- \
+  --data-binary "$payload" \
   --max-time 10 \
   "${server_url}/rpc/hooks.codex")
 

@@ -643,6 +643,10 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
 	require.Contains(t, script, "hooks.codex", "hook.sh must POST to the codex endpoint")
 	require.Contains(t, script, cfg.HooksAPIKey, "hook.sh must embed the API key")
+	require.Contains(t, script, "auth.json", "hook.sh must derive Codex user email from local auth claims")
+	require.Contains(t, script, `hook_event_name") == "SessionStart"`, "hook.sh must only inspect local Codex auth on SessionStart")
+	require.Contains(t, script, `"user_email"`, "hook.sh must enrich the payload with user_email")
+	require.NotContains(t, script, "GRAM_USER_EMAIL", "hook.sh must not rely on a manually configured user email")
 
 	asyncScript := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook_async.sh"])
 	require.Contains(t, asyncScript, "mktemp", "hook_async.sh must copy stdin before returning")
