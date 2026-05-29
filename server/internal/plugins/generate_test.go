@@ -667,13 +667,9 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	t.Parallel()
 
 	bashPath, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skip("bash not available")
-	}
+	require.NoError(t, err, "bash is required to run the generated install script")
 	pythonPath, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 not available")
-	}
+	require.NoError(t, err, "python3 is required by the generated install script")
 
 	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
 	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
