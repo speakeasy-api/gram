@@ -126,7 +126,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		ipAllowlist = []string{}
 	}
 	if err := validateIPAllowlist(ipAllowlist); err != nil {
-		return oops.E(oops.CodeBadRequest, err, err.Error()).Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").Log(ctx, s.logger)
 	}
 
 	_, err = s.temporalClient.ExecuteCustomDomainRegistration(
@@ -155,7 +155,7 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	}
 
 	if err := validateIPAllowlist(payload.IPAllowlist); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, err.Error()).Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").Log(ctx, s.logger)
 	}
 
 	domain, err := repo.New(s.db).UpdateCustomDomainIPAllowlist(ctx, repo.UpdateCustomDomainIPAllowlistParams{
