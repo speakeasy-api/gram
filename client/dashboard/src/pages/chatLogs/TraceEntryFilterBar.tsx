@@ -35,7 +35,7 @@ export function EntryTypeFilterBar({
   onRiskOnlyChange?: (value: boolean) => void;
   title?: string;
 }) {
-  const riskOnlyDisabled = riskCount === 0;
+  const riskOnlyDisabled = !riskOnly && riskCount === 0;
 
   return (
     <div>
