@@ -30,8 +30,9 @@ import { RBACDevToolbar } from "./components/dev-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
-import SlackRegister from "./pages/slackapp/SlackRegister";
+import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import SwitchOrg from "./pages/demo/SwitchOrg";
+import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
@@ -241,6 +242,10 @@ const RouteProvider = () => {
         <Route path="/switch-org" element={<LoginCheck />}>
           <Route index element={<SwitchOrg />} />
         </Route>
+        <Route
+          path="/shadow-mcp/request"
+          element={<ShadowMCPRequestAccess />}
+        />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}

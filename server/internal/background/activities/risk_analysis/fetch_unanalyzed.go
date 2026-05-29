@@ -40,6 +40,7 @@ type PolicyForAnalysis struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	CustomRuleIds        []string
 }
 
 type FetchUnanalyzedArgs struct {
@@ -104,6 +105,7 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 			Sources:              p.Sources,
 			PresidioEntities:     p.PresidioEntities,
 			PromptInjectionRules: p.PromptInjectionRules,
+			CustomRuleIds:        p.CustomRuleIds,
 		}
 	}
 

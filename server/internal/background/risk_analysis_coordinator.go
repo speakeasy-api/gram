@@ -96,6 +96,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					Sources:              policy.Sources,
 					PresidioEntities:     policy.PresidioEntities,
 					PromptInjectionRules: policy.PromptInjectionRules,
+					CustomRuleIds:        policy.CustomRuleIds,
 				})
 				futures = append(futures, f)
 			}

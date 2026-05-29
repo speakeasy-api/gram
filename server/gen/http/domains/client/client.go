@@ -25,6 +25,10 @@ type Client struct {
 	// createDomain endpoint.
 	CreateDomainDoer goahttp.Doer
 
+	// UpdateDomain Doer is the HTTP client used to make requests to the
+	// updateDomain endpoint.
+	UpdateDomainDoer goahttp.Doer
+
 	// DeleteDomain Doer is the HTTP client used to make requests to the
 	// deleteDomain endpoint.
 	DeleteDomainDoer goahttp.Doer
@@ -55,6 +59,7 @@ func NewClient(
 	return &Client{
 		GetDomainDoer:        doer,
 		CreateDomainDoer:     doer,
+		UpdateDomainDoer:     doer,
 		DeleteDomainDoer:     doer,
 		ListMcpEndpointsDoer: doer,
 		RestoreResponseBody:  restoreBody,
@@ -108,6 +113,30 @@ func (c *Client) CreateDomain() goa.Endpoint {
 		resp, err := c.CreateDomainDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "createDomain", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateDomain returns an endpoint that makes HTTP requests to the domains
+// service updateDomain server.
+func (c *Client) UpdateDomain() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateDomainRequest(c.encoder)
+		decodeResponse = DecodeUpdateDomainResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateDomainRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateDomainDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "updateDomain", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -63,6 +64,7 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 	signaler       *signalerStub
 	chatRepo       *chatrepo.Queries
+	accessStore    accesscontrol.Store
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -91,10 +93,12 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, auditLogger, cache.NewRedisCacheAdapter(redisClient), false)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, accessStore, auditLogger, false, nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -102,6 +106,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		signaler:       sig,
 		chatRepo:       chatrepo.New(conn),
+		accessStore:    accessStore,
 	}
 }
 

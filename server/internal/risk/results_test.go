@@ -193,18 +193,6 @@ func TestGetRiskPolicyStatus_AllAnalyzed(t *testing.T) {
 	require.Equal(t, "sleeping", status.WorkflowStatus)
 }
 
-func TestTriggerRiskAnalysis_Unauthorized(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
-
-	err := ti.service.TriggerRiskAnalysis(ctx, &gen.TriggerRiskAnalysisPayload{ID: uuid.New().String()})
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
 func TestListRiskResults_Unauthorized(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

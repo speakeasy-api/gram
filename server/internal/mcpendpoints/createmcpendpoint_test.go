@@ -183,6 +183,7 @@ func TestCreateMcpEndpoint_ConflictOnDuplicateSlugWithCustomDomain(t *testing.T)
 		Domain:         "custom-" + uuid.NewString() + ".example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 	customDomainID := domain.ID.String()

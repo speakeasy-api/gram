@@ -312,7 +312,56 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 		}
 	}
+	if len(policy.CustomRuleIds) > 0 {
+		findings, err := s.scanCustomRules(ctx, policy, text)
+		if err != nil {
+			return nil, err
+		}
+		findings = disabled.FilterFindings(findings)
+		if len(findings) > 0 {
+			return &ScanResult{
+				Action:      policy.Action,
+				PolicyID:    policy.ID.String(),
+				PolicyName:  policy.Name,
+				Source:      ra.SourceCustom,
+				RuleID:      findings[0].RuleID,
+				Description: findings[0].Description,
+				UserMessage: conv.FromPGText[string](policy.UserMessage),
+			}, nil
+		}
+	}
 	return nil, nil
+}
+
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, text string) ([]ra.Finding, error) {
+	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("list custom detection rules: %w", err)
+	}
+
+	selected := make(map[string]struct{}, len(policy.CustomRuleIds))
+	for _, id := range policy.CustomRuleIds {
+		selected[id] = struct{}{}
+	}
+
+	customRules := make([]ra.CustomDetectionRule, 0, len(policy.CustomRuleIds))
+	for _, rule := range rules {
+		if _, ok := selected[rule.RuleID]; !ok {
+			continue
+		}
+		customRules = append(customRules, ra.CustomDetectionRule{
+			RuleID:      rule.RuleID,
+			Title:       rule.Title,
+			Description: rule.Description,
+			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
+		})
+	}
+
+	compiled, err := ra.CompileCustomDetectionRules(customRules)
+	if err != nil {
+		return nil, fmt.Errorf("compile custom detection rules: %w", err)
+	}
+	return ra.ScanCustomDetectionRules(text, compiled), nil
 }
 
 // scanGitleaks runs DetectString on the pre-created detector under

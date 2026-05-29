@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	domains "github.com/speakeasy-api/gram/server/gen/domains"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetDomainPayload builds the payload for the domains getDomain endpoint
@@ -37,7 +38,7 @@ func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomai
 	{
 		err = json.Unmarshal([]byte(domainsCreateDomainBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"domain\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"domain\": \"abc123\",\n      \"ip_allowlist\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -48,6 +49,49 @@ func BuildCreateDomainPayload(domainsCreateDomainBody string, domainsCreateDomai
 	}
 	v := &domains.CreateDomainPayload{
 		Domain: body.Domain,
+	}
+	if body.IPAllowlist != nil {
+		v.IPAllowlist = make([]string, len(body.IPAllowlist))
+		for i, val := range body.IPAllowlist {
+			v.IPAllowlist[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpdateDomainPayload builds the payload for the domains updateDomain
+// endpoint from CLI flags.
+func BuildUpdateDomainPayload(domainsUpdateDomainBody string, domainsUpdateDomainSessionToken string) (*domains.UpdateDomainPayload, error) {
+	var err error
+	var body UpdateDomainRequestBody
+	{
+		err = json.Unmarshal([]byte(domainsUpdateDomainBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ip_allowlist\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.IPAllowlist == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if domainsUpdateDomainSessionToken != "" {
+			sessionToken = &domainsUpdateDomainSessionToken
+		}
+	}
+	v := &domains.UpdateDomainPayload{}
+	if body.IPAllowlist != nil {
+		v.IPAllowlist = make([]string, len(body.IPAllowlist))
+		for i, val := range body.IPAllowlist {
+			v.IPAllowlist[i] = val
+		}
+	} else {
+		v.IPAllowlist = []string{}
 	}
 	v.SessionToken = sessionToken
 

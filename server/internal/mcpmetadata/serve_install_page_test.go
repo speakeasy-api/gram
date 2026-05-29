@@ -450,6 +450,7 @@ func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) 
 		Domain:         "correct-install.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
@@ -504,6 +505,7 @@ func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) 
 		Domain:         "wrong-install.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
@@ -555,6 +557,7 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 		Domain:         "correct-render.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
@@ -641,6 +644,7 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 		Domain:         "platform-fallback.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
@@ -724,6 +728,7 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 		Domain:         "deleted-org-a.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
@@ -794,6 +799,7 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 		Domain:         "active-org-b.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
@@ -1023,6 +1029,7 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 		Domain:         "org-has-domain.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 

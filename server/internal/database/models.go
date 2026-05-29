@@ -306,6 +306,7 @@ type CustomDomain struct {
 	IngressName     pgtype.Text
 	CertSecretName  pgtype.Text
 	ProvisionerKind string
+	IpAllowlist     []string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
@@ -1166,7 +1167,8 @@ type RemoteSessionClientUserSessionIssuer struct {
 
 type RemoteSessionIssuer struct {
 	ID                                uuid.UUID
-	ProjectID                         uuid.UUID
+	ProjectID                         uuid.NullUUID
+	OrganizationID                    pgtype.Text
 	Slug                              string
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text

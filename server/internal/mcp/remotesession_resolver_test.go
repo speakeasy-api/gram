@@ -169,7 +169,7 @@ func createRemoteSessionResolverFixture(
 
 	remoteRepo := remotesessions_repo.New(ti.conn)
 	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         *authCtx.ProjectID,
+		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Slug:                              "resolver-rsi-" + suffix,
 		Issuer:                            "https://upstream.example/" + suffix,
 		AuthorizationEndpoint:             conv.ToPGText("https://upstream.example/" + suffix + "/authorize"),

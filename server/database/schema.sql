@@ -612,6 +612,8 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   cert_secret_name TEXT,
   -- Discriminates which K8s API provisioned this domain. Gateway rows write NULL cert_secret_name.
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
+  -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
+  ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -828,7 +830,8 @@ WHERE deleted IS FALSE;
 -- MCP backend
 CREATE TABLE IF NOT EXISTS remote_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   slug TEXT NOT NULL,
   issuer TEXT NOT NULL,
@@ -851,11 +854,16 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT remote_session_issuers_pkey PRIMARY KEY (id),
-  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
 ON remote_session_issuers (project_id, slug)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS remote_session_issuers_organization_id_idx
+ON remote_session_issuers (organization_id)
 WHERE deleted IS FALSE;
 
 -- Remote Session Clients are records of Gram's client registrations with

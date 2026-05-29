@@ -226,7 +226,7 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	// cannot graft a client onto an unrelated tenant's issuer.
 	if _, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
 		ID:        issuerID,
-		ProjectID: *authCtx.ProjectID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)

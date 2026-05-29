@@ -1077,7 +1077,6 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 		"connection.deactivated",
 		"connection.deleted",
 		"dsync.activated",
-		"dsync.deactivated",
 		"dsync.deleted",
 	}, stub.EventCalls()[0].Events)
 }
@@ -1587,36 +1586,6 @@ func TestProcessWorkOSOrganizationEvents_DSyncActivatedSetsSCIMEnabled(t *testin
 	require.True(t, row.ScimEnabled.Bool)
 }
 
-func TestProcessWorkOSOrganizationEvents_DSyncDeactivatedClearsSCIMEnabled(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_org_events_dsync_deactivated")
-	logger := testenv.NewLogger(t)
-
-	const organizationID = "gram_org_scim_deactivated"
-	const workosOrgID = "org_01HZSCIMDEACT"
-
-	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
-
-	stub := newWorkOSClientWithEvents([][]events.Event{
-		{
-			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIM1", workosOrgID),
-			newWorkOSDSyncEvent(t, "dsync.deactivated", "event_01HZSCIM2", workosOrgID),
-		},
-	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
-
-	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
-	require.NoError(t, err)
-	require.Equal(t, "event_01HZSCIM2", res.LastEventID)
-
-	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
-	require.NoError(t, err)
-	require.True(t, row.ScimEnabled.Valid)
-	require.False(t, row.ScimEnabled.Bool)
-}
-
 func TestProcessWorkOSOrganizationEvents_DSyncDeletedClearsSCIMEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -1791,12 +1760,12 @@ func TestProcessWorkOSOrganizationEvents_StaleDSyncEventSkipped(t *testing.T) {
 
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 
-	// Deliver activation with a high event ID, then a stale deactivation
+	// Deliver activation with a high event ID, then a stale deletion
 	// with a lower event ID (simulating out-of-order delivery).
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
 			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMSTALE2", workosOrgID),
-			newWorkOSDSyncEvent(t, "dsync.deactivated", "event_01HZSCIMSTALE1", workosOrgID),
+			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZSCIMSTALE1", workosOrgID),
 		},
 	})
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
@@ -1808,7 +1777,7 @@ func TestProcessWorkOSOrganizationEvents_StaleDSyncEventSkipped(t *testing.T) {
 	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
 	require.NoError(t, err)
 	require.True(t, row.ScimEnabled.Valid)
-	require.True(t, row.ScimEnabled.Bool, "SCIM should remain enabled — stale deactivation must be skipped")
+	require.True(t, row.ScimEnabled.Bool, "SCIM should remain enabled — stale deletion must be skipped")
 	require.Equal(t, "event_01HZSCIMSTALE2", row.WorkosLastEventID.String)
 }
 

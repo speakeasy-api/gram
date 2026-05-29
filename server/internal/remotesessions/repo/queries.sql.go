@@ -210,11 +210,11 @@ VALUES (
     $12,
     $13
 )
-RETURNING id, project_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionIssuerParams struct {
-	ProjectID                         uuid.UUID
+	ProjectID                         uuid.NullUUID
 	Slug                              string
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
@@ -251,6 +251,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Slug,
 		&i.Issuer,
 		&i.AuthorizationEndpoint,
@@ -311,12 +312,12 @@ const deleteRemoteSessionIssuer = `-- name: DeleteRemoteSessionIssuer :one
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteRemoteSessionIssuerParams struct {
 	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ProjectID uuid.NullUUID
 }
 
 func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
@@ -325,6 +326,7 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Slug,
 		&i.Issuer,
 		&i.AuthorizationEndpoint,
@@ -593,14 +595,14 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 }
 
 const getRemoteSessionIssuerByID = `-- name: GetRemoteSessionIssuerByID :one
-SELECT id, project_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
 
 type GetRemoteSessionIssuerByIDParams struct {
 	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ProjectID uuid.NullUUID
 }
 
 func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteSessionIssuerByIDParams) (RemoteSessionIssuer, error) {
@@ -609,6 +611,7 @@ func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteS
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Slug,
 		&i.Issuer,
 		&i.AuthorizationEndpoint,
@@ -630,14 +633,14 @@ func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteS
 }
 
 const getRemoteSessionIssuerBySlug = `-- name: GetRemoteSessionIssuerBySlug :one
-SELECT id, project_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
 
 type GetRemoteSessionIssuerBySlugParams struct {
 	Slug      string
-	ProjectID uuid.UUID
+	ProjectID uuid.NullUUID
 }
 
 func (q *Queries) GetRemoteSessionIssuerBySlug(ctx context.Context, arg GetRemoteSessionIssuerBySlugParams) (RemoteSessionIssuer, error) {
@@ -646,6 +649,7 @@ func (q *Queries) GetRemoteSessionIssuerBySlug(ctx context.Context, arg GetRemot
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Slug,
 		&i.Issuer,
 		&i.AuthorizationEndpoint,
@@ -1201,7 +1205,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuerLegacy(ctx context
 }
 
 const listRemoteSessionIssuersByProjectID = `-- name: ListRemoteSessionIssuersByProjectID :many
-SELECT id, project_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1211,7 +1215,7 @@ LIMIT $3
 `
 
 type ListRemoteSessionIssuersByProjectIDParams struct {
-	ProjectID  uuid.UUID
+	ProjectID  uuid.NullUUID
 	Cursor     uuid.NullUUID
 	LimitValue int32
 }
@@ -1228,6 +1232,7 @@ func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg L
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
+			&i.OrganizationID,
 			&i.Slug,
 			&i.Issuer,
 			&i.AuthorizationEndpoint,
@@ -1456,7 +1461,7 @@ SET
     passthrough = COALESCE($12, passthrough),
     updated_at = clock_timestamp()
 WHERE id = $13 AND project_id = $14 AND deleted IS FALSE
-RETURNING id, project_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionIssuerParams struct {
@@ -1473,7 +1478,7 @@ type UpdateRemoteSessionIssuerParams struct {
 	Oidc                              pgtype.Bool
 	Passthrough                       pgtype.Bool
 	ID                                uuid.UUID
-	ProjectID                         uuid.UUID
+	ProjectID                         uuid.NullUUID
 }
 
 // Three-state semantics on the nullable endpoint columns: an omitted narg
@@ -1503,6 +1508,7 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.Slug,
 		&i.Issuer,
 		&i.AuthorizationEndpoint,
