@@ -14,6 +14,11 @@
 set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
 
 payload=$(cat)
 
@@ -109,6 +114,7 @@ print(json.dumps(p))
 
 curl -s -o /dev/null -X POST \
   -H "Content-Type: application/json" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d "$enriched" \
   --max-time 30 \
   "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true
