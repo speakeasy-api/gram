@@ -40,33 +40,32 @@ export function EntryTypeFilterBar({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 px-6 py-3">
-        <div className="text-sm font-medium">{title}</div>
-        <div className="flex shrink-0 items-center gap-2">
-          {onRiskOnlyChange && (
-            <div
-              className={cn(
-                "border-border bg-background inline-flex h-8 items-center gap-2 rounded-md border px-2 text-xs",
-                riskOnly && "bg-muted/80 border-muted-foreground",
-                riskOnlyDisabled && "opacity-50",
-              )}
-            >
-              <span>Risk only</span>
-              <span className="font-mono text-[10px] leading-none">
-                {riskCount.toLocaleString()}
-              </span>
-              <Switch
-                checked={riskOnly}
-                disabled={riskOnlyDisabled}
-                onCheckedChange={onRiskOnlyChange}
-                aria-label="Show risk entries only"
-              />
-            </div>
-          )}
+        <div className="flex shrink-0 items-baseline gap-4">
+          <div className="text-sm font-medium">{title}</div>
           <div className="text-muted-foreground text-xs">
             Showing {visibleCount.toLocaleString()} of{" "}
             {totalCount.toLocaleString()} entries
           </div>
         </div>
+        {onRiskOnlyChange && (
+          <div
+            className={cn(
+              "inline-flex h-8 items-center gap-2 text-xs",
+              riskOnlyDisabled && "opacity-50",
+            )}
+          >
+            <span>Risk only</span>
+            <span className="font-mono text-[10px] leading-none">
+              {riskCount.toLocaleString()}
+            </span>
+            <Switch
+              checked={riskOnly}
+              disabled={riskOnlyDisabled}
+              onCheckedChange={onRiskOnlyChange}
+              aria-label="Show risk entries only"
+            />
+          </div>
+        )}
       </div>
       <ToggleGroup
         type="multiple"
