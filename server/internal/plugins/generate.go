@@ -762,9 +762,9 @@ print(json.dumps(data, separators=(",", ":")), end="")
 ' 2>/dev/null) || true
 fi
 
-response=$(curl -s -w "\n%%{http_code}" -X POST \
+response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
 %s  -H "Content-Type: application/json" \
-  --data-binary "$payload" \
+  --data-binary @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.codex")
 
@@ -1231,6 +1231,16 @@ for state_key, trusted_hash in [
     if section not in content:
         entry = f'\n{section}\nenabled = true\ntrusted_hash = "{trusted_hash}"\n'
         content = content.rstrip('\n') + '\n' + entry
+    else:
+        # The hook command (and therefore its trusted_hash) changes between
+        # plugin versions. Refresh the hash on this Gram-managed entry so an
+        # upgraded install does not get flagged as modified/untrusted.
+        content = re.sub(
+            re.escape(section) + r'([^\[]*?trusted_hash\s*=\s*")[^"]*(")',
+            lambda m: section + m.group(1) + trusted_hash + m.group(2),
+            content,
+            count=1,
+        )
 
 content = ensure_table_entry(content, f'[plugins."{PLUGIN_KEY}@{MARKETPLACE_KEY}"]', "enabled", "true")
 

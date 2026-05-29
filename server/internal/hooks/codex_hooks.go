@@ -156,11 +156,15 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ProjectID:   projectID,
 	}
 
-	if metadata.UserEmail == "" && metadata.SessionID != "" {
+	if metadata.SessionID != "" {
 		cached, err := s.getSessionMetadata(ctx, metadata.SessionID)
 		if err == nil && cached.ServiceName == "Codex" && cached.GramOrgID == orgID && cached.ProjectID == projectID {
-			metadata.UserEmail = cached.UserEmail
-			metadata.UserID = cached.UserID
+			if metadata.UserEmail == "" {
+				metadata.UserEmail = cached.UserEmail
+			}
+			if metadata.UserID == "" {
+				metadata.UserID = cached.UserID
+			}
 		}
 	}
 

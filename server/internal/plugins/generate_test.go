@@ -4,9 +4,13 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -652,6 +656,68 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	require.Contains(t, asyncScript, "mktemp", "hook_async.sh must copy stdin before returning")
 	require.Contains(t, asyncScript, `bash "$script_dir/hook.sh" < "$tmp"`, "hook_async.sh must delegate to hook.sh")
 	require.Contains(t, asyncScript, ") >/dev/null 2>&1 &", "hook_async.sh must run the sender in the background")
+}
+
+// An upgraded install already carries [hooks.state] entries whose trusted_hash
+// was computed against the previous hook command. When the command changes
+// (e.g. SessionStart moving from hook.sh to hook_async.sh) the installer must
+// rewrite those hashes in place, otherwise Codex flags the hooks as modified
+// and silently stops running telemetry until the user re-approves them.
+func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	pythonPath, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	require.NoError(t, err)
+	require.NotEmpty(t, approvals)
+	target := approvals[0]
+
+	const staleHash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	require.NotEqual(t, staleHash, target.TrustedHash, "fixture hash must differ from the computed one")
+
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
+	existing := "features.hooks = true\n\n" +
+		"[hooks.state.\"" + target.StateKey + "\"]\n" +
+		"enabled = true\n" +
+		"trusted_hash = \"" + staleHash + "\"\n"
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte(existing), 0o644))
+
+	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	// Exclude any installed `codex` binary so only the config.toml patch runs.
+	cmd.Env = []string{
+		"HOME=" + home,
+		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "install script failed: %s", out)
+
+	patched, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	patchedStr := string(patched)
+
+	require.NotContains(t, patchedStr, staleHash, "stale trusted_hash must be replaced")
+	require.Contains(t, patchedStr, target.TrustedHash, "trusted_hash must be refreshed to the current command's hash")
+	require.Equal(t, 1, strings.Count(patchedStr, "[hooks.state.\""+target.StateKey+"\"]"), "refresh must not duplicate the entry")
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
