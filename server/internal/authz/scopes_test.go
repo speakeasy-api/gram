@@ -7,6 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestScopeParts(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, ScopeParts{Resource: "project", Action: "read"}, ScopeProjectRead.Parts())
+	require.Equal(t, ScopeParts{Resource: "risk_policy", Action: "evaluate"}, ScopeRiskPolicyEvaluate.Parts())
+	require.Equal(t, ScopeParts{Resource: "root", Action: ""}, ScopeRoot.Parts())
+}
+
 func TestCheckExpand_orgRead(t *testing.T) {
 	t.Parallel()
 

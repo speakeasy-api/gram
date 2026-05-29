@@ -3,7 +3,6 @@ package authz
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -53,24 +52,27 @@ func (s Selector) StrictMatches(check Selector) bool {
 	return true
 }
 
-// ResourceKindForScope derives the resource kind from a scope's family prefix.
+// ResourceKindForScope derives the selector resource kind from a scope.
 func ResourceKindForScope(scope Scope) string {
-	s := string(scope)
-	switch {
-	case strings.HasPrefix(s, "project:"):
+	switch scope.Parts().Resource {
+	case "project":
 		return "project"
-	case strings.HasPrefix(s, "remote-mcp:"):
+	case "remote-mcp":
 		return "mcp"
-	case strings.HasPrefix(s, "mcp:"):
+	case "mcp":
 		return "mcp"
-	case strings.HasPrefix(s, "org:"):
+	case "org":
 		return "org"
-	case strings.HasPrefix(s, "environment:"):
+	case "environment":
 		return "environment"
+	case "risk_policy":
+		return ResourceKindRiskPolicy
 	default:
 		return "*"
 	}
 }
+
+const ResourceKindRiskPolicy = "risk_policy"
 
 // Disposition values matching MCP tool annotation hint names (snake_case, no _hint suffix).
 const (
