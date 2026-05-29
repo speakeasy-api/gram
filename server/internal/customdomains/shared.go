@@ -28,12 +28,19 @@ func buildCustomDomainView(domain repo.CustomDomain, isUpdating bool) *gen.Custo
 }
 
 // validateIPAllowlist checks that every entry is a valid IPv4 address or IPv4 CIDR range.
+// IPv6 is rejected — nginx whitelist-source-range only supports IPv4 for this use case.
 func validateIPAllowlist(entries []string) error {
 	for _, entry := range entries {
-		if _, _, err := net.ParseCIDR(entry); err == nil {
+		if ip, network, err := net.ParseCIDR(entry); err == nil {
+			if ip.To4() == nil || network.IP.To4() == nil {
+				return fmt.Errorf("IPv6 CIDR ranges are not supported: %q", entry)
+			}
 			continue
 		}
 		if ip := net.ParseIP(entry); ip != nil {
+			if ip.To4() == nil {
+				return fmt.Errorf("IPv6 addresses are not supported: %q", entry)
+			}
 			continue
 		}
 		return fmt.Errorf("invalid IP address or CIDR range: %q", entry)
