@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { Switch } from "@speakeasy-api/moonshine";
 import {
   ENTRY_TYPE_META,
   FILTERABLE_ENTRY_TYPES,
@@ -43,20 +43,24 @@ export function EntryTypeFilterBar({
         <div className="text-sm font-medium">{title}</div>
         <div className="flex shrink-0 items-center gap-2">
           {onRiskOnlyChange && (
-            <Button
-              type="button"
-              variant={riskOnly ? "secondary" : "outline"}
-              size="sm"
-              aria-pressed={riskOnly}
-              disabled={riskOnlyDisabled}
-              onClick={() => onRiskOnlyChange(!riskOnly)}
-              className="h-7 gap-1.5 px-2 text-xs"
+            <div
+              className={cn(
+                "border-border bg-background inline-flex h-8 items-center gap-2 rounded-md border px-2 text-xs",
+                riskOnly && "bg-muted/80 border-muted-foreground",
+                riskOnlyDisabled && "opacity-50",
+              )}
             >
               <span>Risk only</span>
               <span className="font-mono text-[10px] leading-none">
                 {riskCount.toLocaleString()}
               </span>
-            </Button>
+              <Switch
+                checked={riskOnly}
+                disabled={riskOnlyDisabled}
+                onCheckedChange={onRiskOnlyChange}
+                aria-label="Show risk entries only"
+              />
+            </div>
           )}
           <div className="text-muted-foreground text-xs">
             Showing {visibleCount.toLocaleString()} of{" "}
