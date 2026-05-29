@@ -106,7 +106,6 @@ export type BuiltinRule = {
   description: string;
   category: RuleCategory;
   defaultSeverity: SeverityLevel;
-  available: boolean;
 };
 
 /** Synthetic single-rule entries for categories where the category itself
@@ -144,7 +143,6 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
         description,
         category,
         defaultSeverity: severity,
-        available: r.available !== false,
       }));
       return acc;
     }
@@ -157,7 +155,6 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
           description,
           category,
           defaultSeverity: severity,
-          available: true,
         },
       ];
       return acc;

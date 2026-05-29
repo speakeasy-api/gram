@@ -24,7 +24,6 @@ export type DetectionRule = {
   id: string;
   title: string;
   source: "gitleaks" | "presidio" | "prompt_injection";
-  available?: boolean;
 };
 
 export type McpServerScope = {
@@ -1297,138 +1296,14 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       title: "UK National Health Service number",
       source: "presidio",
     },
-    {
-      id: "pii.uk_nino",
-      title: "UK National Insurance Number",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.uk_passport",
-      title: "UK passport number",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.es_nif",
-      title: "Spain personal tax ID (NIF)",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.it_fiscal_code",
-      title: "Italy personal identification code",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.au_tfn",
-      title: "Australia Tax File Number",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.in_pan",
-      title: "India Permanent Account Number",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.in_aadhaar",
-      title: "India Aadhaar (12-digit identity)",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.sg_nric_fin",
-      title: "Singapore NRIC / FIN",
-      source: "presidio",
-      available: false,
-    },
   ],
-  healthcare: [
-    {
-      id: "pii.medical_license",
-      title: "Common medical license numbers",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.us_mbi",
-      title: "US Medicare Beneficiary Identifier",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.us_npi",
-      title: "US National Provider Identifier",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.medical_disease_disorder",
-      title: "Disease or disorder mention",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.medical_medication",
-      title: "Medication or drug name",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.medical_therapeutic_procedure",
-      title: "Treatment or diagnostic procedure",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.medical_clinical_event",
-      title: "Clinical event mention",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.medical_biological_attribute",
-      title: "Biological attribute or measurement",
-      source: "presidio",
-      available: false,
-    },
-    {
-      id: "pii.medical_family_history",
-      title: "Family medical history reference",
-      source: "presidio",
-      available: false,
-    },
-  ],
+  healthcare: [],
   // prompt_injection is enabled at the category level; the detection
   // engine (deberta classifier vs L0 regex/keyword heuristics) is selected
   // per-org via the prompt-injection-use-classifier feature flag, not by the
   // policy author.
   prompt_injection: [],
-  off_policy: [
-    {
-      id: "pii.harmful_content_request",
-      title: "Request to generate harmful or dangerous content",
-      source: "presidio",
-    },
-    {
-      id: "pii.policy_violation",
-      title: "Request that violates acceptable use policy",
-      source: "presidio",
-    },
-    {
-      id: "pii.unauthorized_action",
-      title: "Attempt to perform unauthorized actions",
-      source: "presidio",
-    },
-    {
-      id: "pii.topic_boundary_violation",
-      title: "Request outside permitted topic boundaries",
-      source: "presidio",
-    },
-  ],
+  off_policy: [],
   shadow_mcp: [],
   destructive_tool: [],
   cli_destructive: [],

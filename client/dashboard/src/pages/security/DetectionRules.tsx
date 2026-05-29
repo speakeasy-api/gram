@@ -254,9 +254,7 @@ function BuiltinRulesSection({
       <div className="border-border divide-border divide-y rounded-lg border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
-          const rules = BUILTIN_RULES_BY_CATEGORY[cat].filter(
-            (rule) => rule.available,
-          );
+          const rules = BUILTIN_RULES_BY_CATEGORY[cat];
           if (rules.length === 0) {
             return null;
           }
