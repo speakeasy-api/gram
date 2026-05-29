@@ -176,7 +176,7 @@ export function ConfirmTrafficStep({
       title="Confirm traffic"
       description="We're polling Gram for new hook events. Trigger any action in Claude Code, Cursor, or Codex on a managed machine to confirm the instrumentation works."
       onContinue={onComplete}
-      continueLabel="Go to Dashboard"
+      continueLabel="Complete setup"
       showBack
       onBack={onBack}
     >
@@ -191,17 +191,21 @@ export function ConfirmTrafficStep({
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
               </span>
-              Live
+              Live tail
             </span>
           </div>
           <div className="px-4 py-2">
             {displayed.length === 0 ? (
-              <p
-                className="text-muted-foreground text-sm"
+              <div
+                className="flex flex-col items-center justify-center gap-3"
                 style={{ height: ROW_HEIGHT * MAX_EVENTS_SHOWN }}
               >
-                No events yet. We're checking every {POLL_INTERVAL_MS / 1000}s.
-              </p>
+                <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                <p className="text-muted-foreground text-sm">
+                  No events yet. We're checking every {POLL_INTERVAL_MS / 1000}
+                  s.
+                </p>
+              </div>
             ) : (
               <div
                 className="relative overflow-hidden"

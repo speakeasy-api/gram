@@ -81,12 +81,12 @@ func pickSource(rng *rand.Rand) sourceProfile {
 }
 
 var demoUsers = []string{
-	"sarah.chen@acme.com",
-	"marcus.j@acme.com",
-	"e.rodriguez@acme.com",
-	"d.kim@acme.com",
-	"l.thompson@acme.com",
-	"j.wilson@acme.com",
+	"adam@speakeasy.com",
+	"quinn@speakeasy.com",
+	"sagar@speakeasy.com",
+	"brian@speakeasy.com",
+	"daniel@speakeasy.com",
+	"thomas@speakeasy.com",
 }
 
 func main() {
@@ -163,17 +163,17 @@ func main() {
 			return
 		}
 		// Wildly varied cadence so it doesn't read as a metronome:
-		//   - 20% chance of a back-to-back rapid burst (50-300ms)
-		//   - 10% chance of a long lull (3x-5x the configured interval)
-		//   - otherwise a normal wait spread 30%-200% of the interval
+		//   - 25% chance of a back-to-back rapid burst (30-150ms)
+		//   - 5% chance of a longer lull (2x-3x the configured interval)
+		//   - otherwise a normal wait spread 20%-130% of the interval
 		var wait time.Duration
 		switch {
-		case rng.IntN(5) == 0:
-			wait = time.Duration(50+rng.IntN(250)) * time.Millisecond
-		case rng.IntN(10) == 0:
-			wait = time.Duration(float64(*interval) * (3.0 + rng.Float64()*2.0))
+		case rng.IntN(4) == 0:
+			wait = time.Duration(30+rng.IntN(120)) * time.Millisecond
+		case rng.IntN(20) == 0:
+			wait = time.Duration(float64(*interval) * (2.0 + rng.Float64()))
 		default:
-			wait = time.Duration(float64(*interval) * (0.3 + rng.Float64()*1.7))
+			wait = time.Duration(float64(*interval) * (0.2 + rng.Float64()*1.1))
 		}
 		select {
 		case <-ctx.Done():

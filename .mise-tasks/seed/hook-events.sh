@@ -7,7 +7,7 @@
 #USAGE flag "-o --org-slug <slug>" help="Org slug; uses the first project of that org."
 #USAGE flag "-b --burst-size <n>" default="5" help="Events per burst."
 #USAGE flag "-c --bursts <n>" default="20" help="Number of bursts (0 for infinite)."
-#USAGE flag "-i --interval <duration>" default="2s" help="Wait between bursts (Go duration, e.g. 500ms, 2s)."
+#USAGE flag "-i --interval <duration>" default="800ms" help="Wait between bursts (Go duration, e.g. 500ms, 2s)."
 #USAGE flag "--block-rate <rate>" default="0.1" help="Fraction of events (0-1) marked blocked."
 
 set -e
@@ -22,7 +22,7 @@ fi
 args+=(
   "-burst-size" "${usage_burst_size:-5}"
   "-bursts" "${usage_bursts:-20}"
-  "-interval" "${usage_interval:-2s}"
+  "-interval" "${usage_interval:-800ms}"
   "-block-rate" "${usage_block_rate:-0.1}"
 )
 
