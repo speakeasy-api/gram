@@ -1,11 +1,80 @@
-import { useState } from "react";
-import { Terminal, Check, Copy, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Terminal,
+  Check,
+  Copy,
+  ChevronRight,
+  ArrowLeft,
+  Loader2,
+  AlertCircle,
+  Ban,
+} from "lucide-react";
+import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { toast } from "sonner";
+import { codeToHtml, type BundledLanguage } from "shiki";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { StepContainer } from "../step-container";
-import { AGENT_PLATFORMS } from "../../mock-data";
+import { AGENT_PLATFORMS } from "../../setup-data";
 import type { AgentPlatform, PlatformSetupStatus } from "../../types";
-import { Badge } from "@speakeasy-api/moonshine";
-import { Button } from "@/components/ui/button";
+import { Badge, Button, Link } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
+
+const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";
+
+function HighlightedCode({
+  code,
+  language,
+}: {
+  code: string;
+  language?: string;
+}) {
+  const [html, setHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    codeToHtml(code, {
+      lang: (language as BundledLanguage) ?? "text",
+      theme: "github-dark-default",
+      transformers: [
+        {
+          pre(node) {
+            node.properties.class =
+              "px-3 pb-3 text-[13px] leading-relaxed whitespace-pre-wrap break-all max-h-[400px] overflow-y-auto !bg-transparent";
+          },
+        },
+      ],
+    })
+      .then((out) => {
+        if (!cancelled) setHtml(out);
+      })
+      .catch(() => {
+        if (!cancelled) setHtml(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language]);
+
+  if (html) {
+    return (
+      <div
+        className="text-zinc-200"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  }
+  return (
+    <pre className="max-h-[400px] overflow-y-auto px-3 pb-3 text-[13px] leading-relaxed break-all whitespace-pre-wrap">
+      <code className="text-zinc-200">{code}</code>
+    </pre>
+  );
+}
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
@@ -22,7 +91,7 @@ export function InstrumentAgentsStep({
   onComplete,
   onBack,
 }: InstrumentAgentsStepProps) {
-  const [expandedPlatform, setExpandedPlatform] = useState<string | null>(null);
+  const [drawerPlatformId, setDrawerPlatformId] = useState<string | null>(null);
   const [platformStatus, setPlatformStatus] = useState<
     Record<string, PlatformSetupStatus>
   >(() =>
@@ -32,35 +101,109 @@ export function InstrumentAgentsStep({
     Record<string, number>
   >(() => Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, 0])));
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [apiKeyPending, setApiKeyPending] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [apiKeyError, setApiKeyError] = useState<Record<string, string>>({});
+  const [platformBlocked, setPlatformBlocked] = useState<
+    Record<string, { title: string; description: string }>
+  >({});
+
+  const createKeyMutation = useCreateAPIKeyMutation();
 
   const completedCount = Object.values(platformStatus).filter(
     (s) => s === "complete",
   ).length;
 
-  const toggleExpand = (platformId: string) => {
-    if (expandedPlatform === platformId) {
-      setExpandedPlatform(null);
-    } else {
-      setExpandedPlatform(platformId);
-      if (platformStatus[platformId] === "not_started") {
-        setPlatformStatus((prev) => ({
-          ...prev,
-          [platformId]: "in_progress",
-        }));
-      }
-    }
+  const activePlatform =
+    AGENT_PLATFORMS.find((p) => p.id === drawerPlatformId) ?? null;
+
+  const ensureApiKey = (platform: AgentPlatform) => {
+    const needsKey = platform.setupSteps.some((s) => s.requiresApiKey);
+    if (!needsKey) return;
+    if (apiKeys[platform.id] || apiKeyPending[platform.id]) return;
+
+    setApiKeyPending((prev) => ({ ...prev, [platform.id]: true }));
+    setApiKeyError((prev) => {
+      const next = { ...prev };
+      delete next[platform.id];
+      return next;
+    });
+
+    // The api_keys table enforces UNIQUE (organization_id, name) on
+    // non-deleted rows, and key tokens are only returned on creation (never
+    // re-readable via listKeys). Both constraints mean we can't "fetch the
+    // existing key" — we have to mint a fresh one with a unique name on each
+    // wizard run. The timestamp suffix guarantees uniqueness and tells admins
+    // which run produced each entry in the API Keys list.
+    const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+    createKeyMutation.mutate(
+      {
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          createKeyForm: {
+            name: `${platform.name} hooks (setup ${timestamp})`,
+            scopes: ["hooks"],
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          setApiKeyPending((prev) => ({ ...prev, [platform.id]: false }));
+          if (data.key) {
+            setApiKeys((prev) => ({ ...prev, [platform.id]: data.key! }));
+          } else {
+            setApiKeyError((prev) => ({
+              ...prev,
+              [platform.id]: "API key token missing from response.",
+            }));
+          }
+        },
+        onError: (err) => {
+          setApiKeyPending((prev) => ({ ...prev, [platform.id]: false }));
+          const msg =
+            err instanceof Error ? err.message : "Failed to generate API key.";
+          setApiKeyError((prev) => ({ ...prev, [platform.id]: msg }));
+          toast.error(`Failed to generate API key: ${msg}`);
+        },
+      },
+    );
   };
 
-  const advanceStep = (platformId: string, platform: AgentPlatform) => {
-    const currentIdx = activeStepIndex[platformId] ?? 0;
+  const openDrawer = (platformId: string) => {
+    setDrawerPlatformId(platformId);
+    if (platformStatus[platformId] === "not_started") {
+      setPlatformStatus((prev) => ({ ...prev, [platformId]: "in_progress" }));
+    }
+    const platform = AGENT_PLATFORMS.find((p) => p.id === platformId);
+    if (!platform) return;
+    // Skip key generation if an unresolved eligibility step gates the flow;
+    // handleEligibilityYes triggers it after the user confirms.
+    const firstStep = platform.setupSteps[0];
+    if (
+      firstStep?.eligibility &&
+      platformStatus[platformId] === "not_started"
+    ) {
+      return;
+    }
+    ensureApiKey(platform);
+  };
+
+  const closeDrawer = () => {
+    setDrawerPlatformId(null);
+  };
+
+  const advanceStep = (platform: AgentPlatform) => {
+    const currentIdx = activeStepIndex[platform.id] ?? 0;
     if (currentIdx < platform.setupSteps.length - 1) {
       setActiveStepIndex((prev) => ({
         ...prev,
-        [platformId]: currentIdx + 1,
+        [platform.id]: currentIdx + 1,
       }));
     } else {
-      setPlatformStatus((prev) => ({ ...prev, [platformId]: "complete" }));
-      setExpandedPlatform(null);
+      setPlatformStatus((prev) => ({ ...prev, [platform.id]: "complete" }));
+      closeDrawer();
     }
   };
 
@@ -94,9 +237,299 @@ export function InstrumentAgentsStep({
             <Badge.Text>In progress</Badge.Text>
           </Badge>
         );
+      case "blocked":
+        return (
+          <Badge variant="destructive" background>
+            <Badge.Text>Not eligible</Badge.Text>
+          </Badge>
+        );
       default:
         return null;
     }
+  };
+
+  const handleEligibilityNo = (
+    platform: AgentPlatform,
+    blocked: { title: string; description: string },
+  ) => {
+    setPlatformBlocked((prev) => ({ ...prev, [platform.id]: blocked }));
+    setPlatformStatus((prev) => ({ ...prev, [platform.id]: "blocked" }));
+  };
+
+  const handleEligibilityYes = (platform: AgentPlatform) => {
+    setPlatformBlocked((prev) => {
+      const next = { ...prev };
+      delete next[platform.id];
+      return next;
+    });
+    if (platformStatus[platform.id] === "blocked") {
+      setPlatformStatus((prev) => ({ ...prev, [platform.id]: "in_progress" }));
+    }
+    ensureApiKey(platform);
+    advanceStep(platform);
+  };
+
+  const renderDrawerContent = () => {
+    if (!activePlatform) return null;
+
+    const blocked = platformBlocked[activePlatform.id];
+    if (blocked) {
+      return (
+        <>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Set up {activePlatform.name}</SheetTitle>
+            <SheetDescription>{activePlatform.description}</SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 pb-6 text-center">
+            <div className="bg-destructive/10 text-destructive flex h-12 w-12 items-center justify-center rounded-full">
+              <Ban className="h-6 w-6" />
+            </div>
+            <h4 className="text-foreground text-base font-medium">
+              {blocked.title}
+            </h4>
+            <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
+              {blocked.description}
+            </p>
+          </div>
+          <div className="border-border flex items-center justify-end border-t px-6 py-4">
+            <Button variant="secondary" size="sm" onClick={closeDrawer}>
+              <Button.Text>Close</Button.Text>
+            </Button>
+          </div>
+        </>
+      );
+    }
+
+    const currentStepIdx = activeStepIndex[activePlatform.id] ?? 0;
+    const stepCount = activePlatform.setupSteps.length;
+    const currentStep = activePlatform.setupSteps[currentStepIdx];
+    const isLastStep = currentStepIdx === stepCount - 1;
+    const isEligibilityStep = !!currentStep?.eligibility;
+
+    return (
+      <>
+        <SheetHeader className="sr-only">
+          <SheetTitle>Set up {activePlatform.name}</SheetTitle>
+          <SheetDescription>{activePlatform.description}</SheetDescription>
+        </SheetHeader>
+
+        <div className="flex items-center gap-1.5 px-6 pt-6 pr-14">
+          {activePlatform.setupSteps.map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() =>
+                idx <= currentStepIdx &&
+                setActiveStepIndex((prev) => ({
+                  ...prev,
+                  [activePlatform.id]: idx,
+                }))
+              }
+              className={cn(
+                "h-1 rounded-full transition-all",
+                idx === currentStepIdx
+                  ? "bg-foreground w-6"
+                  : idx < currentStepIdx
+                    ? "bg-foreground/40 hover:bg-foreground/60 w-4 cursor-pointer"
+                    : "bg-border w-4",
+              )}
+            />
+          ))}
+          <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
+            {currentStepIdx + 1}/{stepCount}
+          </span>
+        </div>
+
+        <div className="relative flex-1 overflow-hidden">
+          <div
+            className="flex h-full transition-transform duration-300 ease-in-out"
+            style={{ transform: `translateX(-${currentStepIdx * 100}%)` }}
+          >
+            {activePlatform.setupSteps.map((step, idx) => {
+              const platformKey = apiKeys[activePlatform.id];
+              const isPending = !!apiKeyPending[activePlatform.id];
+              const error = apiKeyError[activePlatform.id];
+              const needsKey = !!step.requiresApiKey;
+              const displayCode =
+                step.code && needsKey && platformKey
+                  ? step.code.replaceAll(API_KEY_PLACEHOLDER, platformKey)
+                  : step.code;
+
+              return (
+                <div
+                  key={idx}
+                  className="w-full shrink-0 space-y-3 overflow-y-auto px-6 pb-4"
+                >
+                  <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+                    Step {idx + 1}
+                  </p>
+                  <h4 className="text-foreground text-base font-medium">
+                    {step.title}
+                  </h4>
+                  {step.screenshot && (
+                    <figure className="border-border !my-6 overflow-hidden rounded-md border">
+                      <img
+                        src={step.screenshot.src}
+                        alt={step.screenshot.alt}
+                        className="w-full"
+                      />
+                      {step.screenshot.caption && (
+                        <figcaption className="border-border bg-secondary/40 text-muted-foreground border-t px-3 py-2 text-xs leading-relaxed">
+                          {step.screenshot.caption}
+                        </figcaption>
+                      )}
+                    </figure>
+                  )}
+                  {step.description && (
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      {step.description}
+                    </p>
+                  )}
+
+                  {step.helpLink &&
+                    (() => {
+                      const { url, linkLabel, sentence } = step.helpLink;
+                      const [before, after] = sentence.split("{LINK}", 2);
+                      return (
+                        <p className="text-muted-foreground text-sm leading-relaxed">
+                          {before}
+                          <Link
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            size="sm"
+                            iconSuffixName="external-link"
+                          >
+                            {linkLabel}
+                          </Link>
+                          {after}
+                        </p>
+                      );
+                    })()}
+
+                  {step.eligibility && (
+                    <div className="bg-secondary/40 border-border !mt-6 space-y-4 rounded-lg border p-4">
+                      <p className="text-foreground text-sm font-medium">
+                        {step.eligibility.question}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleEligibilityYes(activePlatform)}
+                        >
+                          <Button.Text>
+                            {step.eligibility.yesLabel ?? "Yes"}
+                          </Button.Text>
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() =>
+                            handleEligibilityNo(activePlatform, {
+                              title: step.eligibility!.blockedTitle,
+                              description: step.eligibility!.blockedDescription,
+                            })
+                          }
+                        >
+                          <Button.Text>
+                            {step.eligibility.noLabel ?? "No"}
+                          </Button.Text>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {needsKey && isPending && (
+                    <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Generating API key…
+                    </div>
+                  )}
+
+                  {needsKey && error && (
+                    <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 rounded-md border p-2.5 text-xs">
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-medium">
+                          Couldn't generate an API key
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">{error}</p>
+                        <button
+                          type="button"
+                          className="text-foreground mt-1.5 underline underline-offset-2"
+                          onClick={() => ensureApiKey(activePlatform)}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {displayCode && (
+                    <div className="overflow-hidden rounded-md bg-zinc-950">
+                      <div className="flex items-center justify-between px-3 py-2.5">
+                        <span className="text-[10px] tracking-wider text-zinc-500 uppercase">
+                          {step.language ?? "shell"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(
+                              displayCode,
+                              `${activePlatform.id}-${idx}`,
+                            )
+                          }
+                          className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium tracking-wider text-zinc-300 uppercase transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                        >
+                          {copiedField === `${activePlatform.id}-${idx}` ? (
+                            <Check className="h-3 w-3" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                          {copiedField === `${activePlatform.id}-${idx}`
+                            ? "Copied"
+                            : "Copy"}
+                        </button>
+                      </div>
+                      <HighlightedCode
+                        code={displayCode}
+                        language={step.language}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {!isEligibilityStep && (
+          <div className="border-border flex items-center justify-between border-t px-6 py-4">
+            <Button
+              variant="tertiary"
+              size="sm"
+              disabled={currentStepIdx === 0}
+              onClick={() => goBackStep(activePlatform.id)}
+            >
+              <Button.LeftIcon>
+                <ArrowLeft className="h-3 w-3" />
+              </Button.LeftIcon>
+              <Button.Text>Back</Button.Text>
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => advanceStep(activePlatform)}
+            >
+              <Button.Text>{isLastStep ? "Done" : "Next step"}</Button.Text>
+            </Button>
+          </div>
+        )}
+      </>
+    );
   };
 
   return (
@@ -107,192 +540,82 @@ export function InstrumentAgentsStep({
         </div>
       }
       title="Instrument agent platforms"
-      description="Set up Speakeasy hooks for each AI coding assistant your team uses. Each platform has its own configuration steps."
+      description="Set up Gram hooks for each AI coding assistant your team uses. Each platform has its own configuration steps."
       onContinue={onComplete}
       continueLabel="Continue"
       showBack
       onBack={onBack}
     >
       <div className="space-y-3">
-        {/* Summary */}
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground text-sm">
             {completedCount} of {AGENT_PLATFORMS.length} platforms configured
           </span>
         </div>
 
-        {/* Platform cards */}
         {AGENT_PLATFORMS.map((platform) => {
           const status = platformStatus[platform.id] ?? "not_started";
-          const isExpanded = expandedPlatform === platform.id;
-          const currentStepIdx = activeStepIndex[platform.id] ?? 0;
-          const currentStep = platform.setupSteps[currentStepIdx];
 
           return (
-            <div
+            <button
               key={platform.id}
+              type="button"
+              onClick={() => openDrawer(platform.id)}
               className={cn(
-                "rounded-lg border transition-all",
-                isExpanded
-                  ? "border-foreground/20 bg-secondary/30"
-                  : status === "complete"
-                    ? "border-foreground/10 bg-secondary/20"
-                    : "border-border bg-card hover:border-foreground/20",
+                "flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all",
+                status === "complete"
+                  ? "border-foreground/10 bg-secondary/20"
+                  : "border-border bg-card hover:border-foreground/20",
               )}
             >
-              {/* Card header — always visible */}
-              <button
-                type="button"
-                onClick={() => toggleExpand(platform.id)}
-                className="flex w-full items-center gap-4 p-4 text-left"
+              <div
+                className={cn(
+                  "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
+                  status === "complete" ? "bg-foreground/10" : "bg-secondary",
+                )}
               >
-                <div
-                  className={cn(
-                    "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg",
-                    status === "complete" ? "bg-foreground/10" : "bg-secondary",
-                  )}
-                >
-                  {PLATFORM_LOGOS[platform.id] ? (
-                    <img
-                      src={PLATFORM_LOGOS[platform.id]}
-                      alt={platform.name}
-                      className="h-5 w-5"
-                    />
-                  ) : (
-                    <span className="text-foreground text-sm font-semibold">
-                      {platform.name.charAt(0)}
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-foreground text-sm font-medium">
-                      {platform.name}
-                    </p>
-                    {statusBadge(status)}
-                  </div>
-                  <p className="text-muted-foreground text-xs">
-                    {platform.description}
+                {PLATFORM_LOGOS[platform.id] ? (
+                  <img
+                    src={PLATFORM_LOGOS[platform.id]}
+                    alt={platform.name}
+                    className="h-5 w-5"
+                  />
+                ) : (
+                  <span className="text-foreground text-sm font-semibold">
+                    {platform.name.charAt(0)}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-foreground text-sm font-medium">
+                    {platform.name}
                   </p>
+                  {statusBadge(status)}
                 </div>
-                <ChevronRight
-                  className={cn(
-                    "text-muted-foreground h-4 w-4 flex-shrink-0 transition-transform",
-                    isExpanded && "rotate-90",
-                  )}
-                />
-              </button>
-
-              {/* Expanded setup wizard */}
-              {isExpanded && currentStep && (
-                <div className="px-4 pb-4">
-                  {/* Progress dots */}
-                  <div className="flex items-center gap-1.5 pb-4">
-                    {platform.setupSteps.map((_, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() =>
-                          idx <= currentStepIdx &&
-                          setActiveStepIndex((prev) => ({
-                            ...prev,
-                            [platform.id]: idx,
-                          }))
-                        }
-                        className={cn(
-                          "h-1 rounded-full transition-all",
-                          idx === currentStepIdx
-                            ? "bg-foreground w-6"
-                            : idx < currentStepIdx
-                              ? "bg-foreground/40 hover:bg-foreground/60 w-4 cursor-pointer"
-                              : "bg-border w-4",
-                        )}
-                      />
-                    ))}
-                    <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
-                      {currentStepIdx + 1}/{platform.setupSteps.length}
-                    </span>
-                  </div>
-
-                  {/* Step content */}
-                  <div className="bg-background border-border rounded-lg border p-4">
-                    <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                      Step {currentStepIdx + 1}
-                    </p>
-                    <h4 className="text-foreground mt-1 text-sm font-medium">
-                      {currentStep.title}
-                    </h4>
-                    <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
-                      {currentStep.description}
-                    </p>
-
-                    {currentStep.code && (
-                      <div className="mt-3 overflow-hidden rounded-md bg-zinc-950">
-                        <div className="flex items-center justify-between px-3 py-1.5">
-                          <span className="text-[10px] tracking-wider text-zinc-500 uppercase">
-                            {currentStep.language ?? "shell"}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-                            onClick={() =>
-                              copyToClipboard(
-                                currentStep.code!,
-                                `${platform.id}-${currentStepIdx}`,
-                              )
-                            }
-                          >
-                            {copiedField ===
-                            `${platform.id}-${currentStepIdx}` ? (
-                              <>
-                                <Check className="mr-1 h-3 w-3" />
-                                Copied
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="mr-1 h-3 w-3" />
-                                Copy
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                        <pre className="overflow-x-auto px-3 pb-3 text-[13px] leading-relaxed">
-                          <code className="text-zinc-200">
-                            {currentStep.code}
-                          </code>
-                        </pre>
-                      </div>
-                    )}
-
-                    {/* Navigation */}
-                    <div className="mt-4 flex items-center justify-between">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground h-8 text-xs"
-                        disabled={currentStepIdx === 0}
-                        onClick={() => goBackStep(platform.id)}
-                      >
-                        Back
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="bg-accent hover:bg-accent/90 text-accent-foreground h-8 text-xs"
-                        onClick={() => advanceStep(platform.id, platform)}
-                      >
-                        {currentStepIdx === platform.setupSteps.length - 1
-                          ? "Mark complete"
-                          : "Next step"}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+                <p className="text-muted-foreground text-xs">
+                  {platform.description}
+                </p>
+              </div>
+              <ChevronRight className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+            </button>
           );
         })}
       </div>
+
+      <Sheet
+        open={!!drawerPlatformId}
+        onOpenChange={(open) => {
+          if (!open) closeDrawer();
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
+        >
+          {renderDrawerContent()}
+        </SheetContent>
+      </Sheet>
     </StepContainer>
   );
 }

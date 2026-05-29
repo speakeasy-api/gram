@@ -7,7 +7,6 @@ import {
   ConnectIdpStep,
   DirectorySyncStep,
   InstrumentAgentsStep,
-  AddSourcesStep,
   ConfirmTrafficStep,
 } from "./steps";
 
@@ -26,11 +25,6 @@ const STEPS: Step[] = [
     id: "instrument-agents",
     title: "Instrument agents",
     description: "Connect AI coding assistants",
-  },
-  {
-    id: "add-sources",
-    title: "Add MCP sources",
-    description: "Configure tools and data access",
   },
   {
     id: "confirm-traffic",
@@ -133,10 +127,6 @@ export function SetupWizard() {
           />
         );
       case 3:
-        return (
-          <AddSourcesStep onComplete={completeCurrentStep} onBack={goBack} />
-        );
-      case 4:
         return (
           <ConfirmTrafficStep
             onComplete={completeCurrentStep}

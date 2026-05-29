@@ -10,7 +10,7 @@ import {
   PartyPopper,
 } from "lucide-react";
 import { StepContainer } from "../step-container";
-import { MOCK_TRAFFIC_METRICS } from "../../mock-data";
+import { MOCK_TRAFFIC_METRICS } from "../../setup-data";
 import type { TrafficMetric } from "../../types";
 import { cn } from "@/lib/utils";
 

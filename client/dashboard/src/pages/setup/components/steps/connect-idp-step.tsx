@@ -1,11 +1,18 @@
-import { useState } from "react";
-import { KeyRound, ExternalLink, Loader2, ChevronDown } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  KeyRound,
+  ExternalLink,
+  Loader2,
+  ChevronDown,
+  Search,
+} from "lucide-react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
+import { Input } from "@/components/ui/input";
 import { cn, getServerURL } from "@/lib/utils";
 
 function ProviderIcon({
@@ -35,6 +42,24 @@ const INITIAL_VISIBLE = 6;
 export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filteredProviders = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return IDP_PROVIDERS;
+    return IDP_PROVIDERS.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.protocol.toLowerCase().includes(q),
+    );
+  }, [query]);
+
+  const isSearching = query.trim().length > 0;
+  const visibleProviders = isSearching
+    ? filteredProviders
+    : showAll
+      ? IDP_PROVIDERS
+      : IDP_PROVIDERS.slice(0, INITIAL_VISIBLE);
 
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
@@ -94,11 +119,24 @@ export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
           <label className="text-foreground text-sm font-medium">
             Select provider<span className="text-accent">*</span>
           </label>
+          <div className="relative mt-3">
+            <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              type="search"
+              value={query}
+              onChange={setQuery}
+              placeholder="Search providers"
+              className="pl-9"
+              disabled={generatePortalLink.isPending}
+            />
+          </div>
+          {isSearching && filteredProviders.length === 0 && (
+            <p className="text-muted-foreground mt-3 text-sm">
+              No providers match &quot;{query}&quot;.
+            </p>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-3">
-            {(showAll
-              ? IDP_PROVIDERS
-              : IDP_PROVIDERS.slice(0, INITIAL_VISIBLE)
-            ).map((p) => (
+            {visibleProviders.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setSelectedProvider(p.id)}
@@ -133,16 +171,18 @@ export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
               </button>
             ))}
           </div>
-          {!showAll && IDP_PROVIDERS.length > INITIAL_VISIBLE && (
-            <button
-              type="button"
-              onClick={() => setShowAll(true)}
-              className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
-            >
-              <ChevronDown className="h-4 w-4" />
-              Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
-            </button>
-          )}
+          {!isSearching &&
+            !showAll &&
+            IDP_PROVIDERS.length > INITIAL_VISIBLE && (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
+              >
+                <ChevronDown className="h-4 w-4" />
+                Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
+              </button>
+            )}
         </div>
 
         {selectedProvider && !generatePortalLink.isPending && (
