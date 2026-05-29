@@ -233,6 +233,7 @@ export * from "./searchchats.js";
 export * from "./searchlogs.js";
 export * from "./searchtoolcalls.js";
 export * from "./searchusers.js";
+export * from "./sendenterpriseadminonboardingemail.js";
 export * from "./sendinvite.js";
 export * from "./servechatattachment.js";
 export * from "./servechatattachmentsigned.js";

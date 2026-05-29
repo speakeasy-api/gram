@@ -18,20 +18,21 @@ import (
 
 // Server lists the organizations service endpoint HTTP handlers.
 type Server struct {
-	Mounts                        []*MountPoint
-	Get                           http.Handler
-	SendInvite                    http.Handler
-	RevokeInvite                  http.Handler
-	UpdateInviteRole              http.Handler
-	ListInvites                   http.Handler
-	ListUsers                     http.Handler
-	RemoveUser                    http.Handler
-	EnableWebhooks                http.Handler
-	DisableWebhooks               http.Handler
-	CreatePortalSession           http.Handler
-	GetOnboardingStatus           http.Handler
-	VerifyOnboardingHooksSetup    http.Handler
-	GenerateWorkOSAdminPortalLink http.Handler
+	Mounts                             []*MountPoint
+	Get                                http.Handler
+	SendInvite                         http.Handler
+	RevokeInvite                       http.Handler
+	UpdateInviteRole                   http.Handler
+	ListInvites                        http.Handler
+	ListUsers                          http.Handler
+	RemoveUser                         http.Handler
+	EnableWebhooks                     http.Handler
+	DisableWebhooks                    http.Handler
+	CreatePortalSession                http.Handler
+	GetOnboardingStatus                http.Handler
+	VerifyOnboardingHooksSetup         http.Handler
+	SendEnterpriseAdminOnboardingEmail http.Handler
+	GenerateWorkOSAdminPortalLink      http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -73,21 +74,23 @@ func New(
 			{"CreatePortalSession", "POST", "/rpc/organizations.createPortalSession"},
 			{"GetOnboardingStatus", "GET", "/rpc/organizations.getOnboardingStatus"},
 			{"VerifyOnboardingHooksSetup", "GET", "/rpc/organizations.verifyOnboardingHooksSetup"},
+			{"SendEnterpriseAdminOnboardingEmail", "POST", "/rpc/organizations.sendEnterpriseAdminOnboardingEmail"},
 			{"GenerateWorkOSAdminPortalLink", "POST", "/rpc/organizations.generateWorkOSAdminPortalLink"},
 		},
-		Get:                           NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
-		SendInvite:                    NewSendInviteHandler(e.SendInvite, mux, decoder, encoder, errhandler, formatter),
-		RevokeInvite:                  NewRevokeInviteHandler(e.RevokeInvite, mux, decoder, encoder, errhandler, formatter),
-		UpdateInviteRole:              NewUpdateInviteRoleHandler(e.UpdateInviteRole, mux, decoder, encoder, errhandler, formatter),
-		ListInvites:                   NewListInvitesHandler(e.ListInvites, mux, decoder, encoder, errhandler, formatter),
-		ListUsers:                     NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
-		RemoveUser:                    NewRemoveUserHandler(e.RemoveUser, mux, decoder, encoder, errhandler, formatter),
-		EnableWebhooks:                NewEnableWebhooksHandler(e.EnableWebhooks, mux, decoder, encoder, errhandler, formatter),
-		DisableWebhooks:               NewDisableWebhooksHandler(e.DisableWebhooks, mux, decoder, encoder, errhandler, formatter),
-		CreatePortalSession:           NewCreatePortalSessionHandler(e.CreatePortalSession, mux, decoder, encoder, errhandler, formatter),
-		GetOnboardingStatus:           NewGetOnboardingStatusHandler(e.GetOnboardingStatus, mux, decoder, encoder, errhandler, formatter),
-		VerifyOnboardingHooksSetup:    NewVerifyOnboardingHooksSetupHandler(e.VerifyOnboardingHooksSetup, mux, decoder, encoder, errhandler, formatter),
-		GenerateWorkOSAdminPortalLink: NewGenerateWorkOSAdminPortalLinkHandler(e.GenerateWorkOSAdminPortalLink, mux, decoder, encoder, errhandler, formatter),
+		Get:                                NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		SendInvite:                         NewSendInviteHandler(e.SendInvite, mux, decoder, encoder, errhandler, formatter),
+		RevokeInvite:                       NewRevokeInviteHandler(e.RevokeInvite, mux, decoder, encoder, errhandler, formatter),
+		UpdateInviteRole:                   NewUpdateInviteRoleHandler(e.UpdateInviteRole, mux, decoder, encoder, errhandler, formatter),
+		ListInvites:                        NewListInvitesHandler(e.ListInvites, mux, decoder, encoder, errhandler, formatter),
+		ListUsers:                          NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
+		RemoveUser:                         NewRemoveUserHandler(e.RemoveUser, mux, decoder, encoder, errhandler, formatter),
+		EnableWebhooks:                     NewEnableWebhooksHandler(e.EnableWebhooks, mux, decoder, encoder, errhandler, formatter),
+		DisableWebhooks:                    NewDisableWebhooksHandler(e.DisableWebhooks, mux, decoder, encoder, errhandler, formatter),
+		CreatePortalSession:                NewCreatePortalSessionHandler(e.CreatePortalSession, mux, decoder, encoder, errhandler, formatter),
+		GetOnboardingStatus:                NewGetOnboardingStatusHandler(e.GetOnboardingStatus, mux, decoder, encoder, errhandler, formatter),
+		VerifyOnboardingHooksSetup:         NewVerifyOnboardingHooksSetupHandler(e.VerifyOnboardingHooksSetup, mux, decoder, encoder, errhandler, formatter),
+		SendEnterpriseAdminOnboardingEmail: NewSendEnterpriseAdminOnboardingEmailHandler(e.SendEnterpriseAdminOnboardingEmail, mux, decoder, encoder, errhandler, formatter),
+		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkHandler(e.GenerateWorkOSAdminPortalLink, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -108,6 +111,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreatePortalSession = m(s.CreatePortalSession)
 	s.GetOnboardingStatus = m(s.GetOnboardingStatus)
 	s.VerifyOnboardingHooksSetup = m(s.VerifyOnboardingHooksSetup)
+	s.SendEnterpriseAdminOnboardingEmail = m(s.SendEnterpriseAdminOnboardingEmail)
 	s.GenerateWorkOSAdminPortalLink = m(s.GenerateWorkOSAdminPortalLink)
 }
 
@@ -128,6 +132,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreatePortalSessionHandler(mux, h.CreatePortalSession)
 	MountGetOnboardingStatusHandler(mux, h.GetOnboardingStatus)
 	MountVerifyOnboardingHooksSetupHandler(mux, h.VerifyOnboardingHooksSetup)
+	MountSendEnterpriseAdminOnboardingEmailHandler(mux, h.SendEnterpriseAdminOnboardingEmail)
 	MountGenerateWorkOSAdminPortalLinkHandler(mux, h.GenerateWorkOSAdminPortalLink)
 }
 
@@ -750,6 +755,60 @@ func NewVerifyOnboardingHooksSetupHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "verifyOnboardingHooksSetup")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSendEnterpriseAdminOnboardingEmailHandler configures the mux to serve
+// the "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint.
+func MountSendEnterpriseAdminOnboardingEmailHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizations.sendEnterpriseAdminOnboardingEmail", f)
+}
+
+// NewSendEnterpriseAdminOnboardingEmailHandler creates a HTTP handler which
+// loads the HTTP request and calls the "organizations" service
+// "sendEnterpriseAdminOnboardingEmail" endpoint.
+func NewSendEnterpriseAdminOnboardingEmailHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSendEnterpriseAdminOnboardingEmailRequest(mux, decoder)
+		encodeResponse = EncodeSendEnterpriseAdminOnboardingEmailResponse(encoder)
+		encodeError    = EncodeSendEnterpriseAdminOnboardingEmailError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "sendEnterpriseAdminOnboardingEmail")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

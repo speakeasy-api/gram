@@ -344,6 +344,7 @@ run();
 * [listUsers](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 * [removeUser](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 * [revokeInvite](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+* [sendEnterpriseAdminOnboardingEmail](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 * [sendInvite](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 * [updateInviteRole](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
 * [verifyOnboardingHooksSetup](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
@@ -737,6 +738,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`organizationsRemoveUser`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`organizationsRevokeInvite`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`organizationsSendEnterpriseAdminOnboardingEmail`](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 - [`organizationsSendInvite`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`organizationsUpdateInviteRole`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
 - [`organizationsVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
@@ -1138,6 +1140,7 @@ To learn about this feature and how to get started, check
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 - [`useSearchUsers`](docs/sdks/telemetry/README.md#searchusers) - searchUsers telemetry
+- [`useSendEnterpriseAdminOnboardingEmailMutation`](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 - [`useSendInviteMutation`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`useServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets

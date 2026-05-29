@@ -64,6 +64,10 @@ type Client struct {
 	// the verifyOnboardingHooksSetup endpoint.
 	VerifyOnboardingHooksSetupDoer goahttp.Doer
 
+	// SendEnterpriseAdminOnboardingEmail Doer is the HTTP client used to make
+	// requests to the sendEnterpriseAdminOnboardingEmail endpoint.
+	SendEnterpriseAdminOnboardingEmailDoer goahttp.Doer
+
 	// GenerateWorkOSAdminPortalLink Doer is the HTTP client used to make requests
 	// to the generateWorkOSAdminPortalLink endpoint.
 	GenerateWorkOSAdminPortalLinkDoer goahttp.Doer
@@ -89,24 +93,25 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetDoer:                           doer,
-		SendInviteDoer:                    doer,
-		RevokeInviteDoer:                  doer,
-		UpdateInviteRoleDoer:              doer,
-		ListInvitesDoer:                   doer,
-		ListUsersDoer:                     doer,
-		RemoveUserDoer:                    doer,
-		EnableWebhooksDoer:                doer,
-		DisableWebhooksDoer:               doer,
-		CreatePortalSessionDoer:           doer,
-		GetOnboardingStatusDoer:           doer,
-		VerifyOnboardingHooksSetupDoer:    doer,
-		GenerateWorkOSAdminPortalLinkDoer: doer,
-		RestoreResponseBody:               restoreBody,
-		scheme:                            scheme,
-		host:                              host,
-		decoder:                           dec,
-		encoder:                           enc,
+		GetDoer:                                doer,
+		SendInviteDoer:                         doer,
+		RevokeInviteDoer:                       doer,
+		UpdateInviteRoleDoer:                   doer,
+		ListInvitesDoer:                        doer,
+		ListUsersDoer:                          doer,
+		RemoveUserDoer:                         doer,
+		EnableWebhooksDoer:                     doer,
+		DisableWebhooksDoer:                    doer,
+		CreatePortalSessionDoer:                doer,
+		GetOnboardingStatusDoer:                doer,
+		VerifyOnboardingHooksSetupDoer:         doer,
+		SendEnterpriseAdminOnboardingEmailDoer: doer,
+		GenerateWorkOSAdminPortalLinkDoer:      doer,
+		RestoreResponseBody:                    restoreBody,
+		scheme:                                 scheme,
+		host:                                   host,
+		decoder:                                dec,
+		encoder:                                enc,
 	}
 }
 
@@ -393,6 +398,31 @@ func (c *Client) VerifyOnboardingHooksSetup() goa.Endpoint {
 		resp, err := c.VerifyOnboardingHooksSetupDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "verifyOnboardingHooksSetup", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SendEnterpriseAdminOnboardingEmail returns an endpoint that makes HTTP
+// requests to the organizations service sendEnterpriseAdminOnboardingEmail
+// server.
+func (c *Client) SendEnterpriseAdminOnboardingEmail() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSendEnterpriseAdminOnboardingEmailRequest(c.encoder)
+		decodeResponse = DecodeSendEnterpriseAdminOnboardingEmailResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSendEnterpriseAdminOnboardingEmailRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SendEnterpriseAdminOnboardingEmailDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
 		}
 		return decodeResponse(resp)
 	}

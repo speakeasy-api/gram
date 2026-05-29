@@ -33,6 +33,14 @@ type UpdateInviteRoleRequestBody struct {
 	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
 }
 
+// SendEnterpriseAdminOnboardingEmailRequestBody is the type of the
+// "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint HTTP
+// request body.
+type SendEnterpriseAdminOnboardingEmailRequestBody struct {
+	// Recipient email addresses.
+	Recipients []string `form:"recipients" json:"recipients" xml:"recipients"`
+}
+
 // GenerateWorkOSAdminPortalLinkRequestBody is the type of the "organizations"
 // service "generateWorkOSAdminPortalLink" endpoint HTTP request body.
 type GenerateWorkOSAdminPortalLinkRequestBody struct {
@@ -161,6 +169,16 @@ type VerifyOnboardingHooksSetupResponseBody struct {
 	// Total events received with time_unix_nano greater than since_unix_nano. May
 	// exceed len(events) when truncated.
 	TotalCount *int `form:"total_count,omitempty" json:"total_count,omitempty" xml:"total_count,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailResponseBody is the type of the
+// "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint HTTP
+// response body.
+type SendEnterpriseAdminOnboardingEmailResponseBody struct {
+	// Number of recipients the email was dispatched to.
+	SentCount *int `form:"sent_count,omitempty" json:"sent_count,omitempty" xml:"sent_count,omitempty"`
+	// The setup link embedded in the dispatched email.
+	SetupLink *string `form:"setup_link,omitempty" json:"setup_link,omitempty" xml:"setup_link,omitempty"`
 }
 
 // GenerateWorkOSAdminPortalLinkResponseBody is the type of the "organizations"
@@ -2409,6 +2427,196 @@ type VerifyOnboardingHooksSetupGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SendEnterpriseAdminOnboardingEmailUnauthorizedResponseBody is the type of
+// the "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint
+// HTTP response body for the "unauthorized" error.
+type SendEnterpriseAdminOnboardingEmailUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailForbiddenResponseBody is the type of the
+// "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint HTTP
+// response body for the "forbidden" error.
+type SendEnterpriseAdminOnboardingEmailForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailBadRequestResponseBody is the type of the
+// "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint HTTP
+// response body for the "bad_request" error.
+type SendEnterpriseAdminOnboardingEmailBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailNotFoundResponseBody is the type of the
+// "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint HTTP
+// response body for the "not_found" error.
+type SendEnterpriseAdminOnboardingEmailNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailConflictResponseBody is the type of the
+// "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint HTTP
+// response body for the "conflict" error.
+type SendEnterpriseAdminOnboardingEmailConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailUnsupportedMediaResponseBody is the type
+// of the "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint
+// HTTP response body for the "unsupported_media" error.
+type SendEnterpriseAdminOnboardingEmailUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailInvalidResponseBody is the type of the
+// "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint HTTP
+// response body for the "invalid" error.
+type SendEnterpriseAdminOnboardingEmailInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailInvariantViolationResponseBody is the type
+// of the "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint
+// HTTP response body for the "invariant_violation" error.
+type SendEnterpriseAdminOnboardingEmailInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailUnexpectedResponseBody is the type of the
+// "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint HTTP
+// response body for the "unexpected" error.
+type SendEnterpriseAdminOnboardingEmailUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SendEnterpriseAdminOnboardingEmailGatewayErrorResponseBody is the type of
+// the "organizations" service "sendEnterpriseAdminOnboardingEmail" endpoint
+// HTTP response body for the "gateway_error" error.
+type SendEnterpriseAdminOnboardingEmailGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody is the type of the
 // "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -2709,6 +2917,22 @@ func NewUpdateInviteRoleRequestBody(p *organizations.UpdateInviteRolePayload) *U
 	body := &UpdateInviteRoleRequestBody{
 		InvitationID: p.InvitationID,
 		RoleID:       p.RoleID,
+	}
+	return body
+}
+
+// NewSendEnterpriseAdminOnboardingEmailRequestBody builds the HTTP request
+// body from the payload of the "sendEnterpriseAdminOnboardingEmail" endpoint
+// of the "organizations" service.
+func NewSendEnterpriseAdminOnboardingEmailRequestBody(p *organizations.SendEnterpriseAdminOnboardingEmailPayload) *SendEnterpriseAdminOnboardingEmailRequestBody {
+	body := &SendEnterpriseAdminOnboardingEmailRequestBody{}
+	if p.Recipients != nil {
+		body.Recipients = make([]string, len(p.Recipients))
+		for i, val := range p.Recipients {
+			body.Recipients[i] = val
+		}
+	} else {
+		body.Recipients = []string{}
 	}
 	return body
 }
@@ -4658,6 +4882,169 @@ func NewVerifyOnboardingHooksSetupGatewayError(body *VerifyOnboardingHooksSetupG
 	return v
 }
 
+// NewSendEnterpriseAdminOnboardingEmailResultOK builds a "organizations"
+// service "sendEnterpriseAdminOnboardingEmail" endpoint result from a HTTP
+// "OK" response.
+func NewSendEnterpriseAdminOnboardingEmailResultOK(body *SendEnterpriseAdminOnboardingEmailResponseBody) *organizations.SendEnterpriseAdminOnboardingEmailResult {
+	v := &organizations.SendEnterpriseAdminOnboardingEmailResult{
+		SentCount: *body.SentCount,
+		SetupLink: *body.SetupLink,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailUnauthorized builds a organizations
+// service sendEnterpriseAdminOnboardingEmail endpoint unauthorized error.
+func NewSendEnterpriseAdminOnboardingEmailUnauthorized(body *SendEnterpriseAdminOnboardingEmailUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailForbidden builds a organizations
+// service sendEnterpriseAdminOnboardingEmail endpoint forbidden error.
+func NewSendEnterpriseAdminOnboardingEmailForbidden(body *SendEnterpriseAdminOnboardingEmailForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailBadRequest builds a organizations
+// service sendEnterpriseAdminOnboardingEmail endpoint bad_request error.
+func NewSendEnterpriseAdminOnboardingEmailBadRequest(body *SendEnterpriseAdminOnboardingEmailBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailNotFound builds a organizations service
+// sendEnterpriseAdminOnboardingEmail endpoint not_found error.
+func NewSendEnterpriseAdminOnboardingEmailNotFound(body *SendEnterpriseAdminOnboardingEmailNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailConflict builds a organizations service
+// sendEnterpriseAdminOnboardingEmail endpoint conflict error.
+func NewSendEnterpriseAdminOnboardingEmailConflict(body *SendEnterpriseAdminOnboardingEmailConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailUnsupportedMedia builds a organizations
+// service sendEnterpriseAdminOnboardingEmail endpoint unsupported_media error.
+func NewSendEnterpriseAdminOnboardingEmailUnsupportedMedia(body *SendEnterpriseAdminOnboardingEmailUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailInvalid builds a organizations service
+// sendEnterpriseAdminOnboardingEmail endpoint invalid error.
+func NewSendEnterpriseAdminOnboardingEmailInvalid(body *SendEnterpriseAdminOnboardingEmailInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailInvariantViolation builds a
+// organizations service sendEnterpriseAdminOnboardingEmail endpoint
+// invariant_violation error.
+func NewSendEnterpriseAdminOnboardingEmailInvariantViolation(body *SendEnterpriseAdminOnboardingEmailInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailUnexpected builds a organizations
+// service sendEnterpriseAdminOnboardingEmail endpoint unexpected error.
+func NewSendEnterpriseAdminOnboardingEmailUnexpected(body *SendEnterpriseAdminOnboardingEmailUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendEnterpriseAdminOnboardingEmailGatewayError builds a organizations
+// service sendEnterpriseAdminOnboardingEmail endpoint gateway_error error.
+func NewSendEnterpriseAdminOnboardingEmailGatewayError(body *SendEnterpriseAdminOnboardingEmailGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGenerateWorkOSAdminPortalLinkResultOK builds a "organizations" service
 // "generateWorkOSAdminPortalLink" endpoint result from a HTTP "OK" response.
 func NewGenerateWorkOSAdminPortalLinkResultOK(body *GenerateWorkOSAdminPortalLinkResponseBody) *organizations.GenerateWorkOSAdminPortalLinkResult {
@@ -5017,6 +5404,18 @@ func ValidateVerifyOnboardingHooksSetupResponseBody(body *VerifyOnboardingHooksS
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailResponseBody runs the validations
+// defined on SendEnterpriseAdminOnboardingEmailResponseBody
+func ValidateSendEnterpriseAdminOnboardingEmailResponseBody(body *SendEnterpriseAdminOnboardingEmailResponseBody) (err error) {
+	if body.SentCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sent_count", "body"))
+	}
+	if body.SetupLink == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("setup_link", "body"))
 	}
 	return
 }
@@ -7891,6 +8290,256 @@ func ValidateVerifyOnboardingHooksSetupUnexpectedResponseBody(body *VerifyOnboar
 // ValidateVerifyOnboardingHooksSetupGatewayErrorResponseBody runs the
 // validations defined on verifyOnboardingHooksSetup_gateway_error_response_body
 func ValidateVerifyOnboardingHooksSetupGatewayErrorResponseBody(body *VerifyOnboardingHooksSetupGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailUnauthorizedResponseBody runs the
+// validations defined on
+// sendEnterpriseAdminOnboardingEmail_unauthorized_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailUnauthorizedResponseBody(body *SendEnterpriseAdminOnboardingEmailUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailForbiddenResponseBody runs the
+// validations defined on
+// sendEnterpriseAdminOnboardingEmail_forbidden_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailForbiddenResponseBody(body *SendEnterpriseAdminOnboardingEmailForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailBadRequestResponseBody runs the
+// validations defined on
+// sendEnterpriseAdminOnboardingEmail_bad_request_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailBadRequestResponseBody(body *SendEnterpriseAdminOnboardingEmailBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailNotFoundResponseBody runs the
+// validations defined on
+// sendEnterpriseAdminOnboardingEmail_not_found_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailNotFoundResponseBody(body *SendEnterpriseAdminOnboardingEmailNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailConflictResponseBody runs the
+// validations defined on
+// sendEnterpriseAdminOnboardingEmail_conflict_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailConflictResponseBody(body *SendEnterpriseAdminOnboardingEmailConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailUnsupportedMediaResponseBody runs
+// the validations defined on
+// sendEnterpriseAdminOnboardingEmail_unsupported_media_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailUnsupportedMediaResponseBody(body *SendEnterpriseAdminOnboardingEmailUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailInvalidResponseBody runs the
+// validations defined on
+// sendEnterpriseAdminOnboardingEmail_invalid_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailInvalidResponseBody(body *SendEnterpriseAdminOnboardingEmailInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailInvariantViolationResponseBody
+// runs the validations defined on
+// sendEnterpriseAdminOnboardingEmail_invariant_violation_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailInvariantViolationResponseBody(body *SendEnterpriseAdminOnboardingEmailInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailUnexpectedResponseBody runs the
+// validations defined on
+// sendEnterpriseAdminOnboardingEmail_unexpected_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailUnexpectedResponseBody(body *SendEnterpriseAdminOnboardingEmailUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSendEnterpriseAdminOnboardingEmailGatewayErrorResponseBody runs the
+// validations defined on
+// sendEnterpriseAdminOnboardingEmail_gateway_error_response_body
+func ValidateSendEnterpriseAdminOnboardingEmailGatewayErrorResponseBody(body *SendEnterpriseAdminOnboardingEmailGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -257,6 +257,32 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "VerifyOnboardingHooksSetup"}`)
 	})
 
+	Method("sendEnterpriseAdminOnboardingEmail", func() {
+		Description("Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.")
+
+		Payload(func() {
+			Attribute("recipients", ArrayOf(String, func() {
+				Format(FormatEmail)
+			}), "Recipient email addresses.", func() {
+				MinLength(1)
+			})
+			Required("recipients")
+			security.SessionPayload()
+		})
+
+		Result(SendEnterpriseAdminOnboardingEmailResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.sendEnterpriseAdminOnboardingEmail")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "sendEnterpriseAdminOnboardingEmail")
+		Meta("openapi:extension:x-speakeasy-name-override", "sendEnterpriseAdminOnboardingEmail")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SendEnterpriseAdminOnboardingEmail"}`)
+	})
+
 	Method("generateWorkOSAdminPortalLink", func() {
 		Description("Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).")
 
@@ -407,6 +433,13 @@ var OnboardingHookEvent = Type("OnboardingHookEvent", func() {
 	Attribute("chat_id", String, "Gram chat/session ID that owns this event, when present.")
 
 	Required("time_unix_nano", "source", "project_slug")
+})
+
+var SendEnterpriseAdminOnboardingEmailResult = Type("SendEnterpriseAdminOnboardingEmailResult", func() {
+	Attribute("sent_count", Int, "Number of recipients the email was dispatched to.")
+	Attribute("setup_link", String, "The setup link embedded in the dispatched email.")
+
+	Required("sent_count", "setup_link")
 })
 
 var VerifyOnboardingHooksSetupResult = Type("VerifyOnboardingHooksSetupResult", func() {

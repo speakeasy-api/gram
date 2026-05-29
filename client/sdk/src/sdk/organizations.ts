@@ -12,6 +12,7 @@ import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
+import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
@@ -204,6 +205,27 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsRevokeInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * sendEnterpriseAdminOnboardingEmail organizations
+   *
+   * @remarks
+   * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.
+   */
+  async sendEnterpriseAdminOnboardingEmail(
+    request: operations.SendEnterpriseAdminOnboardingEmailRequest,
+    security?:
+      | operations.SendEnterpriseAdminOnboardingEmailSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SendEnterpriseAdminOnboardingEmailResult> {
+    return unwrapAsync(organizationsSendEnterpriseAdminOnboardingEmail(
       this,
       request,
       security,

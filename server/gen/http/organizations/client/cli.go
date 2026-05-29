@@ -234,6 +234,49 @@ func BuildVerifyOnboardingHooksSetupPayload(organizationsVerifyOnboardingHooksSe
 	return v, nil
 }
 
+// BuildSendEnterpriseAdminOnboardingEmailPayload builds the payload for the
+// organizations sendEnterpriseAdminOnboardingEmail endpoint from CLI flags.
+func BuildSendEnterpriseAdminOnboardingEmailPayload(organizationsSendEnterpriseAdminOnboardingEmailBody string, organizationsSendEnterpriseAdminOnboardingEmailSessionToken string) (*organizations.SendEnterpriseAdminOnboardingEmailPayload, error) {
+	var err error
+	var body SendEnterpriseAdminOnboardingEmailRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsSendEnterpriseAdminOnboardingEmailBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"recipients\": [\n         \"alice@example.com\",\n         \"alice@example.com\"\n      ]\n   }'")
+		}
+		if body.Recipients == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("recipients", "body"))
+		}
+		if len(body.Recipients) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.recipients", body.Recipients, len(body.Recipients), 1, true))
+		}
+		for _, e := range body.Recipients {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.recipients[*]", e, goa.FormatEmail))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsSendEnterpriseAdminOnboardingEmailSessionToken != "" {
+			sessionToken = &organizationsSendEnterpriseAdminOnboardingEmailSessionToken
+		}
+	}
+	v := &organizations.SendEnterpriseAdminOnboardingEmailPayload{}
+	if body.Recipients != nil {
+		v.Recipients = make([]string, len(body.Recipients))
+		for i, val := range body.Recipients {
+			v.Recipients[i] = val
+		}
+	} else {
+		v.Recipients = []string{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGenerateWorkOSAdminPortalLinkPayload builds the payload for the
 // organizations generateWorkOSAdminPortalLink endpoint from CLI flags.
 func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminPortalLinkBody string, organizationsGenerateWorkOSAdminPortalLinkSessionToken string) (*organizations.GenerateWorkOSAdminPortalLinkPayload, error) {

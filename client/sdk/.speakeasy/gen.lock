@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 66d91fd63a51414c699060a768923776
+  docChecksum: 0d626e0487158cc13074b0c5687823b7
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -852,6 +852,10 @@ trackedFiles:
     last_write_checksum: sha1:c9440e44db862ae2ab790d1f490d7a145a23cd9d
   docs/models/components/selector.md:
     last_write_checksum: sha1:c8d3fdbdb79801acc981d10b05dc72494794f9d0
+  docs/models/components/sendenterpriseadminonboardingemailrequestbody.md:
+    last_write_checksum: sha1:27fc5669a41dd588018dd68ee4169204a183f855
+  docs/models/components/sendenterpriseadminonboardingemailresult.md:
+    last_write_checksum: sha1:b30c268dda4e8ceb98d53e52bcd9d496e66a76d7
   docs/models/components/sendinviterequestbody.md:
     last_write_checksum: sha1:e433f2544bc88fdc779ca174ecf2b7ea969d6e9f
   docs/models/components/serveimageform.md:
@@ -2580,6 +2584,10 @@ trackedFiles:
     last_write_checksum: sha1:cfb2803d0ea5da660c1e5d7f62f1555eff125eb3
   docs/models/operations/searchuserssecurityoption2.md:
     last_write_checksum: sha1:0b76a2a1d256a669c500a2845b41755f9fbfd195
+  docs/models/operations/sendenterpriseadminonboardingemailrequest.md:
+    last_write_checksum: sha1:cccb37a9663ab1524d8435272dc0c4478b223f37
+  docs/models/operations/sendenterpriseadminonboardingemailsecurity.md:
+    last_write_checksum: sha1:43aae349aadde2811840fe34a82ff2d79e8ddf4c
   docs/models/operations/sendinviterequest.md:
     last_write_checksum: sha1:73372bdb9e63c9d912761855f2b97fb001f66e4f
   docs/models/operations/sendinvitesecurity.md:
@@ -2989,7 +2997,7 @@ trackedFiles:
   docs/sdks/mcpservers/README.md:
     last_write_checksum: sha1:9ae13e4509f1401bf73e3cfb9f74a479d1c115ea
   docs/sdks/organizations/README.md:
-    last_write_checksum: sha1:ee86f1c365a7a13f5b21fa08e7e218f5ab834af5
+    last_write_checksum: sha1:d8eceef43b2a8f6f1511db17dc5a842435358c66
   docs/sdks/otelforwarding/README.md:
     last_write_checksum: sha1:9599fbb87a1e733dbaf6180a1602c3ed20e46953
   docs/sdks/overview/README.md:
@@ -3332,6 +3340,8 @@ trackedFiles:
     last_write_checksum: sha1:a7d2ce703fda7b17afea02a972ea1349fdff5c93
   src/funcs/organizationsRevokeInvite.ts:
     last_write_checksum: sha1:4fea492b55ea1f99efd2e2ee15fdbb7089ba055c
+  src/funcs/organizationsSendEnterpriseAdminOnboardingEmail.ts:
+    last_write_checksum: sha1:7c694e36a7050afa7323e8fcc3b73ace83196ea6
   src/funcs/organizationsSendInvite.ts:
     last_write_checksum: sha1:54b2bfcf5c4f4387b03b5aacc863ee8ba3307596
   src/funcs/organizationsUpdateInviteRole.ts:
@@ -3955,7 +3965,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:20f5db3977b9aeb1707eda7bfdbe8542e1c02b53
+    last_write_checksum: sha1:adb14494ea53d1f5e88604f9c9f4c11943e21db6
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4336,6 +4346,10 @@ trackedFiles:
     last_write_checksum: sha1:b6435b1d385bc4ce89a1a172f494119f689414cb
   src/models/components/selector.ts:
     last_write_checksum: sha1:6121febd6ff326d1b1431cb8f8fbeb6c690212ef
+  src/models/components/sendenterpriseadminonboardingemailrequestbody.ts:
+    last_write_checksum: sha1:467940c2f3abf0401725f58e44f9499a88ffaa88
+  src/models/components/sendenterpriseadminonboardingemailresult.ts:
+    last_write_checksum: sha1:69374429599917da541d5916a99e337d8ea66b80
   src/models/components/sendinviterequestbody.ts:
     last_write_checksum: sha1:4db10ad0000eeaf1021650d75cbb16501a3eeb42
   src/models/components/serveimageform.ts:
@@ -4836,7 +4850,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:0d808dcaa1bbe85630652312d9a33beba96a1b3a
+    last_write_checksum: sha1:248a56b0aa6a78b42f1782e794081a7e1e946b74
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5018,6 +5032,8 @@ trackedFiles:
     last_write_checksum: sha1:50aa906a1142808e7f895973e1d827f6f7d47eed
   src/models/operations/searchusers.ts:
     last_write_checksum: sha1:ccc538d2d9c78bf1adb52afcb0e2323af5896e51
+  src/models/operations/sendenterpriseadminonboardingemail.ts:
+    last_write_checksum: sha1:c9c3da4417ef8bb7a8f8908187c7c91d5f65070c
   src/models/operations/sendinvite.ts:
     last_write_checksum: sha1:65f16d139e14830c560dbde697b99945ed48f79d
   src/models/operations/servechatattachment.ts:
@@ -5442,7 +5458,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:7789a3ede3e35085943d338a6ba230920ca2c077
+    last_write_checksum: sha1:504d0b46e92e16b29d0842ede5cf09cc38154649
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -5798,6 +5814,8 @@ trackedFiles:
     last_write_checksum: sha1:304a0d48442ce9848580dd96427992f4037e8578
   src/react-query/searchUsers.ts:
     last_write_checksum: sha1:1aed86190eb13de376440fc48529c7a208791c2f
+  src/react-query/sendEnterpriseAdminOnboardingEmail.ts:
+    last_write_checksum: sha1:b0d0f7dbf81ecdf5dba9acd42e8dfb542e82269c
   src/react-query/sendInvite.ts:
     last_write_checksum: sha1:e8ddaa87274318dee9be969d0c320125e8897f5f
   src/react-query/serveChatAttachment.core.ts:
@@ -6017,7 +6035,7 @@ trackedFiles:
   src/sdk/mcpservers.ts:
     last_write_checksum: sha1:3e45664e9634dbdbfc2ec9b2c8a1b7af83a3a87b
   src/sdk/organizations.ts:
-    last_write_checksum: sha1:302cfd397d8946671eb289ae605c8b49f71333bb
+    last_write_checksum: sha1:52e6012bb229d10c24e26d655303bce57fb932a4
   src/sdk/otelforwarding.ts:
     last_write_checksum: sha1:bdff0a0685140d557a23b72fe543fdc8dbd95996
   src/sdk/overview.ts:
@@ -9098,5 +9116,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  sendEnterpriseAdminOnboardingEmail:
+    speakeasy-default-send-enterprise-admin-onboarding-email:
+      requestBody:
+        application/json: {"recipients": ["Talon_Bauch99@yahoo.com", "Garret_King9@hotmail.com"]}
+      responses:
+        "200":
+          application/json: {"sent_count": 365255, "setup_link": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

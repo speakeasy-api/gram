@@ -1120,6 +1120,47 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 
+func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payload *gen.SendEnterpriseAdminOnboardingEmailPayload) (*gen.SendEnterpriseAdminOnboardingEmailResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	if s.email == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "email service not configured").Log(ctx, s.logger)
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+	}
+
+	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), org.Slug)
+
+	tmpl := email.EnterpriseAdminOnboarding{SetupLink: setupLink}
+
+	sent := 0
+	for _, recipient := range payload.Recipients {
+		recipient = strings.TrimSpace(recipient)
+		if recipient == "" {
+			continue
+		}
+		if err := s.email.Send(ctx, recipient, tmpl); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to send onboarding email to %s", recipient).Log(ctx, s.logger)
+		}
+		sent++
+	}
+
+	return &gen.SendEnterpriseAdminOnboardingEmailResult{
+		SentCount: sent,
+		SetupLink: setupLink,
+	}, nil
+}
+
 func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *gen.GenerateWorkOSAdminPortalLinkPayload) (res *gen.GenerateWorkOSAdminPortalLinkResult, err error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {

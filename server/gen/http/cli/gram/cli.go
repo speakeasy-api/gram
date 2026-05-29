@@ -98,7 +98,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
-		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|generate-work-os-admin-portal-link)",
+		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
@@ -973,6 +973,10 @@ func ParseEndpoint(
 		organizationsVerifyOnboardingHooksSetupFlags             = flag.NewFlagSet("verify-onboarding-hooks-setup", flag.ExitOnError)
 		organizationsVerifyOnboardingHooksSetupSinceUnixNanoFlag = organizationsVerifyOnboardingHooksSetupFlags.String("since-unix-nano", "", "")
 		organizationsVerifyOnboardingHooksSetupSessionTokenFlag  = organizationsVerifyOnboardingHooksSetupFlags.String("session-token", "", "")
+
+		organizationsSendEnterpriseAdminOnboardingEmailFlags            = flag.NewFlagSet("send-enterprise-admin-onboarding-email", flag.ExitOnError)
+		organizationsSendEnterpriseAdminOnboardingEmailBodyFlag         = organizationsSendEnterpriseAdminOnboardingEmailFlags.String("body", "REQUIRED", "")
+		organizationsSendEnterpriseAdminOnboardingEmailSessionTokenFlag = organizationsSendEnterpriseAdminOnboardingEmailFlags.String("session-token", "", "")
 
 		organizationsGenerateWorkOSAdminPortalLinkFlags            = flag.NewFlagSet("generate-work-os-admin-portal-link", flag.ExitOnError)
 		organizationsGenerateWorkOSAdminPortalLinkBodyFlag         = organizationsGenerateWorkOSAdminPortalLinkFlags.String("body", "REQUIRED", "")
@@ -2093,6 +2097,7 @@ func ParseEndpoint(
 	organizationsCreatePortalSessionFlags.Usage = organizationsCreatePortalSessionUsage
 	organizationsGetOnboardingStatusFlags.Usage = organizationsGetOnboardingStatusUsage
 	organizationsVerifyOnboardingHooksSetupFlags.Usage = organizationsVerifyOnboardingHooksSetupUsage
+	organizationsSendEnterpriseAdminOnboardingEmailFlags.Usage = organizationsSendEnterpriseAdminOnboardingEmailUsage
 	organizationsGenerateWorkOSAdminPortalLinkFlags.Usage = organizationsGenerateWorkOSAdminPortalLinkUsage
 
 	otelForwardingFlags.Usage = otelForwardingUsage
@@ -2971,6 +2976,9 @@ func ParseEndpoint(
 
 			case "verify-onboarding-hooks-setup":
 				epf = organizationsVerifyOnboardingHooksSetupFlags
+
+			case "send-enterprise-admin-onboarding-email":
+				epf = organizationsSendEnterpriseAdminOnboardingEmailFlags
 
 			case "generate-work-os-admin-portal-link":
 				epf = organizationsGenerateWorkOSAdminPortalLinkFlags
@@ -4101,6 +4109,9 @@ func ParseEndpoint(
 			case "verify-onboarding-hooks-setup":
 				endpoint = c.VerifyOnboardingHooksSetup()
 				data, err = organizationsc.BuildVerifyOnboardingHooksSetupPayload(*organizationsVerifyOnboardingHooksSetupSinceUnixNanoFlag, *organizationsVerifyOnboardingHooksSetupSessionTokenFlag)
+			case "send-enterprise-admin-onboarding-email":
+				endpoint = c.SendEnterpriseAdminOnboardingEmail()
+				data, err = organizationsc.BuildSendEnterpriseAdminOnboardingEmailPayload(*organizationsSendEnterpriseAdminOnboardingEmailBodyFlag, *organizationsSendEnterpriseAdminOnboardingEmailSessionTokenFlag)
 			case "generate-work-os-admin-portal-link":
 				endpoint = c.GenerateWorkOSAdminPortalLink()
 				data, err = organizationsc.BuildGenerateWorkOSAdminPortalLinkPayload(*organizationsGenerateWorkOSAdminPortalLinkBodyFlag, *organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag)
@@ -8166,6 +8177,7 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-portal-session: Create a webhook portal session.`)
 	fmt.Fprintln(os.Stderr, `    get-onboarding-status: Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.`)
 	fmt.Fprintln(os.Stderr, `    verify-onboarding-hooks-setup: Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.`)
+	fmt.Fprintln(os.Stderr, `    send-enterprise-admin-onboarding-email: Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.`)
 	fmt.Fprintln(os.Stderr, `    generate-work-os-admin-portal-link: Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -8395,6 +8407,26 @@ func organizationsVerifyOnboardingHooksSetupUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations verify-onboarding-hooks-setup --since-unix-nano \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsSendEnterpriseAdminOnboardingEmailUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations send-enterprise-admin-onboarding-email", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations send-enterprise-admin-onboarding-email --body '{\n      \"recipients\": [\n         \"alice@example.com\",\n         \"alice@example.com\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func organizationsGenerateWorkOSAdminPortalLinkUsage() {

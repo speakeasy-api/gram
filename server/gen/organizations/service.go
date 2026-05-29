@@ -46,6 +46,10 @@ type Service interface {
 	// wizard can confirm that Claude Code, Cursor, or Codex instrumentation is
 	// delivering events to Gram. Polled from the confirm-traffic step.
 	VerifyOnboardingHooksSetup(context.Context, *VerifyOnboardingHooksSetupPayload) (res *VerifyOnboardingHooksSetupResult, err error)
+	// Send the enterprise admin onboarding email to one or more recipients. The
+	// email links each recipient to the wizard for the active organization. Used
+	// by the super-admin Onboarding tab.
+	SendEnterpriseAdminOnboardingEmail(context.Context, *SendEnterpriseAdminOnboardingEmailPayload) (res *SendEnterpriseAdminOnboardingEmailResult, err error)
 	// Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
 	GenerateWorkOSAdminPortalLink(context.Context, *GenerateWorkOSAdminPortalLinkPayload) (res *GenerateWorkOSAdminPortalLinkResult, err error)
 }
@@ -70,7 +74,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "generateWorkOSAdminPortalLink"}
+var MethodNames = [14]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -270,6 +274,23 @@ type RevokeInvitePayload struct {
 	// WorkOS invitation ID.
 	InvitationID string
 	SessionToken *string
+}
+
+// SendEnterpriseAdminOnboardingEmailPayload is the payload type of the
+// organizations service sendEnterpriseAdminOnboardingEmail method.
+type SendEnterpriseAdminOnboardingEmailPayload struct {
+	// Recipient email addresses.
+	Recipients   []string
+	SessionToken *string
+}
+
+// SendEnterpriseAdminOnboardingEmailResult is the result type of the
+// organizations service sendEnterpriseAdminOnboardingEmail method.
+type SendEnterpriseAdminOnboardingEmailResult struct {
+	// Number of recipients the email was dispatched to.
+	SentCount int
+	// The setup link embedded in the dispatched email.
+	SetupLink string
 }
 
 // SendInvitePayload is the payload type of the organizations service

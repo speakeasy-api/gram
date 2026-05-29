@@ -231,6 +231,7 @@ export * from "./searchChats.js";
 export * from "./searchLogs.js";
 export * from "./searchToolCalls.js";
 export * from "./searchUsers.js";
+export * from "./sendEnterpriseAdminOnboardingEmail.js";
 export * from "./sendInvite.js";
 export * from "./serveChatAttachment.js";
 export * from "./serveChatAttachmentSigned.js";
