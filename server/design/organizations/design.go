@@ -235,6 +235,28 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OnboardingStatus"}`)
 	})
 
+	Method("verifyOnboardingHooksSetup", func() {
+		Description("Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.")
+
+		Payload(func() {
+			Attribute("since_unix_nano", String, "Only return events with time_unix_nano greater than this value. Pass the previous response's latest_unix_nano to poll for new events. Stringified to preserve int64 precision.")
+			security.SessionPayload()
+		})
+
+		Result(VerifyOnboardingHooksSetupResult)
+
+		HTTP(func() {
+			GET("/rpc/organizations.verifyOnboardingHooksSetup")
+			Param("since_unix_nano")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "verifyOnboardingHooksSetup")
+		Meta("openapi:extension:x-speakeasy-name-override", "verifyOnboardingHooksSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "VerifyOnboardingHooksSetup"}`)
+	})
+
 	Method("generateWorkOSAdminPortalLink", func() {
 		Description("Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).")
 
@@ -372,4 +394,25 @@ var OnboardingStatusResult = Type("OnboardingStatusResult", func() {
 	Attribute("dsync_configured", Boolean, "Whether the organization has at least one linked directory sync in WorkOS.")
 
 	Required("sso_configured", "dsync_configured")
+})
+
+var OnboardingHookEvent = Type("OnboardingHookEvent", func() {
+	Attribute("time_unix_nano", String, "Event timestamp in nanoseconds since unix epoch. Stringified to preserve int64 precision.")
+	Attribute("source", String, "Hook source: claude_code, cursor, or codex.")
+	Attribute("tool_name", String, "Tool invoked by the hook, if any.")
+	Attribute("event_name", String, "Hook event name (e.g. PreToolUse, SessionStart).")
+	Attribute("project_slug", String, "Slug of the Gram project that received the event.")
+	Attribute("status", String, "Outcome status: allowed, blocked, failure, or pending.")
+	Attribute("user_email", String, "Email of the user whose session produced the event, when present in hook attributes.")
+	Attribute("chat_id", String, "Gram chat/session ID that owns this event, when present.")
+
+	Required("time_unix_nano", "source", "project_slug")
+})
+
+var VerifyOnboardingHooksSetupResult = Type("VerifyOnboardingHooksSetupResult", func() {
+	Attribute("events", ArrayOf(OnboardingHookEvent), "Recent hook events, newest first. Truncated to a server-defined limit.")
+	Attribute("latest_unix_nano", String, "Highest time_unix_nano in this batch. Pass back as since_unix_nano on the next poll.")
+	Attribute("total_count", Int, "Total events received with time_unix_nano greater than since_unix_nano. May exceed len(events) when truncated.")
+
+	Required("events", "latest_unix_nano", "total_count")
 })

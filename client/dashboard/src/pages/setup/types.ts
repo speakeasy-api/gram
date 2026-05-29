@@ -104,10 +104,3 @@ export interface AgentPlatform {
   /** Platform-specific setup instructions shown when the card is expanded. */
   setupSteps: PlatformSetupStep[];
 }
-
-export interface TrafficMetric {
-  label: string;
-  value: string;
-  trend: "up" | "down" | "stable";
-  healthy: boolean;
-}

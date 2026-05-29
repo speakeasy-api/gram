@@ -62,6 +62,11 @@ func GetOnboardingStatusOrganizationsPath() string {
 	return "/rpc/organizations.getOnboardingStatus"
 }
 
+// VerifyOnboardingHooksSetupOrganizationsPath returns the URL path to the organizations service verifyOnboardingHooksSetup HTTP endpoint.
+func VerifyOnboardingHooksSetupOrganizationsPath() string {
+	return "/rpc/organizations.verifyOnboardingHooksSetup"
+}
+
 // GenerateWorkOSAdminPortalLinkOrganizationsPath returns the URL path to the organizations service generateWorkOSAdminPortalLink HTTP endpoint.
 func GenerateWorkOSAdminPortalLinkOrganizationsPath() string {
 	return "/rpc/organizations.generateWorkOSAdminPortalLink"

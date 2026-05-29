@@ -42,6 +42,10 @@ type Service interface {
 	// Get the onboarding status for the active organization by checking WorkOS SSO
 	// connections and directory sync state.
 	GetOnboardingStatus(context.Context, *GetOnboardingStatusPayload) (res *OnboardingStatusResult, err error)
+	// Return recent hook events for the active organization so the onboarding
+	// wizard can confirm that Claude Code, Cursor, or Codex instrumentation is
+	// delivering events to Gram. Polled from the confirm-traffic step.
+	VerifyOnboardingHooksSetup(context.Context, *VerifyOnboardingHooksSetupPayload) (res *VerifyOnboardingHooksSetupResult, err error)
 	// Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
 	GenerateWorkOSAdminPortalLink(context.Context, *GenerateWorkOSAdminPortalLinkPayload) (res *GenerateWorkOSAdminPortalLinkResult, err error)
 }
@@ -66,7 +70,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "generateWorkOSAdminPortalLink"}
+var MethodNames = [13]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "generateWorkOSAdminPortalLink"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -156,6 +160,27 @@ type ListUsersPayload struct {
 type ListUsersResult struct {
 	// Users linked to the organization in Gram.
 	Users []*OrganizationUser
+}
+
+type OnboardingHookEvent struct {
+	// Event timestamp in nanoseconds since unix epoch. Stringified to preserve
+	// int64 precision.
+	TimeUnixNano string
+	// Hook source: claude_code, cursor, or codex.
+	Source string
+	// Tool invoked by the hook, if any.
+	ToolName *string
+	// Hook event name (e.g. PreToolUse, SessionStart).
+	EventName *string
+	// Slug of the Gram project that received the event.
+	ProjectSlug string
+	// Outcome status: allowed, blocked, failure, or pending.
+	Status *string
+	// Email of the user whose session produced the event, when present in hook
+	// attributes.
+	UserEmail *string
+	// Gram chat/session ID that owns this event, when present.
+	ChatID *string
 }
 
 // OnboardingStatusResult is the result type of the organizations service
@@ -265,6 +290,29 @@ type UpdateInviteRolePayload struct {
 	// Role ID to assign to the invitee.
 	RoleID       string
 	SessionToken *string
+}
+
+// VerifyOnboardingHooksSetupPayload is the payload type of the organizations
+// service verifyOnboardingHooksSetup method.
+type VerifyOnboardingHooksSetupPayload struct {
+	// Only return events with time_unix_nano greater than this value. Pass the
+	// previous response's latest_unix_nano to poll for new events. Stringified to
+	// preserve int64 precision.
+	SinceUnixNano *string
+	SessionToken  *string
+}
+
+// VerifyOnboardingHooksSetupResult is the result type of the organizations
+// service verifyOnboardingHooksSetup method.
+type VerifyOnboardingHooksSetupResult struct {
+	// Recent hook events, newest first. Truncated to a server-defined limit.
+	Events []*OnboardingHookEvent
+	// Highest time_unix_nano in this batch. Pass back as since_unix_nano on the
+	// next poll.
+	LatestUnixNano string
+	// Total events received with time_unix_nano greater than since_unix_nano. May
+	// exceed len(events) when truncated.
+	TotalCount int
 }
 
 type WorkOSDomainVerificationIntentOptions struct {

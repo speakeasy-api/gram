@@ -14,6 +14,7 @@ import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
+import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -241,6 +242,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.OrganizationInvitation> {
     return unwrapAsync(organizationsUpdateInviteRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * verifyOnboardingHooksSetup organizations
+   *
+   * @remarks
+   * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+   */
+  async verifyOnboardingHooksSetup(
+    request?: operations.VerifyOnboardingHooksSetupRequest | undefined,
+    security?: operations.VerifyOnboardingHooksSetupSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.VerifyOnboardingHooksSetupResult> {
+    return unwrapAsync(organizationsVerifyOnboardingHooksSetup(
       this,
       request,
       security,

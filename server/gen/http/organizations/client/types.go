@@ -150,6 +150,19 @@ type GetOnboardingStatusResponseBody struct {
 	DsyncConfigured *bool `form:"dsync_configured,omitempty" json:"dsync_configured,omitempty" xml:"dsync_configured,omitempty"`
 }
 
+// VerifyOnboardingHooksSetupResponseBody is the type of the "organizations"
+// service "verifyOnboardingHooksSetup" endpoint HTTP response body.
+type VerifyOnboardingHooksSetupResponseBody struct {
+	// Recent hook events, newest first. Truncated to a server-defined limit.
+	Events []*OnboardingHookEventResponseBody `form:"events,omitempty" json:"events,omitempty" xml:"events,omitempty"`
+	// Highest time_unix_nano in this batch. Pass back as since_unix_nano on the
+	// next poll.
+	LatestUnixNano *string `form:"latest_unix_nano,omitempty" json:"latest_unix_nano,omitempty" xml:"latest_unix_nano,omitempty"`
+	// Total events received with time_unix_nano greater than since_unix_nano. May
+	// exceed len(events) when truncated.
+	TotalCount *int `form:"total_count,omitempty" json:"total_count,omitempty" xml:"total_count,omitempty"`
+}
+
 // GenerateWorkOSAdminPortalLinkResponseBody is the type of the "organizations"
 // service "generateWorkOSAdminPortalLink" endpoint HTTP response body.
 type GenerateWorkOSAdminPortalLinkResponseBody struct {
@@ -2206,6 +2219,196 @@ type GetOnboardingStatusGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// VerifyOnboardingHooksSetupUnauthorizedResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "unauthorized" error.
+type VerifyOnboardingHooksSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupForbiddenResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "forbidden" error.
+type VerifyOnboardingHooksSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupBadRequestResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "bad_request" error.
+type VerifyOnboardingHooksSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupNotFoundResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "not_found" error.
+type VerifyOnboardingHooksSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupConflictResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "conflict" error.
+type VerifyOnboardingHooksSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupUnsupportedMediaResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "unsupported_media" error.
+type VerifyOnboardingHooksSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupInvalidResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "invalid" error.
+type VerifyOnboardingHooksSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupInvariantViolationResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "invariant_violation" error.
+type VerifyOnboardingHooksSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupUnexpectedResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "unexpected" error.
+type VerifyOnboardingHooksSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyOnboardingHooksSetupGatewayErrorResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "gateway_error" error.
+type VerifyOnboardingHooksSetupGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody is the type of the
 // "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -2439,6 +2642,29 @@ type OrganizationUserResponseBody struct {
 	UpdatedAt          *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// Timestamp of the user's most recent login.
 	LastLogin *string `form:"last_login,omitempty" json:"last_login,omitempty" xml:"last_login,omitempty"`
+}
+
+// OnboardingHookEventResponseBody is used to define fields on response body
+// types.
+type OnboardingHookEventResponseBody struct {
+	// Event timestamp in nanoseconds since unix epoch. Stringified to preserve
+	// int64 precision.
+	TimeUnixNano *string `form:"time_unix_nano,omitempty" json:"time_unix_nano,omitempty" xml:"time_unix_nano,omitempty"`
+	// Hook source: claude_code, cursor, or codex.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Tool invoked by the hook, if any.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Hook event name (e.g. PreToolUse, SessionStart).
+	EventName *string `form:"event_name,omitempty" json:"event_name,omitempty" xml:"event_name,omitempty"`
+	// Slug of the Gram project that received the event.
+	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	// Outcome status: allowed, blocked, failure, or pending.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Email of the user whose session produced the event, when present in hook
+	// attributes.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Gram chat/session ID that owns this event, when present.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 }
 
 // WorkOSIntentOptionsRequestBody is used to define fields on request body
@@ -4263,6 +4489,175 @@ func NewGetOnboardingStatusGatewayError(body *GetOnboardingStatusGatewayErrorRes
 	return v
 }
 
+// NewVerifyOnboardingHooksSetupResultOK builds a "organizations" service
+// "verifyOnboardingHooksSetup" endpoint result from a HTTP "OK" response.
+func NewVerifyOnboardingHooksSetupResultOK(body *VerifyOnboardingHooksSetupResponseBody) *organizations.VerifyOnboardingHooksSetupResult {
+	v := &organizations.VerifyOnboardingHooksSetupResult{
+		LatestUnixNano: *body.LatestUnixNano,
+		TotalCount:     *body.TotalCount,
+	}
+	v.Events = make([]*organizations.OnboardingHookEvent, len(body.Events))
+	for i, val := range body.Events {
+		if val == nil {
+			v.Events[i] = nil
+			continue
+		}
+		v.Events[i] = unmarshalOnboardingHookEventResponseBodyToOrganizationsOnboardingHookEvent(val)
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupUnauthorized builds a organizations service
+// verifyOnboardingHooksSetup endpoint unauthorized error.
+func NewVerifyOnboardingHooksSetupUnauthorized(body *VerifyOnboardingHooksSetupUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupForbidden builds a organizations service
+// verifyOnboardingHooksSetup endpoint forbidden error.
+func NewVerifyOnboardingHooksSetupForbidden(body *VerifyOnboardingHooksSetupForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupBadRequest builds a organizations service
+// verifyOnboardingHooksSetup endpoint bad_request error.
+func NewVerifyOnboardingHooksSetupBadRequest(body *VerifyOnboardingHooksSetupBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupNotFound builds a organizations service
+// verifyOnboardingHooksSetup endpoint not_found error.
+func NewVerifyOnboardingHooksSetupNotFound(body *VerifyOnboardingHooksSetupNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupConflict builds a organizations service
+// verifyOnboardingHooksSetup endpoint conflict error.
+func NewVerifyOnboardingHooksSetupConflict(body *VerifyOnboardingHooksSetupConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupUnsupportedMedia builds a organizations service
+// verifyOnboardingHooksSetup endpoint unsupported_media error.
+func NewVerifyOnboardingHooksSetupUnsupportedMedia(body *VerifyOnboardingHooksSetupUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupInvalid builds a organizations service
+// verifyOnboardingHooksSetup endpoint invalid error.
+func NewVerifyOnboardingHooksSetupInvalid(body *VerifyOnboardingHooksSetupInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupInvariantViolation builds a organizations
+// service verifyOnboardingHooksSetup endpoint invariant_violation error.
+func NewVerifyOnboardingHooksSetupInvariantViolation(body *VerifyOnboardingHooksSetupInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupUnexpected builds a organizations service
+// verifyOnboardingHooksSetup endpoint unexpected error.
+func NewVerifyOnboardingHooksSetupUnexpected(body *VerifyOnboardingHooksSetupUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupGatewayError builds a organizations service
+// verifyOnboardingHooksSetup endpoint gateway_error error.
+func NewVerifyOnboardingHooksSetupGatewayError(body *VerifyOnboardingHooksSetupGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGenerateWorkOSAdminPortalLinkResultOK builds a "organizations" service
 // "generateWorkOSAdminPortalLink" endpoint result from a HTTP "OK" response.
 func NewGenerateWorkOSAdminPortalLinkResultOK(body *GenerateWorkOSAdminPortalLinkResponseBody) *organizations.GenerateWorkOSAdminPortalLinkResult {
@@ -4600,6 +4995,28 @@ func ValidateGetOnboardingStatusResponseBody(body *GetOnboardingStatusResponseBo
 	}
 	if body.DsyncConfigured == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("dsync_configured", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupResponseBody runs the validations defined
+// on VerifyOnboardingHooksSetupResponseBody
+func ValidateVerifyOnboardingHooksSetupResponseBody(body *VerifyOnboardingHooksSetupResponseBody) (err error) {
+	if body.Events == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("events", "body"))
+	}
+	if body.LatestUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("latest_unix_nano", "body"))
+	}
+	if body.TotalCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_count", "body"))
+	}
+	for _, e := range body.Events {
+		if e != nil {
+			if err2 := ValidateOnboardingHookEventResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -7253,6 +7670,248 @@ func ValidateGetOnboardingStatusGatewayErrorResponseBody(body *GetOnboardingStat
 	return
 }
 
+// ValidateVerifyOnboardingHooksSetupUnauthorizedResponseBody runs the
+// validations defined on verifyOnboardingHooksSetup_unauthorized_response_body
+func ValidateVerifyOnboardingHooksSetupUnauthorizedResponseBody(body *VerifyOnboardingHooksSetupUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupForbiddenResponseBody runs the validations
+// defined on verifyOnboardingHooksSetup_forbidden_response_body
+func ValidateVerifyOnboardingHooksSetupForbiddenResponseBody(body *VerifyOnboardingHooksSetupForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupBadRequestResponseBody runs the
+// validations defined on verifyOnboardingHooksSetup_bad_request_response_body
+func ValidateVerifyOnboardingHooksSetupBadRequestResponseBody(body *VerifyOnboardingHooksSetupBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupNotFoundResponseBody runs the validations
+// defined on verifyOnboardingHooksSetup_not_found_response_body
+func ValidateVerifyOnboardingHooksSetupNotFoundResponseBody(body *VerifyOnboardingHooksSetupNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupConflictResponseBody runs the validations
+// defined on verifyOnboardingHooksSetup_conflict_response_body
+func ValidateVerifyOnboardingHooksSetupConflictResponseBody(body *VerifyOnboardingHooksSetupConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupUnsupportedMediaResponseBody runs the
+// validations defined on
+// verifyOnboardingHooksSetup_unsupported_media_response_body
+func ValidateVerifyOnboardingHooksSetupUnsupportedMediaResponseBody(body *VerifyOnboardingHooksSetupUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupInvalidResponseBody runs the validations
+// defined on verifyOnboardingHooksSetup_invalid_response_body
+func ValidateVerifyOnboardingHooksSetupInvalidResponseBody(body *VerifyOnboardingHooksSetupInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupInvariantViolationResponseBody runs the
+// validations defined on
+// verifyOnboardingHooksSetup_invariant_violation_response_body
+func ValidateVerifyOnboardingHooksSetupInvariantViolationResponseBody(body *VerifyOnboardingHooksSetupInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupUnexpectedResponseBody runs the
+// validations defined on verifyOnboardingHooksSetup_unexpected_response_body
+func ValidateVerifyOnboardingHooksSetupUnexpectedResponseBody(body *VerifyOnboardingHooksSetupUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyOnboardingHooksSetupGatewayErrorResponseBody runs the
+// validations defined on verifyOnboardingHooksSetup_gateway_error_response_body
+func ValidateVerifyOnboardingHooksSetupGatewayErrorResponseBody(body *VerifyOnboardingHooksSetupGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGenerateWorkOSAdminPortalLinkUnauthorizedResponseBody runs the
 // validations defined on
 // generateWorkOSAdminPortalLink_unauthorized_response_body
@@ -7571,6 +8230,21 @@ func ValidateOrganizationUserResponseBody(body *OrganizationUserResponseBody) (e
 	}
 	if body.LastLogin != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_login", *body.LastLogin, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateOnboardingHookEventResponseBody runs the validations defined on
+// OnboardingHookEventResponseBody
+func ValidateOnboardingHookEventResponseBody(body *OnboardingHookEventResponseBody) (err error) {
+	if body.TimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("time_unix_nano", "body"))
+	}
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.ProjectSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
 	}
 	return
 }

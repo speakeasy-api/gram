@@ -14276,6 +14276,94 @@ paths:
             x-speakeasy-name-override: updateInviteRole
             x-speakeasy-react-hook:
                 name: UpdateInviteRole
+    /rpc/organizations.verifyOnboardingHooksSetup:
+        get:
+            description: Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+            operationId: verifyOnboardingHooksSetup
+            parameters:
+                - allowEmptyValue: true
+                  description: Only return events with time_unix_nano greater than this value. Pass the previous response's latest_unix_nano to poll for new events. Stringified to preserve int64 precision.
+                  in: query
+                  name: since_unix_nano
+                  schema:
+                    description: Only return events with time_unix_nano greater than this value. Pass the previous response's latest_unix_nano to poll for new events. Stringified to preserve int64 precision.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyOnboardingHooksSetupResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: verifyOnboardingHooksSetup organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: verifyOnboardingHooksSetup
+            x-speakeasy-react-hook:
+                name: VerifyOnboardingHooksSetup
     /rpc/otelForwarding.deleteConfig:
         post:
             description: Delete the org-wide OTEL forwarding config.
@@ -36484,6 +36572,37 @@ components:
                 - total_tool_calls
                 - failed_tool_calls
                 - avg_latency_ms
+        OnboardingHookEvent:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: Gram chat/session ID that owns this event, when present.
+                event_name:
+                    type: string
+                    description: Hook event name (e.g. PreToolUse, SessionStart).
+                project_slug:
+                    type: string
+                    description: Slug of the Gram project that received the event.
+                source:
+                    type: string
+                    description: 'Hook source: claude_code, cursor, or codex.'
+                status:
+                    type: string
+                    description: 'Outcome status: allowed, blocked, failure, or pending.'
+                time_unix_nano:
+                    type: string
+                    description: Event timestamp in nanoseconds since unix epoch. Stringified to preserve int64 precision.
+                tool_name:
+                    type: string
+                    description: Tool invoked by the hook, if any.
+                user_email:
+                    type: string
+                    description: Email of the user whose session produced the event, when present in hook attributes.
+            required:
+                - time_unix_nano
+                - source
+                - project_slug
         OnboardingStatusResult:
             type: object
             properties:
@@ -42338,6 +42457,25 @@ components:
                 - organization
                 - projects
                 - scopes
+        VerifyOnboardingHooksSetupResult:
+            type: object
+            properties:
+                events:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OnboardingHookEvent'
+                    description: Recent hook events, newest first. Truncated to a server-defined limit.
+                latest_unix_nano:
+                    type: string
+                    description: Highest time_unix_nano in this batch. Pass back as since_unix_nano on the next poll.
+                total_count:
+                    type: integer
+                    description: Total events received with time_unix_nano greater than since_unix_nano. May exceed len(events) when truncated.
+                    format: int64
+            required:
+                - events
+                - latest_unix_nano
+                - total_count
         VerifyURLForm:
             type: object
             properties:

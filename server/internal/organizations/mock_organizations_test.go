@@ -96,6 +96,17 @@ func (m *MockOrganizationProvider) ListDirectories(ctx context.Context, organiza
 	return nil, nil
 }
 
+func (m *MockOrganizationProvider) ListRoles(ctx context.Context, workosOrgID string) ([]thirdpartyworkos.Role, error) {
+	args := m.Called(ctx, workosOrgID)
+	if err := args.Error(1); err != nil {
+		return nil, fmt.Errorf("mock ListRoles: %w", err)
+	}
+	if roles, ok := args.Get(0).([]thirdpartyworkos.Role); ok {
+		return roles, nil
+	}
+	return nil, nil
+}
+
 // stubUserProvisioner is a no-op implementation of UserProvisioner for tests
 // that don't exercise the invite callback HTTP handler.
 type stubUserProvisioner struct{}

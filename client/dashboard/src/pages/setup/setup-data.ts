@@ -1,4 +1,4 @@
-import type { AgentPlatform, TrafficMetric } from "./types";
+import type { AgentPlatform } from "./types";
 
 export const AGENT_PLATFORMS: AgentPlatform[] = [
   {
@@ -132,11 +132,4 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
       },
     ],
   },
-];
-
-export const MOCK_TRAFFIC_METRICS: TrafficMetric[] = [
-  { label: "Active Users", value: "24", trend: "up", healthy: true },
-  { label: "Tool Requests", value: "1,247", trend: "up", healthy: true },
-  { label: "Blocked Calls", value: "38", trend: "down", healthy: true },
-  { label: "Compliance Rate", value: "96.8%", trend: "stable", healthy: true },
 ];

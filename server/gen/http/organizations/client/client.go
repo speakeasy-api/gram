@@ -60,6 +60,10 @@ type Client struct {
 	// getOnboardingStatus endpoint.
 	GetOnboardingStatusDoer goahttp.Doer
 
+	// VerifyOnboardingHooksSetup Doer is the HTTP client used to make requests to
+	// the verifyOnboardingHooksSetup endpoint.
+	VerifyOnboardingHooksSetupDoer goahttp.Doer
+
 	// GenerateWorkOSAdminPortalLink Doer is the HTTP client used to make requests
 	// to the generateWorkOSAdminPortalLink endpoint.
 	GenerateWorkOSAdminPortalLinkDoer goahttp.Doer
@@ -96,6 +100,7 @@ func NewClient(
 		DisableWebhooksDoer:               doer,
 		CreatePortalSessionDoer:           doer,
 		GetOnboardingStatusDoer:           doer,
+		VerifyOnboardingHooksSetupDoer:    doer,
 		GenerateWorkOSAdminPortalLinkDoer: doer,
 		RestoreResponseBody:               restoreBody,
 		scheme:                            scheme,
@@ -364,6 +369,30 @@ func (c *Client) GetOnboardingStatus() goa.Endpoint {
 		resp, err := c.GetOnboardingStatusDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "getOnboardingStatus", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// VerifyOnboardingHooksSetup returns an endpoint that makes HTTP requests to
+// the organizations service verifyOnboardingHooksSetup server.
+func (c *Client) VerifyOnboardingHooksSetup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeVerifyOnboardingHooksSetupRequest(c.encoder)
+		decodeResponse = DecodeVerifyOnboardingHooksSetupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVerifyOnboardingHooksSetupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VerifyOnboardingHooksSetupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "verifyOnboardingHooksSetup", err)
 		}
 		return decodeResponse(resp)
 	}

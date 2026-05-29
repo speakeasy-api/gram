@@ -44,6 +44,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -80,6 +82,14 @@ type orgFeatureChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
+// HookEventReader is the subset of the telemetry repo used by the onboarding
+// wizard's verifyOnboardingHooksSetup poll. Decoupled from a concrete repo so
+// tests can stub it.
+type HookEventReader interface {
+	ListRecentHookEventsForOnboarding(ctx context.Context, arg telemrepo.ListRecentHookEventsForOnboardingParams) ([]telemrepo.RecentHookEvent, error)
+	CountRecentHookEventsForOnboarding(ctx context.Context, projectIDs []string, sinceUnixNano int64) (uint64, error)
+}
+
 type Service struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
@@ -90,6 +100,7 @@ type Service struct {
 	orgs      OrganizationProvider
 	invite    InviteIdentityProvider
 	features  orgFeatureChecker
+	hooks     HookEventReader // optional; nil disables verifyOnboardingHooksSetup
 	email     *email.Service
 	serverURL string // API server URL; used to build invite links
 	siteURL   string // frontend URL; used for post-callback browser redirects
@@ -101,7 +112,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
@@ -114,6 +125,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		orgs:      orgs,
 		invite:    invite,
 		features:  features,
+		hooks:     hooks,
 		email:     emailService,
 		serverURL: serverURL,
 		siteURL:   siteURL,
@@ -938,6 +950,92 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 	return &gen.OnboardingStatusResult{
 		SsoConfigured:   workos.HasActiveConnection(connections),
 		DsyncConfigured: workos.HasActiveDirectory(directories),
+	}, nil
+}
+
+const verifyOnboardingHooksLimit = 50
+
+func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.VerifyOnboardingHooksSetupPayload) (*gen.VerifyOnboardingHooksSetupResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	if s.hooks == nil {
+		// Telemetry/ClickHouse is not wired in this binary. Return an empty result
+		// so the wizard can render gracefully on local OSS setups.
+		return &gen.VerifyOnboardingHooksSetupResult{Events: []*gen.OnboardingHookEvent{}, LatestUnixNano: "0", TotalCount: 0}, nil
+	}
+
+	var sinceUnixNano int64
+	if payload.SinceUnixNano != nil && *payload.SinceUnixNano != "" {
+		parsed, parseErr := strconv.ParseInt(*payload.SinceUnixNano, 10, 64)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid since_unix_nano cursor").Log(ctx, s.logger)
+		}
+		if parsed > 0 {
+			sinceUnixNano = parsed
+		}
+	}
+
+	projects, err := projectsrepo.New(s.db).ListProjectsByOrganization(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list projects for organization").Log(ctx, s.logger)
+	}
+
+	if len(projects) == 0 {
+		return &gen.VerifyOnboardingHooksSetupResult{Events: []*gen.OnboardingHookEvent{}, LatestUnixNano: strconv.FormatInt(sinceUnixNano, 10), TotalCount: 0}, nil
+	}
+
+	projectIDs := make([]string, 0, len(projects))
+	slugByID := make(map[string]string, len(projects))
+	for _, p := range projects {
+		id := p.ID.String()
+		projectIDs = append(projectIDs, id)
+		slugByID[id] = p.Slug
+	}
+
+	rows, err := s.hooks.ListRecentHookEventsForOnboarding(ctx, telemrepo.ListRecentHookEventsForOnboardingParams{
+		ProjectIDs:    projectIDs,
+		SinceUnixNano: sinceUnixNano,
+		Limit:         verifyOnboardingHooksLimit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read recent hook events").Log(ctx, s.logger)
+	}
+
+	total, err := s.hooks.CountRecentHookEventsForOnboarding(ctx, projectIDs, sinceUnixNano)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to count recent hook events").Log(ctx, s.logger)
+	}
+
+	events := make([]*gen.OnboardingHookEvent, 0, len(rows))
+	latest := sinceUnixNano
+	for _, r := range rows {
+		if r.TimeUnixNano > latest {
+			latest = r.TimeUnixNano
+		}
+		ev := &gen.OnboardingHookEvent{
+			TimeUnixNano: strconv.FormatInt(r.TimeUnixNano, 10),
+			Source:       r.ServiceVersion,
+			ProjectSlug:  slugByID[r.GramProjectID],
+			ToolName:     r.ToolName,
+			EventName:    r.EventName,
+			UserEmail:    r.UserEmail,
+			ChatID:       r.GramChatID,
+			Status:       conv.PtrEmpty(r.Status),
+		}
+		events = append(events, ev)
+	}
+
+	return &gen.VerifyOnboardingHooksSetupResult{
+		Events:         events,
+		LatestUnixNano: strconv.FormatInt(latest, 10),
+		TotalCount:     int(total), //nolint:gosec // count fits int
 	}, nil
 }
 

@@ -147,6 +147,19 @@ type GetOnboardingStatusResponseBody struct {
 	DsyncConfigured bool `form:"dsync_configured" json:"dsync_configured" xml:"dsync_configured"`
 }
 
+// VerifyOnboardingHooksSetupResponseBody is the type of the "organizations"
+// service "verifyOnboardingHooksSetup" endpoint HTTP response body.
+type VerifyOnboardingHooksSetupResponseBody struct {
+	// Recent hook events, newest first. Truncated to a server-defined limit.
+	Events []*OnboardingHookEventResponseBody `form:"events" json:"events" xml:"events"`
+	// Highest time_unix_nano in this batch. Pass back as since_unix_nano on the
+	// next poll.
+	LatestUnixNano string `form:"latest_unix_nano" json:"latest_unix_nano" xml:"latest_unix_nano"`
+	// Total events received with time_unix_nano greater than since_unix_nano. May
+	// exceed len(events) when truncated.
+	TotalCount int `form:"total_count" json:"total_count" xml:"total_count"`
+}
+
 // GenerateWorkOSAdminPortalLinkResponseBody is the type of the "organizations"
 // service "generateWorkOSAdminPortalLink" endpoint HTTP response body.
 type GenerateWorkOSAdminPortalLinkResponseBody struct {
@@ -2203,6 +2216,196 @@ type GetOnboardingStatusGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// VerifyOnboardingHooksSetupUnauthorizedResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "unauthorized" error.
+type VerifyOnboardingHooksSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupForbiddenResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "forbidden" error.
+type VerifyOnboardingHooksSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupBadRequestResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "bad_request" error.
+type VerifyOnboardingHooksSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupNotFoundResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "not_found" error.
+type VerifyOnboardingHooksSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupConflictResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "conflict" error.
+type VerifyOnboardingHooksSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupUnsupportedMediaResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "unsupported_media" error.
+type VerifyOnboardingHooksSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupInvalidResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "invalid" error.
+type VerifyOnboardingHooksSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupInvariantViolationResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "invariant_violation" error.
+type VerifyOnboardingHooksSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupUnexpectedResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "unexpected" error.
+type VerifyOnboardingHooksSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyOnboardingHooksSetupGatewayErrorResponseBody is the type of the
+// "organizations" service "verifyOnboardingHooksSetup" endpoint HTTP response
+// body for the "gateway_error" error.
+type VerifyOnboardingHooksSetupGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody is the type of the
 // "organizations" service "generateWorkOSAdminPortalLink" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -2438,6 +2641,29 @@ type OrganizationUserResponseBody struct {
 	LastLogin *string `form:"last_login,omitempty" json:"last_login,omitempty" xml:"last_login,omitempty"`
 }
 
+// OnboardingHookEventResponseBody is used to define fields on response body
+// types.
+type OnboardingHookEventResponseBody struct {
+	// Event timestamp in nanoseconds since unix epoch. Stringified to preserve
+	// int64 precision.
+	TimeUnixNano string `form:"time_unix_nano" json:"time_unix_nano" xml:"time_unix_nano"`
+	// Hook source: claude_code, cursor, or codex.
+	Source string `form:"source" json:"source" xml:"source"`
+	// Tool invoked by the hook, if any.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Hook event name (e.g. PreToolUse, SessionStart).
+	EventName *string `form:"event_name,omitempty" json:"event_name,omitempty" xml:"event_name,omitempty"`
+	// Slug of the Gram project that received the event.
+	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
+	// Outcome status: allowed, blocked, failure, or pending.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Email of the user whose session produced the event, when present in hook
+	// attributes.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Gram chat/session ID that owns this event, when present.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+}
+
 // WorkOSIntentOptionsRequestBody is used to define fields on request body
 // types.
 type WorkOSIntentOptionsRequestBody struct {
@@ -2570,6 +2796,29 @@ func NewGetOnboardingStatusResponseBody(res *organizations.OnboardingStatusResul
 	body := &GetOnboardingStatusResponseBody{
 		SsoConfigured:   res.SsoConfigured,
 		DsyncConfigured: res.DsyncConfigured,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupResponseBody builds the HTTP response body from
+// the result of the "verifyOnboardingHooksSetup" endpoint of the
+// "organizations" service.
+func NewVerifyOnboardingHooksSetupResponseBody(res *organizations.VerifyOnboardingHooksSetupResult) *VerifyOnboardingHooksSetupResponseBody {
+	body := &VerifyOnboardingHooksSetupResponseBody{
+		LatestUnixNano: res.LatestUnixNano,
+		TotalCount:     res.TotalCount,
+	}
+	if res.Events != nil {
+		body.Events = make([]*OnboardingHookEventResponseBody, len(res.Events))
+		for i, val := range res.Events {
+			if val == nil {
+				body.Events[i] = nil
+				continue
+			}
+			body.Events[i] = marshalOrganizationsOnboardingHookEventToOnboardingHookEventResponseBody(val)
+		}
+	} else {
+		body.Events = []*OnboardingHookEventResponseBody{}
 	}
 	return body
 }
@@ -4156,6 +4405,156 @@ func NewGetOnboardingStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetO
 	return body
 }
 
+// NewVerifyOnboardingHooksSetupUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "verifyOnboardingHooksSetup" endpoint
+// of the "organizations" service.
+func NewVerifyOnboardingHooksSetupUnauthorizedResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupUnauthorizedResponseBody {
+	body := &VerifyOnboardingHooksSetupUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupForbiddenResponseBody builds the HTTP response
+// body from the result of the "verifyOnboardingHooksSetup" endpoint of the
+// "organizations" service.
+func NewVerifyOnboardingHooksSetupForbiddenResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupForbiddenResponseBody {
+	body := &VerifyOnboardingHooksSetupForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupBadRequestResponseBody builds the HTTP response
+// body from the result of the "verifyOnboardingHooksSetup" endpoint of the
+// "organizations" service.
+func NewVerifyOnboardingHooksSetupBadRequestResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupBadRequestResponseBody {
+	body := &VerifyOnboardingHooksSetupBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupNotFoundResponseBody builds the HTTP response
+// body from the result of the "verifyOnboardingHooksSetup" endpoint of the
+// "organizations" service.
+func NewVerifyOnboardingHooksSetupNotFoundResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupNotFoundResponseBody {
+	body := &VerifyOnboardingHooksSetupNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupConflictResponseBody builds the HTTP response
+// body from the result of the "verifyOnboardingHooksSetup" endpoint of the
+// "organizations" service.
+func NewVerifyOnboardingHooksSetupConflictResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupConflictResponseBody {
+	body := &VerifyOnboardingHooksSetupConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "verifyOnboardingHooksSetup" endpoint
+// of the "organizations" service.
+func NewVerifyOnboardingHooksSetupUnsupportedMediaResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupUnsupportedMediaResponseBody {
+	body := &VerifyOnboardingHooksSetupUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupInvalidResponseBody builds the HTTP response
+// body from the result of the "verifyOnboardingHooksSetup" endpoint of the
+// "organizations" service.
+func NewVerifyOnboardingHooksSetupInvalidResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupInvalidResponseBody {
+	body := &VerifyOnboardingHooksSetupInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "verifyOnboardingHooksSetup" endpoint
+// of the "organizations" service.
+func NewVerifyOnboardingHooksSetupInvariantViolationResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupInvariantViolationResponseBody {
+	body := &VerifyOnboardingHooksSetupInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupUnexpectedResponseBody builds the HTTP response
+// body from the result of the "verifyOnboardingHooksSetup" endpoint of the
+// "organizations" service.
+func NewVerifyOnboardingHooksSetupUnexpectedResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupUnexpectedResponseBody {
+	body := &VerifyOnboardingHooksSetupUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyOnboardingHooksSetupGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "verifyOnboardingHooksSetup" endpoint
+// of the "organizations" service.
+func NewVerifyOnboardingHooksSetupGatewayErrorResponseBody(res *goa.ServiceError) *VerifyOnboardingHooksSetupGatewayErrorResponseBody {
+	body := &VerifyOnboardingHooksSetupGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGenerateWorkOSAdminPortalLinkUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "generateWorkOSAdminPortalLink"
 // endpoint of the "organizations" service.
@@ -4407,6 +4806,16 @@ func NewCreatePortalSessionPayload(sessionToken *string) *organizations.CreatePo
 // getOnboardingStatus endpoint payload.
 func NewGetOnboardingStatusPayload(sessionToken *string) *organizations.GetOnboardingStatusPayload {
 	v := &organizations.GetOnboardingStatusPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewVerifyOnboardingHooksSetupPayload builds a organizations service
+// verifyOnboardingHooksSetup endpoint payload.
+func NewVerifyOnboardingHooksSetupPayload(sinceUnixNano *string, sessionToken *string) *organizations.VerifyOnboardingHooksSetupPayload {
+	v := &organizations.VerifyOnboardingHooksSetupPayload{}
+	v.SinceUnixNano = sinceUnixNano
 	v.SessionToken = sessionToken
 
 	return v

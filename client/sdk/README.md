@@ -346,6 +346,7 @@ run();
 * [revokeInvite](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
 * [sendInvite](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 * [updateInviteRole](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+* [verifyOnboardingHooksSetup](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 
 ### [OtelForwarding](docs/sdks/otelforwarding/README.md)
 
@@ -738,6 +739,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`organizationsRevokeInvite`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
 - [`organizationsSendInvite`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`organizationsUpdateInviteRole`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+- [`organizationsVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 - [`otelForwardingDeleteConfig`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`otelForwardingGetConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`otelForwardingUpsertConfig`](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding
@@ -1192,6 +1194,7 @@ To learn about this feature and how to get started, check
 - [`useUserSessionIssuers`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
 - [`useUserSessions`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`useVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 - [`useVerifyRemoteMcpURLMutation`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 
 </details>

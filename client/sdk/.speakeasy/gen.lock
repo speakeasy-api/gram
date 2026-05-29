@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 5322f3c2cd79ae0e5713ca5a1d77af1c
+  docChecksum: 66d91fd63a51414c699060a768923776
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -604,6 +604,8 @@ trackedFiles:
     last_write_checksum: sha1:e43e2c2124c136c907fa266ab6ec9ba00c8043d4
   docs/models/components/observabilitysummary.md:
     last_write_checksum: sha1:a4c530861f85f8e0d513cb80258c50b602df6a22
+  docs/models/components/onboardinghookevent.md:
+    last_write_checksum: sha1:60b06b493235dee425bf0c967c1b5fc1046edf5c
   docs/models/components/onboardingstatusresult.md:
     last_write_checksum: sha1:fd24447a91723363f53d7f26556cbf098bf3773f
   docs/models/components/openapiv3deploymentasset.md:
@@ -1116,6 +1118,8 @@ trackedFiles:
     last_write_checksum: sha1:9d9546befa9a1e9c96a40d54e1105084514d25bf
   docs/models/components/validatekeyresult.md:
     last_write_checksum: sha1:6d0d0f6fb80bbd83f1871cd1d41ff730dc977af9
+  docs/models/components/verifyonboardinghookssetupresult.md:
+    last_write_checksum: sha1:4180478f27a875aaf5699f60b1670a01d64ed4c8
   docs/models/components/verifyurlform.md:
     last_write_checksum: sha1:e2e26a735ee5a68d5943741939587184571b9d4e
   docs/models/components/verifyurlresult.md:
@@ -2916,6 +2920,10 @@ trackedFiles:
     last_write_checksum: sha1:69bb44cbe3a53ab8c66a24b69a732c0835bed205
   docs/models/operations/validateapikeysecurity.md:
     last_write_checksum: sha1:e62caf16f73dad337d51e180798d0a150fab3a71
+  docs/models/operations/verifyonboardinghookssetuprequest.md:
+    last_write_checksum: sha1:21d6ae5b53b8400caa32cfc6b9a02f9549028e09
+  docs/models/operations/verifyonboardinghookssetupsecurity.md:
+    last_write_checksum: sha1:d0ed5228645eb237c3e7fbe88e5b437ec3b05c52
   docs/models/operations/verifyremotemcpurlrequest.md:
     last_write_checksum: sha1:8fdea75b9a9b02f0c6d0875e4806c1144cb195e0
   docs/models/operations/verifyremotemcpurlsecurity.md:
@@ -2981,7 +2989,7 @@ trackedFiles:
   docs/sdks/mcpservers/README.md:
     last_write_checksum: sha1:9ae13e4509f1401bf73e3cfb9f74a479d1c115ea
   docs/sdks/organizations/README.md:
-    last_write_checksum: sha1:338808c6911ca31a946923ada127541770d39eaa
+    last_write_checksum: sha1:ee86f1c365a7a13f5b21fa08e7e218f5ab834af5
   docs/sdks/otelforwarding/README.md:
     last_write_checksum: sha1:9599fbb87a1e733dbaf6180a1602c3ed20e46953
   docs/sdks/overview/README.md:
@@ -3328,6 +3336,8 @@ trackedFiles:
     last_write_checksum: sha1:54b2bfcf5c4f4387b03b5aacc863ee8ba3307596
   src/funcs/organizationsUpdateInviteRole.ts:
     last_write_checksum: sha1:c92dc89c9f1732c20f71b8e4ad64be6a2071a563
+  src/funcs/organizationsVerifyOnboardingHooksSetup.ts:
+    last_write_checksum: sha1:048f00c01f96bd6de151434f59e670e49fc620ed
   src/funcs/otelForwardingDeleteConfig.ts:
     last_write_checksum: sha1:2694f8121bbaa811cb7e589a9bbe99bc8a38ce81
   src/funcs/otelForwardingGetConfig.ts:
@@ -3945,7 +3955,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:1454e918cf7e3c16595683f1d7b195f8994f880e
+    last_write_checksum: sha1:20f5db3977b9aeb1707eda7bfdbe8542e1c02b53
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4127,6 +4137,8 @@ trackedFiles:
     last_write_checksum: sha1:39601abb61a44578f7ab0d0ad7813d3f3275de33
   src/models/components/observabilitysummary.ts:
     last_write_checksum: sha1:21e9c5e23ffb49025e98fbc8dd5f46b560e87b46
+  src/models/components/onboardinghookevent.ts:
+    last_write_checksum: sha1:8687c778e107a35c69fcdcdd9c57b838943bb51b
   src/models/components/onboardingstatusresult.ts:
     last_write_checksum: sha1:1941d341eb7a1c75cb58ae608d672b3ef3f1fe6c
   src/models/components/openapiv3deploymentasset.ts:
@@ -4514,6 +4526,8 @@ trackedFiles:
     last_write_checksum: sha1:3b6e64f12fdfc6de7d6fa4166ec9ae0a56fb4439
   src/models/components/validatekeyresult.ts:
     last_write_checksum: sha1:fcd384eea317c2c452042fd7d108baa1c0686f8d
+  src/models/components/verifyonboardinghookssetupresult.ts:
+    last_write_checksum: sha1:2d98244aa6bfb029a07aecd4f40675ced97269be
   src/models/components/verifyurlform.ts:
     last_write_checksum: sha1:2d2dd5f849196368cc037753851a776c00739db5
   src/models/components/verifyurlresult.ts:
@@ -4822,7 +4836,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:469ae018270c6c4320d9ded7be4c5f929624b8cb
+    last_write_checksum: sha1:0d808dcaa1bbe85630652312d9a33beba96a1b3a
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5110,6 +5124,8 @@ trackedFiles:
     last_write_checksum: sha1:ebbd1b550a1d979debb64fa14b7ed06b868b0102
   src/models/operations/validateapikey.ts:
     last_write_checksum: sha1:3abc74c8bf0f4c1c49ba1d402b8694aca6eb3e9d
+  src/models/operations/verifyonboardinghookssetup.ts:
+    last_write_checksum: sha1:7577f9b657820639e019aa0f3cbf296d3c44bc45
   src/models/operations/verifyremotemcpurl.ts:
     last_write_checksum: sha1:bfd96e94e00dd5c6f7a396e7d346fbf6da1049ef
   src/react-query/_context.tsx:
@@ -5426,7 +5442,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:b4c9c4ee18925602f257f4d83a8b69e5ea8b81b3
+    last_write_checksum: sha1:7789a3ede3e35085943d338a6ba230920ca2c077
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -5936,6 +5952,10 @@ trackedFiles:
     last_write_checksum: sha1:c9dd808df5819032399b91a883c00b359077e3a7
   src/react-query/validateAPIKey.ts:
     last_write_checksum: sha1:b4caae676913cbb7094eeb72f440a6b82a98b769
+  src/react-query/verifyOnboardingHooksSetup.core.ts:
+    last_write_checksum: sha1:77295ff868c7b89209da1e530e83d6e1f39704f0
+  src/react-query/verifyOnboardingHooksSetup.ts:
+    last_write_checksum: sha1:869e06e56e85a3d3d562ba0a0d21e7dcf82a7cbc
   src/react-query/verifyRemoteMcpURL.ts:
     last_write_checksum: sha1:7a8b3ee3d721701d3b98ec26f6b6f3b1b1a27bd9
   src/sdk/access.ts:
@@ -5997,7 +6017,7 @@ trackedFiles:
   src/sdk/mcpservers.ts:
     last_write_checksum: sha1:3e45664e9634dbdbfc2ec9b2c8a1b7af83a3a87b
   src/sdk/organizations.ts:
-    last_write_checksum: sha1:5556da62c99ca0078cb548f73e9fb9567ae91619
+    last_write_checksum: sha1:302cfd397d8946671eb289ae605c8b49f71333bb
   src/sdk/otelforwarding.ts:
     last_write_checksum: sha1:bdff0a0685140d557a23b72fe543fdc8dbd95996
   src/sdk/overview.ts:
@@ -9069,5 +9089,14 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  verifyOnboardingHooksSetup:
+    speakeasy-default-verify-onboarding-hooks-setup:
+      responses:
+        "200":
+          application/json: {"events": [], "latest_unix_nano": "<value>", "total_count": 733964}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

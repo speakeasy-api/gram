@@ -287,4 +287,5 @@ export * from "./userSessionIssuer.js";
 export * from "./userSessionIssuers.js";
 export * from "./userSessions.js";
 export * from "./validateAPIKey.js";
+export * from "./verifyOnboardingHooksSetup.js";
 export * from "./verifyRemoteMcpURL.js";

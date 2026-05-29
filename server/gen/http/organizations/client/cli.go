@@ -212,6 +212,28 @@ func BuildGetOnboardingStatusPayload(organizationsGetOnboardingStatusSessionToke
 	return v, nil
 }
 
+// BuildVerifyOnboardingHooksSetupPayload builds the payload for the
+// organizations verifyOnboardingHooksSetup endpoint from CLI flags.
+func BuildVerifyOnboardingHooksSetupPayload(organizationsVerifyOnboardingHooksSetupSinceUnixNano string, organizationsVerifyOnboardingHooksSetupSessionToken string) (*organizations.VerifyOnboardingHooksSetupPayload, error) {
+	var sinceUnixNano *string
+	{
+		if organizationsVerifyOnboardingHooksSetupSinceUnixNano != "" {
+			sinceUnixNano = &organizationsVerifyOnboardingHooksSetupSinceUnixNano
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsVerifyOnboardingHooksSetupSessionToken != "" {
+			sessionToken = &organizationsVerifyOnboardingHooksSetupSessionToken
+		}
+	}
+	v := &organizations.VerifyOnboardingHooksSetupPayload{}
+	v.SinceUnixNano = sinceUnixNano
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGenerateWorkOSAdminPortalLinkPayload builds the payload for the
 // organizations generateWorkOSAdminPortalLink endpoint from CLI flags.
 func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminPortalLinkBody string, organizationsGenerateWorkOSAdminPortalLinkSessionToken string) (*organizations.GenerateWorkOSAdminPortalLinkPayload, error) {
