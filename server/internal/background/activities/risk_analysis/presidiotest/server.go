@@ -207,9 +207,6 @@ func DefaultDetector(text string, entities []string) []Result {
 	if allowed("DATE_TIME") {
 		out = append(out, matchLiteral(text, "2026-05-28 13:45", "DATE_TIME", 0.9)...)
 	}
-	if allowed("DOMAIN_NAME") {
-		out = append(out, matchLiteral(text, "example.org", "DOMAIN_NAME", 0.9)...)
-	}
 	if allowed("IBAN_CODE") {
 		out = append(out, matchLiteral(text, "GB33BUKB20201555555555", "IBAN_CODE", 0.95)...)
 	}
@@ -222,17 +219,11 @@ func DefaultDetector(text string, entities []string) []Result {
 	if allowed("MAC_ADDRESS") {
 		out = append(out, matchLiteral(text, "00:1B:44:11:3A:B7", "MAC_ADDRESS", 0.95)...)
 	}
-	if allowed("MEDICAL_LICENSE") {
-		out = append(out, matchLiteral(text, "MD123456", "MEDICAL_LICENSE", 0.9)...)
-	}
 	if allowed("NRP") {
 		out = append(out, matchLiteral(text, "Christian", "NRP", 0.75)...)
 	}
-	if allowed("SG_NRIC_FIN") {
-		out = append(out, matchLiteral(text, "S1234567D", "SG_NRIC_FIN", 0.95)...)
-	}
 	if allowed("UK_NHS") {
-		out = append(out, matchLiteral(text, "485 777 3456", "UK_NHS", 0.95)...)
+		out = append(out, matchLiteral(text, "943 476 5919", "UK_NHS", 0.95)...)
 	}
 	if allowed("US_BANK_NUMBER") {
 		out = append(out, matchLiteral(text, "123456789012", "US_BANK_NUMBER", 0.9)...)
@@ -247,7 +238,7 @@ func DefaultDetector(text string, entities []string) []Result {
 		out = append(out, matchLiteral(text, "123456789", "US_PASSPORT", 0.9)...)
 	}
 	if allowed("US_SSN") {
-		out = append(out, matchLiteral(text, "123-45-6789", "US_SSN", 0.95)...)
+		out = append(out, matchLiteral(text, "457-55-5462", "US_SSN", 0.95)...)
 	}
 	return out
 }

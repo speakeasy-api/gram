@@ -1343,6 +1343,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       id: "pii.sg_nric_fin",
       title: "Singapore NRIC / FIN",
       source: "presidio",
+      available: false,
     },
   ],
   healthcare: [
@@ -1350,6 +1351,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       id: "pii.medical_license",
       title: "Common medical license numbers",
       source: "presidio",
+      available: false,
     },
     {
       id: "pii.us_mbi",
