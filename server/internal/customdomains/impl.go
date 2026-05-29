@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -42,8 +43,8 @@ type Service struct {
 
 type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
-	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string) (client.WorkflowRun, error)
-	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string) (client.WorkflowRun, error)
+	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
+	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -136,6 +137,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		payload.Domain,
 		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		authCtx.Email,
+		k8s.ProvisionerKindIngress,
 	)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error executing custom domain registration").Log(ctx, s.logger)
@@ -158,8 +160,8 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
 	}
 
-	if domain.Activated && domain.IngressName.Valid && domain.CertSecretName.Valid {
-		run, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String)
+	if domain.Activated && domain.IngressName.Valid {
+		run, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String, k8s.ProvisionerKind(domain.ProvisionerKind))
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").Log(ctx, s.logger)
 		}

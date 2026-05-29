@@ -17,21 +17,24 @@ INSERT INTO custom_domains (
     organization_id,
     domain,
     ingress_name,
-    cert_secret_name
+    cert_secret_name,
+    provisioner_kind
 ) VALUES (
     $1,
     $2,
     $3,
-    $4
+    $4,
+    $5
 )
 RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateCustomDomainParams struct {
-	OrganizationID string
-	Domain         string
-	IngressName    pgtype.Text
-	CertSecretName pgtype.Text
+	OrganizationID  string
+	Domain          string
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
 }
 
 func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomainParams) (CustomDomain, error) {
@@ -40,6 +43,7 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 		arg.Domain,
 		arg.IngressName,
 		arg.CertSecretName,
+		arg.ProvisionerKind,
 	)
 	var i CustomDomain
 	err := row.Scan(
@@ -197,18 +201,20 @@ SET
     activated = COALESCE($2, activated),
     ingress_name = COALESCE($3, ingress_name),
     cert_secret_name = COALESCE($4, cert_secret_name),
+    provisioner_kind = $5,
     updated_at = clock_timestamp()
-WHERE id = $5
+WHERE id = $6
   AND deleted IS FALSE
 RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainParams struct {
-	Verified       bool
-	Activated      bool
-	IngressName    pgtype.Text
-	CertSecretName pgtype.Text
-	ID             uuid.UUID
+	Verified        bool
+	Activated       bool
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	ID              uuid.UUID
 }
 
 func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomainParams) (CustomDomain, error) {
@@ -217,6 +223,7 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 		arg.Activated,
 		arg.IngressName,
 		arg.CertSecretName,
+		arg.ProvisionerKind,
 		arg.ID,
 	)
 	var i CustomDomain
