@@ -184,6 +184,7 @@ export function OrgDomainsInner() {
   // Edit allowlist dialog state
   const [isEditAllowlistOpen, setIsEditAllowlistOpen] = useState(false);
   const [editIPs, setEditIPs] = useState<string[]>([]);
+  const [updateAllowlistError, setUpdateAllowlistError] = useState("");
 
   const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$/i;
 
@@ -254,6 +255,9 @@ export function OrgDomainsInner() {
     onSuccess: async () => {
       setIsEditAllowlistOpen(false);
       await invalidateAllGetDomain(queryClient);
+    },
+    onError: (error) => {
+      setUpdateAllowlistError(error.message || "Failed to save allowlist");
     },
   });
 
@@ -371,6 +375,7 @@ export function OrgDomainsInner() {
                   size="sm"
                   onClick={() => {
                     setEditIPs(domain.ipAllowlist);
+                    setUpdateAllowlistError("");
                     setIsEditAllowlistOpen(true);
                   }}
                 >
@@ -672,10 +677,18 @@ export function OrgDomainsInner() {
               addresses or CIDR ranges. Leave empty to allow all traffic.
             </Type>
             <IPAllowlistEditor ips={editIPs} onIpsChange={setEditIPs} />
+            {updateAllowlistError && (
+              <Type variant="body" className="text-destructive text-sm">
+                {updateAllowlistError}
+              </Type>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="secondary"
-                onClick={() => setIsEditAllowlistOpen(false)}
+                onClick={() => {
+                  setIsEditAllowlistOpen(false);
+                  setUpdateAllowlistError("");
+                }}
                 disabled={updateDomainMutation.isPending}
               >
                 Cancel
