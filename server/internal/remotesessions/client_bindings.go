@@ -193,6 +193,11 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 		if isRemoteSessionClientIssuerDrift(err) {
 			return nil, err
 		}
+		s.logger.WarnContext(ctx, "opportunistic backfill failed, returning legacy rows",
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogUserSessionIssuerID(userSessionIssuerID.UUID.String()),
+			attr.SlogError(err),
+		)
 		return legacyRows, nil
 	}
 
