@@ -733,7 +733,7 @@ fi
 
 response=$(curl -s -w "\n%%{http_code}" -X POST \
 %s  -H "Content-Type: application/json" \
-  "${hook_hostname_header[@]}" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.codex")
@@ -785,7 +785,7 @@ fi
 
 response=$(curl -s -w "\n%%{http_code}" -X POST \
 %s  -H "Content-Type: application/json" \
-  "${hook_hostname_header[@]}" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.%s")
@@ -964,7 +964,7 @@ print(json.dumps(p))
 
 curl -s -o /dev/null -X POST \
 %s  -H "Content-Type: application/json" \
-  "${hook_hostname_header[@]}" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d "$enriched" \
   --max-time 30 \
   "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true

@@ -22,7 +22,7 @@ fi
 
 response=$(curl -s -w "\n%{http_code}" -X POST \
   -H "Content-Type: application/json" \
-  "${hook_hostname_header[@]}" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.claude")

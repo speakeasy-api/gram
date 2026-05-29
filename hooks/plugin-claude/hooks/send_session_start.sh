@@ -114,7 +114,7 @@ print(json.dumps(p))
 
 curl -s -o /dev/null -X POST \
   -H "Content-Type: application/json" \
-  "${hook_hostname_header[@]}" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d "$enriched" \
   --max-time 30 \
   "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true

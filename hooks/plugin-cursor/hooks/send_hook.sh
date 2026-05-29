@@ -21,7 +21,7 @@ curl -s -X POST \
   -H "Content-Type: application/json" \
   -H "Gram-Key: ${api_key}" \
   -H "Gram-Project: ${project_slug}" \
-  "${hook_hostname_header[@]}" \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
   -d @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.cursor" 2>/dev/null || echo '{}'
