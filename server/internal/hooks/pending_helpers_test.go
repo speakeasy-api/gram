@@ -269,7 +269,7 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 	assert.Equal(t, userID, metadata.UserID)
 }
 
-func TestBuildTelemetryAttributesWithMetadata_SetsEndpointIdentity(t *testing.T) {
+func TestBuildTelemetryAttributesWithMetadata_SetsHookHostname(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
@@ -281,25 +281,16 @@ func TestBuildTelemetryAttributesWithMetadata_SetsEndpointIdentity(t *testing.T)
 		GramOrgID: authCtx.ActiveOrganizationID,
 		ProjectID: authCtx.ProjectID.String(),
 	}
+	hostname := " subomi-mbp "
 	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		SessionID:     &metadata.SessionID,
-		AdditionalData: map[string]any{
-			"endpoint": map[string]any{
-				"id":       "endpoint-123",
-				"hostname": "subomi-mbp",
-				"os":       "Darwin",
-				"arch":     "arm64",
-			},
-		},
+		HookHostname:  &hostname,
 	}, metadata)
 
-	assert.Equal(t, "endpoint-123", attrs[attr.EndpointIDKey])
-	assert.Equal(t, "subomi-mbp", attrs[attr.EndpointHostnameKey])
-	assert.Equal(t, "Darwin", attrs[attr.EndpointOSKey])
-	assert.Equal(t, "arm64", attrs[attr.EndpointArchKey])
+	assert.Equal(t, "subomi-mbp", attrs[attr.HookHostnameKey])
 }
 
 var (

@@ -125,10 +125,6 @@ const (
 	EnvironmentIDKey               = attribute.Key("gram.environment.id")
 	EnvironmentSlugKey             = attribute.Key("gram.environment.slug")
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
-	EndpointIDKey                  = attribute.Key("gram.endpoint.id")
-	EndpointHostnameKey            = attribute.Key("gram.endpoint.hostname")
-	EndpointOSKey                  = attribute.Key("gram.endpoint.os")
-	EndpointArchKey                = attribute.Key("gram.endpoint.arch")
 	EventSourceKey                 = attribute.Key("gram.event.source")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	TriggerCorrelationIDKey        = attribute.Key("gram.trigger.correlation_id")
@@ -274,6 +270,7 @@ const (
 	HookSourceKey               = attribute.Key("gram.hook.source")
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
+	HookHostnameKey             = attribute.Key("gram.hook.hostname")
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -492,6 +489,9 @@ func SlogHookBlockReason(v string) slog.Attr      { return slog.String(string(Ho
 
 func HookHasPluginAuth(v bool) attribute.KeyValue { return HookHasPluginAuthKey.Bool(v) }
 func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(HookHasPluginAuthKey), v) }
+
+func HookHostname(v string) attribute.KeyValue { return HookHostnameKey.String(v) }
+func SlogHookHostname(v string) slog.Attr      { return slog.String(string(HookHostnameKey), v) }
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
@@ -713,20 +713,6 @@ func SlogEnvironmentSlug(v string) slog.Attr      { return slog.String(string(En
 
 func EnvVarName(v string) attribute.KeyValue { return EnvVarNameKey.String(v) }
 func SlogEnvVarName(v string) slog.Attr      { return slog.String(string(EnvVarNameKey), v) }
-
-func EndpointID(v string) attribute.KeyValue { return EndpointIDKey.String(v) }
-func SlogEndpointID(v string) slog.Attr      { return slog.String(string(EndpointIDKey), v) }
-
-func EndpointHostname(v string) attribute.KeyValue { return EndpointHostnameKey.String(v) }
-func SlogEndpointHostname(v string) slog.Attr {
-	return slog.String(string(EndpointHostnameKey), v)
-}
-
-func EndpointOS(v string) attribute.KeyValue { return EndpointOSKey.String(v) }
-func SlogEndpointOS(v string) slog.Attr      { return slog.String(string(EndpointOSKey), v) }
-
-func EndpointArch(v string) attribute.KeyValue { return EndpointArchKey.String(v) }
-func SlogEndpointArch(v string) slog.Attr      { return slog.String(string(EndpointArchKey), v) }
 
 func EventSource(v string) attribute.KeyValue { return EventSourceKey.String(v) }
 func SlogEventSource(v string) slog.Attr      { return slog.String(string(EventSourceKey), v) }

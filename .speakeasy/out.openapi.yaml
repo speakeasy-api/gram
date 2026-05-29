@@ -8646,6 +8646,13 @@ paths:
           schema:
             type: string
             description: Optional project slug for plugin-driven attribution.
+        - name: X-Gram-Hook-Hostname
+          in: header
+          description: Optional endpoint hostname supplied by the Gram hook plugin.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional endpoint hostname supplied by the Gram hook plugin.
       requestBody:
         required: true
         content:
@@ -8735,6 +8742,13 @@ paths:
           schema:
             type: string
             description: project header
+        - name: X-Gram-Hook-Hostname
+          in: header
+          description: Optional endpoint hostname supplied by the Gram hook plugin.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional endpoint hostname supplied by the Gram hook plugin.
       requestBody:
         required: true
         content:
@@ -8828,6 +8842,13 @@ paths:
           schema:
             type: string
             description: project header
+        - name: X-Gram-Hook-Hostname
+          in: header
+          description: Optional endpoint hostname supplied by the Gram hook plugin.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional endpoint hostname supplied by the Gram hook plugin.
       requestBody:
         required: true
         content:

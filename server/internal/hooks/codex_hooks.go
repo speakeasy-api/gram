@@ -185,6 +185,7 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.OrganizationIDKey: orgID,
 		attr.HookSourceKey:     "codex",
 	}
+	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Model != nil && *payload.Model != "" {
 		attrs[attr.GenAIResponseModelKey] = *payload.Model

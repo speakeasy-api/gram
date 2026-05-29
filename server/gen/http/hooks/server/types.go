@@ -1996,7 +1996,7 @@ func NewMetricsGatewayErrorResponseBody(res *goa.ServiceError) *MetricsGatewayEr
 }
 
 // NewClaudePayload builds a hooks service claude endpoint payload.
-func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.ClaudePayload {
+func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.ClaudePayload {
 	v := &hooks.ClaudePayload{
 		HookEventName:        *body.HookEventName,
 		ToolName:             body.ToolName,
@@ -2028,12 +2028,13 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v
 }
 
 // NewCursorPayload builds a hooks service cursor endpoint payload.
-func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.CursorPayload {
+func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.CursorPayload {
 	v := &hooks.CursorPayload{
 		HookEventName:    *body.HookEventName,
 		ConversationID:   body.ConversationID,
@@ -2074,12 +2075,13 @@ func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugI
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v
 }
 
 // NewCodexPayload builds a hooks service codex endpoint payload.
-func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.CodexPayload {
+func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.CodexPayload {
 	v := &hooks.CodexPayload{
 		HookEventName:  *body.HookEventName,
 		SessionID:      body.SessionID,
@@ -2094,6 +2096,7 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v
 }

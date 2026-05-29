@@ -72,7 +72,6 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 	hookEvent := "hook"
 	toolCallEvent := "tool_call"
 	endpointHostname := "subomi-mbp"
-	gramHostedUserAgent := "Claude/1.0 (Macintosh)"
 	remoteServerID := uuid.NewString()
 
 	insertTelemetryLogWithParams(t, ctx, testLogParams{
@@ -89,8 +88,7 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 			"user.id":                 userID,
 			"gram.hook.source":        cursor,
 			"gram.hook.event":         "PostToolUse",
-			"gram.endpoint.id":        "endpoint-123",
-			"gram.endpoint.hostname":  endpointHostname,
+			"gram.hook.hostname":      endpointHostname,
 			"gram.external_mcp.name":  "GitHub",
 			"gram.mcp.server_url":     "https://api.github.com/mcp",
 			"gen_ai.response.model":   "claude-sonnet-4",
@@ -111,8 +109,7 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 			"user.id":                userID,
 			"gram.hook.source":       cursor,
 			"gram.hook.event":        "PostToolUseFailure",
-			"gram.endpoint.id":       "endpoint-123",
-			"gram.endpoint.hostname": endpointHostname,
+			"gram.hook.hostname":     endpointHostname,
 			"gram.external_mcp.name": "GitHub",
 			"gram.mcp.server_url":    "https://api.github.com/mcp",
 			"gen_ai.response.model":  "claude-sonnet-4",
@@ -132,8 +129,7 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 			"user.id":                 userID,
 			"gram.hook.source":        claudeCode,
 			"gram.hook.event":         "PostToolUse",
-			"gram.endpoint.id":        "endpoint-123",
-			"gram.endpoint.hostname":  endpointHostname,
+			"gram.hook.hostname":      endpointHostname,
 			"gen_ai.tool.call.result": "ok",
 		},
 	})
@@ -166,9 +162,8 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 		eventSource:  &toolCallEvent,
 		httpStatus:   &statusOK,
 		customAttrs: map[string]any{
-			"user.id":                        userID,
-			"gram.remote_mcp_server.id":      remoteServerID,
-			"http.request.header.user_agent": gramHostedUserAgent,
+			"user.id":                   userID,
+			"gram.remote_mcp_server.id": remoteServerID,
 		},
 	})
 
@@ -189,10 +184,6 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 	require.NotNil(t, endpointNode)
 	require.Equal(t, int64(3), endpointNode.TotalCalls)
 	require.Nil(t, findEmployeeDataFlowNode(result.Nodes, "endpoint", "https://api.github.com/mcp"))
-
-	gramHostedEndpointNode := findEmployeeDataFlowNode(result.Nodes, "endpoint", gramHostedUserAgent)
-	require.NotNil(t, gramHostedEndpointNode)
-	require.Equal(t, int64(1), gramHostedEndpointNode.TotalCalls)
 
 	githubNode := findEmployeeDataFlowNode(result.Nodes, "server", "GitHub")
 	require.NotNil(t, githubNode)

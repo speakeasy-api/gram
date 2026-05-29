@@ -138,7 +138,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	if metadata.UserID != "" {
 		attrs[attr.UserIDKey] = metadata.UserID
 	}
-	applyEndpointMetadataAttrs(attrs, payload.AdditionalData)
+	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
 		attrs[attr.HookErrorKey] = payload.Error
@@ -209,46 +209,13 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	return attrs
 }
 
-func applyEndpointMetadataAttrs(attrs map[attr.Key]any, additionalData map[string]any) {
-	if len(additionalData) == 0 {
+func applyHookHostnameAttr(attrs map[attr.Key]any, hostname *string) {
+	if hostname == nil {
 		return
 	}
-
-	endpoint, ok := additionalData["endpoint"]
-	if !ok {
-		return
+	if value := strings.TrimSpace(*hostname); value != "" {
+		attrs[attr.HookHostnameKey] = value
 	}
-
-	endpointMap := map[string]any{}
-	switch v := endpoint.(type) {
-	case map[string]any:
-		endpointMap = v
-	case string:
-		if strings.TrimSpace(v) == "" {
-			return
-		}
-		if err := json.Unmarshal([]byte(v), &endpointMap); err != nil {
-			return
-		}
-	default:
-		return
-	}
-
-	addEndpointAttr := func(key attr.Key, value any) {
-		s, ok := value.(string)
-		if !ok {
-			return
-		}
-		if s = strings.TrimSpace(s); s == "" {
-			return
-		}
-		attrs[key] = s
-	}
-
-	addEndpointAttr(attr.EndpointIDKey, endpointMap["id"])
-	addEndpointAttr(attr.EndpointHostnameKey, endpointMap["hostname"])
-	addEndpointAttr(attr.EndpointOSKey, endpointMap["os"])
-	addEndpointAttr(attr.EndpointArchKey, endpointMap["arch"])
 }
 
 // MetricDataPoint represents a single metric aggregated across all data points for a model+session
