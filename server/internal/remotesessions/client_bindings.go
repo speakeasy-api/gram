@@ -187,7 +187,13 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 		legacyClientIDs = append(legacyClientIDs, row.ID)
 	}
 	if err := ensureLegacyRemoteSessionClientRowsBackfilled(ctx, s.db, s.logger, projectID, userSessionIssuerID.UUID, legacyClientIDs); err != nil {
-		return nil, err
+		// Backfill is opportunistic: only drift (ambiguous client-per-issuer) is
+		// fatal. Other failures still return the already-fetched legacy rows,
+		// matching the runtime fallback path.
+		if isRemoteSessionClientIssuerDrift(err) {
+			return nil, err
+		}
+		return legacyRows, nil
 	}
 
 	return legacyRows, nil
