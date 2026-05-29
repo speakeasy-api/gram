@@ -835,10 +835,13 @@ func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.E
 			if !ok {
 				acc = &employeeGraphNodeAccumulator{
 					node: &telem_gen.EmployeeDataFlowNode{
-						ID:    nodeID,
-						Tier:  pathNode.tier,
-						Label: pathNode.label,
+						ID:          nodeID,
+						Tier:        pathNode.tier,
+						Label:       pathNode.label,
+						TotalCalls:  0,
+						ServerClass: nil,
 					},
+					totalCalls: 0,
 				}
 				if pathNode.tier == "server" && pathNode.serverClass != "" {
 					serverClass := pathNode.serverClass
@@ -857,10 +860,16 @@ func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.E
 			if !ok {
 				acc = &employeeGraphEdgeAccumulator{
 					edge: &telem_gen.EmployeeDataFlowEdge{
-						ID:     edgeID,
-						Source: sourceID,
-						Target: targetID,
+						ID:           edgeID,
+						Source:       sourceID,
+						Target:       targetID,
+						CallCount:    0,
+						SuccessCount: 0,
+						FailureCount: 0,
 					},
+					callCount:    0,
+					successCount: 0,
+					failureCount: 0,
 				}
 				edgeAccs[edgeID] = acc
 			}
@@ -906,10 +915,10 @@ func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.E
 
 func employeeDataFlowPath(row repo.EmployeeDataFlowRow) []employeeGraphTupleNode {
 	candidates := []employeeGraphTupleNode{
-		{tier: "endpoint", label: strings.TrimSpace(row.Endpoint)},
-		{tier: "client", label: strings.TrimSpace(row.Client)},
+		{tier: "endpoint", label: strings.TrimSpace(row.Endpoint), serverClass: ""},
+		{tier: "client", label: strings.TrimSpace(row.Client), serverClass: ""},
 		{tier: "server", label: strings.TrimSpace(row.Server), serverClass: strings.TrimSpace(row.ServerClass)},
-		{tier: "tool", label: strings.TrimSpace(row.Tool)},
+		{tier: "tool", label: strings.TrimSpace(row.Tool), serverClass: ""},
 	}
 
 	path := make([]employeeGraphTupleNode, 0, len(candidates))
@@ -934,7 +943,7 @@ func uint64ToInt64(v uint64) int64 {
 	if v > maxInt64 {
 		return int64(maxInt64)
 	}
-	return int64(v) //nolint:gosec // Range checked above.
+	return int64(v)
 }
 
 // searchParams contains common validated parameters for telemetry search endpoints.
