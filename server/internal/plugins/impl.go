@@ -959,10 +959,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 }
 
 // writePluginZip serializes the file map as a deterministic ZIP, marking
-// shell scripts executable so hook.sh runs after extraction. The GitHub
+// shell scripts executable so hook.sh / hook_async.sh run after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
 // thirdparty/github/repo.go; keep them in sync — without the execute bit,
-// Claude Code and Cursor silently fail on `./hook.sh: permission denied`.
+// Claude Code, Cursor, and Codex silently fail on `./hook.sh: permission denied`.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))

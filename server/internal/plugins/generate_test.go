@@ -597,6 +597,39 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t 
 	}
 }
 
+func TestGenerateCodexObservabilityPluginRoutesTelemetryEventsThroughBackgroundWrapper(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	hooksJSON := files[CodexObservabilitySlug(cfg)+"/hooks/hooks.json"]
+	require.NotNil(t, hooksJSON, "codex observability hooks/hooks.json missing")
+	require.NotContains(t, string(hooksJSON), `"async"`, "Codex skips hooks with async=true/false until async hooks are supported")
+
+	var parsed codexHooksConfig
+	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
+
+	for _, event := range []string{"SessionStart", "PostToolUse", "Stop"} {
+		require.Contains(t, parsed.Hooks, event)
+		require.Len(t, parsed.Hooks[event], 1)
+		require.Len(t, parsed.Hooks[event][0].Hooks, 1)
+		require.Contains(t, parsed.Hooks[event][0].Hooks[0].Command, "hooks/hook_async.sh", "event %q should be fire-and-forget", event)
+	}
+
+	for _, event := range []string{"PreToolUse", "PermissionRequest", "UserPromptSubmit"} {
+		require.Contains(t, parsed.Hooks, event)
+		require.Len(t, parsed.Hooks[event], 1)
+		require.Len(t, parsed.Hooks[event][0].Hooks, 1)
+		require.Contains(t, parsed.Hooks[event][0].Hooks[0].Command, "hooks/hook.sh", "event %q must stay blocking", event)
+		require.NotContains(t, parsed.Hooks[event][0].Hooks[0].Command, "hook_async.sh")
+	}
+}
+
 func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -610,6 +643,11 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
 	require.Contains(t, script, "hooks.codex", "hook.sh must POST to the codex endpoint")
 	require.Contains(t, script, cfg.HooksAPIKey, "hook.sh must embed the API key")
+
+	asyncScript := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook_async.sh"])
+	require.Contains(t, asyncScript, "mktemp", "hook_async.sh must copy stdin before returning")
+	require.Contains(t, asyncScript, `bash "$script_dir/hook.sh" < "$tmp"`, "hook_async.sh must delegate to hook.sh")
+	require.Contains(t, asyncScript, ") >/dev/null 2>&1 &", "hook_async.sh must run the sender in the background")
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
@@ -633,6 +671,7 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	t.Parallel()
 	files := map[string][]byte{
 		"hook.sh":                    []byte("#!/usr/bin/env bash\necho hi\n"),
+		"hook_async.sh":              []byte("#!/usr/bin/env bash\necho hi\n"),
 		".claude-plugin/plugin.json": []byte("{}"),
 		"README.md":                  []byte("# readme\n"),
 	}
@@ -649,6 +688,7 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	}
 
 	require.Equal(t, uint32(0o755), modes["hook.sh"], "hook.sh must be executable so ./hook.sh works after unzip")
+	require.Equal(t, uint32(0o755), modes["hook_async.sh"], "hook_async.sh must be executable so ./hook_async.sh works after unzip")
 	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
 }
