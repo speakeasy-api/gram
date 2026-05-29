@@ -20,6 +20,7 @@ report.md
 /posting.env
 /client/sdk/docs
 /server/goa*
+/dev-idp/goa*
 /server/gram
 /server/risk_accuracy_metrics.json
 # Goa generates OpenAPI specs with non-deterministic examples. Nothing consumes them.
