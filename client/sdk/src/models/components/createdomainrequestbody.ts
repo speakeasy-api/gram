@@ -3,26 +3,40 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateDomainRequestBody = {
   /**
    * The custom domain
    */
   domain: string;
+  /**
+   * IP addresses or CIDR ranges to allow. Leave empty for unrestricted access.
+   */
+  ipAllowlist?: Array<string> | undefined;
 };
 
 /** @internal */
 export type CreateDomainRequestBody$Outbound = {
   domain: string;
+  ip_allowlist?: Array<string> | undefined;
 };
 
 /** @internal */
 export const CreateDomainRequestBody$outboundSchema: z.ZodMiniType<
   CreateDomainRequestBody$Outbound,
   CreateDomainRequestBody
-> = z.object({
-  domain: z.string(),
-});
+> = z.pipe(
+  z.object({
+    domain: z.string(),
+    ipAllowlist: z.optional(z.array(z.string())),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      ipAllowlist: "ip_allowlist",
+    });
+  }),
+);
 
 export function createDomainRequestBodyToJSON(
   createDomainRequestBody: CreateDomainRequestBody,

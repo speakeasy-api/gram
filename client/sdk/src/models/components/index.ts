@@ -382,6 +382,7 @@ export * from "./triggerinstance.js";
 export * from "./triggerriskanalysisrequestbody.js";
 export * from "./updateassistantform.js";
 export * from "./updatecustomdetectionrulerequestbody.js";
+export * from "./updatedomainrequestbody.js";
 export * from "./updateenvironmentrequestbody.js";
 export * from "./updateinviterolerequestbody.js";
 export * from "./updatemcpendpointform.js";

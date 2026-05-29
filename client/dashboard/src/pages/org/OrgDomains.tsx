@@ -1,5 +1,6 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
+import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -17,11 +18,13 @@ import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDoma
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
+import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   CheckCircle2,
+  ChevronRight,
   Copy,
   Globe,
   Loader2,
@@ -46,6 +49,119 @@ export default function OrgDomains() {
   );
 }
 
+function validateIPEntry(entry: string): string {
+  const trimmed = entry.trim();
+  if (!trimmed) return "Entry is required";
+
+  // CIDR notation
+  const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}\/(\d|[1-2]\d|3[0-2])$/;
+  if (cidrRegex.test(trimmed)) {
+    const octets = trimmed.split("/")[0].split(".").map(Number);
+    if (octets.every((o) => o >= 0 && o <= 255)) return "";
+    return "Octet out of range (0–255)";
+  }
+
+  // Plain IP
+  const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  if (ipRegex.test(trimmed)) {
+    const octets = trimmed.split(".").map(Number);
+    if (octets.every((o) => o >= 0 && o <= 255)) return "";
+    return "Octet out of range (0–255)";
+  }
+
+  return "Enter a valid IP address (1.2.3.4) or CIDR range (10.0.0.0/24)";
+}
+
+function IPAllowlistEditor({
+  ips,
+  onIpsChange,
+}: {
+  ips: string[];
+  onIpsChange: (ips: string[]) => void;
+}) {
+  const [input, setInput] = useState("");
+  const [error, setError] = useState("");
+
+  function handleAdd() {
+    const err = validateIPEntry(input);
+    if (err) {
+      setError(err);
+      return;
+    }
+    const trimmed = input.trim();
+    if (!ips.includes(trimmed)) {
+      onIpsChange([...ips, trimmed]);
+    }
+    setInput("");
+    setError("");
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAdd();
+    }
+  }
+
+  function handleRemove(ip: string) {
+    onIpsChange(ips.filter((i) => i !== ip));
+  }
+
+  return (
+    <div className="space-y-3">
+      {ips.length > 0 && (
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-1 flex-wrap gap-2">
+            {ips.map((ip) => (
+              <Badge key={ip} variant="secondary" className="font-mono">
+                {ip}
+                <button
+                  type="button"
+                  onClick={() => handleRemove(ip)}
+                  className="text-muted-foreground hover:text-destructive ml-1"
+                  aria-label={`Remove ${ip}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+          <Button
+            variant="tertiary"
+            size="sm"
+            className="hover:text-destructive shrink-0"
+            onClick={() => onIpsChange([])}
+          >
+            Clear all
+          </Button>
+        </div>
+      )}
+      <div className="flex items-start gap-2">
+        <div className="flex-1 space-y-1">
+          <Input
+            placeholder="1.2.3.4 or 10.0.0.0/24"
+            value={input}
+            onChange={(val) => {
+              setInput(val);
+              if (error) setError("");
+            }}
+            onKeyDown={handleKeyDown}
+            className={cn(error && "border-destructive")}
+          />
+          {error && (
+            <Type variant="body" className="text-destructive text-xs">
+              {error}
+            </Type>
+          )}
+        </div>
+        <Button variant="secondary" size="sm" onClick={handleAdd}>
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function OrgDomainsInner() {
   const organization = useOrganization();
   const productTier = useProductTier();
@@ -60,6 +176,14 @@ export function OrgDomainsInner() {
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = getCustomDomainCNAME();
+
+  // IP allowlist state for create dialog
+  const [pendingIPs, setPendingIPs] = useState<string[]>([]);
+  const [isAllowlistExpanded, setIsAllowlistExpanded] = useState(false);
+
+  // Edit allowlist dialog state
+  const [isEditAllowlistOpen, setIsEditAllowlistOpen] = useState(false);
+  const [editIPs, setEditIPs] = useState<string[]>([]);
 
   const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$/i;
 
@@ -107,6 +231,8 @@ export function OrgDomainsInner() {
       setIsAddDomainDialogOpen(false);
       setDomainInput("");
       setDomainError("");
+      setPendingIPs([]);
+      setIsAllowlistExpanded(false);
       setTimeout(() => {
         domainRefetch();
       }, 2000);
@@ -120,6 +246,13 @@ export function OrgDomainsInner() {
     onSuccess: async () => {
       setIsDeleteDomainDialogOpen(false);
       setDomainInput("");
+      await invalidateAllGetDomain(queryClient);
+    },
+  });
+
+  const updateDomainMutation = useUpdateDomainMutation({
+    onSuccess: async () => {
+      setIsEditAllowlistOpen(false);
       await invalidateAllGetDomain(queryClient);
     },
   });
@@ -148,6 +281,18 @@ export function OrgDomainsInner() {
       request: {
         createDomainRequestBody: {
           domain: domainInput.trim(),
+          ipAllowlist: pendingIPs.length > 0 ? pendingIPs : undefined,
+        },
+      },
+    });
+  };
+
+  const handleSaveAllowlist = () => {
+    updateDomainMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updateDomainRequestBody: {
+          ipAllowlist: editIPs,
         },
       },
     });
@@ -199,9 +344,38 @@ export function OrgDomainsInner() {
               >
                 Linked <HumanizeDateTime date={domain.createdAt} />
               </Type>
+              <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
+                <Type variant="body" className="text-muted-foreground text-sm">
+                  Allowed IPs:
+                </Type>
+                {domain.ipAllowlist.length === 0 ? (
+                  <Type
+                    variant="body"
+                    className="text-muted-foreground text-sm italic"
+                  >
+                    All (no restriction)
+                  </Type>
+                ) : (
+                  domain.ipAllowlist.map((ip) => (
+                    <Badge key={ip} variant="secondary" className="font-mono">
+                      {ip}
+                    </Badge>
+                  ))
+                )}
+              </div>
             </Stack>
             <RequireScope scope="org:admin" level="section">
               <Stack direction="horizontal" gap={2}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setEditIPs(domain.ipAllowlist);
+                    setIsEditAllowlistOpen(true);
+                  }}
+                >
+                  Edit allowlist
+                </Button>
                 {!domain.verified && (
                   <Button
                     variant="secondary"
@@ -336,7 +510,13 @@ export function OrgDomainsInner() {
 
       <Dialog
         open={isAddDomainDialogOpen}
-        onOpenChange={setIsAddDomainDialogOpen}
+        onOpenChange={(open) => {
+          setIsAddDomainDialogOpen(open);
+          if (!open) {
+            setPendingIPs([]);
+            setIsAllowlistExpanded(false);
+          }
+        }}
       >
         <Dialog.Content className="max-w-lg">
           <Dialog.Header>
@@ -428,6 +608,36 @@ export function OrgDomainsInner() {
                 </Button>
               </div>
             </div>
+            <div>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
+                onClick={() => setIsAllowlistExpanded((prev) => !prev)}
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    isAllowlistExpanded && "rotate-90",
+                  )}
+                />
+                Advanced: IP allowlist (optional)
+              </button>
+              {isAllowlistExpanded && (
+                <div className="mt-3 pl-5">
+                  <Type
+                    variant="body"
+                    className="text-muted-foreground mb-3 text-sm"
+                  >
+                    Restrict access to specific IP addresses or CIDR ranges.
+                    Leave empty to allow all traffic.
+                  </Type>
+                  <IPAllowlistEditor
+                    ips={pendingIPs}
+                    onIpsChange={setPendingIPs}
+                  />
+                </div>
+              )}
+            </div>
             <div className="mt-4 flex justify-end">
               <RequireScope scope="org:admin" level="component">
                 <Button
@@ -449,6 +659,40 @@ export function OrgDomainsInner() {
           </div>
         </Dialog.Content>
       </Dialog>
+
+      <Dialog open={isEditAllowlistOpen} onOpenChange={setIsEditAllowlistOpen}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Edit IP allowlist</Dialog.Title>
+          </Dialog.Header>
+          <div className="space-y-4 py-4">
+            <Type variant="body" className="text-muted-foreground text-sm">
+              Restrict access to{" "}
+              <span className="font-mono">{domain?.domain}</span> to specific IP
+              addresses or CIDR ranges. Leave empty to allow all traffic.
+            </Type>
+            <IPAllowlistEditor ips={editIPs} onIpsChange={setEditIPs} />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="secondary"
+                onClick={() => setIsEditAllowlistOpen(false)}
+                disabled={updateDomainMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <RequireScope scope="org:admin" level="component">
+                <Button
+                  onClick={handleSaveAllowlist}
+                  disabled={updateDomainMutation.isPending}
+                >
+                  {updateDomainMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </RequireScope>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog>
+
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainUpgradeModalOpen(false)}
