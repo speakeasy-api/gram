@@ -1139,6 +1139,40 @@ func toolCallExprsFor(eventSource string) toolCallExpressions {
 	}
 }
 
+func chAttr(path string) string {
+	return "toString(attributes." + path + ")"
+}
+
+func chMultiIf(args ...string) string {
+	return "multiIf(" + strings.Join(args, ", ") + ")"
+}
+
+func chFirstNonEmpty(exprs ...string) string {
+	if len(exprs) == 0 {
+		return "''"
+	}
+	if len(exprs) == 1 {
+		return exprs[0]
+	}
+
+	args := make([]string, 0, len(exprs)*2-1)
+	for _, expr := range exprs[:len(exprs)-1] {
+		args = append(args, expr+" != ''", expr)
+	}
+	args = append(args, exprs[len(exprs)-1])
+
+	return chMultiIf(args...)
+}
+
+func chAny(conditions ...string) string {
+	wrapped := make([]string, 0, len(conditions))
+	for _, condition := range conditions {
+		wrapped = append(wrapped, "("+condition+")")
+	}
+
+	return "(" + strings.Join(wrapped, " OR ") + ")"
+}
+
 // SearchUsersParams contains the parameters for searching users with aggregated metrics.
 type SearchUsersParams struct {
 	GramProjectID    string
@@ -1431,40 +1465,95 @@ type GetEmployeeDataFlowGraphParams struct {
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
 }
 
+type employeeDataFlowExpressions struct {
+	origin      string
+	client      string
+	server      string
+	serverClass string
+	tool        string
+	isCall      string
+	isSuccess   string
+	isFailure   string
+}
+
+func employeeDataFlowExprs() employeeDataFlowExpressions {
+	externalMCPName := chFirstNonEmpty(
+		chAttr("gram.external_mcp.name"),
+		chAttr("gram.external_mcp.slug"),
+		chAttr("gram.external_mcp.id"),
+		"''",
+	)
+	mcpMatch := chAttr("gram.mcp.match")
+	mcpServerURL := chAttr("gram.mcp.server_url")
+	hookEvent := chAttr("gram.hook.event")
+	httpStatus := "toInt32OrZero(" + chAttr("http.response.status_code") + ")"
+	urnSource := "arrayElement(splitByChar(':', gram_urn), 3)"
+
+	hookCall := "event_source = 'hook' AND tool_name != '' AND " + hookEvent + " IN ('PostToolUse', 'PostToolUseFailure')"
+	gramCall := "event_source != 'hook' AND startsWith(gram_urn, 'tools:')"
+
+	server := chMultiIf(
+		"remote_mcp_server_id != ''",
+		chFirstNonEmpty("tool_source", externalMCPName, "remote_mcp_server_id"),
+		externalMCPName+" != ''",
+		externalMCPName,
+		mcpMatch+" != ''",
+		mcpMatch,
+		"tool_source != ''",
+		"tool_source",
+		"startsWith(gram_urn, 'tools:')",
+		urnSource,
+		"'local'",
+	)
+
+	return employeeDataFlowExpressions{
+		origin: chAttr("gram.hook.hostname"),
+		client: chFirstNonEmpty(
+			"hook_source",
+			"event_source",
+			"'unknown'",
+		),
+		server: server,
+		serverClass: chMultiIf(
+			"remote_mcp_server_id != '' OR (startsWith(gram_urn, 'tools:') AND event_source != 'hook')",
+			"'gram'",
+			externalMCPName+" != '' OR "+mcpServerURL+" != '' OR "+mcpMatch+" != ''",
+			"'external'",
+			server+" = 'local'",
+			"'local'",
+			"tool_source = ''",
+			"'local'",
+			"'external'",
+		),
+		tool:      chFirstNonEmpty("tool_name", "gram_urn", "urn", "''"),
+		isCall:    chAny(hookCall, gramCall),
+		isSuccess: chAny("event_source = 'hook' AND tool_name != '' AND "+hookEvent+" = 'PostToolUse'", gramCall+" AND "+httpStatus+" >= 200 AND "+httpStatus+" < 300"),
+		isFailure: chAny("event_source = 'hook' AND tool_name != '' AND "+hookEvent+" = 'PostToolUseFailure'", gramCall+" AND "+httpStatus+" >= 400"),
+	}
+}
+
 // GetEmployeeDataFlowGraph aggregates an employee's tool-call telemetry into
 // path tuples: origin -> MCP client -> MCP server -> tool.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeDataFlowGraphParams) ([]EmployeeDataFlowRow, error) {
-	externalMCPNameExpr := "multiIf(toString(attributes.gram.external_mcp.name) != '', toString(attributes.gram.external_mcp.name), toString(attributes.gram.external_mcp.slug) != '', toString(attributes.gram.external_mcp.slug), toString(attributes.gram.external_mcp.id) != '', toString(attributes.gram.external_mcp.id), '')"
-	originExpr := "toString(attributes.gram.hook.hostname)"
-	urnSourceExpr := "arrayElement(splitByChar(':', gram_urn), 3)"
-	serverExpr := fmt.Sprintf("multiIf(remote_mcp_server_id != '', multiIf(tool_source != '', tool_source, %s != '', %s, remote_mcp_server_id), %s != '', %s, toString(attributes.gram.mcp.match) != '', toString(attributes.gram.mcp.match), tool_source != '', tool_source, startsWith(gram_urn, 'tools:'), %s, 'local')", externalMCPNameExpr, externalMCPNameExpr, externalMCPNameExpr, externalMCPNameExpr, urnSourceExpr)
-	serverClassExpr := fmt.Sprintf("multiIf(remote_mcp_server_id != '' OR (startsWith(gram_urn, 'tools:') AND event_source != 'hook'), 'gram', %s != '' OR toString(attributes.gram.mcp.server_url) != '' OR toString(attributes.gram.mcp.match) != '', 'external', %s = 'local', 'local', tool_source = '', 'local', 'external')", externalMCPNameExpr, serverExpr)
-	clientExpr := "multiIf(hook_source != '', hook_source, event_source != '', event_source, 'unknown')"
-	toolExpr := "multiIf(tool_name != '', tool_name, gram_urn != '', gram_urn, urn != '', urn, '')"
-
-	hookCallExpr := "event_source = 'hook' AND tool_name != '' AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')"
-	gramCallExpr := "event_source != 'hook' AND startsWith(gram_urn, 'tools:')"
-	callExpr := fmt.Sprintf("((%s) OR (%s))", hookCallExpr, gramCallExpr)
-	successExpr := fmt.Sprintf("((event_source = 'hook' AND tool_name != '' AND toString(attributes.gram.hook.event) = 'PostToolUse') OR (%s AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300))", gramCallExpr)
-	failureExpr := fmt.Sprintf("((event_source = 'hook' AND tool_name != '' AND toString(attributes.gram.hook.event) = 'PostToolUseFailure') OR (%s AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))", gramCallExpr)
+	exprs := employeeDataFlowExprs()
 
 	sb := sq.Select(
-		originExpr+" AS origin",
-		clientExpr+" AS client",
-		serverExpr+" AS server",
-		serverClassExpr+" AS server_class",
-		toolExpr+" AS tool",
+		exprs.origin+" AS origin",
+		exprs.client+" AS client",
+		exprs.server+" AS server",
+		exprs.serverClass+" AS server_class",
+		exprs.tool+" AS tool",
 		"count() AS call_count",
-		"countIf("+successExpr+") AS success_count",
-		"countIf("+failureExpr+") AS failure_count",
+		"countIf("+exprs.isSuccess+") AS success_count",
+		"countIf("+exprs.isFailure+") AS failure_count",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where(callExpr)
+		Where(exprs.isCall)
 
 	if arg.UserID != "" {
 		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
