@@ -154,12 +154,16 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 		return nil, err
 	}
 
-	if err := validateIPAllowlist(payload.IPAllowlist); err != nil {
+	ipAllowlist := payload.IPAllowlist
+	if ipAllowlist == nil {
+		ipAllowlist = []string{}
+	}
+	if err := validateIPAllowlist(ipAllowlist); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").Log(ctx, s.logger)
 	}
 
 	domain, err := repo.New(s.db).UpdateCustomDomainIPAllowlist(ctx, repo.UpdateCustomDomainIPAllowlistParams{
-		IpAllowlist:    payload.IPAllowlist,
+		IpAllowlist:    ipAllowlist,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
