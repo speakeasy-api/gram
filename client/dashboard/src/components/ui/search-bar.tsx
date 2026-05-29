@@ -33,10 +33,12 @@ export function SearchBar({
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           // Escape clears the search, matching the × button. Only when there
-          // is something to clear, so an empty box lets Escape bubble (e.g. to
-          // close a surrounding popover).
+          // is something to clear: stop propagation so this Escape only clears,
+          // then an empty box lets the next Escape bubble (e.g. to close a
+          // surrounding popover).
           if (e.key === "Escape" && value) {
             e.preventDefault();
+            e.stopPropagation();
             onChange("");
           }
         }}
