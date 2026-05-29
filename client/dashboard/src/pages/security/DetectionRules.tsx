@@ -5,13 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -222,7 +215,6 @@ function CustomRulesSection({
                 key={rule.id}
                 title={rule.title || rule.id}
                 subtitle={rule.id}
-                severity={rule.severity}
                 onClick={() => onSelect(rule)}
               />
             ))}
@@ -273,7 +265,6 @@ function BuiltinRulesSection({
                       key={rule.id}
                       title={rule.title}
                       subtitle={rule.id}
-                      severity={rule.defaultSeverity}
                       onClick={() => onSelect(rule)}
                     />
                   ))}
@@ -335,12 +326,10 @@ function CategoryHeader({
 function RuleRow({
   title,
   subtitle,
-  severity,
   onClick,
 }: {
   title: string;
   subtitle: string;
-  severity: SeverityLevel;
   onClick: () => void;
 }) {
   return (
@@ -355,7 +344,6 @@ function RuleRow({
           {subtitle}
         </div>
       </div>
-      <SeverityBadge severity={severity} />
       <ChevronRight className="text-muted-foreground size-4 shrink-0" />
     </button>
   );
@@ -1387,25 +1375,6 @@ function CreateCustomRuleSheet({
                     full scanned payload.
                   </p>
                 )}
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Default severity</Label>
-                <Select
-                  value={severity}
-                  onValueChange={(v) => setSeverity(v as SeverityLevel)}
-                >
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SEVERITY_LEVELS.map((level) => (
-                      <SelectItem key={level} value={level}>
-                        {SEVERITY_META[level].label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
