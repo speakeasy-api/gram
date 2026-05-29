@@ -306,6 +306,7 @@ type CustomDomain struct {
 	IngressName     pgtype.Text
 	CertSecretName  pgtype.Text
 	ProvisionerKind string
+	IpAllowlist     []string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
