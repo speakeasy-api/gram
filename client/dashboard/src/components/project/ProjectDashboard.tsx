@@ -291,6 +291,37 @@ export function ProjectDashboard() {
       }));
   }, [externalUsersData]);
 
+  // Top tools by failure rate (MCP view): aggregate per-tool call + failure
+  // counts across external users; rank by failure rate, tie-broken by absolute
+  // failures so a high-volume failing tool outranks a one-off 100% failure.
+  const topToolsByFailureRate = useMemo(() => {
+    const agg = new Map<string, { calls: number; failures: number }>();
+    for (const u of externalUsersData ?? []) {
+      for (const t of u.tools) {
+        const cur = agg.get(t.urn) ?? { calls: 0, failures: 0 };
+        cur.calls += t.count;
+        cur.failures += t.failureCount;
+        agg.set(t.urn, cur);
+      }
+    }
+    return [...agg.entries()]
+      .filter(([, v]) => v.failures > 0)
+      .map(([urn, v]) => ({
+        key: urn,
+        label: toolLabelFromUrn(urn),
+        rate: v.calls > 0 ? (v.failures / v.calls) * 100 : 0,
+        failures: v.failures,
+      }))
+      .sort((a, b) => b.rate - a.rate || b.failures - a.failures)
+      .slice(0, 5)
+      .map((t) => ({
+        key: t.key,
+        label: t.label,
+        value: Math.round(t.rate),
+        valueLabel: `${Math.round(t.rate)}%`,
+      }));
+  }, [externalUsersData]);
+
   const endUsersCount = externalUsersData?.length ?? 0;
 
   const isTopUsersLoading =
@@ -660,23 +691,43 @@ export function ProjectDashboard() {
                     </DashboardCard>
                   </>
                 ) : (
-                  <DashboardCard
-                    title="Most Used Tools"
-                    tooltip="Tools ranked by the number of MCP calls they served in the selected period."
-                    action={
-                      <CardActions>
-                        <ViewAllLink to={routes.insights.tools.href()} />
-                      </CardActions>
-                    }
-                  >
-                    {modePending || mcpUsersPending ? (
-                      <SkeletonList />
-                    ) : mostUsedTools.length === 0 ? (
-                      <EmptyState message="No tool activity recorded" />
-                    ) : (
-                      <RankedBarList items={mostUsedTools} />
-                    )}
-                  </DashboardCard>
+                  <>
+                    <DashboardCard
+                      title="Most Used Tools"
+                      tooltip="Tools ranked by the number of MCP calls they served in the selected period."
+                      action={
+                        <CardActions>
+                          <ViewAllLink to={routes.insights.tools.href()} />
+                        </CardActions>
+                      }
+                    >
+                      {modePending || mcpUsersPending ? (
+                        <SkeletonList />
+                      ) : mostUsedTools.length === 0 ? (
+                        <EmptyState message="No tool activity recorded" />
+                      ) : (
+                        <RankedBarList items={mostUsedTools} />
+                      )}
+                    </DashboardCard>
+
+                    <DashboardCard
+                      title="Top Tools by Failure Rate"
+                      tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
+                      action={
+                        <CardActions>
+                          <ViewAllLink to={routes.insights.tools.href()} />
+                        </CardActions>
+                      }
+                    >
+                      {modePending || mcpUsersPending ? (
+                        <SkeletonList />
+                      ) : topToolsByFailureRate.length === 0 ? (
+                        <EmptyState message="No tool failures recorded" />
+                      ) : (
+                        <RankedBarList items={topToolsByFailureRate} />
+                      )}
+                    </DashboardCard>
+                  </>
                 )}
               </div>
             </>
@@ -750,7 +801,13 @@ function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
   );
 }
 
-type RankedBarListItem = { key: string; label: string; value: number };
+type RankedBarListItem = {
+  key: string;
+  label: string;
+  value: number;
+  // Optional display override for the value (e.g. "42%"); bar width still uses `value`.
+  valueLabel?: string;
+};
 
 function RankedBarList({ items }: { items: RankedBarListItem[] }) {
   const max = items[0]?.value || 1;
@@ -765,7 +822,7 @@ function RankedBarList({ items }: { items: RankedBarListItem[] }) {
             <div className="mb-1 flex items-center justify-between">
               <span className="truncate text-sm">{item.label}</span>
               <span className="text-muted-foreground ml-2 shrink-0 text-xs">
-                {item.value.toLocaleString()}
+                {item.valueLabel ?? item.value.toLocaleString()}
               </span>
             </div>
             <div className="bg-muted h-1 w-full rounded-full">
