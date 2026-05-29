@@ -23,6 +23,15 @@ interface MetadataParams {
   installationOverrideUrl: string | undefined;
 }
 
+// McpMetadataFormTarget tells the form which backend the metadata belongs to.
+// Exactly one shape applies per render. Choosing this over a flat
+// `(toolsetSlug?, mcpServerId?)` API forces every call site to spell out the
+// backend, which keeps the mutation payload and React Query invalidation key
+// in sync without runtime checks.
+export type McpMetadataFormTarget =
+  | { kind: "toolset"; toolsetSlug: string }
+  | { kind: "mcp_server"; mcpServerId: string };
+
 type ValidationResult =
   | {
       valid: true;
@@ -83,7 +92,7 @@ function equalsServerState(
 }
 
 export function useMcpMetadataMetadataForm(
-  toolsetSlug: string,
+  target: McpMetadataFormTarget,
   currentMetadata?: McpMetadata,
 ): UseMcpMetadataMetadataFormResult {
   const queryClient = useQueryClient();
@@ -101,9 +110,34 @@ export function useMcpMetadataMetadataForm(
 
   const [urlValid, setUrlValid] = useState<ValidationResult>({ valid: true });
 
+  // Mutation request and the React Query invalidation key carry exactly the
+  // same backend identifier so a refetch after save lands on the same row the
+  // mutation touched. Keep these derived in one place to avoid drift, and
+  // memo on the primitive backend id so save/saveAsync stay referentially
+  // stable across renders.
+  const targetKind = target.kind;
+  const targetToolsetSlug =
+    target.kind === "toolset" ? target.toolsetSlug : undefined;
+  const targetMcpServerId =
+    target.kind === "mcp_server" ? target.mcpServerId : undefined;
+  const invalidationKey = useMemo(
+    () =>
+      targetKind === "toolset"
+        ? { toolsetSlug: targetToolsetSlug! }
+        : { mcpServerId: targetMcpServerId! },
+    [targetKind, targetToolsetSlug, targetMcpServerId],
+  );
+  const backendRequestFields = useMemo(
+    () =>
+      targetKind === "toolset"
+        ? { toolsetSlug: targetToolsetSlug! }
+        : { mcpServerId: targetMcpServerId! },
+    [targetKind, targetToolsetSlug, targetMcpServerId],
+  );
+
   const mutation = useMcpMetadataSetMutation({
     onSettled: () => {
-      invalidateGetMcpMetadata(queryClient, [{ toolsetSlug }]);
+      invalidateGetMcpMetadata(queryClient, [invalidationKey]);
     },
   });
 
@@ -229,23 +263,23 @@ export function useMcpMetadataMetadataForm(
     mutation.mutate({
       request: {
         setMcpMetadataRequestBody: {
-          toolsetSlug,
+          ...backendRequestFields,
           ...metadataParams,
         },
       },
     });
-  }, [toolsetSlug, metadataParams, mutation]);
+  }, [backendRequestFields, metadataParams, mutation]);
 
   const saveAsync = useCallback(async () => {
     await mutation.mutateAsync({
       request: {
         setMcpMetadataRequestBody: {
-          toolsetSlug,
+          ...backendRequestFields,
           ...metadataParams,
         },
       },
     });
-  }, [toolsetSlug, metadataParams, mutation]);
+  }, [backendRequestFields, metadataParams, mutation]);
 
   return {
     valid: urlValid,

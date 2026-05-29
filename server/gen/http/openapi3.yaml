@@ -12195,18 +12195,25 @@ paths:
                 name: ExportMcpMetadata
     /rpc/mcpMetadata.get:
         get:
-            description: Fetch the metadata that powers the MCP install page.
+            description: Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
             operationId: getMcpMetadata
             parameters:
                 - allowEmptyValue: true
-                  description: The slug of the toolset associated with this install page metadata
+                  description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
                   in: query
                   name: toolset_slug
-                  required: true
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
                     pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: The ID of the MCP server associated with this install page metadata. Mutually exclusive with toolset_slug.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: The ID of the MCP server associated with this install page metadata. Mutually exclusive with toolset_slug.
+                    format: uuid
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -12303,7 +12310,7 @@ paths:
                 name: GetMcpMetadata
     /rpc/mcpMetadata.set:
         post:
-            description: Create or update the metadata that powers the MCP install page.
+            description: Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
             operationId: setMcpMetadata
             parameters:
                 - allowEmptyValue: true
@@ -36408,18 +36415,21 @@ components:
                     type: string
                     description: The asset ID for the MCP install page logo
                     format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The MCP server associated with this install page metadata. Mutually exclusive with toolset_id.
+                    format: uuid
                 toolset_id:
                     type: string
-                    description: The toolset associated with this install page metadata
+                    description: The toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
                     format: uuid
                 updated_at:
                     type: string
                     description: When the metadata entry was last updated
                     format: date-time
-            description: Metadata used to configure the MCP install page.
+            description: Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.
             required:
                 - id
-                - toolset_id
                 - created_at
                 - updated_at
         McpServer:
@@ -39876,7 +39886,7 @@ components:
             properties:
                 default_environment_id:
                     type: string
-                    description: The default environment to load variables from
+                    description: The default environment to load variables from. Not supported when mcp_server_id is provided.
                     format: uuid
                 environment_configs:
                     type: array
@@ -39899,13 +39909,15 @@ components:
                 logo_asset_id:
                     type: string
                     description: The asset ID for the MCP install page logo
+                mcp_server_id:
+                    type: string
+                    description: The ID of the MCP server associated with this install page metadata. Mutually exclusive with toolset_slug.
+                    format: uuid
                 toolset_slug:
                     type: string
-                    description: The slug of the toolset associated with this install page metadata
+                    description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
-            required:
-                - toolset_slug
         SetOrganizationWhitelistRequestBody:
             type: object
             properties:

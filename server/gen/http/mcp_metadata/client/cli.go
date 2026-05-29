@@ -19,17 +19,29 @@ import (
 
 // BuildGetMcpMetadataPayload builds the payload for the mcpMetadata
 // getMcpMetadata endpoint from CLI flags.
-func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcpMetadataGetMcpMetadataApikeyToken string, mcpMetadataGetMcpMetadataSessionToken string, mcpMetadataGetMcpMetadataProjectSlugInput string) (*mcpmetadata.GetMcpMetadataPayload, error) {
+func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcpMetadataGetMcpMetadataMcpServerID string, mcpMetadataGetMcpMetadataApikeyToken string, mcpMetadataGetMcpMetadataSessionToken string, mcpMetadataGetMcpMetadataProjectSlugInput string) (*mcpmetadata.GetMcpMetadataPayload, error) {
 	var err error
-	var toolsetSlug string
+	var toolsetSlug *string
 	{
-		toolsetSlug = mcpMetadataGetMcpMetadataToolsetSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(toolsetSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
+		if mcpMetadataGetMcpMetadataToolsetSlug != "" {
+			toolsetSlug = &mcpMetadataGetMcpMetadataToolsetSlug
+			err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", *toolsetSlug, "^[a-z0-9_-]{1,128}$"))
+			if utf8.RuneCountInString(*toolsetSlug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", *toolsetSlug, utf8.RuneCountInString(*toolsetSlug), 40, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
-		if err != nil {
-			return nil, err
+	}
+	var mcpServerID *string
+	{
+		if mcpMetadataGetMcpMetadataMcpServerID != "" {
+			mcpServerID = &mcpMetadataGetMcpMetadataMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var apikeyToken *string
@@ -51,7 +63,11 @@ func BuildGetMcpMetadataPayload(mcpMetadataGetMcpMetadataToolsetSlug string, mcp
 		}
 	}
 	v := &mcpmetadata.GetMcpMetadataPayload{}
-	v.ToolsetSlug = types.Slug(toolsetSlug)
+	if toolsetSlug != nil {
+		tmptoolsetSlug := types.Slug(*toolsetSlug)
+		v.ToolsetSlug = &tmptoolsetSlug
+	}
+	v.McpServerID = mcpServerID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -67,20 +83,7 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 	{
 		err = json.Unmarshal([]byte(mcpMetadataSetMcpMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_text\": \"abc123\",\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"toolset_slug\": \"aaa\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
-		}
-		if body.DefaultEnvironmentID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
-		}
-		if body.InstallationOverrideURL != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.installation_override_url", *body.InstallationOverrideURL, goa.FormatURI))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_text\": \"abc123\",\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_slug\": \"aaa\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -102,13 +105,17 @@ func BuildSetMcpMetadataPayload(mcpMetadataSetMcpMetadataBody string, mcpMetadat
 		}
 	}
 	v := &mcpmetadata.SetMcpMetadataPayload{
-		ToolsetSlug:               types.Slug(body.ToolsetSlug),
+		McpServerID:               body.McpServerID,
 		LogoAssetID:               body.LogoAssetID,
 		ExternalDocumentationURL:  body.ExternalDocumentationURL,
 		ExternalDocumentationText: body.ExternalDocumentationText,
 		Instructions:              body.Instructions,
 		DefaultEnvironmentID:      body.DefaultEnvironmentID,
 		InstallationOverrideURL:   body.InstallationOverrideURL,
+	}
+	if body.ToolsetSlug != nil {
+		toolsetSlug := types.Slug(*body.ToolsetSlug)
+		v.ToolsetSlug = &toolsetSlug
 	}
 	if body.EnvironmentConfigs != nil {
 		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))

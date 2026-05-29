@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: bea63b9efd3019d5de5eb85be5b9373b
+  docChecksum: 51b7d08d96299aeae632fa4258db4a3b
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -357,7 +357,7 @@ trackedFiles:
   docs/models/components/getlatestdeploymentresult.md:
     last_write_checksum: sha1:edfc03b954ccf67da252ed64e90f9b22e2689cb0
   docs/models/components/getmcpmetadataresponsebody.md:
-    last_write_checksum: sha1:9b86c4be9501099f26c719416628dff6b1b969dc
+    last_write_checksum: sha1:f00cda9f44898e1cec1f794f4f04bed79f9440f9
   docs/models/components/getmetricssummaryresult.md:
     last_write_checksum: sha1:24f8b6ad1e5b6cbd5a7157d8f6ac0c5ad8c59c4a
   docs/models/components/getobservabilityoverviewpayload.md:
@@ -573,7 +573,7 @@ trackedFiles:
   docs/models/components/mcpexporttool.md:
     last_write_checksum: sha1:22faae35fe224a809904d156b4130504acd3922c
   docs/models/components/mcpmetadata.md:
-    last_write_checksum: sha1:f574a3192c208864e861d175ddf9754df74eae2a
+    last_write_checksum: sha1:a8a7681e4d51323e0cbaaff9e705214d482b7070
   docs/models/components/mcpregistry.md:
     last_write_checksum: sha1:fb0e91780ba5dfb14024c1c29f06167a3d6da339
   docs/models/components/mcpserver.md:
@@ -859,7 +859,7 @@ trackedFiles:
   docs/models/components/serviceinfo.md:
     last_write_checksum: sha1:7b023437b4cb0c103ac75214c7dd13b22937f757
   docs/models/components/setmcpmetadatarequestbody.md:
-    last_write_checksum: sha1:d4ccf252bdbf5df535e69b72c70b344960c2e583
+    last_write_checksum: sha1:0e878c1d0415d8acabe1f9a3a52818eec650ff00
   docs/models/components/setorganizationwhitelistrequestbody.md:
     last_write_checksum: sha1:cd847c182c0d3c9292955f482dfc666de8804314
   docs/models/components/setpluginassignmentsform.md:
@@ -1757,7 +1757,7 @@ trackedFiles:
   docs/models/operations/getmcpendpointsecurityoption2.md:
     last_write_checksum: sha1:ae66a24c1ab22a2644e45bc03d7737388aa73812
   docs/models/operations/getmcpmetadatarequest.md:
-    last_write_checksum: sha1:c0e45707ac7a4c2f387f6001cbb9cce88c17184e
+    last_write_checksum: sha1:a4163a9609102139d1b441091efcf14c8c6a1771
   docs/models/operations/getmcpmetadatasecurity.md:
     last_write_checksum: sha1:328ba889e21e367ca08e45acb0b18dfca840790d
   docs/models/operations/getmcpmetadatasecurityoption1.md:
@@ -2621,7 +2621,7 @@ trackedFiles:
   docs/models/operations/sessioninfosecurity.md:
     last_write_checksum: sha1:38062637f91e8c80f53ec89ef396accc3fc01700
   docs/models/operations/setmcpmetadatarequest.md:
-    last_write_checksum: sha1:05c113d8641d602bde2e1baf13185688c8855f17
+    last_write_checksum: sha1:40f12eb24fa857f0256cb2d734a83d7cac11e56d
   docs/models/operations/setmcpmetadatasecurity.md:
     last_write_checksum: sha1:8e0b4d4ca384dbf8e2abcca1088cfba4e6bc7110
   docs/models/operations/setmcpmetadatasecurityoption1.md:
@@ -2991,7 +2991,7 @@ trackedFiles:
   docs/sdks/mcpendpoints/README.md:
     last_write_checksum: sha1:1e7459d65306ac151501a653c4136b4070ed29f5
   docs/sdks/mcpmetadata/README.md:
-    last_write_checksum: sha1:c6b5740a3f5a951130dc2f63d5de659165147e50
+    last_write_checksum: sha1:9d09f648b29db9e13721aa4006f0531ae5c04a46
   docs/sdks/mcpregistries/README.md:
     last_write_checksum: sha1:6e0e53ab4f9d91a9685bc9bfd5517dc99fc47f4c
   docs/sdks/mcpservers/README.md:
@@ -3303,9 +3303,9 @@ trackedFiles:
   src/funcs/mcpMetadataExport.ts:
     last_write_checksum: sha1:b2126071d475235631f4d4e625b3112a26f5f64d
   src/funcs/mcpMetadataGet.ts:
-    last_write_checksum: sha1:b1f619ae2ad0c4ad06efccea3e3f056cf9352d30
+    last_write_checksum: sha1:4f6d66d25dbdb91af63bfbb71edbb5f17081e356
   src/funcs/mcpMetadataSet.ts:
-    last_write_checksum: sha1:3a1b66b78d963d0a2504619f6afe3d483621b5b6
+    last_write_checksum: sha1:fb0633a997ccbf07256c8984f6efdc0fe68529da
   src/funcs/mcpRegistriesClearCache.ts:
     last_write_checksum: sha1:3db75c2ac47eed5281dd928a560e04315a4de161
   src/funcs/mcpRegistriesGetServerDetails.ts:
@@ -3932,7 +3932,7 @@ trackedFiles:
   src/models/components/getlatestdeploymentresult.ts:
     last_write_checksum: sha1:3e5010a8dc6633c1a7f699e9b37facc3f233e6f5
   src/models/components/getmcpmetadataresponsebody.ts:
-    last_write_checksum: sha1:58b6f6c269fbded1e45dd701fde779dcbb36ab52
+    last_write_checksum: sha1:b85bb81a4622ec2dc7c1f567485cc40216e79374
   src/models/components/getmetricssummaryresult.ts:
     last_write_checksum: sha1:5a47b03d97c320d6c11cd80f0401d5c42da3f011
   src/models/components/getobservabilityoverviewpayload.ts:
@@ -4130,7 +4130,7 @@ trackedFiles:
   src/models/components/mcpexporttool.ts:
     last_write_checksum: sha1:376ccc397f560a48f510ce0e1de1a0db1d51c1e1
   src/models/components/mcpmetadata.ts:
-    last_write_checksum: sha1:dec45030b359842fa3f602a7052d58f39018f32f
+    last_write_checksum: sha1:b1cc9ae842a4b42e94299929aeb905aad60394a0
   src/models/components/mcpregistry.ts:
     last_write_checksum: sha1:78224741968880f86a10b5ed9aeecac079504722
   src/models/components/mcpserver.ts:
@@ -4361,7 +4361,7 @@ trackedFiles:
   src/models/components/serviceinfo.ts:
     last_write_checksum: sha1:1df6dcbca3b98b0c7d4fc966bf494ff36ec0be51
   src/models/components/setmcpmetadatarequestbody.ts:
-    last_write_checksum: sha1:0e9fcd94cf2a60b6f0d3c9f6fd40b7e574500135
+    last_write_checksum: sha1:aee841addaf98d99a69af04a17b431c00cc30544
   src/models/components/setorganizationwhitelistrequestbody.ts:
     last_write_checksum: sha1:4c096b2cd203f95604375437283e11226adb2841
   src/models/components/setpluginassignmentsform.ts:
@@ -4769,7 +4769,7 @@ trackedFiles:
   src/models/operations/getmcpendpoint.ts:
     last_write_checksum: sha1:a8b091414afe67bb1773027969decc834c2cb323
   src/models/operations/getmcpmetadata.ts:
-    last_write_checksum: sha1:ced18a4cf28bcf240897c5a580d38dcd44006c38
+    last_write_checksum: sha1:35fe009a8b1ae8815ce459dc843909a6bb387a50
   src/models/operations/getmcpserver.ts:
     last_write_checksum: sha1:27680c0cbc8f2fd9e294d710a1117089f8fba3fa
   src/models/operations/getmcpserverdetails.ts:
@@ -5387,9 +5387,9 @@ trackedFiles:
   src/react-query/getMcpEndpoint.ts:
     last_write_checksum: sha1:77f868dcff8c8bd59ba3a8c1ab06e441de8c20db
   src/react-query/getMcpMetadata.core.ts:
-    last_write_checksum: sha1:92ae5db5f3a77376284cdc9fb969618803905e3e
+    last_write_checksum: sha1:8cd4febe8add994a2d34a230c78f65f528517a36
   src/react-query/getMcpMetadata.ts:
-    last_write_checksum: sha1:36d623a09015ee0502b88a1b8f14f0b968eb6f79
+    last_write_checksum: sha1:9981d8f38ad374acc25d768f67348bea412a067b
   src/react-query/getMcpServer.core.ts:
     last_write_checksum: sha1:5c0495e136904e40d9bf524d5563a0f7766197a7
   src/react-query/getMcpServer.ts:
@@ -5587,7 +5587,7 @@ trackedFiles:
   src/react-query/mcpEndpoints.ts:
     last_write_checksum: sha1:7608272a5a1a0d7335646b6afb9c0a9cf162d522
   src/react-query/mcpMetadataSet.ts:
-    last_write_checksum: sha1:00f08cba6b017ff5592a0d3dc5c66f0cb0a46877
+    last_write_checksum: sha1:cfa478bed7f0285980ef20b4e5a6e0baf75a6481
   src/react-query/mcpRegistriesClearCache.ts:
     last_write_checksum: sha1:d23f4b44500d799d9ec3f8fe2a1cf1f6068705f3
   src/react-query/mcpRegistriesGetServerDetails.core.ts:
@@ -6035,7 +6035,7 @@ trackedFiles:
   src/sdk/mcpendpoints.ts:
     last_write_checksum: sha1:73fa5085a17ec02ee46d8f125b4bee8fb093e8fc
   src/sdk/mcpmetadata.ts:
-    last_write_checksum: sha1:9b4f87965763ed96d3f46f1db71643f76ff96107
+    last_write_checksum: sha1:7abb0cbf30414e532b532b1a79744820a0fe4eff
   src/sdk/mcpregistries.ts:
     last_write_checksum: sha1:3f43cbc58c4fda6b886ab4f80f73b4993de92d3f
   src/sdk/mcpservers.ts:
@@ -7255,10 +7255,10 @@ examples:
   setMcpMetadata:
     speakeasy-default-set-mcp-metadata:
       requestBody:
-        application/json: {"toolset_slug": "<value>"}
+        application/json: {}
       responses:
         "200":
-          application/json: {"created_at": "2025-12-11T16:40:00.632Z", "id": "<id>", "toolset_id": "4a999575-d1bd-4e03-9441-727039544c9e", "updated_at": "2025-12-20T06:05:12.488Z"}
+          application/json: {"created_at": "2025-12-11T16:40:00.632Z", "id": "<id>", "updated_at": "2025-12-20T06:05:12.488Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8943,106 +8943,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  updateDomain:
-    speakeasy-default-update-domain:
-      requestBody:
-        application/json: {"ip_allowlist": ["<value 1>", "<value 2>", "<value 3>"]}
-      responses:
-        "200":
-          application/json: {"activated": true, "created_at": "2025-07-20T07:56:40.308Z", "domain": "indolent-granny.com", "id": "<id>", "ip_allowlist": ["<value 1>"], "is_updating": true, "organization_id": "<id>", "updated_at": "2024-04-12T23:32:23.157Z", "verified": false}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  approveShadowMCPApprovalRequest:
-    speakeasy-default-approve-shadow-MCP-approval-request:
-      requestBody:
-        application/json: {"access_scope": "organization", "display_name": "Danny75", "id": "07e9687f-f01e-43f5-9a11-0ddd8f277af1", "match_breadth": "full_url", "match_value": "<value>"}
-      responses:
-        "200":
-          application/json: {"request": {"blocked_count": 680208, "created_at": "2025-07-06T20:55:40.446Z", "id": "93aa2893-caab-40eb-99a3-ed7a02422b42", "organization_id": "<id>", "project_id": "6bb2bf61-7094-446d-8636-eb666b7bc260", "requested_at": "2024-07-17T23:41:34.538Z", "resource_type": "<value>", "status": "approved", "updated_at": "2026-07-13T13:51:25.190Z"}, "rules": []}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  createShadowMCPApprovalRequest:
-    speakeasy-default-create-shadow-MCP-approval-request:
-      requestBody:
-        application/json: {"request_token": "<value>"}
-      responses:
-        "201":
-          application/json: {"blocked_count": 969788, "created_at": "2025-04-29T20:29:04.035Z", "id": "1526e0a7-4af4-4689-bfa4-1c4665678cb5", "organization_id": "<id>", "project_id": "b16e3cbd-e4c1-43e0-831a-9241c2751328", "requested_at": "2026-01-30T06:35:05.422Z", "resource_type": "<value>", "status": "denied", "updated_at": "2025-08-11T11:46:57.662Z"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  denyShadowMCPApprovalRequest:
-    speakeasy-default-deny-shadow-MCP-approval-request:
-      requestBody:
-        application/json: {"create_deny_rule": true, "id": "3be6c4bf-a350-4f31-b5c7-6008bf1bb80a"}
-      responses:
-        "200":
-          application/json: {"request": {"blocked_count": 949718, "created_at": "2026-05-06T09:57:36.921Z", "id": "31ffc4f9-7bab-4ebb-84ab-b4efc861adac", "organization_id": "<id>", "project_id": "b54042f0-758a-47ff-80d2-da01ef9e6380", "requested_at": "2024-05-30T23:20:20.940Z", "resource_type": "<value>", "status": "requested", "updated_at": "2025-09-27T12:24:51.852Z"}, "rules": [{"access_scope": "organization", "created_at": "2026-07-17T16:04:04.975Z", "display_name": "Rickie12", "disposition": "allowed", "id": "fc4c2c94-c6b7-4652-a545-4c2e8572831d", "match_breadth": "url_host", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2026-04-22T20:46:34.139Z"}]}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listShadowMCPApprovalRequests:
-    speakeasy-default-list-shadow-MCP-approval-requests:
-      parameters:
-        query:
-          limit: 50
-      responses:
-        "200":
-          application/json: {"requests": [{"blocked_count": 313365, "created_at": "2024-10-01T16:26:19.462Z", "id": "ad376aad-3f61-4fbd-9934-1517ea94af9d", "organization_id": "<id>", "project_id": "8b2912f8-2396-4e08-ab06-db8c539f1d8e", "requested_at": "2024-09-04T12:31:04.746Z", "resource_type": "<value>", "status": "requested", "updated_at": "2024-08-07T11:27:04.392Z"}]}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  createShadowMCPAccessRule:
-    speakeasy-default-create-shadow-MCP-access-rule:
-      requestBody:
-        application/json: {"access_scope": "organization", "display_name": "Benny37", "disposition": "allowed", "match_breadth": "full_url", "match_value": "<value>"}
-      responses:
-        "201":
-          application/json: {"rules": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  deleteShadowMCPAccessRule:
-    speakeasy-default-delete-shadow-MCP-access-rule:
-      parameters:
-        query:
-          id: "a60637e3-e5e4-45fc-929e-cc1e55a91410"
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  listShadowMCPAccessRules:
-    speakeasy-default-list-shadow-MCP-access-rules:
-      parameters:
-        query:
-          limit: 50
-      responses:
-        "200":
-          application/json: {"rules": []}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  updateShadowMCPAccessRule:
-    speakeasy-default-update-shadow-MCP-access-rule:
-      requestBody:
-        application/json: {"access_scope": "project", "display_name": "Cecile_Bechtelar72", "disposition": "denied", "id": "013dc837-fd7a-4500-ac0e-c11de541d779", "match_breadth": "full_url", "match_value": "<value>"}
-      responses:
-        "200":
-          application/json: {"access_scope": "organization", "created_at": "2024-04-22T09:20:11.013Z", "display_name": "Shaina_Schmidt80", "disposition": "denied", "id": "ce1a95e1-fad1-45e7-a293-f4458397746f", "match_breadth": "url_host", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2025-08-18T21:43:39.221Z"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createCustomDetectionRule:
     speakeasy-default-create-custom-detection-rule:
       requestBody:
@@ -9117,6 +9017,106 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  approveShadowMCPApprovalRequest:
+    speakeasy-default-approve-shadow-MCP-approval-request:
+      requestBody:
+        application/json: {"access_scope": "organization", "display_name": "Danny75", "id": "07e9687f-f01e-43f5-9a11-0ddd8f277af1", "match_breadth": "full_url", "match_value": "<value>"}
+      responses:
+        "200":
+          application/json: {"request": {"blocked_count": 680208, "created_at": "2025-07-06T20:55:40.446Z", "id": "93aa2893-caab-40eb-99a3-ed7a02422b42", "organization_id": "<id>", "project_id": "6bb2bf61-7094-446d-8636-eb666b7bc260", "requested_at": "2024-07-17T23:41:34.538Z", "resource_type": "<value>", "status": "approved", "updated_at": "2026-07-13T13:51:25.190Z"}, "rules": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createShadowMCPApprovalRequest:
+    speakeasy-default-create-shadow-MCP-approval-request:
+      requestBody:
+        application/json: {"request_token": "<value>"}
+      responses:
+        "201":
+          application/json: {"blocked_count": 969788, "created_at": "2025-04-29T20:29:04.035Z", "id": "1526e0a7-4af4-4689-bfa4-1c4665678cb5", "organization_id": "<id>", "project_id": "b16e3cbd-e4c1-43e0-831a-9241c2751328", "requested_at": "2026-01-30T06:35:05.422Z", "resource_type": "<value>", "status": "denied", "updated_at": "2025-08-11T11:46:57.662Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  denyShadowMCPApprovalRequest:
+    speakeasy-default-deny-shadow-MCP-approval-request:
+      requestBody:
+        application/json: {"create_deny_rule": true, "id": "3be6c4bf-a350-4f31-b5c7-6008bf1bb80a"}
+      responses:
+        "200":
+          application/json: {"request": {"blocked_count": 949718, "created_at": "2026-05-06T09:57:36.921Z", "id": "31ffc4f9-7bab-4ebb-84ab-b4efc861adac", "organization_id": "<id>", "project_id": "b54042f0-758a-47ff-80d2-da01ef9e6380", "requested_at": "2024-05-30T23:20:20.940Z", "resource_type": "<value>", "status": "requested", "updated_at": "2025-09-27T12:24:51.852Z"}, "rules": [{"access_scope": "organization", "created_at": "2026-07-17T16:04:04.975Z", "display_name": "Rickie12", "disposition": "allowed", "id": "fc4c2c94-c6b7-4652-a545-4c2e8572831d", "match_breadth": "full_url", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2026-04-22T20:46:34.139Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listShadowMCPApprovalRequests:
+    speakeasy-default-list-shadow-MCP-approval-requests:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"requests": [{"blocked_count": 313365, "created_at": "2024-10-01T16:26:19.462Z", "id": "ad376aad-3f61-4fbd-9934-1517ea94af9d", "organization_id": "<id>", "project_id": "8b2912f8-2396-4e08-ab06-db8c539f1d8e", "requested_at": "2024-09-04T12:31:04.746Z", "resource_type": "<value>", "status": "requested", "updated_at": "2024-08-07T11:27:04.392Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createShadowMCPAccessRule:
+    speakeasy-default-create-shadow-MCP-access-rule:
+      requestBody:
+        application/json: {"access_scope": "organization", "display_name": "Benny37", "disposition": "allowed", "match_breadth": "full_url", "match_value": "<value>"}
+      responses:
+        "201":
+          application/json: {"rules": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteShadowMCPAccessRule:
+    speakeasy-default-delete-shadow-MCP-access-rule:
+      parameters:
+        query:
+          id: "a60637e3-e5e4-45fc-929e-cc1e55a91410"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listShadowMCPAccessRules:
+    speakeasy-default-list-shadow-MCP-access-rules:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"rules": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateShadowMCPAccessRule:
+    speakeasy-default-update-shadow-MCP-access-rule:
+      requestBody:
+        application/json: {"access_scope": "project", "display_name": "Cecile_Bechtelar72", "disposition": "denied", "id": "013dc837-fd7a-4500-ac0e-c11de541d779", "match_breadth": "full_url", "match_value": "<value>"}
+      responses:
+        "200":
+          application/json: {"access_scope": "organization", "created_at": "2024-04-22T09:20:11.013Z", "display_name": "Shaina_Schmidt80", "disposition": "denied", "id": "ce1a95e1-fad1-45e7-a293-f4458397746f", "match_breadth": "url_host", "match_value": "<value>", "organization_id": "<id>", "resource_type": "<value>", "updated_at": "2025-08-18T21:43:39.221Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateDomain:
+    speakeasy-default-update-domain:
+      requestBody:
+        application/json: {"ip_allowlist": ["<value 1>", "<value 2>", "<value 3>"]}
+      responses:
+        "200":
+          application/json: {"activated": true, "created_at": "2025-07-20T07:56:40.308Z", "domain": "indolent-granny.com", "id": "<id>", "ip_allowlist": ["<value 1>"], "is_updating": true, "organization_id": "<id>", "updated_at": "2024-04-12T23:32:23.157Z", "verified": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createOrganizationRemoteSessionIssuer:
     speakeasy-default-create-organization-remote-session-issuer:
       requestBody:
