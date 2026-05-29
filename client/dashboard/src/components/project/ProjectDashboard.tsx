@@ -130,6 +130,28 @@ export function ProjectDashboard() {
       }));
   }, [topUsersSearchData, memberById]);
 
+  // Most Agent Sessions by User reads from the same trusted telemetrySearchUsers
+  // data as Top Users (rather than overview.summary.topUsers), ranking by the
+  // number of distinct agent sessions (totalChats = unique gen_ai.conversation.id,
+  // which every hook source stamps with its session id). Names resolve via the
+  // shared memberById map; internal users only, so raw auth IDs no longer leak.
+  const topUsersBySessions = useMemo(() => {
+    if (!topUsersSearchData) return [];
+    return [...topUsersSearchData]
+      .filter((u) => u.totalChats > 0)
+      .sort((a, b) => b.totalChats - a.totalChats)
+      .slice(0, 5)
+      .map((u) => {
+        const member = memberById.get(u.userId);
+        return {
+          userId: u.userId,
+          name: member?.name ?? u.userId,
+          initialsSource: member?.email ?? member?.name ?? u.userId,
+          sessions: u.totalChats,
+        };
+      });
+  }, [topUsersSearchData, memberById]);
+
   const isTopUsersLoading =
     logsEnabled && (isTopUsersPending || isMembersPending);
 
@@ -358,7 +380,7 @@ export function ProjectDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
                   title="Most Agent Sessions by User"
-                  tooltip="End users ranked by agent activity in the selected period. When agent sessions exist, activity counts chat messages; otherwise it counts tool calls from tool events."
+                  tooltip="Employees ranked by the number of distinct agent sessions in the selected period."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -393,47 +415,38 @@ export function ProjectDashboard() {
                     </CardActions>
                   }
                 >
-                  {isOverviewPending ? (
+                  {isTopUsersLoading ? (
                     <SkeletonList />
-                  ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
+                  ) : topUsersBySessions.length === 0 ? (
                     <EmptyState message="No session activity recorded" />
                   ) : (
                     <ul className="divide-border divide-y">
-                      {(overview?.summary.topUsers ?? [])
-                        .slice(0, 5)
-                        .map((user, i) => {
-                          const member = memberById.get(user.userId);
-                          const displayName = member?.name ?? user.userId;
-                          return (
-                            <li
-                              key={user.userId}
-                              className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                      {topUsersBySessions.map((user, i) => (
+                        <li
+                          key={user.userId}
+                          className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                        >
+                          <Avatar className="size-8 shrink-0">
+                            <AvatarFallback
+                              className={cn(
+                                "text-xs font-medium",
+                                avatarColor(i),
+                              )}
                             >
-                              <Avatar className="size-8 shrink-0">
-                                <AvatarFallback
-                                  className={cn(
-                                    "text-xs font-medium",
-                                    avatarColor(i),
-                                  )}
-                                >
-                                  {emailInitials(
-                                    member?.email ??
-                                      member?.name ??
-                                      user.userId,
-                                  )}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium">
-                                  {displayName}
-                                </p>
-                                <p className="text-muted-foreground text-xs">
-                                  {user.activityCount.toLocaleString()} calls
-                                </p>
-                              </div>
-                            </li>
-                          );
-                        })}
+                              {emailInitials(user.initialsSource)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {user.name}
+                            </p>
+                            <p className="text-muted-foreground text-xs">
+                              {user.sessions.toLocaleString()}{" "}
+                              {user.sessions === 1 ? "session" : "sessions"}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
                     </ul>
                   )}
                 </DashboardCard>
