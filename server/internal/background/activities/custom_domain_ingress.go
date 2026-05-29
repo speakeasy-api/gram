@@ -19,6 +19,11 @@ type CustomDomainIngressAction string
 const (
 	CustomDomainIngressActionSetup  CustomDomainIngressAction = "setup"
 	CustomDomainIngressActionDelete CustomDomainIngressAction = "delete"
+	// CustomDomainIngressActionReapply re-applies the current IP allowlist to an
+	// already-provisioned resource. Used by the edit flow. It skips the
+	// convergence wait and the verified/activated DB flip since the resource and
+	// its cert already exist.
+	CustomDomainIngressActionReapply CustomDomainIngressAction = "reapply"
 )
 
 type CustomDomainIngress struct {
@@ -103,13 +108,29 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").Log(ctx, c.logger)
 	}
 
+	if args.Action == CustomDomainIngressActionReapply {
+		c.logger.InfoContext(ctx, "re-applying custom domain ip allowlist",
+			attr.SlogCustomDomainProvisionerKind(string(kind)),
+			attr.SlogURLDomain(customDomain.Domain),
+		)
+
+		// Setup is idempotent (create-or-update) and applies the current allowlist.
+		// The resource and its cert already exist, so there is no convergence wait
+		// and no verified/activated flip.
+		if _, err := provisioner.Setup(ctx, customDomain.Domain, customDomain.IpAllowlist); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to re-apply custom domain ip allowlist").Log(ctx, c.logger)
+		}
+
+		return nil
+	}
+
 	if args.Action == CustomDomainIngressActionSetup {
 		c.logger.InfoContext(ctx, "provisioning custom domain resource",
 			attr.SlogCustomDomainProvisionerKind(string(kind)),
 			attr.SlogURLDomain(customDomain.Domain),
 		)
 
-		result, err := provisioner.Setup(ctx, customDomain.Domain)
+		result, err := provisioner.Setup(ctx, customDomain.Domain, customDomain.IpAllowlist)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to provision custom domain resource").Log(ctx, c.logger)
 		}

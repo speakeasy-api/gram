@@ -44,6 +44,7 @@ type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
 	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
 	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
+	ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -168,6 +169,15 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+	}
+
+	// Push the new allowlist to the live k8s resource. Only meaningful once the
+	// domain is provisioned; otherwise the registration workflow picks up the
+	// persisted allowlist when it runs Setup.
+	if domain.Activated && domain.IngressName.Valid {
+		if _, err := s.temporalClient.ExecuteCustomDomainUpdate(ctx, authCtx.ActiveOrganizationID, domain.Domain, k8s.ProvisionerKind(domain.ProvisionerKind)); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to start custom domain update workflow").Log(ctx, s.logger)
+		}
 	}
 
 	isUpdating := false

@@ -33,6 +33,12 @@ type CustomDomainDeletionParams struct {
 	ProvisionerKind k8s.ProvisionerKind
 }
 
+type CustomDomainUpdateParams struct {
+	OrgID           string
+	Domain          string
+	ProvisionerKind k8s.ProvisionerKind
+}
+
 type CustomDomainRegistrationClient struct {
 	TemporalEnv *tenv.Environment
 }
@@ -53,6 +59,26 @@ func (c *CustomDomainRegistrationClient) GetID(orgID string, domain string) stri
 
 func (c *CustomDomainRegistrationClient) GetDeletionID(orgID string, domain string) string {
 	return fmt.Sprintf("v1:custom-domain-deletion:%s:%s", orgID, domain)
+}
+
+func (c *CustomDomainRegistrationClient) GetUpdateID(orgID string, domain string) string {
+	return fmt.Sprintf("v1:custom-domain-update:%s:%s", orgID, domain)
+}
+
+// ExecuteCustomDomainUpdate re-applies the persisted IP allowlist to an
+// already-provisioned custom domain. Used by the edit flow.
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error) {
+	id := c.GetUpdateID(orgID, domain)
+	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    id,
+		TaskQueue:             string(c.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowRunTimeout:    5 * time.Minute,
+	}, CustomDomainUpdateWorkflow, CustomDomainUpdateParams{
+		OrgID:           orgID,
+		Domain:          domain,
+		ProvisionerKind: provisionerKind,
+	})
 }
 
 func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error) {
@@ -138,6 +164,37 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	if err != nil {
 		logger.Error("failed to create custom domain ingress", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
 		return fmt.Errorf("failed to create custom domain ingress: %w", err)
+	}
+
+	return nil
+}
+
+func CustomDomainUpdateWorkflow(ctx workflow.Context, params CustomDomainUpdateParams) error {
+	logger := workflow.GetLogger(ctx)
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 60 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	})
+
+	var a *Activities
+	err := workflow.ExecuteActivity(
+		ctx,
+		a.CustomDomainIngress,
+		activities.CustomDomainIngressArgs{
+			OrgID:           params.OrgID,
+			Domain:          params.Domain,
+			Action:          activities.CustomDomainIngressActionReapply,
+			IngressName:     "",
+			ResourceName:    "",
+			CertSecretName:  "",
+			ProvisionerKind: params.ProvisionerKind,
+		},
+	).Get(ctx, nil)
+	if err != nil {
+		logger.Error("failed to re-apply custom domain ip allowlist", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
+		return fmt.Errorf("failed to re-apply custom domain ip allowlist: %w", err)
 	}
 
 	return nil

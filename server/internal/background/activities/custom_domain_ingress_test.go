@@ -192,6 +192,54 @@ func TestCustomDomainIngress_Setup_Gateway_WritesNullCertSecret(t *testing.T) {
 	require.False(t, row.CertSecretName.Valid, "CertSecretName must be NULL for gateway kind")
 }
 
+func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-reapply"
+	const domain = "reapply.example.com"
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+
+	conn, err := infra.CloneTestDatabase(t, "reapply_test")
+	require.NoError(t, err)
+
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        orgID,
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	_, err = customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  orgID,
+		Domain:          domain,
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{"1.2.3.4", "10.0.0.0/8"},
+	})
+	require.NoError(t, err)
+
+	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	act := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, k8s.ProvisionerKindIngress, activities.WithSetupSleep(0))
+
+	err = act.Do(ctx, activities.CustomDomainIngressArgs{
+		OrgID:           orgID,
+		Domain:          domain,
+		Action:          activities.CustomDomainIngressActionReapply,
+		ProvisionerKind: k8s.ProvisionerKindIngress,
+	})
+	require.NoError(t, err)
+
+	// Reapply runs a single idempotent Setup with the persisted allowlist —
+	// no convergence Get, no DB write.
+	calls := stub.Calls()
+	require.Len(t, calls, 1)
+	require.Equal(t, "Setup", calls[0].Method)
+	require.Equal(t, domain, calls[0].Domain)
+	require.Equal(t, []string{"1.2.3.4", "10.0.0.0/8"}, calls[0].IPAllowlist)
+}
+
 func TestCustomDomainIngress_Setup_KindResolution_DefaultsToIngress(t *testing.T) {
 	t.Parallel()
 

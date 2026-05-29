@@ -8,19 +8,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayclient "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
 type GatewayProvisioner struct {
-	client    gatewayclient.Interface
-	namespace string
-	logger    *slog.Logger
+	client  gatewayclient.Interface
+	dynamic dynamic.Interface
+	// securityPolicyEnabled gates the Envoy Gateway SecurityPolicy reconcile. It
+	// must stay off until Envoy Gateway and its SecurityPolicy CRD are installed
+	// in the target namespaces; otherwise create/delete calls hit a missing CRD
+	// and break provisioning. See InitializeK8sClient.
+	securityPolicyEnabled bool
+	namespace             string
+	logger                *slog.Logger
 }
 
 func (p *GatewayProvisioner) Kind() ProvisionerKind { return ProvisionerKindGateway }
 
-func (p *GatewayProvisioner) Setup(ctx context.Context, domain string) (SetupResult, error) {
+func (p *GatewayProvisioner) Setup(ctx context.Context, domain string, ipAllowlist []string) (SetupResult, error) {
 	name, err := SanitizeDomainForK8sName(domain)
 	if err != nil {
 		return SetupResult{}, fmt.Errorf("sanitize domain: %w", err)
@@ -38,13 +45,20 @@ func (p *GatewayProvisioner) Setup(ctx context.Context, domain string) (SetupRes
 		if _, createErr := routeInterface.Create(ctx, route, metav1.CreateOptions{}); createErr != nil {
 			return SetupResult{}, fmt.Errorf("create httproute %s: %w", name, createErr)
 		}
-		return SetupResult{ResourceName: name, SecretName: ""}, nil
+	} else {
+		p.logger.InfoContext(ctx, "httproute found, updating", attr.SlogResourceName(name))
+		route.ResourceVersion = existing.ResourceVersion
+		if _, updateErr := routeInterface.Update(ctx, route, metav1.UpdateOptions{}); updateErr != nil {
+			return SetupResult{}, fmt.Errorf("update httproute %s: %w", name, updateErr)
+		}
 	}
 
-	p.logger.InfoContext(ctx, "httproute found, updating", attr.SlogResourceName(name))
-	route.ResourceVersion = existing.ResourceVersion
-	if _, updateErr := routeInterface.Update(ctx, route, metav1.UpdateOptions{}); updateErr != nil {
-		return SetupResult{}, fmt.Errorf("update httproute %s: %w", name, updateErr)
+	// Gateway API has no native CIDR filtering; IP allow listing is delegated to
+	// an Envoy Gateway SecurityPolicy targeting the HTTPRoute. Isolated in
+	// gateway_security_policy.go so the mechanism can be swapped if the gateway
+	// implementation changes.
+	if err := p.reconcileSecurityPolicy(ctx, name, ipAllowlist); err != nil {
+		return SetupResult{}, fmt.Errorf("reconcile security policy %s: %w", name, err)
 	}
 
 	return SetupResult{ResourceName: name, SecretName: ""}, nil
@@ -58,8 +72,13 @@ func (p *GatewayProvisioner) Get(ctx context.Context, resourceName string) error
 	return nil
 }
 
-// Delete removes the HTTPRoute only. The parent Gateway's TLS Secret is shared and must not be touched.
+// Delete removes the HTTPRoute and any SecurityPolicy it owns. The parent
+// Gateway's TLS Secret is shared and must not be touched.
 func (p *GatewayProvisioner) Delete(ctx context.Context, resourceName, _ string) error {
+	if err := p.deleteSecurityPolicy(ctx, resourceName); err != nil {
+		return fmt.Errorf("delete security policy %s: %w", resourceName, err)
+	}
+
 	if err := p.client.GatewayV1().HTTPRoutes(p.namespace).Delete(ctx, resourceName, metav1.DeleteOptions{}); err != nil {
 		return fmt.Errorf("delete httproute %s: %w", resourceName, err)
 	}
