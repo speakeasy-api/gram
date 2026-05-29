@@ -4466,5 +4466,11 @@ func ValidateGenerateWorkOSAdminPortalLinkRequestBody(body *GenerateWorkOSAdminP
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.intent", *body.Intent, []any{"dsync", "sso", "audit_logs", "domain_verification", "log_streams"}))
 		}
 	}
+	if body.ReturnURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.return_url", *body.ReturnURL, goa.FormatURI))
+	}
+	if body.SuccessURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.success_url", *body.SuccessURL, goa.FormatURI))
+	}
 	return
 }

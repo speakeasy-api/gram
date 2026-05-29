@@ -120,12 +120,7 @@ export function SetupWizard() {
   const renderStep = () => {
     switch (currentStep) {
       case 0:
-        return (
-          <ConnectIdpStep
-            onComplete={completeCurrentStep}
-            onSkip={completeCurrentStep}
-          />
-        );
+        return <ConnectIdpStep onSkip={completeCurrentStep} />;
       case 1:
         return (
           <DirectorySyncStep onComplete={completeCurrentStep} onBack={goBack} />

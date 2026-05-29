@@ -220,10 +220,16 @@ func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminP
 	{
 		err = json.Unmarshal([]byte(organizationsGenerateWorkOSAdminPortalLinkBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"intent\": \"sso\",\n      \"intent_options\": {\n         \"domain_verification\": {\n            \"domain_name\": \"abc123\"\n         },\n         \"sso\": {\n            \"bookmark_slug\": \"abc123\",\n            \"provider_type\": \"abc123\"\n         }\n      },\n      \"it_contact_emails\": [\n         \"abc123\"\n      ],\n      \"return_url\": \"abc123\",\n      \"success_url\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"intent\": \"sso\",\n      \"intent_options\": {\n         \"domain_verification\": {\n            \"domain_name\": \"abc123\"\n         },\n         \"sso\": {\n            \"bookmark_slug\": \"abc123\",\n            \"provider_type\": \"abc123\"\n         }\n      },\n      \"it_contact_emails\": [\n         \"abc123\"\n      ],\n      \"return_url\": \"https://example.com/foo\",\n      \"success_url\": \"https://example.com/foo\"\n   }'")
 		}
 		if !(body.Intent == "dsync" || body.Intent == "sso" || body.Intent == "audit_logs" || body.Intent == "domain_verification" || body.Intent == "log_streams") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.intent", body.Intent, []any{"dsync", "sso", "audit_logs", "domain_verification", "log_streams"}))
+		}
+		if body.ReturnURL != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.return_url", *body.ReturnURL, goa.FormatURI))
+		}
+		if body.SuccessURL != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.success_url", *body.SuccessURL, goa.FormatURI))
 		}
 		if err != nil {
 			return nil, err

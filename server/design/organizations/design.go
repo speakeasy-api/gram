@@ -242,8 +242,12 @@ var _ = Service("organizations", func() {
 			Attribute("intent", String, "WorkOS Admin Portal intent.", func() {
 				Enum("dsync", "sso", "audit_logs", "domain_verification", "log_streams")
 			})
-			Attribute("return_url", String, "URL to redirect the user to after the Admin Portal session ends.")
-			Attribute("success_url", String, "URL to redirect the user to on successful completion of the Admin Portal flow.")
+			Attribute("return_url", String, "URL to redirect the user to after the Admin Portal session ends.", func() {
+				Format(FormatURI)
+			})
+			Attribute("success_url", String, "URL to redirect the user to on successful completion of the Admin Portal flow.", func() {
+				Format(FormatURI)
+			})
 			Attribute("it_contact_emails", ArrayOf(String), "IT contact email addresses displayed in the Admin Portal for end-user support.")
 			Attribute("intent_options", WorkOSIntentOptions, "Per-intent configuration for the Admin Portal flow.")
 			Required("intent")

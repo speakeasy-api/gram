@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Activity,
+  AlertTriangle,
   Check,
   Loader2,
   TrendingUp,
@@ -104,7 +105,11 @@ export function ConfirmTrafficStep({
                 allHealthy ? "bg-success" : "bg-destructive",
               )}
             >
-              <Check className="text-background h-7 w-7" />
+              {allHealthy ? (
+                <Check className="text-background h-7 w-7" />
+              ) : (
+                <AlertTriangle className="text-background h-7 w-7" />
+              )}
             </div>
             <div>
               <p className="text-foreground text-xl font-semibold">

@@ -33661,9 +33661,11 @@ components:
                 return_url:
                     type: string
                     description: URL to redirect the user to after the Admin Portal session ends.
+                    format: uri
                 success_url:
                     type: string
                     description: URL to redirect the user to on successful completion of the Admin Portal flow.
+                    format: uri
             required:
                 - intent
         GenerateWorkOSAdminPortalLinkResult:

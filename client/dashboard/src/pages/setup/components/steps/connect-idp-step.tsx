@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  KeyRound,
-  Check,
-  ExternalLink,
-  Loader2,
-  ChevronDown,
-} from "lucide-react";
+import { KeyRound, ExternalLink, Loader2, ChevronDown } from "lucide-react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query";
 import { toast } from "sonner";
@@ -33,15 +27,13 @@ function ProviderIcon({
 }
 
 interface ConnectIdpStepProps {
-  onComplete: () => void;
   onSkip: () => void;
 }
 
 const INITIAL_VISIBLE = 6;
 
-export function ConnectIdpStep({ onComplete, onSkip }: ConnectIdpStepProps) {
+export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
@@ -81,14 +73,6 @@ export function ConnectIdpStep({ onComplete, onSkip }: ConnectIdpStepProps) {
     );
   };
 
-  const handleContinue = () => {
-    if (isConnected) {
-      onComplete();
-    } else {
-      handleConnect();
-    }
-  };
-
   return (
     <StepContainer
       icon={
@@ -98,16 +82,10 @@ export function ConnectIdpStep({ onComplete, onSkip }: ConnectIdpStepProps) {
       }
       title="Connect identity provider"
       description="Connect your SSO provider to enable secure authentication for your team. This allows employees to sign in with their existing credentials."
-      onContinue={handleContinue}
+      onContinue={handleConnect}
       onSkip={onSkip}
       skipLabel="Skip for now"
-      continueLabel={
-        isConnected
-          ? "Continue"
-          : generatePortalLink.isPending
-            ? "Opening..."
-            : "Connect"
-      }
+      continueLabel={generatePortalLink.isPending ? "Opening..." : "Connect"}
       isLoading={generatePortalLink.isPending}
       canContinue={!!selectedProvider}
     >
@@ -123,18 +101,14 @@ export function ConnectIdpStep({ onComplete, onSkip }: ConnectIdpStepProps) {
             ).map((p) => (
               <button
                 key={p.id}
-                onClick={() => {
-                  if (!isConnected) {
-                    setSelectedProvider(p.id);
-                  }
-                }}
-                disabled={isConnected || generatePortalLink.isPending}
+                onClick={() => setSelectedProvider(p.id)}
+                disabled={generatePortalLink.isPending}
                 className={cn(
                   "flex items-center gap-3 rounded-lg border p-4 text-left transition-all",
                   selectedProvider === p.id
                     ? "border-foreground bg-secondary"
                     : "border-border bg-card hover:border-foreground/30",
-                  (isConnected || generatePortalLink.isPending) &&
+                  generatePortalLink.isPending &&
                     selectedProvider !== p.id &&
                     "cursor-not-allowed opacity-50",
                 )}
@@ -147,12 +121,6 @@ export function ConnectIdpStep({ onComplete, onSkip }: ConnectIdpStepProps) {
                     <span className="text-foreground truncate text-sm font-medium">
                       {p.name}
                     </span>
-                    {selectedProvider === p.id && isConnected && (
-                      <span className="text-success bg-success/10 flex items-center gap-1 rounded px-1.5 py-0.5 text-xs">
-                        <Check className="h-3 w-3" />
-                        Connected
-                      </span>
-                    )}
                     {selectedProvider === p.id &&
                       generatePortalLink.isPending && (
                         <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
@@ -177,7 +145,7 @@ export function ConnectIdpStep({ onComplete, onSkip }: ConnectIdpStepProps) {
           )}
         </div>
 
-        {selectedProvider && !isConnected && !generatePortalLink.isPending && (
+        {selectedProvider && !generatePortalLink.isPending && (
           <div className="bg-secondary/50 border-border rounded-lg border p-4">
             <div className="flex items-start gap-3">
               <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
@@ -191,25 +159,6 @@ export function ConnectIdpStep({ onComplete, onSkip }: ConnectIdpStepProps) {
                   After clicking Connect, you will be redirected to configure
                   your {provider?.name} SSO connection. Once complete, you will
                   be returned to the next step automatically.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isConnected && (
-          <div className="bg-success/5 border-success/20 rounded-lg border p-4">
-            <div className="flex items-start gap-3">
-              <div className="bg-success/10 mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
-                <Check className="text-success h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-foreground text-sm font-medium">
-                  Setup portal opened
-                </p>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Complete the configuration in the WorkOS portal window. Once
-                  done, click Continue to proceed.
                 </p>
               </div>
             </div>
