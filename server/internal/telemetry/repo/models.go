@@ -208,6 +208,22 @@ type UserSummary struct {
 	HookSourceCounts map[string]uint64 `ch:"hook_source_counts"`
 }
 
+// EmployeeDataFlowRow represents an aggregated call-path tuple for an employee.
+// The service layer expands each tuple into graph nodes and edges, skipping tiers
+// that are empty for a given row. Endpoint is the originating endpoint identity
+// from telemetry, not the MCP server URL.
+type EmployeeDataFlowRow struct {
+	Endpoint    string `ch:"endpoint"`
+	Client      string `ch:"client"`
+	Server      string `ch:"server"`
+	ServerClass string `ch:"server_class"`
+	Tool        string `ch:"tool"`
+
+	CallCount    uint64 `ch:"call_count"`
+	SuccessCount uint64 `ch:"success_count"`
+	FailureCount uint64 `ch:"failure_count"`
+}
+
 // TimeSeriesBucket represents a single time bucket for time series metrics.
 // Used for plotting metrics over time in the observability overview.
 type TimeSeriesBucket struct {

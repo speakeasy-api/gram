@@ -220,6 +220,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetUserMetricsSummary", "type": "query"}`)
 	})
 
+	Method("getEmployeeDataFlowGraph", func() {
+		Description("Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetEmployeeDataFlowGraphPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetEmployeeDataFlowGraphResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getEmployeeDataFlowGraph")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getEmployeeDataFlowGraph")
+		Meta("openapi:extension:x-speakeasy-name-override", "getEmployeeDataFlowGraph")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetEmployeeDataFlowGraph", "type": "query"}`)
+	})
+
 	Method("getObservabilityOverview", func() {
 		Description("Get observability overview metrics including time series, tool breakdowns, and summary stats")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -987,6 +1016,63 @@ var GetUserMetricsSummaryResult = Type("GetUserMetricsSummaryResult", func() {
 	Attribute("metrics", ProjectSummaryType, "Aggregated metrics for the user")
 
 	Required("metrics")
+})
+
+// Employee data flow graph types
+
+var GetEmployeeDataFlowGraphPayload = Type("GetEmployeeDataFlowGraphPayload", func() {
+	Description("Payload for getting an employee-level MCP data flow graph")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("user_id", String, "User ID to get the graph for (mutually exclusive with external_user_id)")
+	Attribute("external_user_id", String, "External user ID to get the graph for (mutually exclusive with user_id)")
+
+	Required("from", "to")
+})
+
+var GetEmployeeDataFlowGraphResult = Type("GetEmployeeDataFlowGraphResult", func() {
+	Description("Result of employee data flow graph query")
+
+	Attribute("nodes", ArrayOf(EmployeeDataFlowNode), "Graph nodes grouped by tier")
+	Attribute("edges", ArrayOf(EmployeeDataFlowEdge), "Weighted graph edges between adjacent populated tiers")
+
+	Required("nodes", "edges")
+})
+
+var EmployeeDataFlowNode = Type("EmployeeDataFlowNode", func() {
+	Description("A node in the employee data flow graph")
+
+	Attribute("id", String, "Stable node ID")
+	Attribute("tier", String, "Graph tier. Endpoint nodes identify the originating device or client context from telemetry, not the MCP server URL.", func() {
+		Enum("endpoint", "client", "server", "tool")
+	})
+	Attribute("label", String, "Display label")
+	Attribute("total_calls", Int64, "Total calls involving this node")
+	Attribute("server_class", String, "Server classification, present for MCP server nodes", func() {
+		Enum("gram", "external", "local")
+	})
+
+	Required("id", "tier", "label", "total_calls")
+})
+
+var EmployeeDataFlowEdge = Type("EmployeeDataFlowEdge", func() {
+	Description("A weighted edge in the employee data flow graph")
+
+	Attribute("id", String, "Stable edge ID")
+	Attribute("source", String, "Source node ID")
+	Attribute("target", String, "Target node ID")
+	Attribute("call_count", Int64, "Total calls represented by this edge")
+	Attribute("success_count", Int64, "Successful calls represented by this edge")
+	Attribute("failure_count", Int64, "Failed or blocked calls represented by this edge")
+
+	Required("id", "source", "target", "call_count", "success_count", "failure_count")
 })
 
 // Observability Overview types

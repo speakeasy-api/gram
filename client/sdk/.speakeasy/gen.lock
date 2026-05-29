@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5eb2f2f238fef9b8b5bef2cdf4491edb
+  docChecksum: 73ab61fd67e8aa4d011ae180a3d3aec2
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -282,6 +282,10 @@ trackedFiles:
     last_write_checksum: sha1:d51c0ffed16ab9b7706cd9c7d439d66379aac4e7
   docs/models/components/effect.md:
     last_write_checksum: sha1:2ea3ae7c67eda161f0cf83077be58faa0c550f98
+  docs/models/components/employeedataflowedge.md:
+    last_write_checksum: sha1:4c9ff584bf87c232a96e954bc2a3bf0a39513fdb
+  docs/models/components/employeedataflownode.md:
+    last_write_checksum: sha1:afd349a0ea0f40408b3ca865d1466932225d1c5e
   docs/models/components/engine.md:
     last_write_checksum: sha1:011590e0a0948b257fe56e89b478e1576fdb488b
   docs/models/components/environment.md:
@@ -340,6 +344,10 @@ trackedFiles:
     last_write_checksum: sha1:dfd6ce6a7623292f2aa2837f9a1bc6e3723ec2da
   docs/models/components/getdeploymentresult.md:
     last_write_checksum: sha1:d071a02508f3cfd7908fdd374fa5fc6d6ee8376f
+  docs/models/components/getemployeedataflowgraphpayload.md:
+    last_write_checksum: sha1:e755120204e73c580dcee44fc08e17c7ce7c7fb7
+  docs/models/components/getemployeedataflowgraphresult.md:
+    last_write_checksum: sha1:c84589562bfa8b9bdb87a48b7def8e0f039aef51
   docs/models/components/gethookssummarypayload.md:
     last_write_checksum: sha1:304201edceca60e0da7f377e563c412674ca311e
   docs/models/components/gethookssummaryresult.md:
@@ -824,6 +832,8 @@ trackedFiles:
     last_write_checksum: sha1:e433f2544bc88fdc779ca174ecf2b7ea969d6e9f
   docs/models/components/serveimageform.md:
     last_write_checksum: sha1:530060f0cc468c392b1fd32052fc990c4a5c17c5
+  docs/models/components/serverclass.md:
+    last_write_checksum: sha1:974a1462df927f7814ebefd8735af1960ed6d6f7
   docs/models/components/servernameoverride.md:
     last_write_checksum: sha1:9283a4e62c88adf744657c62452b7f7c14c9a851
   docs/models/components/servervariable.md:
@@ -882,6 +892,8 @@ trackedFiles:
     last_write_checksum: sha1:5d600cc8329b5cabff595ac87ddc5c95b49e96b3
   docs/models/components/telemetrylogrecord.md:
     last_write_checksum: sha1:4fde4c28dc8b97fd22c471c1496d617c0f9787cb
+  docs/models/components/tier.md:
+    last_write_checksum: sha1:55756f0c74481d4e3028dfa2e23c93acb6acf4f1
   docs/models/components/tierlimits.md:
     last_write_checksum: sha1:8934fbccf0cc664f9548e491a89261f5a8b4f3c3
   docs/models/components/timeseriesbucket.md:
@@ -1584,6 +1596,14 @@ trackedFiles:
     last_write_checksum: sha1:7d0708fe31dfa77ba5c550b7245c428e2680ade6
   docs/models/operations/getdomainsecurity.md:
     last_write_checksum: sha1:c775e6a0e6e1eca9b8e6b3640763d1c20c5948cd
+  docs/models/operations/getemployeedataflowgraphrequest.md:
+    last_write_checksum: sha1:98c7cb78e4fe6408693fecaa8190e97549d2ac88
+  docs/models/operations/getemployeedataflowgraphsecurity.md:
+    last_write_checksum: sha1:bc1237f3fcb7b9084e679fbae352358ab9543a39
+  docs/models/operations/getemployeedataflowgraphsecurityoption1.md:
+    last_write_checksum: sha1:ca07f82ee9c115ae0880044301c700575a283f79
+  docs/models/operations/getemployeedataflowgraphsecurityoption2.md:
+    last_write_checksum: sha1:230210189dcdbbb77d8a14a43182ee2adb3dc449
   docs/models/operations/gethookssummaryrequest.md:
     last_write_checksum: sha1:a0c5d1371aad8d5bd7c2b276a855e9b0746de697
   docs/models/operations/gethookssummarysecurity.md:
@@ -2827,7 +2847,7 @@ trackedFiles:
   docs/sdks/slack/README.md:
     last_write_checksum: sha1:6b45aed94ea43bd45ec8d54f844bb070d1b8829f
   docs/sdks/telemetry/README.md:
-    last_write_checksum: sha1:56c113707303970594fb36dfbbb3dd296094377b
+    last_write_checksum: sha1:4e4d4e1de0311cbb7323aad0be0435901e8d93b5
   docs/sdks/templates/README.md:
     last_write_checksum: sha1:ef637e7fa604cc11f4cd5a22d4b3e478b47ad375
   docs/sdks/tools/README.md:
@@ -3432,6 +3452,8 @@ trackedFiles:
     id: e543750e348d
     last_write_checksum: sha1:f57746fdf53849458bd4f265e8c7296bf03a18c8
     pristine_git_object: 950b9802c810583a40e4408f5e0db1a0ed96e83c
+  src/funcs/telemetryGetEmployeeDataFlowGraph.ts:
+    last_write_checksum: sha1:1b10ff16f01e9969b6b05afe4e5f66db00e40fe3
   src/funcs/telemetryGetHooksSummary.ts:
     last_write_checksum: sha1:570c7637fbf4bb0f6b907687b5aae5a84155d9e9
   src/funcs/telemetryGetObservabilityOverview.ts:
@@ -3936,6 +3958,10 @@ trackedFiles:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/discoverremotesessionissuerrequestbody.ts:
     last_write_checksum: sha1:a5e07e068cde80ee4d9f385dce489b0567c7598b
+  src/models/components/employeedataflowedge.ts:
+    last_write_checksum: sha1:855573fcfb5701e2f15aac5936024cd55656ec32
+  src/models/components/employeedataflownode.ts:
+    last_write_checksum: sha1:73e86a5f403dc6d6802f80fd17a06317bf84b095
   src/models/components/environment.ts:
     id: c68cb95d8182
     last_write_checksum: sha1:c5af3e46aabad6dbcba00fbfec14734c2f5b7e3d
@@ -4018,6 +4044,10 @@ trackedFiles:
     id: c0fcda89f8a6
     last_write_checksum: sha1:984fe80d9be6dc99ae420ce5d2d3d0f13709d98b
     pristine_git_object: d1c8cfa0335d49d507da3c1b229a42e0012091c0
+  src/models/components/getemployeedataflowgraphpayload.ts:
+    last_write_checksum: sha1:215c61b6f1d4e2ff4a053cb859f34955f9f7fc51
+  src/models/components/getemployeedataflowgraphresult.ts:
+    last_write_checksum: sha1:256ca94ab3c0cd95e40db7b187ec41211704a4ae
   src/models/components/gethookssummarypayload.ts:
     last_write_checksum: sha1:69b331b52b5958d1a4276ae6c94d25631f4172c5
   src/models/components/gethookssummaryresult.ts:
@@ -4086,7 +4116,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:d2a97c1029b2b0505494320f281c1eb5f821f809
+    last_write_checksum: sha1:95de5ef12315b95cf0d236796267e4145aa25fe0
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -5074,6 +5104,8 @@ trackedFiles:
     id: 8eb93ffedf48
     last_write_checksum: sha1:8cb7090ee0a4ed648aa63eb10d10687100380158
     pristine_git_object: dbcbc3de01f5ba77308527d7ea6da20caf246297
+  src/models/operations/getemployeedataflowgraph.ts:
+    last_write_checksum: sha1:7fce6ad6dbc91ba01333e348ebb267fd3727b4c8
   src/models/operations/gethookssummary.ts:
     last_write_checksum: sha1:28d036479a6f8fea943a9460861f287b48cd0738
   src/models/operations/getinstance.ts:
@@ -5178,7 +5210,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:40cd725df20ee8cc1d930d392a0e478dabb30522
+    last_write_checksum: sha1:6863ab319cf0fb07dbf98ccbc477145ce1669e59
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5858,6 +5890,10 @@ trackedFiles:
     id: 2e1181d780cb
     last_write_checksum: sha1:1daf49b59be1a456b688e15615d294e916f330d4
     pristine_git_object: b4620c991936e515817d1c64102d9d48062ec9cd
+  src/react-query/getEmployeeDataFlowGraph.core.ts:
+    last_write_checksum: sha1:752b748c336f80d46a26b732e217b62b4aa4a2b0
+  src/react-query/getEmployeeDataFlowGraph.ts:
+    last_write_checksum: sha1:1e0e1667f804283d6ad61267b41fd1c5a461bf70
   src/react-query/getHooksSummary.core.ts:
     last_write_checksum: sha1:fb5c3f66f6db70a6921f34d310d386e070ce658c
   src/react-query/getHooksSummary.ts:
@@ -5966,7 +6002,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:61caed166a6a39aec444481247fa77f2d941b754
+    last_write_checksum: sha1:7c3989c56becb4ed6d0cbe0e17754e44da8a0bc1
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6750,7 +6786,7 @@ trackedFiles:
     pristine_git_object: d16d819fa66b8897901a9ca21562ae2f6aeeb581
   src/sdk/telemetry.ts:
     id: f916b9d9fdfc
-    last_write_checksum: sha1:b079eb436e66d28856b99eed3103037ffefc2ba2
+    last_write_checksum: sha1:ea6fa0ccc7932a9bd325e0988f8748f201eba12b
     pristine_git_object: 6daba3b204763bbe78967b2e29cbfadb6d01e1b5
   src/sdk/templates.ts:
     id: 4792df8a2835
@@ -10091,6 +10127,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getEmployeeDataFlowGraph:
+    speakeasy-default-get-employee-data-flow-graph:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"edges": [], "nodes": [{"id": "<id>", "label": "<value>", "tier": "endpoint", "total_calls": 265317}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

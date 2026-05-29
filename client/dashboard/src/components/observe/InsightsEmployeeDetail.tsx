@@ -1,4 +1,12 @@
-import { Icon } from "@speakeasy-api/moonshine";
+import { Badge, Icon, type IconName } from "@speakeasy-api/moonshine";
+import {
+  ArrowRight,
+  Boxes,
+  Globe,
+  type LucideIcon,
+  Laptop,
+  Maximize2,
+} from "lucide-react";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
@@ -6,13 +14,19 @@ import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
+import { telemetryGetEmployeeDataFlowGraph } from "@gram/client/funcs/telemetryGetEmployeeDataFlowGraph";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetUserMetricsSummary } from "@gram/client/funcs/telemetryGetUserMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import type {
+  EmployeeDataFlowNode,
+  GetEmployeeDataFlowGraphResult,
   GetObservabilityOverviewResult,
   ProjectSummary,
   TimeSeriesBucket,
@@ -20,6 +34,13 @@ import type {
 } from "@gram/client/models/components";
 import { useGramContext, useMembers } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
+import {
+  TimeRangePicker,
+  type DateRangePreset,
+  getPresetRange,
+} from "@gram-ai/elements";
+import { useSlugs } from "@/contexts/Sdk";
+import { formatDateRangeLabel } from "@/components/observe/useDateRangeFilter";
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -36,6 +57,22 @@ import { useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import { useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Background,
+  BaseEdge,
+  Controls,
+  Handle,
+  MarkerType,
+  MiniMap,
+  Position,
+  ReactFlow,
+  getBezierPath,
+  type Edge,
+  type EdgeProps,
+  type Node,
+  type NodeProps,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 
 ChartJS.register(
   CategoryScale,
@@ -48,7 +85,51 @@ ChartJS.register(
 );
 
 const CHART_COLOR = "#60a5fa";
-const LOOKBACK_DAYS = 30;
+const DATA_FLOW_TIER_ORDER: DataFlowTier[] = [
+  "user",
+  "endpoint",
+  "client",
+  "server",
+  "tool",
+];
+const DATA_FLOW_TIER_LABELS: Record<string, string> = {
+  user: "Employee",
+  endpoint: "Endpoint",
+  client: "MCP Client",
+  server: "MCP Server",
+  tool: "Tool",
+};
+const DATA_FLOW_TIER_ICONS: Record<string, IconName> = {
+  user: "user",
+  endpoint: "monitor",
+  client: "terminal",
+  server: "server",
+  tool: "wrench",
+};
+const DATA_FLOW_TIER_TONES: Record<string, string> = {
+  user: "bg-slate-500/10 text-slate-600 ring-slate-500/20",
+  endpoint: "bg-blue-500/10 text-blue-600 ring-blue-500/20",
+  client: "bg-purple-500/10 text-purple-600 ring-purple-500/20",
+  server: "bg-amber-500/10 text-amber-600 ring-amber-500/20",
+  tool: "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20",
+};
+const SYNTHETIC_USER_NODE_ID = "synthetic:user";
+const DATA_FLOW_TIER_MINIMAP_COLOR: Record<string, string> = {
+  user: "#64748b",
+  endpoint: "#3b82f6",
+  client: "#a855f7",
+  server: "#f59e0b",
+  tool: "#10b981",
+};
+const DATA_FLOW_EDGE_COLOR = "var(--color-muted-foreground)";
+const DATA_FLOW_EDGE_MARKER = {
+  type: MarkerType.ArrowClosed,
+  width: 9,
+  height: 9,
+  color: DATA_FLOW_EDGE_COLOR,
+};
+const DATA_FLOW_NODE_TYPES = { dataFlow: DataFlowNodeCard };
+const DATA_FLOW_EDGE_TYPES = { dataFlow: DataFlowEdgeLine };
 
 export function InsightsEmployeeDetailContent() {
   const { userSlug } = useParams<{ userSlug: string }>();
@@ -75,12 +156,41 @@ export function InsightsEmployeeDetailContent() {
     [members, routeUser, userSlug],
   );
 
-  const { from, to, timeRangeMs } = useMemo(() => {
-    const end = new Date();
-    const start = new Date(end);
-    start.setDate(start.getDate() - LOOKBACK_DAYS);
-    return { from: start, to: end, timeRangeMs: LOOKBACK_DAYS * 86_400_000 };
-  }, []);
+  const { projectSlug } = useSlugs();
+  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
+  const [customRange, setCustomRange] = useState<{
+    from: Date;
+    to: Date;
+  } | null>(null);
+  const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
+
+  const { from, to } = useMemo(
+    () => customRange ?? getPresetRange(dateRange),
+    [customRange, dateRange],
+  );
+  const timeRangeMs = to.getTime() - from.getTime();
+  const rangeLabel = useMemo(() => {
+    if (customRange) return customRangeLabel ?? "the selected range";
+    return formatDateRangeLabel(dateRange, null);
+  }, [customRange, customRangeLabel, dateRange]);
+
+  const handlePresetChange = (preset: DateRangePreset) => {
+    setDateRange(preset);
+    setCustomRange(null);
+    setCustomRangeLabel(null);
+  };
+  const handleCustomRangeChange = (
+    rangeFrom: Date,
+    rangeTo: Date,
+    label?: string,
+  ) => {
+    setCustomRange({ from: rangeFrom, to: rangeTo });
+    setCustomRangeLabel(label ?? null);
+  };
+  const handleClearCustomRange = () => {
+    setCustomRange(null);
+    setCustomRangeLabel(null);
+  };
 
   const fallbackUserQuery = useQuery({
     queryKey: [
@@ -139,9 +249,25 @@ export function InsightsEmployeeDetailContent() {
     throwOnError: false,
   });
 
+  const dataFlowQuery = useQuery({
+    queryKey: [
+      "insights",
+      "employee-detail",
+      "data-flow",
+      resolvedUserId,
+      from.toISOString(),
+      to.toISOString(),
+    ],
+    queryFn: () =>
+      fetchEmployeeDataFlowGraph(client, from, to, resolvedUserId!),
+    enabled: resolvedUserId != null,
+    throwOnError: false,
+  });
+
   const summary = summaryQuery.data ?? fallbackUserQuery.data ?? null;
   const metrics = metricsQuery.data;
   const overview = overviewQuery.data;
+  const dataFlow = dataFlowQuery.data;
   const timeSeries = overview?.timeSeries ?? [];
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
@@ -169,7 +295,7 @@ export function InsightsEmployeeDetailContent() {
           {
             title: "Usage Summary",
             label: "Summarize usage",
-            prompt: `Summarize the token and tool usage for ${displayName} (${displayEmail}) over the last ${LOOKBACK_DAYS} days.`,
+            prompt: `Summarize the token and tool usage for ${displayName} (${displayEmail}) over ${rangeLabel}.`,
           },
           {
             title: "Platform Breakdown",
@@ -180,18 +306,43 @@ export function InsightsEmployeeDetailContent() {
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div className="flex items-center gap-3">
-            <Avatar className="size-12">
-              {member?.photoUrl && (
-                <AvatarImage src={member.photoUrl} alt={displayName} />
-              )}
-              <AvatarFallback className="text-base font-semibold">
-                {getInitials(displayName)}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <h1 className="text-xl font-semibold">{displayName}</h1>
-              <p className="text-muted-foreground text-sm">{displayEmail}</p>
+          <div
+            className={cn(
+              "flex gap-4 transition-all duration-300",
+              isInsightsOpen
+                ? "flex-col items-stretch"
+                : "flex-row items-center justify-between",
+            )}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar className="size-12">
+                {member?.photoUrl && (
+                  <AvatarImage src={member.photoUrl} alt={displayName} />
+                )}
+                <AvatarFallback className="text-base font-semibold">
+                  {getInitials(displayName)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-semibold">
+                  {displayName}
+                </h1>
+                <p className="text-muted-foreground truncate text-sm">
+                  {displayEmail}
+                </p>
+              </div>
+            </div>
+            <div className={cn(isInsightsOpen ? "justify-start" : "shrink-0")}>
+              <TimeRangePicker
+                preset={customRange ? null : dateRange}
+                customRange={customRange}
+                customRangeLabel={customRangeLabel}
+                onPresetChange={handlePresetChange}
+                onCustomRangeChange={handleCustomRangeChange}
+                onClearCustomRange={handleClearCustomRange}
+                disabled={isLoading}
+                projectSlug={projectSlug}
+              />
             </div>
           </div>
 
@@ -227,7 +378,7 @@ export function InsightsEmployeeDetailContent() {
                   icon="credit-card"
                   subtext={
                     totalCost > 0
-                      ? `Last ${LOOKBACK_DAYS} days`
+                      ? `Over ${rangeLabel}`
                       : "No cost data reported"
                   }
                 />
@@ -268,6 +419,21 @@ export function InsightsEmployeeDetailContent() {
                   emptyLabel="No tool calls"
                 />
               </section>
+
+              {dataFlowQuery.error ? (
+                <ErrorAlert
+                  title="Unable to load employee data flow"
+                  error={dataFlowQuery.error}
+                />
+              ) : dataFlowQuery.isLoading ? (
+                <Skeleton className="h-[360px] rounded-lg" />
+              ) : (
+                <EmployeeDataFlowGraphCard
+                  graph={dataFlow ?? { nodes: [], edges: [] }}
+                  userName={displayName}
+                  userPhotoUrl={member?.photoUrl ?? undefined}
+                />
+              )}
 
               {metricsQuery.error ? (
                 <ErrorAlert
@@ -387,9 +553,806 @@ function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
         <Skeleton className="h-48 rounded-lg" />
       </section>
       <Skeleton className="h-40 rounded-lg" />
+      <Skeleton className="h-[360px] rounded-lg" />
       <Skeleton className="h-72 rounded-lg" />
     </>
   );
+}
+
+type DataFlowTier = EmployeeDataFlowNode["tier"] | "user";
+
+type DataFlowSourceNode = Omit<EmployeeDataFlowNode, "tier"> & {
+  tier: DataFlowTier;
+  photoUrl?: string;
+};
+
+type DataFlowNodeMetric = {
+  value: number;
+  successValue: number;
+  failureValue: number;
+};
+
+type DataFlowNodeData = {
+  node: DataFlowSourceNode;
+  variant?: "detail" | "summary";
+  tierCount?: number;
+  metric?: DataFlowNodeMetric;
+  serverClassCounts?: Partial<
+    Record<NonNullable<EmployeeDataFlowNode["serverClass"]>, number>
+  >;
+};
+
+type DataFlowEdgeData = {
+  callCount: number;
+  successCount: number;
+  failureCount: number;
+};
+
+type DataFlowGraphNode = Node<DataFlowNodeData, "dataFlow">;
+type DataFlowGraphEdge = Edge<DataFlowEdgeData, "dataFlow">;
+
+function EmployeeDataFlowGraphCard({
+  graph,
+  userName,
+  userPhotoUrl,
+}: {
+  graph: GetEmployeeDataFlowGraphResult;
+  userName: string;
+  userPhotoUrl?: string;
+}) {
+  const [expandedOpen, setExpandedOpen] = useState(false);
+  const sourceGraph = useMemo(
+    () => augmentGraphWithUser(graph, userName, userPhotoUrl),
+    [graph, userName, userPhotoUrl],
+  );
+  const summaryLayout = useMemo(
+    () => buildCollapsedDataFlowLayout(sourceGraph),
+    [sourceGraph],
+  );
+  const detailLayout = useMemo(
+    () => buildDataFlowLayout(sourceGraph),
+    [sourceGraph],
+  );
+  const hasData =
+    detailLayout.nodes.length > 0 && detailLayout.edges.length > 0;
+
+  return (
+    <section className="rounded-lg border p-4">
+      <DataFlowEdgeAnimationStyles />
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-semibold">Data Flow</h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            From devices to MCP clients, servers, and the tools they use.
+          </p>
+        </div>
+        {hasData && (
+          <button
+            type="button"
+            onClick={() => setExpandedOpen(true)}
+            className="text-muted-foreground hover:text-foreground rounded p-0.5 transition-colors"
+            aria-label="Expand graph"
+          >
+            <Maximize2 className="size-4" />
+          </button>
+        )}
+      </div>
+
+      {!hasData ? (
+        <div className="text-muted-foreground flex h-[280px] items-center justify-center text-sm">
+          No MCP tool-call flow data for selected time range
+        </div>
+      ) : (
+        <div className="bg-muted/20 mt-4 h-[240px] overflow-hidden rounded-lg border">
+          <ReactFlow<DataFlowGraphNode, DataFlowGraphEdge>
+            className="employee-data-flow-graph"
+            nodes={summaryLayout.nodes}
+            edges={summaryLayout.edges}
+            nodeTypes={DATA_FLOW_NODE_TYPES}
+            edgeTypes={DATA_FLOW_EDGE_TYPES}
+            fitView
+            fitViewOptions={{ padding: 0.3 }}
+            minZoom={0.5}
+            maxZoom={1.2}
+            zoomOnScroll={false}
+            zoomOnPinch={false}
+            panOnScroll={false}
+            panOnDrag={false}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+          >
+            <Background gap={24} size={1} />
+          </ReactFlow>
+        </div>
+      )}
+      <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
+        <Dialog.Content className="flex h-[90vh] max-h-[90vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-4 p-4 sm:max-w-[calc(100vw-2rem)]">
+          <Dialog.Header>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Dialog.Title>Data Flow</Dialog.Title>
+                <Dialog.Description>
+                  From devices to MCP clients, servers, and the tools they use.
+                </Dialog.Description>
+              </div>
+              <div className="mr-8 flex shrink-0 gap-2">
+                <ServerClassBadge serverClass="gram" />
+                <ServerClassBadge serverClass="external" />
+                <ServerClassBadge serverClass="local" />
+              </div>
+            </div>
+          </Dialog.Header>
+          <div className="bg-muted/20 min-h-0 flex-1 overflow-hidden rounded-lg border">
+            <ReactFlow<DataFlowGraphNode, DataFlowGraphEdge>
+              className="employee-data-flow-graph"
+              nodes={detailLayout.nodes}
+              edges={detailLayout.edges}
+              nodeTypes={DATA_FLOW_NODE_TYPES}
+              edgeTypes={DATA_FLOW_EDGE_TYPES}
+              fitView
+              fitViewOptions={{ padding: 0.16, maxZoom: 1.25 }}
+              minZoom={0.2}
+              maxZoom={1.6}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              elementsSelectable={false}
+            >
+              <Background gap={24} size={1} />
+              <MiniMap
+                pannable
+                zoomable
+                ariaLabel="Data flow minimap"
+                className="!bg-card !border-border rounded-md border"
+                maskColor="hsl(0 0% 50% / 0.12)"
+                nodeColor={getDataFlowMiniMapColor}
+                nodeStrokeWidth={2}
+              />
+              <Controls showInteractive={false} />
+            </ReactFlow>
+          </div>
+        </Dialog.Content>
+      </Dialog>
+    </section>
+  );
+}
+
+function DataFlowEdgeAnimationStyles() {
+  return (
+    <style>{`
+      @keyframes employee-data-flow-edge-dash {
+        to {
+          stroke-dashoffset: -11;
+        }
+      }
+
+      /* Interactions are disabled on the graph, which makes React Flow set
+         pointer-events: none on nodes. Re-enable it so node badge tooltips
+         can receive hover. */
+      .employee-data-flow-graph .react-flow__node {
+        pointer-events: auto !important;
+      }
+
+      .employee-data-flow-graph .react-flow__handle {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .employee-data-flow-edge {
+          animation: none !important;
+        }
+      }
+    `}</style>
+  );
+}
+
+function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
+  const node = data.node;
+  const isSummary = data.variant === "summary";
+  const isServer = node.tier === "server";
+  const icon = DATA_FLOW_TIER_ICONS[node.tier] ?? "circle";
+  const tone =
+    DATA_FLOW_TIER_TONES[node.tier] ??
+    "bg-muted text-muted-foreground ring-border";
+  const serverClassCounts = data.serverClassCounts
+    ? (Object.entries(data.serverClassCounts).filter(([, count]) =>
+        Boolean(count),
+      ) as [NonNullable<EmployeeDataFlowNode["serverClass"]>, number][])
+    : [];
+
+  return (
+    <div
+      className={cn(
+        "bg-card/95 border-border rounded-lg border shadow-sm backdrop-blur",
+        isSummary ? "max-w-64 min-w-56 p-4" : "max-w-56 min-w-48 p-3",
+      )}
+    >
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!border-background !bg-muted-foreground"
+      />
+      <div className="mb-2 flex items-center gap-2">
+        <DataFlowNodeVisual
+          node={node}
+          isSummary={isSummary}
+          tone={tone}
+          icon={icon}
+        />
+        <div className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+          {DATA_FLOW_TIER_LABELS[node.tier] ?? node.tier}
+        </div>
+      </div>
+      <div className="truncate text-sm font-semibold" title={node.label}>
+        {isSummary ? node.label : formatDataFlowNodeLabel(node)}
+      </div>
+      {(data.metric ||
+        (isSummary ? serverClassCounts.length > 0 : isServer)) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {data.metric && <DataFlowMetricBadge metric={data.metric} />}
+          {isSummary
+            ? serverClassCounts.map(([serverClass, count]) => (
+                <ServerClassBadge
+                  key={serverClass}
+                  serverClass={serverClass}
+                  count={count}
+                />
+              ))
+            : isServer && (
+                <ServerClassBadge
+                  serverClass={node.serverClass ?? "external"}
+                />
+              )}
+        </div>
+      )}
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!border-background !bg-muted-foreground"
+      />
+    </div>
+  );
+}
+
+function DataFlowMetricBadge({ metric }: { metric: DataFlowNodeMetric }) {
+  const tooltip = `${metric.value.toLocaleString()} calls received (${metric.successValue.toLocaleString()} ok / ${metric.failureValue.toLocaleString()} blocked)`;
+
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <Badge variant="neutral" background>
+        <Badge.LeftIcon>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Badge.LeftIcon>
+        <Badge.Text>{metric.value.toLocaleString()}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
+  );
+}
+
+function DataFlowNodeVisual({
+  node,
+  isSummary,
+  tone,
+  icon,
+}: {
+  node: DataFlowSourceNode;
+  isSummary: boolean;
+  tone: string;
+  icon: IconName;
+}) {
+  if (node.tier === "user") {
+    return (
+      <Avatar className="size-7">
+        {node.photoUrl && <AvatarImage src={node.photoUrl} alt={node.label} />}
+        <AvatarFallback className="text-[10px] font-semibold">
+          {getInitials(node.label)}
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
+
+  // Individual MCP client nodes show their product logo (Cursor, Claude, etc.).
+  if (node.tier === "client" && !isSummary) {
+    return (
+      <span className="border-border bg-background inline-flex size-7 items-center justify-center rounded-md border">
+        <HookSourceIcon source={node.label} className="size-4" />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex size-7 items-center justify-center rounded-md ring-1",
+        tone,
+      )}
+    >
+      <Icon name={icon} className="size-3.5" />
+    </span>
+  );
+}
+
+const SERVER_CLASS_BADGE_META: Record<
+  NonNullable<EmployeeDataFlowNode["serverClass"]>,
+  {
+    variant: "information" | "warning" | "success";
+    icon: LucideIcon;
+    tooltip: string;
+  }
+> = {
+  gram: {
+    variant: "information",
+    icon: Boxes,
+    tooltip: "Gram-hosted MCP server",
+  },
+  external: {
+    variant: "warning",
+    icon: Globe,
+    tooltip: "Third-party external MCP server",
+  },
+  local: {
+    variant: "success",
+    icon: Laptop,
+    tooltip: "Local MCP server running on the employee's device",
+  },
+};
+
+function ServerClassBadge({
+  serverClass,
+  count,
+}: {
+  serverClass: NonNullable<EmployeeDataFlowNode["serverClass"]>;
+  count?: number;
+}) {
+  const meta = SERVER_CLASS_BADGE_META[serverClass];
+  const ClassIcon = meta.icon;
+  const tooltip =
+    count !== undefined
+      ? `${count.toLocaleString()} ${serverClass} ${count === 1 ? "server" : "servers"} — ${meta.tooltip}`
+      : meta.tooltip;
+
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <Badge variant={meta.variant} background aria-label={meta.tooltip}>
+        <Badge.LeftIcon>
+          <ClassIcon className="h-3.5 w-3.5" />
+        </Badge.LeftIcon>
+        {count !== undefined && (
+          <Badge.Text>{count.toLocaleString()}</Badge.Text>
+        )}
+      </Badge>
+    </SimpleTooltip>
+  );
+}
+
+function DataFlowEdgeLine({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  style,
+}: EdgeProps<DataFlowGraphEdge>) {
+  const [edgePath] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  const edgeStyle = {
+    ...style,
+    strokeLinecap: "round" as const,
+    animation: "employee-data-flow-edge-dash 900ms linear infinite",
+  };
+
+  return (
+    <BaseEdge
+      id={id}
+      path={edgePath}
+      markerEnd={markerEnd}
+      style={edgeStyle}
+      className="employee-data-flow-edge"
+      interactionWidth={28}
+    />
+  );
+}
+
+type DataFlowSourceGraph = {
+  nodes: DataFlowSourceNode[];
+  edges: GetEmployeeDataFlowGraphResult["edges"];
+};
+
+function augmentGraphWithUser(
+  graph: GetEmployeeDataFlowGraphResult,
+  userName: string,
+  userPhotoUrl?: string,
+): DataFlowSourceGraph {
+  // Only keep nodes reachable forward from an endpoint (the entry tier). This
+  // drops dangling nodes such as an MCP client with no inbound connection, and
+  // anything that hangs off them.
+  const adjacency = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const targets = adjacency.get(edge.source) ?? [];
+    targets.push(edge.target);
+    adjacency.set(edge.source, targets);
+  }
+
+  const reachable = new Set<string>();
+  const queue = graph.nodes
+    .filter((node) => node.tier === "endpoint")
+    .map((node) => node.id);
+  for (const id of queue) reachable.add(id);
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    for (const target of adjacency.get(id) ?? []) {
+      if (!reachable.has(target)) {
+        reachable.add(target);
+        queue.push(target);
+      }
+    }
+  }
+
+  const nodes: DataFlowSourceNode[] = graph.nodes
+    .filter((node) => reachable.has(node.id))
+    .map((node) => ({ ...node }));
+  const edges = graph.edges
+    .filter((edge) => reachable.has(edge.source) && reachable.has(edge.target))
+    .map((edge) => ({ ...edge }));
+
+  const endpoints = nodes.filter((node) => node.tier === "endpoint");
+  if (endpoints.length === 0) return { nodes, edges };
+
+  const outcomeByEndpoint = new Map<
+    string,
+    { success: number; failure: number }
+  >();
+  for (const edge of graph.edges) {
+    const outcome = outcomeByEndpoint.get(edge.source) ?? {
+      success: 0,
+      failure: 0,
+    };
+    outcome.success += edge.successCount;
+    outcome.failure += edge.failureCount;
+    outcomeByEndpoint.set(edge.source, outcome);
+  }
+
+  const totalCalls = endpoints.reduce((sum, node) => sum + node.totalCalls, 0);
+  nodes.push({
+    id: SYNTHETIC_USER_NODE_ID,
+    label: userName || "Employee",
+    tier: "user",
+    totalCalls,
+    photoUrl: userPhotoUrl,
+  });
+
+  for (const endpoint of endpoints) {
+    const outcome = outcomeByEndpoint.get(endpoint.id) ?? {
+      success: endpoint.totalCalls,
+      failure: 0,
+    };
+    edges.push({
+      id: `synthetic:user->${endpoint.id}`,
+      source: SYNTHETIC_USER_NODE_ID,
+      target: endpoint.id,
+      callCount: endpoint.totalCalls,
+      successCount: outcome.success,
+      failureCount: outcome.failure,
+    });
+  }
+
+  return { nodes, edges };
+}
+
+function buildCollapsedDataFlowLayout(graph: DataFlowSourceGraph): {
+  nodes: DataFlowGraphNode[];
+  edges: DataFlowGraphEdge[];
+} {
+  const nodesByTier = groupDataFlowNodesByTier(graph.nodes);
+  const visibleTiers = DATA_FLOW_TIER_ORDER.filter((tier) =>
+    nodesByTier.has(tier),
+  );
+  const tierXGap = 280;
+
+  const edgeCountsByTierPair = new Map<
+    string,
+    { callCount: number; successCount: number; failureCount: number }
+  >();
+  const tierByNodeId = new Map(graph.nodes.map((node) => [node.id, node.tier]));
+  for (const edge of graph.edges) {
+    const sourceTier = tierByNodeId.get(edge.source);
+    const targetTier = tierByNodeId.get(edge.target);
+    if (!sourceTier || !targetTier || sourceTier === targetTier) continue;
+
+    const key = getTierPairKey(sourceTier, targetTier);
+    const counts = edgeCountsByTierPair.get(key) ?? {
+      callCount: 0,
+      successCount: 0,
+      failureCount: 0,
+    };
+    counts.callCount += edge.callCount;
+    counts.successCount += edge.successCount;
+    counts.failureCount += edge.failureCount;
+    edgeCountsByTierPair.set(key, counts);
+  }
+
+  const nodes: DataFlowGraphNode[] = visibleTiers.map((tier, index) => {
+    const tierNodes = nodesByTier.get(tier) ?? [];
+    const totalCalls = tierNodes.reduce(
+      (sum, node) => sum + node.totalCalls,
+      0,
+    );
+    const isUser = tier === "user";
+    const firstNode = tierNodes[0];
+    const previousTier = index > 0 ? visibleTiers[index - 1] : undefined;
+    const incoming = previousTier
+      ? edgeCountsByTierPair.get(getTierPairKey(previousTier, tier))
+      : undefined;
+
+    const metric: DataFlowNodeMetric | undefined =
+      !isUser && incoming
+        ? {
+            value: incoming.callCount,
+            successValue: incoming.successCount,
+            failureValue: incoming.failureCount,
+          }
+        : undefined;
+
+    return {
+      id: getAggregateDataFlowNodeId(tier),
+      type: "dataFlow",
+      position: {
+        x: index * tierXGap,
+        y: 0,
+      },
+      data: {
+        node: {
+          id: getAggregateDataFlowNodeId(tier),
+          label: isUser
+            ? (firstNode?.label ?? "Employee")
+            : formatAggregateTierLabel(tier, tierNodes.length),
+          tier,
+          totalCalls,
+          photoUrl: isUser ? firstNode?.photoUrl : undefined,
+        },
+        variant: "summary",
+        tierCount: tierNodes.length,
+        metric,
+        serverClassCounts:
+          tier === "server" ? getServerClassCounts(tierNodes) : undefined,
+      },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+    };
+  });
+
+  const aggregateEdges = visibleTiers.slice(0, -1).map((tier, index) => {
+    const nextTier = visibleTiers[index + 1]!;
+    const counts = edgeCountsByTierPair.get(getTierPairKey(tier, nextTier)) ?? {
+      callCount: 0,
+      successCount: 0,
+      failureCount: 0,
+    };
+
+    return {
+      id: `aggregate:${tier}->${nextTier}`,
+      source: getAggregateDataFlowNodeId(tier),
+      target: getAggregateDataFlowNodeId(nextTier),
+      callCount: counts.callCount,
+      successCount: counts.successCount,
+      failureCount: counts.failureCount,
+    };
+  });
+  const maxCalls = Math.max(...aggregateEdges.map((edge) => edge.callCount), 1);
+  const edges: DataFlowGraphEdge[] = aggregateEdges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    type: "dataFlow",
+    markerEnd: DATA_FLOW_EDGE_MARKER,
+    style: getDataFlowEdgeStyle(edge.callCount, maxCalls, 2),
+    data: {
+      callCount: edge.callCount,
+      successCount: edge.successCount,
+      failureCount: edge.failureCount,
+    },
+  }));
+
+  return { nodes, edges };
+}
+
+function buildDataFlowLayout(graph: DataFlowSourceGraph): {
+  nodes: DataFlowGraphNode[];
+  edges: DataFlowGraphEdge[];
+} {
+  const nodesByTier = groupDataFlowNodesByTier(graph.nodes);
+  const visibleTiers = DATA_FLOW_TIER_ORDER.filter((tier) =>
+    nodesByTier.has(tier),
+  );
+  // Tiers with many nodes (typically tools) wrap into multiple sub-columns so
+  // the graph stays compact instead of one very tall, sparse column.
+  const maxRowsPerColumn = 6;
+  const subColumnGap = 264;
+  const tierGap = 336;
+  const nodeYGap = 132;
+
+  const incomingSourcesByTarget = new Map<string, string[]>();
+  const incomingCallsByTarget = new Map<
+    string,
+    { callCount: number; successCount: number; failureCount: number }
+  >();
+  for (const edge of graph.edges) {
+    const sources = incomingSourcesByTarget.get(edge.target) ?? [];
+    sources.push(edge.source);
+    incomingSourcesByTarget.set(edge.target, sources);
+
+    const counts = incomingCallsByTarget.get(edge.target) ?? {
+      callCount: 0,
+      successCount: 0,
+      failureCount: 0,
+    };
+    counts.callCount += edge.callCount;
+    counts.successCount += edge.successCount;
+    counts.failureCount += edge.failureCount;
+    incomingCallsByTarget.set(edge.target, counts);
+  }
+
+  // Order each tier so connected nodes line up vertically with their sources
+  // (barycenter heuristic), which reduces edge crossings and empty-space edges.
+  const rowIndexByNode = new Map<string, number>();
+  const orderedNodesByTier = new Map<string, DataFlowSourceNode[]>();
+  const barycenter = (nodeId: string) => {
+    const sources = incomingSourcesByTarget.get(nodeId) ?? [];
+    const indices = sources
+      .map((source) => rowIndexByNode.get(source))
+      .filter((index): index is number => index !== undefined);
+    if (indices.length === 0) return Number.POSITIVE_INFINITY;
+    return indices.reduce((sum, index) => sum + index, 0) / indices.length;
+  };
+
+  visibleTiers.forEach((tier, tierIndex) => {
+    const tierNodes = (nodesByTier.get(tier) ?? []).slice();
+    tierNodes.sort((a, b) => {
+      if (tierIndex > 0) {
+        const diff = barycenter(a.id) - barycenter(b.id);
+        if (Number.isFinite(diff) && diff !== 0) return diff;
+      }
+      return b.totalCalls - a.totalCalls || a.label.localeCompare(b.label);
+    });
+    tierNodes.forEach((node, index) => rowIndexByNode.set(node.id, index));
+    orderedNodesByTier.set(tier, tierNodes);
+  });
+
+  // Pre-compute horizontal placement for each tier, accounting for tiers that
+  // wrap into multiple sub-columns (so later tiers shift right accordingly).
+  let cursorX = 0;
+  const placementByTier = new Map<
+    string,
+    { baseX: number; rowsPerColumn: number }
+  >();
+  for (const tier of visibleTiers) {
+    const count = orderedNodesByTier.get(tier)?.length ?? 0;
+    const subColumns = Math.max(1, Math.ceil(count / maxRowsPerColumn));
+    const rowsPerColumn = Math.max(1, Math.ceil(count / subColumns));
+    placementByTier.set(tier, { baseX: cursorX, rowsPerColumn });
+    cursorX += (subColumns - 1) * subColumnGap + tierGap;
+  }
+
+  const nodes: DataFlowGraphNode[] = visibleTiers.flatMap((tier) => {
+    const tierNodes = orderedNodesByTier.get(tier) ?? [];
+    const placement = placementByTier.get(tier)!;
+    const offset = ((placement.rowsPerColumn - 1) * nodeYGap) / 2;
+
+    return tierNodes.map((node, index) => {
+      const isUser = node.tier === "user";
+      const incoming = incomingCallsByTarget.get(node.id);
+      const metric: DataFlowNodeMetric | undefined =
+        !isUser && incoming
+          ? {
+              value: incoming.callCount,
+              successValue: incoming.successCount,
+              failureValue: incoming.failureCount,
+            }
+          : undefined;
+
+      const column = Math.floor(index / placement.rowsPerColumn);
+      const row = index % placement.rowsPerColumn;
+
+      return {
+        id: node.id,
+        type: "dataFlow" as const,
+        position: {
+          x: placement.baseX + column * subColumnGap,
+          y: row * nodeYGap - offset,
+        },
+        data: { node, variant: "detail" as const, metric },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+      };
+    });
+  });
+
+  const maxCalls = Math.max(...graph.edges.map((edge) => edge.callCount), 1);
+  const edges: DataFlowGraphEdge[] = graph.edges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    type: "dataFlow",
+    markerEnd: DATA_FLOW_EDGE_MARKER,
+    style: getDataFlowEdgeStyle(edge.callCount, maxCalls, 1.5),
+    data: {
+      callCount: edge.callCount,
+      successCount: edge.successCount,
+      failureCount: edge.failureCount,
+    },
+  }));
+
+  return { nodes, edges };
+}
+
+function getDataFlowMiniMapColor(node: DataFlowGraphNode) {
+  return DATA_FLOW_TIER_MINIMAP_COLOR[node.data.node.tier] ?? "#94a3b8";
+}
+
+function getDataFlowEdgeStyle(
+  callCount: number,
+  maxCalls: number,
+  minStrokeWidth: number,
+) {
+  return {
+    stroke: DATA_FLOW_EDGE_COLOR,
+    strokeDasharray: "5 6",
+    strokeWidth: Math.max(
+      minStrokeWidth,
+      Math.min(3, (callCount / maxCalls) * 3),
+    ),
+    opacity: 1,
+  };
+}
+
+function groupDataFlowNodesByTier(nodes: DataFlowSourceNode[]) {
+  const nodesByTier = new Map<string, DataFlowSourceNode[]>();
+  for (const node of nodes) {
+    const tierNodes = nodesByTier.get(node.tier) ?? [];
+    tierNodes.push(node);
+    nodesByTier.set(node.tier, tierNodes);
+  }
+
+  return nodesByTier;
+}
+
+function getAggregateDataFlowNodeId(tier: string) {
+  return `aggregate:${tier}`;
+}
+
+function getTierPairKey(sourceTier: string, targetTier: string) {
+  return `${sourceTier}->${targetTier}`;
+}
+
+function formatAggregateTierLabel(tier: string, count: number) {
+  const label = DATA_FLOW_TIER_LABELS[tier] ?? tier;
+  const suffix = count === 1 ? label : pluralizeDataFlowTierLabel(label);
+  return `${count.toLocaleString()} ${suffix}`;
+}
+
+function pluralizeDataFlowTierLabel(label: string) {
+  if (label.endsWith("y")) return `${label.slice(0, -1)}ies`;
+  return `${label}s`;
+}
+
+function getServerClassCounts(nodes: DataFlowSourceNode[]) {
+  return nodes.reduce<
+    Partial<Record<NonNullable<EmployeeDataFlowNode["serverClass"]>, number>>
+  >((counts, node) => {
+    const serverClass = node.serverClass ?? "external";
+    counts[serverClass] = (counts[serverClass] ?? 0) + 1;
+    return counts;
+  }, {});
 }
 
 function BreakdownCard({
@@ -664,6 +1627,23 @@ async function fetchUserOverview(
   );
 }
 
+async function fetchEmployeeDataFlowGraph(
+  client: Parameters<typeof telemetryGetEmployeeDataFlowGraph>[0],
+  from: Date,
+  to: Date,
+  userId: string,
+): Promise<GetEmployeeDataFlowGraphResult> {
+  return unwrapAsync(
+    telemetryGetEmployeeDataFlowGraph(client, {
+      getEmployeeDataFlowGraphPayload: {
+        from,
+        to,
+        userId,
+      },
+    }),
+  );
+}
+
 function unixNanoToDate(value: string) {
   const nanos = BigInt(value);
   const millis = Number(nanos / 1_000_000n);
@@ -681,4 +1661,42 @@ function formatPlatform(value: string) {
 function formatToolUrn(value: string) {
   const parts = value.split(/[/:]/).filter(Boolean);
   return parts[parts.length - 1] ?? value;
+}
+
+function formatDataFlowNodeLabel(node: DataFlowSourceNode) {
+  if (node.tier === "client") return formatPlatform(node.label);
+  if (node.tier === "tool") return formatToolUrn(node.label);
+  if (node.tier === "endpoint") return formatEndpointLabel(node.label);
+  if (node.tier === "server") return formatServerLabel(node);
+  return node.label;
+}
+
+const UUID_LIKE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function formatServerLabel(node: DataFlowSourceNode) {
+  if (UUID_LIKE_PATTERN.test(node.label)) {
+    const serverClass = node.serverClass ?? "external";
+    const shortId = node.label.slice(0, 8);
+    const prefix =
+      serverClass === "gram"
+        ? "Gram server"
+        : serverClass === "local"
+          ? "Local server"
+          : "MCP server";
+    return `${prefix} ${shortId}`;
+  }
+  return node.label;
+}
+
+function formatEndpointLabel(value: string) {
+  if (value === "local") return "local";
+  if (/^https?:\/\//.test(value)) {
+    try {
+      return new URL(value).hostname || value;
+    } catch {
+      return value;
+    }
+  }
+  return value;
 }

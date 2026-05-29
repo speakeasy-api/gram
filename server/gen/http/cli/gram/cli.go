@@ -111,7 +111,7 @@ func UsageCommands() []string {
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer)",
@@ -1454,6 +1454,12 @@ func ParseEndpoint(
 		telemetryGetUserMetricsSummarySessionTokenFlag     = telemetryGetUserMetricsSummaryFlags.String("session-token", "", "")
 		telemetryGetUserMetricsSummaryProjectSlugInputFlag = telemetryGetUserMetricsSummaryFlags.String("project-slug-input", "", "")
 
+		telemetryGetEmployeeDataFlowGraphFlags                = flag.NewFlagSet("get-employee-data-flow-graph", flag.ExitOnError)
+		telemetryGetEmployeeDataFlowGraphBodyFlag             = telemetryGetEmployeeDataFlowGraphFlags.String("body", "REQUIRED", "")
+		telemetryGetEmployeeDataFlowGraphApikeyTokenFlag      = telemetryGetEmployeeDataFlowGraphFlags.String("apikey-token", "", "")
+		telemetryGetEmployeeDataFlowGraphSessionTokenFlag     = telemetryGetEmployeeDataFlowGraphFlags.String("session-token", "", "")
+		telemetryGetEmployeeDataFlowGraphProjectSlugInputFlag = telemetryGetEmployeeDataFlowGraphFlags.String("project-slug-input", "", "")
+
 		telemetryGetObservabilityOverviewFlags                = flag.NewFlagSet("get-observability-overview", flag.ExitOnError)
 		telemetryGetObservabilityOverviewBodyFlag             = telemetryGetObservabilityOverviewFlags.String("body", "REQUIRED", "")
 		telemetryGetObservabilityOverviewApikeyTokenFlag      = telemetryGetObservabilityOverviewFlags.String("apikey-token", "", "")
@@ -2098,6 +2104,7 @@ func ParseEndpoint(
 	telemetryCaptureEventFlags.Usage = telemetryCaptureEventUsage
 	telemetryGetProjectMetricsSummaryFlags.Usage = telemetryGetProjectMetricsSummaryUsage
 	telemetryGetUserMetricsSummaryFlags.Usage = telemetryGetUserMetricsSummaryUsage
+	telemetryGetEmployeeDataFlowGraphFlags.Usage = telemetryGetEmployeeDataFlowGraphUsage
 	telemetryGetObservabilityOverviewFlags.Usage = telemetryGetObservabilityOverviewUsage
 	telemetryGetProjectOverviewFlags.Usage = telemetryGetProjectOverviewUsage
 	telemetryListFilterOptionsFlags.Usage = telemetryListFilterOptionsUsage
@@ -3133,6 +3140,9 @@ func ParseEndpoint(
 
 			case "get-user-metrics-summary":
 				epf = telemetryGetUserMetricsSummaryFlags
+
+			case "get-employee-data-flow-graph":
+				epf = telemetryGetEmployeeDataFlowGraphFlags
 
 			case "get-observability-overview":
 				epf = telemetryGetObservabilityOverviewFlags
@@ -4206,6 +4216,9 @@ func ParseEndpoint(
 			case "get-user-metrics-summary":
 				endpoint = c.GetUserMetricsSummary()
 				data, err = telemetryc.BuildGetUserMetricsSummaryPayload(*telemetryGetUserMetricsSummaryBodyFlag, *telemetryGetUserMetricsSummaryApikeyTokenFlag, *telemetryGetUserMetricsSummarySessionTokenFlag, *telemetryGetUserMetricsSummaryProjectSlugInputFlag)
+			case "get-employee-data-flow-graph":
+				endpoint = c.GetEmployeeDataFlowGraph()
+				data, err = telemetryc.BuildGetEmployeeDataFlowGraphPayload(*telemetryGetEmployeeDataFlowGraphBodyFlag, *telemetryGetEmployeeDataFlowGraphApikeyTokenFlag, *telemetryGetEmployeeDataFlowGraphSessionTokenFlag, *telemetryGetEmployeeDataFlowGraphProjectSlugInputFlag)
 			case "get-observability-overview":
 				endpoint = c.GetObservabilityOverview()
 				data, err = telemetryc.BuildGetObservabilityOverviewPayload(*telemetryGetObservabilityOverviewBodyFlag, *telemetryGetObservabilityOverviewApikeyTokenFlag, *telemetryGetObservabilityOverviewSessionTokenFlag, *telemetryGetObservabilityOverviewProjectSlugInputFlag)
@@ -10000,6 +10013,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    capture-event: Capture a telemetry event and forward it to PostHog`)
 	fmt.Fprintln(os.Stderr, `    get-project-metrics-summary: Get aggregated metrics summary for an entire project`)
 	fmt.Fprintln(os.Stderr, `    get-user-metrics-summary: Get aggregated metrics summary grouped by user`)
+	fmt.Fprintln(os.Stderr, `    get-employee-data-flow-graph: Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools`)
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
 	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    list-filter-options: List available filter options (API keys or users) for the observability overview`)
@@ -10178,6 +10192,30 @@ func telemetryGetUserMetricsSummaryUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-user-metrics-summary --body '{\n      \"event_source\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetEmployeeDataFlowGraphUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-employee-data-flow-graph", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an employee's MCP data flow graph across endpoint identities, clients, servers, and tools`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-employee-data-flow-graph --body '{\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetObservabilityOverviewUsage() {

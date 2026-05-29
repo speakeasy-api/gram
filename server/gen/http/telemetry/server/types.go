@@ -114,6 +114,19 @@ type GetUserMetricsSummaryRequestBody struct {
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 }
 
+// GetEmployeeDataFlowGraphRequestBody is the type of the "telemetry" service
+// "getEmployeeDataFlowGraph" endpoint HTTP request body.
+type GetEmployeeDataFlowGraphRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// User ID to get the graph for (mutually exclusive with external_user_id)
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// External user ID to get the graph for (mutually exclusive with user_id)
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+}
+
 // GetObservabilityOverviewRequestBody is the type of the "telemetry" service
 // "getObservabilityOverview" endpoint HTTP request body.
 type GetObservabilityOverviewRequestBody struct {
@@ -260,6 +273,15 @@ type GetProjectMetricsSummaryResponseBody struct {
 type GetUserMetricsSummaryResponseBody struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummaryResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
+}
+
+// GetEmployeeDataFlowGraphResponseBody is the type of the "telemetry" service
+// "getEmployeeDataFlowGraph" endpoint HTTP response body.
+type GetEmployeeDataFlowGraphResponseBody struct {
+	// Graph nodes grouped by tier
+	Nodes []*EmployeeDataFlowNodeResponseBody `form:"nodes" json:"nodes" xml:"nodes"`
+	// Weighted graph edges between adjacent populated tiers
+	Edges []*EmployeeDataFlowEdgeResponseBody `form:"edges" json:"edges" xml:"edges"`
 }
 
 // GetObservabilityOverviewResponseBody is the type of the "telemetry" service
@@ -1628,6 +1650,196 @@ type GetUserMetricsSummaryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetEmployeeDataFlowGraphUnauthorizedResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetEmployeeDataFlowGraphUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphForbiddenResponseBody is the type of the "telemetry"
+// service "getEmployeeDataFlowGraph" endpoint HTTP response body for the
+// "forbidden" error.
+type GetEmployeeDataFlowGraphForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphBadRequestResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "bad_request" error.
+type GetEmployeeDataFlowGraphBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphNotFoundResponseBody is the type of the "telemetry"
+// service "getEmployeeDataFlowGraph" endpoint HTTP response body for the
+// "not_found" error.
+type GetEmployeeDataFlowGraphNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphConflictResponseBody is the type of the "telemetry"
+// service "getEmployeeDataFlowGraph" endpoint HTTP response body for the
+// "conflict" error.
+type GetEmployeeDataFlowGraphConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetEmployeeDataFlowGraphUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphInvalidResponseBody is the type of the "telemetry"
+// service "getEmployeeDataFlowGraph" endpoint HTTP response body for the
+// "invalid" error.
+type GetEmployeeDataFlowGraphInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphInvariantViolationResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetEmployeeDataFlowGraphInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphUnexpectedResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "unexpected" error.
+type GetEmployeeDataFlowGraphUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEmployeeDataFlowGraphGatewayErrorResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetEmployeeDataFlowGraphGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetObservabilityOverviewUnauthorizedResponseBody is the type of the
 // "telemetry" service "getObservabilityOverview" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -2979,6 +3191,39 @@ type ModelUsageResponseBody struct {
 	Count int64 `form:"count" json:"count" xml:"count"`
 }
 
+// EmployeeDataFlowNodeResponseBody is used to define fields on response body
+// types.
+type EmployeeDataFlowNodeResponseBody struct {
+	// Stable node ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Graph tier. Endpoint nodes identify the originating device or client context
+	// from telemetry, not the MCP server URL.
+	Tier string `form:"tier" json:"tier" xml:"tier"`
+	// Display label
+	Label string `form:"label" json:"label" xml:"label"`
+	// Total calls involving this node
+	TotalCalls int64 `form:"total_calls" json:"total_calls" xml:"total_calls"`
+	// Server classification, present for MCP server nodes
+	ServerClass *string `form:"server_class,omitempty" json:"server_class,omitempty" xml:"server_class,omitempty"`
+}
+
+// EmployeeDataFlowEdgeResponseBody is used to define fields on response body
+// types.
+type EmployeeDataFlowEdgeResponseBody struct {
+	// Stable edge ID
+	ID string `form:"id" json:"id" xml:"id"`
+	// Source node ID
+	Source string `form:"source" json:"source" xml:"source"`
+	// Target node ID
+	Target string `form:"target" json:"target" xml:"target"`
+	// Total calls represented by this edge
+	CallCount int64 `form:"call_count" json:"call_count" xml:"call_count"`
+	// Successful calls represented by this edge
+	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
+	// Failed or blocked calls represented by this edge
+	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+}
+
 // ObservabilitySummaryResponseBody is used to define fields on response body
 // types.
 type ObservabilitySummaryResponseBody struct {
@@ -3471,6 +3716,38 @@ func NewGetUserMetricsSummaryResponseBody(res *telemetry.GetUserMetricsSummaryRe
 	body := &GetUserMetricsSummaryResponseBody{}
 	if res.Metrics != nil {
 		body.Metrics = marshalTelemetryProjectSummaryToProjectSummaryResponseBody(res.Metrics)
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphResponseBody builds the HTTP response body from
+// the result of the "getEmployeeDataFlowGraph" endpoint of the "telemetry"
+// service.
+func NewGetEmployeeDataFlowGraphResponseBody(res *telemetry.GetEmployeeDataFlowGraphResult) *GetEmployeeDataFlowGraphResponseBody {
+	body := &GetEmployeeDataFlowGraphResponseBody{}
+	if res.Nodes != nil {
+		body.Nodes = make([]*EmployeeDataFlowNodeResponseBody, len(res.Nodes))
+		for i, val := range res.Nodes {
+			if val == nil {
+				body.Nodes[i] = nil
+				continue
+			}
+			body.Nodes[i] = marshalTelemetryEmployeeDataFlowNodeToEmployeeDataFlowNodeResponseBody(val)
+		}
+	} else {
+		body.Nodes = []*EmployeeDataFlowNodeResponseBody{}
+	}
+	if res.Edges != nil {
+		body.Edges = make([]*EmployeeDataFlowEdgeResponseBody, len(res.Edges))
+		for i, val := range res.Edges {
+			if val == nil {
+				body.Edges[i] = nil
+				continue
+			}
+			body.Edges[i] = marshalTelemetryEmployeeDataFlowEdgeToEmployeeDataFlowEdgeResponseBody(val)
+		}
+	} else {
+		body.Edges = []*EmployeeDataFlowEdgeResponseBody{}
 	}
 	return body
 }
@@ -4692,6 +4969,156 @@ func NewGetUserMetricsSummaryGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
+// NewGetEmployeeDataFlowGraphUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getEmployeeDataFlowGraph" endpoint of the
+// "telemetry" service.
+func NewGetEmployeeDataFlowGraphUnauthorizedResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphUnauthorizedResponseBody {
+	body := &GetEmployeeDataFlowGraphUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphForbiddenResponseBody builds the HTTP response
+// body from the result of the "getEmployeeDataFlowGraph" endpoint of the
+// "telemetry" service.
+func NewGetEmployeeDataFlowGraphForbiddenResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphForbiddenResponseBody {
+	body := &GetEmployeeDataFlowGraphForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphBadRequestResponseBody builds the HTTP response
+// body from the result of the "getEmployeeDataFlowGraph" endpoint of the
+// "telemetry" service.
+func NewGetEmployeeDataFlowGraphBadRequestResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphBadRequestResponseBody {
+	body := &GetEmployeeDataFlowGraphBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphNotFoundResponseBody builds the HTTP response
+// body from the result of the "getEmployeeDataFlowGraph" endpoint of the
+// "telemetry" service.
+func NewGetEmployeeDataFlowGraphNotFoundResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphNotFoundResponseBody {
+	body := &GetEmployeeDataFlowGraphNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphConflictResponseBody builds the HTTP response
+// body from the result of the "getEmployeeDataFlowGraph" endpoint of the
+// "telemetry" service.
+func NewGetEmployeeDataFlowGraphConflictResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphConflictResponseBody {
+	body := &GetEmployeeDataFlowGraphConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getEmployeeDataFlowGraph" endpoint of
+// the "telemetry" service.
+func NewGetEmployeeDataFlowGraphUnsupportedMediaResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphUnsupportedMediaResponseBody {
+	body := &GetEmployeeDataFlowGraphUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphInvalidResponseBody builds the HTTP response body
+// from the result of the "getEmployeeDataFlowGraph" endpoint of the
+// "telemetry" service.
+func NewGetEmployeeDataFlowGraphInvalidResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphInvalidResponseBody {
+	body := &GetEmployeeDataFlowGraphInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getEmployeeDataFlowGraph" endpoint of
+// the "telemetry" service.
+func NewGetEmployeeDataFlowGraphInvariantViolationResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphInvariantViolationResponseBody {
+	body := &GetEmployeeDataFlowGraphInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getEmployeeDataFlowGraph" endpoint of the
+// "telemetry" service.
+func NewGetEmployeeDataFlowGraphUnexpectedResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphUnexpectedResponseBody {
+	body := &GetEmployeeDataFlowGraphUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getEmployeeDataFlowGraph" endpoint of the
+// "telemetry" service.
+func NewGetEmployeeDataFlowGraphGatewayErrorResponseBody(res *goa.ServiceError) *GetEmployeeDataFlowGraphGatewayErrorResponseBody {
+	body := &GetEmployeeDataFlowGraphGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetObservabilityOverviewUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "getObservabilityOverview" endpoint of the
 // "telemetry" service.
@@ -5746,6 +6173,22 @@ func NewGetUserMetricsSummaryPayload(body *GetUserMetricsSummaryRequestBody, api
 	return v
 }
 
+// NewGetEmployeeDataFlowGraphPayload builds a telemetry service
+// getEmployeeDataFlowGraph endpoint payload.
+func NewGetEmployeeDataFlowGraphPayload(body *GetEmployeeDataFlowGraphRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetEmployeeDataFlowGraphPayload {
+	v := &telemetry.GetEmployeeDataFlowGraphPayload{
+		From:           *body.From,
+		To:             *body.To,
+		UserID:         body.UserID,
+		ExternalUserID: body.ExternalUserID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetObservabilityOverviewPayload builds a telemetry service
 // getObservabilityOverview endpoint payload.
 func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetObservabilityOverviewPayload {
@@ -6063,6 +6506,24 @@ func ValidateGetProjectMetricsSummaryRequestBody(body *GetProjectMetricsSummaryR
 // ValidateGetUserMetricsSummaryRequestBody runs the validations defined on
 // GetUserMetricsSummaryRequestBody
 func ValidateGetUserMetricsSummaryRequestBody(body *GetUserMetricsSummaryRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphRequestBody runs the validations defined on
+// GetEmployeeDataFlowGraphRequestBody
+func ValidateGetEmployeeDataFlowGraphRequestBody(body *GetEmployeeDataFlowGraphRequestBody) (err error) {
 	if body.From == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
 	}

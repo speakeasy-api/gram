@@ -90,6 +90,7 @@ export * from "./getassistantmemory.js";
 export * from "./getdeployment.js";
 export * from "./getdeploymentlogs.js";
 export * from "./getdomain.js";
+export * from "./getemployeedataflowgraph.js";
 export * from "./gethookssummary.js";
 export * from "./getinstance.js";
 export * from "./getlatestdeployment.js";

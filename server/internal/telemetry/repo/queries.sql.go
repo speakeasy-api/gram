@@ -1422,6 +1422,86 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	return &metrics, nil
 }
 
+// GetEmployeeDataFlowGraphParams contains parameters for getting an employee data flow graph.
+type GetEmployeeDataFlowGraphParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	UserID         string // user_id (mutually exclusive with ExternalUserID)
+	ExternalUserID string // external_user_id (mutually exclusive with UserID)
+}
+
+// GetEmployeeDataFlowGraph aggregates an employee's tool-call telemetry into
+// path tuples: endpoint identity -> MCP client -> MCP server -> tool.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeDataFlowGraphParams) ([]EmployeeDataFlowRow, error) {
+	externalMCPNameExpr := "multiIf(toString(attributes.gram.external_mcp.name) != '', toString(attributes.gram.external_mcp.name), toString(attributes.gram.external_mcp.slug) != '', toString(attributes.gram.external_mcp.slug), toString(attributes.gram.external_mcp.id) != '', toString(attributes.gram.external_mcp.id), '')"
+	endpointExpr := "multiIf(toString(attributes.gram.endpoint.hostname) != '', toString(attributes.gram.endpoint.hostname), toString(attributes.gram.endpoint.id) != '', toString(attributes.gram.endpoint.id), toString(attributes.http.request.header.user_agent) != '', toString(attributes.http.request.header.user_agent), '')"
+	urnSourceExpr := "arrayElement(splitByChar(':', gram_urn), 3)"
+	serverExpr := fmt.Sprintf("multiIf(remote_mcp_server_id != '', multiIf(tool_source != '', tool_source, %s != '', %s, remote_mcp_server_id), %s != '', %s, toString(attributes.gram.mcp.match) != '', toString(attributes.gram.mcp.match), tool_source != '', tool_source, startsWith(gram_urn, 'tools:'), %s, 'local')", externalMCPNameExpr, externalMCPNameExpr, externalMCPNameExpr, externalMCPNameExpr, urnSourceExpr)
+	serverClassExpr := fmt.Sprintf("multiIf(remote_mcp_server_id != '' OR (startsWith(gram_urn, 'tools:') AND event_source != 'hook'), 'gram', %s != '' OR toString(attributes.gram.mcp.server_url) != '' OR toString(attributes.gram.mcp.match) != '', 'external', %s = 'local', 'local', tool_source = '', 'local', 'external')", externalMCPNameExpr, serverExpr)
+	clientExpr := "multiIf(hook_source != '', hook_source, event_source != '', event_source, 'unknown')"
+	toolExpr := "multiIf(tool_name != '', tool_name, gram_urn != '', gram_urn, urn != '', urn, '')"
+
+	hookCallExpr := "event_source = 'hook' AND tool_name != '' AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')"
+	gramCallExpr := "event_source != 'hook' AND startsWith(gram_urn, 'tools:')"
+	callExpr := fmt.Sprintf("((%s) OR (%s))", hookCallExpr, gramCallExpr)
+	successExpr := fmt.Sprintf("((event_source = 'hook' AND tool_name != '' AND toString(attributes.gram.hook.event) = 'PostToolUse') OR (%s AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300))", gramCallExpr)
+	failureExpr := fmt.Sprintf("((event_source = 'hook' AND tool_name != '' AND toString(attributes.gram.hook.event) = 'PostToolUseFailure') OR (%s AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))", gramCallExpr)
+
+	sb := sq.Select(
+		endpointExpr+" AS endpoint",
+		clientExpr+" AS client",
+		serverExpr+" AS server",
+		serverClassExpr+" AS server_class",
+		toolExpr+" AS tool",
+		"count() AS call_count",
+		"countIf("+successExpr+") AS success_count",
+		"countIf("+failureExpr+") AS failure_count",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(callExpr)
+
+	if arg.UserID != "" {
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
+	} else if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
+	}
+
+	sb = sb.GroupBy("endpoint", "client", "server", "server_class", "tool").
+		OrderBy("call_count DESC").
+		Limit(1000)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get employee data flow graph query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	graphRows := []EmployeeDataFlowRow{}
+	for rows.Next() {
+		var row EmployeeDataFlowRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		graphRows = append(graphRows, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return graphRows, nil
+}
+
 // ListFilterOptionsParams contains the parameters for listing filter options.
 type ListFilterOptionsParams struct {
 	GramProjectID string
