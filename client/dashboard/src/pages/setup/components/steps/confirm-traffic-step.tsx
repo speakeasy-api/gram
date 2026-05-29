@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Activity,
-  AlertTriangle,
-  Check,
-  Loader2,
-  PartyPopper,
-} from "lucide-react";
+import { Activity, Loader2, PartyPopper } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query";
 import type { OnboardingHookEvent } from "@gram/client/models/components";
 import { StepContainer } from "../step-container";
-import { cn } from "@/lib/utils";
 
 interface ConfirmTrafficStepProps {
   onComplete: () => void;
@@ -17,7 +11,27 @@ interface ConfirmTrafficStepProps {
 }
 
 const POLL_INTERVAL_MS = 2000;
-const MAX_EVENTS_SHOWN = 20;
+const MAX_EVENTS_SHOWN = 8;
+// Spacing between visible event arrivals. When a poll returns multiple new
+// events, we queue them and play one in every PLAYBACK_INTERVAL_MS so the
+// sliding-window animation reads cleanly (1 in, 1 out) instead of a cascade.
+const PLAYBACK_INTERVAL_MS = 400;
+// Each event row occupies this many pixels. Rows are absolutely positioned so
+// the slide-down animation translates every row by exactly this much in one
+// synchronized tween — no document reflow involved.
+const ROW_HEIGHT = 32;
+
+const SOURCE_ICONS: Record<string, string> = {
+  claude_code: "/icons/platforms/claude.svg",
+  cursor: "/icons/platforms/cursor.svg",
+  codex: "/icons/platforms/openai.svg",
+};
+
+function eventKey(ev: OnboardingHookEvent): string {
+  // Composite stable key: nano timestamp + tool name + user — uniquely
+  // identifies an event without depending on its position in the array.
+  return `${ev.timeUnixNano}|${ev.toolName ?? ""}|${ev.userEmail ?? ""}|${ev.chatId ?? ""}`;
+}
 
 function sourceLabel(source: string): string {
   switch (source) {
@@ -61,10 +75,27 @@ export function ConfirmTrafficStep({
   const [events, setEvents] = useState<OnboardingHookEvent[]>([]);
   const [totalReceived, setTotalReceived] = useState(0);
   const [now, setNow] = useState(Date.now());
+  // Pending playback queue — newest events from polls land here and drain into
+  // `events` one at a time via the playback interval.
+  const queueRef = useRef<OnboardingHookEvent[]>([]);
+  const seenKeysRef = useRef<Set<string>>(new Set());
 
   // Tick "now" every second so relative timestamps stay fresh.
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Drain the playback queue one event at a time so the sliding window
+  // animation can be observed per arrival, even when bursts deliver many at
+  // once.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (queueRef.current.length === 0) return;
+      const next = queueRef.current.shift();
+      if (!next) return;
+      setEvents((prev) => [next, ...prev].slice(0, MAX_EVENTS_SHOWN));
+    }, PLAYBACK_INTERVAL_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -74,15 +105,23 @@ export function ConfirmTrafficStep({
     { refetchInterval: POLL_INTERVAL_MS },
   );
 
-  // Accumulate new events as polls return them and advance the cursor.
+  // Enqueue new events from each poll. Oldest of the batch is played back
+  // first so visual order matches arrival order (newest still ends up at top).
   useEffect(() => {
     if (!query.data) return;
     const data = query.data;
     if (data.events.length === 0) return;
-    setEvents((prev) =>
-      [...data.events, ...prev].slice(0, MAX_EVENTS_SHOWN * 2),
-    );
-    setTotalReceived((prev) => prev + data.events.length);
+    const fresh = data.events.filter((e) => {
+      const k = eventKey(e);
+      if (seenKeysRef.current.has(k)) return false;
+      seenKeysRef.current.add(k);
+      return true;
+    });
+    if (fresh.length === 0) return;
+    // API returns newest-first; reverse so we enqueue oldest-first and the
+    // newest event still ends up at the top of the visible stack.
+    queueRef.current.push(...[...fresh].reverse());
+    setTotalReceived((prev) => prev + fresh.length);
     if (data.latestUnixNano && data.latestUnixNano !== "0") {
       setCursor(data.latestUnixNano);
     }
@@ -92,7 +131,9 @@ export function ConfirmTrafficStep({
     query.isLoading && events.length === 0 && totalReceived === 0;
   const hasEvents = totalReceived > 0;
 
-  const displayed = useMemo(() => events.slice(0, MAX_EVENTS_SHOWN), [events]);
+  // FIFO ring: newest at top, capped at MAX_EVENTS_SHOWN. Eviction is driven
+  // by new arrivals (state-level slice), not by age.
+  const displayed = events;
 
   if (initialLoading) {
     return (
@@ -140,83 +181,70 @@ export function ConfirmTrafficStep({
       onBack={onBack}
     >
       <div className="space-y-6">
-        <div
-          className={cn(
-            "rounded-lg border p-6",
-            hasEvents
-              ? "border-success/20 bg-success/5"
-              : "border-destructive/20 bg-destructive/5",
-          )}
-        >
-          <div className="flex items-center gap-4">
-            <div
-              className={cn(
-                "flex h-14 w-14 items-center justify-center rounded-full",
-                hasEvents ? "bg-success" : "bg-destructive",
-              )}
-            >
-              {hasEvents ? (
-                <Check className="text-background h-7 w-7" />
-              ) : (
-                <AlertTriangle className="text-background h-7 w-7" />
-              )}
-            </div>
-            <div>
-              <p className="text-foreground text-xl font-semibold">
-                {hasEvents
-                  ? `${totalReceived} event${totalReceived === 1 ? "" : "s"} received`
-                  : "Waiting for first event"}
-              </p>
-              <p className="text-muted-foreground">
-                {hasEvents
-                  ? "Hooks are flowing into Gram from your configured agents."
-                  : "Start a Claude Code, Cursor, or Codex session to trigger the first hook."}
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div className="border-border bg-card overflow-hidden rounded-lg border">
           <div className="border-border flex items-center justify-between border-b px-4 py-3">
             <span className="text-foreground text-sm font-medium">
               Recent activity
             </span>
-            <span className="text-success flex items-center gap-1.5 text-xs">
-              <span className="bg-success h-1.5 w-1.5 animate-pulse rounded-full" />
+            <span className="flex items-center gap-2 text-xs font-medium text-emerald-600">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              </span>
               Live
             </span>
           </div>
-          <div className="space-y-3 p-4">
+          <div className="px-4 py-2">
             {displayed.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
+              <p
+                className="text-muted-foreground text-sm"
+                style={{ height: ROW_HEIGHT * MAX_EVENTS_SHOWN }}
+              >
                 No events yet. We're checking every {POLL_INTERVAL_MS / 1000}s.
               </p>
             ) : (
-              displayed.map((ev, i) => (
-                <div
-                  key={`${ev.timeUnixNano}-${i}`}
-                  className="flex items-center gap-3 text-sm"
-                >
-                  <span
-                    className={cn(
-                      "h-2 w-2 flex-shrink-0 rounded-full",
-                      ev.status === "blocked" ? "bg-destructive" : "bg-success",
-                    )}
-                  />
-                  <span className="text-foreground flex-1 truncate">
-                    <span className="font-medium">
-                      {ev.userEmail ?? sourceLabel(ev.source)}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {" "}
-                      - {eventAction(ev)}
-                    </span>
-                  </span>
-                  <span className="text-muted-foreground flex-shrink-0 text-xs">
-                    {relativeTime(now, ev.timeUnixNano)}
-                  </span>
-                </div>
-              ))
+              <div
+                className="relative overflow-hidden"
+                style={{ height: ROW_HEIGHT * MAX_EVENTS_SHOWN }}
+              >
+                <AnimatePresence initial={false}>
+                  {displayed.map((ev, i) => (
+                    <motion.div
+                      key={eventKey(ev)}
+                      initial={{ y: -ROW_HEIGHT, opacity: 0 }}
+                      animate={{ y: i * ROW_HEIGHT, opacity: 1 }}
+                      exit={{
+                        y: MAX_EVENTS_SHOWN * ROW_HEIGHT,
+                        opacity: 0,
+                      }}
+                      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute inset-x-0 flex items-center gap-3 text-sm"
+                      style={{ height: ROW_HEIGHT }}
+                    >
+                      {SOURCE_ICONS[ev.source] ? (
+                        <img
+                          src={SOURCE_ICONS[ev.source]}
+                          alt={sourceLabel(ev.source)}
+                          title={sourceLabel(ev.source)}
+                          className="h-4 w-4 flex-shrink-0"
+                        />
+                      ) : null}
+                      <span className="text-foreground flex-1 truncate">
+                        <span className="font-medium">
+                          {ev.userEmail ?? sourceLabel(ev.source)}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          - {eventAction(ev)}
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground flex-shrink-0 text-xs">
+                        {relativeTime(now, ev.timeUnixNano)}
+                      </span>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
             )}
           </div>
         </div>
