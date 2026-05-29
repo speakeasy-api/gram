@@ -64,6 +64,7 @@ func TestService_UpdateRole(t *testing.T) {
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"))
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-old")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID), authz.ScopeRiskPolicyEvaluate, "policy-1")
 	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
 		ID:          roleID,
 		Name:        &name,
@@ -86,7 +87,12 @@ func TestService_UpdateRole(t *testing.T) {
 	require.Len(t, role.Grants, 2)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
-	require.Len(t, grants, 3)
+	require.Len(t, grants, 4)
+	scopes := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		scopes = append(scopes, grant.Scope)
+	}
+	require.Contains(t, scopes, string(authz.ScopeRiskPolicyEvaluate))
 }
 
 func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {

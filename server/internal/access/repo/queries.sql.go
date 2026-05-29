@@ -85,6 +85,28 @@ func (q *Queries) DeletePrincipalGrantsByResource(ctx context.Context, arg Delet
 	return result.RowsAffected(), nil
 }
 
+const deletePrincipalGrantsByScope = `-- name: DeletePrincipalGrantsByScope :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = ANY($3::text[])
+`
+
+type DeletePrincipalGrantsByScopeParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scopes         []string
+}
+
+// Removes grants for a specific principal and scope set within an org.
+func (q *Queries) DeletePrincipalGrantsByScope(ctx context.Context, arg DeletePrincipalGrantsByScopeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalGrantsByScope, arg.OrganizationID, arg.PrincipalUrn, arg.Scopes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveOrganizationRoleBySlug = `-- name: GetActiveOrganizationRoleBySlug :one
 WITH active_roles AS (
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind

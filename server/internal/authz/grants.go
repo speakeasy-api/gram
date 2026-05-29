@@ -185,7 +185,7 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 	// During the role-principal migration, replace grants for both the new
 	// role:<kind>:<uuid> principal and the legacy role:<slug> principal. New
 	// writes below only insert the canonical URN form.
-	if err := DeleteRoleGrants(ctx, q, orgID, roleSlug, rolePrincipalURN); err != nil {
+	if err := deleteReplaceableRoleGrants(ctx, q, orgID, roleSlug, rolePrincipalURN); err != nil {
 		return nil, err
 	}
 
@@ -261,6 +261,36 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 	}
 
 	return GrantsToScopedGrants(grantRows), nil
+}
+
+func deleteReplaceableRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rolePrincipalURN string) error {
+	principalURN, err := urn.ParsePrincipal(rolePrincipalURN)
+	if err != nil {
+		return fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
+	}
+
+	scopes := replaceableRoleGrantScopes()
+	if _, err := q.DeletePrincipalGrantsByScope(ctx, repo.DeletePrincipalGrantsByScopeParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   principalURN,
+		Scopes:         scopes,
+	}); err != nil {
+		return fmt.Errorf("delete grants by scope for role %q: %w", roleSlug, err)
+	}
+
+	legacyPrincipalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
+	if legacyPrincipalURN.String() == principalURN.String() {
+		return nil
+	}
+	if _, err := q.DeletePrincipalGrantsByScope(ctx, repo.DeletePrincipalGrantsByScopeParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   legacyPrincipalURN,
+		Scopes:         scopes,
+	}); err != nil {
+		return fmt.Errorf("delete legacy grants by scope for role %q: %w", roleSlug, err)
+	}
+
+	return nil
 }
 
 func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rolePrincipalURN string) error {
@@ -345,13 +375,17 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
+		scope := Scope(row.Scope)
+		if scope.IsInternal() {
+			continue
+		}
 		selectors, err := SelectorFromRow(row.Selectors)
 		if err != nil {
 			return nil, err
 		}
 		grantRows = append(grantRows, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
-			Scope:        Scope(row.Scope),
+			Scope:        scope,
 			Effect:       effectFromNullable(row.Effect),
 			Selector:     selectors,
 		})

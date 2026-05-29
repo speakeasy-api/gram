@@ -61,6 +61,13 @@ DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn;
 
+-- name: DeletePrincipalGrantsByScope :execrows
+-- Removes grants for a specific principal and scope set within an org.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = ANY(@scopes::text[]);
+
 -- name: HasActiveOrganizationUser :one
 -- Returns whether a Gram user is an active member of the organization.
 SELECT EXISTS(

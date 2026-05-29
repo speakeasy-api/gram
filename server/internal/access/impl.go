@@ -492,6 +492,9 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
+		if authz.Scope(g.Scope).IsInternal() {
+			continue
+		}
 		var selectors []*gen.Selector
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))

@@ -80,6 +80,55 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 	require.Equal(t, "project-other", otherSel.ResourceID())
 }
 
+func TestService_syncGrants_preservesInternalRoleGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newInternalTestService(t)
+	organizationID := "org_sync_grants_preserve_internal"
+	roleSlug := "custom-audiences"
+	seedInternalOrganization(t, ctx, conn, organizationID)
+	rolePrincipal := seedInternalRole(t, ctx, conn, organizationID, roleSlug)
+	legacyRolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
+
+	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeProjectRead), "project-old")
+	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeRiskPolicyEvaluate), "policy-canonical")
+	seedInternalGrant(t, ctx, conn, organizationID, legacyRolePrincipal, string(authz.ScopeRiskPolicyEvaluate), "policy-legacy")
+
+	err := authz.SyncGrants(ctx, svc.logger, conn, organizationID, roleSlug, rolePrincipal.String(), []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeProjectWrite),
+			Selectors: nil,
+		},
+	})
+	require.NoError(t, err)
+
+	rows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   rolePrincipal.String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+
+	got := make([]string, 0, len(rows))
+	for _, row := range rows {
+		selectors, err := authz.SelectorFromRow(row.Selectors)
+		require.NoError(t, err)
+		got = append(got, row.Scope+"|"+selectors.ResourceID())
+	}
+	require.ElementsMatch(t, []string{
+		string(authz.ScopeProjectWrite) + "|" + authz.WildcardResource,
+		string(authz.ScopeRiskPolicyEvaluate) + "|policy-canonical",
+	}, got)
+
+	legacyRows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   legacyRolePrincipal.String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, legacyRows, 1)
+	require.Equal(t, string(authz.ScopeRiskPolicyEvaluate), legacyRows[0].Scope)
+}
+
 func TestService_syncGrants_emptySelectorsCreatesNoGrant(t *testing.T) {
 	t.Parallel()
 

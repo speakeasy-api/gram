@@ -66,20 +66,6 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyEvaluate: nil,
 }
 
-var internalScopes = map[Scope]bool{
-	ScopeRoot:               false,
-	ScopeOrgRead:            false,
-	ScopeOrgAdmin:           false,
-	ScopeProjectRead:        false,
-	ScopeProjectWrite:       false,
-	ScopeMCPRead:            false,
-	ScopeMCPWrite:           false,
-	ScopeMCPConnect:         false,
-	ScopeEnvironmentRead:    false,
-	ScopeEnvironmentWrite:   false,
-	ScopeRiskPolicyEvaluate: true,
-}
-
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
 // scope, the lower scopes it implies (e.g. org:admin -> org:read).
 var scopeSubScopes map[Scope][]Scope
@@ -107,8 +93,24 @@ func CalculateSubScopes(scope Scope) []string {
 	return out
 }
 
-// IsInternalScope reports whether a scope is used as an internal relation
+// IsInternal reports whether a scope is used as an internal relation
 // rather than a user-facing RBAC capability.
-func IsInternalScope(scope Scope) bool {
-	return internalScopes[scope]
+func (s Scope) IsInternal() bool {
+	switch s {
+	case ScopeRiskPolicyEvaluate:
+		return true
+	default:
+		return false
+	}
+}
+
+func replaceableRoleGrantScopes() []string {
+	out := make([]string, 0, len(scopeExpansions))
+	for scope := range scopeExpansions {
+		if !scope.IsInternal() {
+			out = append(out, string(scope))
+		}
+	}
+	slices.Sort(out)
+	return out
 }
