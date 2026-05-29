@@ -7,6 +7,7 @@ import {
   getRequestDisplayName,
   getRequestServerDetail,
   getResourceTypeLabel,
+  getRuleDisplayName,
   getRuleServerDetail,
 } from "./shadow-mcp-utils";
 
@@ -120,6 +121,16 @@ describe("shadow-mcp-utils", () => {
         "full_url",
       ),
     ).toBe("https://stripe.example/mcp");
+
+    expect(
+      getRuleDisplayName(
+        accessRule({
+          displayName: "",
+          matchValue: "",
+          observedServerIdentity: undefined,
+        }),
+      ),
+    ).toBe("Unknown server");
   });
 
   it("labels server identity only request details", () => {

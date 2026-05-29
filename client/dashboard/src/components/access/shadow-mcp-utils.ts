@@ -83,7 +83,12 @@ export function getRequestDisplayName(request: ShadowMCPApprovalRequest) {
 }
 
 export function getRuleDisplayName(rule: ShadowMCPAccessRule) {
-  return rule.displayName || rule.observedServerIdentity || rule.matchValue;
+  return (
+    rule.displayName ||
+    rule.observedServerIdentity ||
+    rule.matchValue ||
+    "Unknown server"
+  );
 }
 
 export function getRequestServerDetail(request: ShadowMCPApprovalRequest) {
