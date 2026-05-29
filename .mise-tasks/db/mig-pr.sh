@@ -98,20 +98,6 @@ git worktree add "$dest" "$base"
   cd "$dest"
   mise trust >/dev/null
 
-  # Propagate local DB overrides (e.g. DB_PORT) so sqlc can reach the
-  # running Postgres instance from inside the temp worktree.
-  # In a git worktree, repo_root is the worktree dir which won't have
-  # mise.local.toml. Find the main repo root via the shared git dir.
-  git_common=$(git rev-parse --git-common-dir)
-  main_repo_root=$(cd "$git_common/.." && pwd)
-  local_toml="${repo_root}/mise.local.toml"
-  if [ ! -f "$local_toml" ] && [ -f "${main_repo_root}/mise.local.toml" ]; then
-    local_toml="${main_repo_root}/mise.local.toml"
-  fi
-  if [ -f "$local_toml" ]; then
-    cp "$local_toml" "$dest/mise.local.toml"
-  fi
-
   git checkout -b "$new_branch"
 
   # Lift schema + migration files from the source branch.
