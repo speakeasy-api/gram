@@ -269,14 +269,17 @@ export function LogFilterBar({
         }
         break;
       case "Escape":
-        e.preventDefault();
         if (step === "operator") {
           // Cancel an in-progress filter build without touching the applied
           // search.
+          e.preventDefault();
           resetFlow();
-        } else {
+        } else if (searchInput) {
           // Key step: mirror the × button — clear the box and the applied
-          // search so results refresh without forcing a click.
+          // search so results refresh without forcing a click. When the box is
+          // already empty there is nothing to clear, so let Escape bubble (e.g.
+          // to close a surrounding popover) instead of swallowing it.
+          e.preventDefault();
           onSearchInputChange("");
           resetFlow();
           onSearchSubmit("");
