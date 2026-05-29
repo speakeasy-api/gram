@@ -55,7 +55,7 @@ func (s *stubTemporalClient) ExecuteCustomDomainDeletion(ctx context.Context, or
 	return stubTemporalRun{}, nil
 }
 
-func (s *stubTemporalClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, _ k8s.ProvisionerKind) (client.WorkflowRun, error) {
+func (s *stubTemporalClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.updateCalls++
 	s.lastDomain = domain
 	return stubTemporalRun{}, nil

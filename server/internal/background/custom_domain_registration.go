@@ -37,6 +37,7 @@ type CustomDomainUpdateParams struct {
 	OrgID           string
 	Domain          string
 	ProvisionerKind k8s.ProvisionerKind
+	IPAllowlist     []string
 }
 
 type CustomDomainRegistrationClient struct {
@@ -67,7 +68,7 @@ func (c *CustomDomainRegistrationClient) GetUpdateID(orgID string, domain string
 
 // ExecuteCustomDomainUpdate re-applies the persisted IP allowlist to an
 // already-provisioned custom domain. Used by the edit flow.
-func (c *CustomDomainRegistrationClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error) {
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error) {
 	id := c.GetUpdateID(orgID, domain)
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
@@ -78,6 +79,7 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainUpdate(ctx context.C
 		OrgID:           orgID,
 		Domain:          domain,
 		ProvisionerKind: provisionerKind,
+		IPAllowlist:     ipAllowlist,
 	})
 }
 
@@ -159,6 +161,7 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 			ResourceName:    "",
 			CertSecretName:  "",
 			ProvisionerKind: params.ProvisionerKind,
+			IPAllowlist:     nil, // Setup reads the persisted allowlist from the DB.
 		},
 	).Get(ingressCreateCtx, nil)
 	if err != nil {
@@ -190,6 +193,7 @@ func CustomDomainUpdateWorkflow(ctx workflow.Context, params CustomDomainUpdateP
 			ResourceName:    "",
 			CertSecretName:  "",
 			ProvisionerKind: params.ProvisionerKind,
+			IPAllowlist:     params.IPAllowlist,
 		},
 	).Get(ctx, nil)
 	if err != nil {
@@ -221,6 +225,7 @@ func CustomDomainDeletionWorkflow(ctx workflow.Context, params CustomDomainDelet
 			ResourceName:    "",
 			CertSecretName:  params.CertSecretName,
 			ProvisionerKind: params.ProvisionerKind,
+			IPAllowlist:     nil, // Unused by Delete.
 		},
 	).Get(ctx, nil)
 	if err != nil {

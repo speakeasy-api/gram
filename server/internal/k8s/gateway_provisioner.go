@@ -74,15 +74,21 @@ func (p *GatewayProvisioner) Get(ctx context.Context, resourceName string) error
 
 // Delete removes the HTTPRoute and any SecurityPolicy it owns. The parent
 // Gateway's TLS Secret is shared and must not be touched.
+//
+// The HTTPRoute is removed first. If that fails the SecurityPolicy stays in
+// place, so the still-live route remains IP-restricted rather than briefly
+// open. Once the route is gone the SecurityPolicy guards nothing, so deleting
+// it second is safe.
 func (p *GatewayProvisioner) Delete(ctx context.Context, resourceName, _ string) error {
-	if err := p.deleteSecurityPolicy(ctx, resourceName); err != nil {
-		return fmt.Errorf("delete security policy %s: %w", resourceName, err)
-	}
-
 	if err := p.client.GatewayV1().HTTPRoutes(p.namespace).Delete(ctx, resourceName, metav1.DeleteOptions{}); err != nil {
 		return fmt.Errorf("delete httproute %s: %w", resourceName, err)
 	}
 	p.logger.InfoContext(ctx, "httproute deleted", attr.SlogResourceName(resourceName))
+
+	if err := p.deleteSecurityPolicy(ctx, resourceName); err != nil {
+		return fmt.Errorf("delete security policy %s: %w", resourceName, err)
+	}
+
 	return nil
 }
 

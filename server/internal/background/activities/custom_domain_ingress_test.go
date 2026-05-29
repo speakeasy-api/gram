@@ -216,7 +216,7 @@ func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
-		IpAllowlist:     []string{"1.2.3.4", "10.0.0.0/8"},
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 
@@ -228,11 +228,12 @@ func TestCustomDomainIngress_Reapply_AppliesAllowlist(t *testing.T) {
 		Domain:          domain,
 		Action:          activities.CustomDomainIngressActionReapply,
 		ProvisionerKind: k8s.ProvisionerKindIngress,
+		IPAllowlist:     []string{"1.2.3.4", "10.0.0.0/8"},
 	})
 	require.NoError(t, err)
 
-	// Reapply runs a single idempotent Setup with the persisted allowlist —
-	// no convergence Get, no DB write.
+	// Reapply runs a single idempotent Setup with the allowlist from args
+	// (not the DB) — no convergence Get, no DB write.
 	calls := stub.Calls()
 	require.Len(t, calls, 1)
 	require.Equal(t, "Setup", calls[0].Method)
