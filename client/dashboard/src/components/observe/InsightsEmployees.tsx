@@ -32,11 +32,8 @@ import type {
 } from "@gram/client/models/components";
 import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import {
-  TimeRangePicker,
-  type DateRangePreset,
-  getPresetRange,
-} from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
