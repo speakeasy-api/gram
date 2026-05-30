@@ -1,5 +1,5 @@
-import { useSession } from "@/contexts/Auth";
-import { useProject, useSlugs } from "@/contexts/Sdk";
+import { useProject, useSession } from "@/contexts/Auth";
+import { useSlugs } from "@/contexts/Sdk";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import type {
