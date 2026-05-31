@@ -7,11 +7,8 @@ import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import {
-  getPresetRange,
-  TimeRangePicker,
-  type DateRangePreset,
-} from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { telemetrySearchToolCalls } from "@gram/client/funcs/telemetrySearchToolCalls";
 import { Operator } from "@gram/client/models/components/logfilter";
 import {

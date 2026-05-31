@@ -23,11 +23,8 @@ import { useSearchParams } from "react-router";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsFilters } from "@/pages/chatLogs/ChatLogsFilters";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
-import {
-  TimeRangePicker,
-  type DateRangePreset,
-  getPresetRange,
-} from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import {
   Select,
   SelectContent,

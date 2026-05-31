@@ -3,11 +3,8 @@ import { useInsightsState } from "@/components/insights-context";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import {
-  TimeRangePicker,
-  type DateRangePreset,
-  getPresetRange,
-} from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryListFilterOptions } from "@gram/client/funcs/telemetryListFilterOptions";
