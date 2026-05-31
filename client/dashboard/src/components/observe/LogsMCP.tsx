@@ -338,7 +338,7 @@ export function LogsMCPContent() {
       <InsightsConfig
         mcpConfig={mcpConfig}
         title="Explore Logs"
-        subtitle="Ask me about your logs! Powered by Elements + Gram MCP"
+        subtitle="Ask me about your logs! Powered by Elements + platform MCP"
         hideTrigger={isLogsDisabled}
         suggestions={[
           {
