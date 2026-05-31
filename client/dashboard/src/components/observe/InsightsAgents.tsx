@@ -189,6 +189,17 @@ export function InsightsAgentsContent() {
     () => new Map((membersData?.members ?? []).map((m) => [m.id, m])),
     [membersData],
   );
+  const memberIdentifiers = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of membersData?.members ?? []) {
+      ids.add(m.id);
+      ids.add(m.email.toLowerCase());
+    }
+    return ids;
+  }, [membersData]);
+  const isOrgMember = (userId: string) =>
+    memberIdentifiers.has(userId) ||
+    memberIdentifiers.has(userId.toLowerCase());
 
   const usersQuery = useQuery({
     queryKey: [
@@ -262,7 +273,9 @@ export function InsightsAgentsContent() {
 
   const totalTokens = users.reduce((s, u) => s + effectiveTokens(u), 0);
   const totalCost = users.reduce((s, u) => s + u.totalCost, 0);
-  const activeUsers = users.filter((u) => effectiveTokens(u) > 0).length;
+  const activeUsers = users.filter(
+    (u) => effectiveTokens(u) > 0 && isOrgMember(u.userId),
+  ).length;
 
   const clientBreakdown = useMemo(() => {
     const map = new Map<
@@ -403,7 +416,7 @@ export function InsightsAgentsContent() {
     0,
   );
   const filteredActiveUsers = filteredUserRows.filter(
-    (u) => u.totalTokens > 0,
+    (u) => u.totalTokens > 0 && isOrgMember(u.userId),
   ).length;
 
   const isLoading =
