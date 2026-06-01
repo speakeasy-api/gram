@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -91,7 +90,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
+		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(req.ID, err))
 		if merr != nil {
 			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
 		}
@@ -137,12 +136,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	case "tools/call":
 		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
 	default:
-		return nil, &rpcError{
-			ID:      req.ID,
-			Code:    methodNotFound,
-			Message: fmt.Sprintf("%s: %s", req.Method, methodNotFound.UserMessage()),
-			Data:    nil,
-		}
+		return nil, oops.E(oops.CodeMethodNotAllowed, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
 	}
 }
 
