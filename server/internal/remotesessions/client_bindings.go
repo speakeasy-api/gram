@@ -2,12 +2,10 @@ package remotesessions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -15,27 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
-
-type remoteSessionClientIssuerDriftError struct {
-	UserSessionIssuerID uuid.UUID
-	Count               int64
-}
-
-func (e *remoteSessionClientIssuerDriftError) Error() string {
-	return fmt.Sprintf("multiple active legacy remote_session_clients found for user_session_issuer %s: %d", e.UserSessionIssuerID, e.Count)
-}
-
-func isRemoteSessionClientIssuerDrift(err error) bool {
-	var driftErr *remoteSessionClientIssuerDriftError
-	if errors.As(err, &driftErr) {
-		return true
-	}
-
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) &&
-		pgErr.Code == "23505" &&
-		pgErr.ConstraintName == "remote_session_client_user_session_issuers_one_per_issuer"
-}
 
 func backfillRemoteSessionClientUserSessionIssuer(
 	ctx context.Context,

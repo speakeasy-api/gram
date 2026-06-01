@@ -231,7 +231,7 @@ const (
 	ProjectNameKey                       = attribute.Key("gram.project.name")
 	ProjectSlugKey                       = attribute.Key("gram.project.slug")
 	RemoteSessionClientIDKey             = attribute.Key("gram.remote_session_client.id")
-	RemoteSessionClientLegacyRowCountKey = attribute.Key("gram.remote_session_client.legacy_row_count")
+	RemoteSessionClientLegacyRowCountKey = attribute.Key("gram.remote_session_client.remaining_user_session_issuer_fk_count")
 	UserSessionIssuerIDKey               = attribute.Key("gram.user_session_issuer.id")
 	RiskPolicyCountKey                   = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                      = attribute.Key("gram.risk.policy_id")
@@ -406,6 +406,7 @@ func SlogHTTPReferrerHost(v string) slog.Attr      { return slog.String(string(H
 func HTTPRequestID(v string) attribute.KeyValue {
 	return HTTPRequestIDKey.String(v)
 }
+
 func SlogHTTPRequestID(v string) slog.Attr {
 	return slog.String(string(HTTPRequestIDKey), v)
 }
@@ -413,6 +414,7 @@ func SlogHTTPRequestID(v string) slog.Attr {
 func HTTPRequestHeaderReferer(v string) attribute.KeyValue {
 	return HTTPRequestHeaderRefererKey.String(v)
 }
+
 func SlogHTTPRequestHeaderReferer(v string) slog.Attr {
 	return slog.String(string(HTTPRequestHeaderRefererKey), v)
 }
@@ -420,6 +422,7 @@ func SlogHTTPRequestHeaderReferer(v string) slog.Attr {
 func HTTPRequestHeaderContentType(v string) attribute.KeyValue {
 	return HTTPRequestHeaderContentTypeKey.String(v)
 }
+
 func SlogHTTPRequestHeaderContentType(v string) slog.Attr {
 	return slog.String(string(HTTPRequestHeaderContentTypeKey), v)
 }
@@ -427,6 +430,7 @@ func SlogHTTPRequestHeaderContentType(v string) slog.Attr {
 func HTTPRequestHeaderUserAgent(v string) attribute.KeyValue {
 	return HTTPRequestHeaderUserAgentKey.String(v)
 }
+
 func SlogHTTPRequestHeaderUserAgent(v string) slog.Attr {
 	return slog.String(string(HTTPRequestHeaderUserAgentKey), v)
 }
@@ -445,6 +449,7 @@ func SlogHTTPRequestMethod(v string) slog.Attr      { return slog.String(string(
 func HTTPResponseHeaderContentType(v string) attribute.KeyValue {
 	return HTTPResponseHeaderContentTypeKey.String(v)
 }
+
 func SlogHTTPResponseHeaderContentType(v string) slog.Attr {
 	return slog.String(string(HTTPResponseHeaderContentTypeKey), v)
 }
@@ -457,6 +462,7 @@ func SlogHTTPResponseStatusCode(v int) slog.Attr {
 func HTTPResponseOriginalStatusCode(v int) attribute.KeyValue {
 	return HTTPResponseOriginalStatusCodeKey.Int(v)
 }
+
 func SlogHTTPResponseOriginalStatusCode(v int) slog.Attr {
 	return slog.Int(string(HTTPResponseOriginalStatusCodeKey), v)
 }
@@ -472,6 +478,7 @@ func SlogHTTPRoute(v string) slog.Attr      { return slog.String(string(HTTPRout
 func HTTPServerRequestDuration(v float64) attribute.KeyValue {
 	return HTTPServerRequestDurationKey.Float64(v)
 }
+
 func SlogHTTPServerRequestDuration(v float64) slog.Attr {
 	return slog.Float64(string(HTTPServerRequestDurationKey), v)
 }
@@ -479,6 +486,7 @@ func SlogHTTPServerRequestDuration(v float64) slog.Attr {
 func HookServerNameOverrideID(v string) attribute.KeyValue {
 	return HookServerNameOverrideIDKey.String(v)
 }
+
 func SlogHookServerNameOverrideID(v string) slog.Attr {
 	return slog.String(string(HookServerNameOverrideIDKey), v)
 }
@@ -654,6 +662,7 @@ func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(Deplo
 func DeploymentFunctionsAccessID(v string) attribute.KeyValue {
 	return DeploymentFunctionsAccessIDKey.String(v)
 }
+
 func SlogDeploymentFunctionsAccessID(v string) slog.Attr {
 	return slog.String(string(DeploymentFunctionsAccessIDKey), v)
 }
@@ -666,6 +675,7 @@ func SlogDeploymentFunctionsID(v string) slog.Attr {
 func DeploymentFunctionsName(v string) attribute.KeyValue {
 	return DeploymentFunctionsNameKey.String(v)
 }
+
 func SlogDeploymentFunctionsName(v string) slog.Attr {
 	return slog.String(string(DeploymentFunctionsNameKey), v)
 }
@@ -673,6 +683,7 @@ func SlogDeploymentFunctionsName(v string) slog.Attr {
 func DeploymentFunctionsSlug[V ~string](v V) attribute.KeyValue {
 	return DeploymentFunctionsSlugKey.String(string(v))
 }
+
 func SlogDeploymentFunctionsSlug[V ~string](v V) slog.Attr {
 	return slog.String(string(DeploymentFunctionsSlugKey), string(v))
 }
@@ -693,6 +704,7 @@ func SlogDeploymentOpenAPIName(v string) slog.Attr {
 func DeploymentOpenAPIParser(v string) attribute.KeyValue {
 	return DeploymentOpenAPIParserKey.String(v)
 }
+
 func SlogDeploymentOpenAPIParser(v string) slog.Attr {
 	return slog.String(string(DeploymentOpenAPIParserKey), v)
 }
@@ -700,6 +712,7 @@ func SlogDeploymentOpenAPIParser(v string) slog.Attr {
 func DeploymentOpenAPISlug[V ~string](v V) attribute.KeyValue {
 	return DeploymentOpenAPISlugKey.String(string(v))
 }
+
 func SlogDeploymentOpenAPISlug[V ~string](v V) slog.Attr {
 	return slog.String(string(DeploymentOpenAPISlugKey), string(v))
 }
@@ -767,6 +780,7 @@ func SlogFunctionsBackend(v string) slog.Attr      { return slog.String(string(F
 func FunctionsManifestVersion(v string) attribute.KeyValue {
 	return FunctionsManifestVersionKey.String(v)
 }
+
 func SlogFunctionsManifestVersion(v string) slog.Attr {
 	return slog.String(string(FunctionsManifestVersionKey), v)
 }
@@ -779,6 +793,7 @@ func SlogFunctionsRunnerImage(v string) slog.Attr {
 func FunctionsRunnerVersion[V ~string](v V) attribute.KeyValue {
 	return FunctionsRunnerVersionKey.String(string(v))
 }
+
 func SlogFunctionsRunnerVersion[V ~string](v V) slog.Attr {
 	return slog.String(string(FunctionsRunnerVersionKey), string(v))
 }
@@ -786,6 +801,7 @@ func SlogFunctionsRunnerVersion[V ~string](v V) slog.Attr {
 func FunctionsRuntime[V ~string](v V) attribute.KeyValue {
 	return FunctionsRuntimeKey.String(string(v))
 }
+
 func SlogFunctionsRuntime[V ~string](v V) slog.Attr {
 	return slog.String(string(FunctionsRuntimeKey), string(v))
 }
@@ -816,6 +832,7 @@ func SlogIngressName(v string) slog.Attr      { return slog.String(string(Ingres
 func CustomDomainProvisionerKind(v string) attribute.KeyValue {
 	return CustomDomainProvisionerKindKey.String(v)
 }
+
 func SlogCustomDomainProvisionerKind(v string) slog.Attr {
 	return slog.String(string(CustomDomainProvisionerKindKey), v)
 }
@@ -826,6 +843,7 @@ func SlogMetricName(v string) slog.Attr      { return slog.String(string(MetricN
 func OAuthAuthorizationEndpoint(v string) attribute.KeyValue {
 	return OAuthAuthorizationEndpointKey.String(v)
 }
+
 func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 	return slog.String(string(OAuthAuthorizationEndpointKey), v)
 }
@@ -842,6 +860,7 @@ func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthEr
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)
 }
+
 func SlogOAuthErrorDescription(v string) slog.Attr {
 	return slog.String(string(OAuthErrorDescriptionKey), v)
 }
@@ -863,6 +882,7 @@ func SlogOAuthRedirectURIFull(v string) slog.Attr {
 func OAuthRegistrationEndpoint(v string) attribute.KeyValue {
 	return OAuthRegistrationEndpointKey.String(v)
 }
+
 func SlogOAuthRegistrationEndpoint(v string) slog.Attr {
 	return slog.String(string(OAuthRegistrationEndpointKey), v)
 }
@@ -923,6 +943,7 @@ func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenR
 func OpenRouterKeyPreviousLimit(v int) attribute.KeyValue {
 	return OpenRouterKeyPreviousLimitKey.Int(v)
 }
+
 func SlogOpenRouterKeyPreviousLimit(v int) slog.Attr {
 	return slog.Int(string(OpenRouterKeyPreviousLimitKey), v)
 }
@@ -942,6 +963,7 @@ func SlogAccessRoleSource(v string) slog.Attr      { return slog.String(string(A
 func AccessRoleDBWriteFailed(v bool) attribute.KeyValue {
 	return AccessRoleDBWriteFailedKey.Bool(v)
 }
+
 func SlogAccessRoleDBWriteFailed(v bool) slog.Attr {
 	return slog.Bool(string(AccessRoleDBWriteFailedKey), v)
 }
@@ -949,6 +971,7 @@ func SlogAccessRoleDBWriteFailed(v bool) slog.Attr {
 func OrganizationRoleAssignmentID(v string) attribute.KeyValue {
 	return OrganizationRoleAssignmentIDKey.String(v)
 }
+
 func SlogOrganizationRoleAssignmentID(v string) slog.Attr {
 	return slog.String(string(OrganizationRoleAssignmentIDKey), v)
 }
@@ -993,6 +1016,7 @@ func SlogOutboxNoopRows(v int) slog.Attr      { return slog.Int(string(OutboxNoo
 func OrganizationAccountType(v string) attribute.KeyValue {
 	return OrganizationAccountTypeKey.String(v)
 }
+
 func SlogOrganizationAccountType(v string) slog.Attr {
 	return slog.String(string(OrganizationAccountTypeKey), v)
 }
@@ -1048,6 +1072,7 @@ func SlogRemoteSessionClientID(v string) slog.Attr {
 func RemoteSessionClientLegacyRowCount(v int) attribute.KeyValue {
 	return RemoteSessionClientLegacyRowCountKey.Int(v)
 }
+
 func SlogRemoteSessionClientLegacyRowCount(v int) slog.Attr {
 	return slog.Int(string(RemoteSessionClientLegacyRowCountKey), v)
 }
@@ -1070,6 +1095,7 @@ func SlogRemoteMCPServerURL(v string) slog.Attr {
 func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {
 	return RemoteMCPProxyInterceptorKey.String(v)
 }
+
 func SlogRemoteMCPProxyInterceptor(v string) slog.Attr {
 	return slog.String(string(RemoteMCPProxyInterceptorKey), v)
 }
@@ -1077,6 +1103,7 @@ func SlogRemoteMCPProxyInterceptor(v string) slog.Attr {
 func RemoteMCPProxyRemoteStatusCode(v int) attribute.KeyValue {
 	return RemoteMCPProxyRemoteStatusCodeKey.Int(v)
 }
+
 func SlogRemoteMCPProxyRemoteStatusCode(v int) slog.Attr {
 	return slog.Int(string(RemoteMCPProxyRemoteStatusCodeKey), v)
 }
@@ -1084,6 +1111,7 @@ func SlogRemoteMCPProxyRemoteStatusCode(v int) slog.Attr {
 func RemoteMCPProxyRemoteStatusClass(v string) attribute.KeyValue {
 	return RemoteMCPProxyRemoteStatusClassKey.String(v)
 }
+
 func SlogRemoteMCPProxyRemoteStatusClass(v string) slog.Attr {
 	return slog.String(string(RemoteMCPProxyRemoteStatusClassKey), v)
 }
@@ -1214,6 +1242,7 @@ func SlogMimeType(v string) slog.Attr      { return slog.String(string(MimeTypeK
 func ToolCallDuration(v time.Duration) attribute.KeyValue {
 	return ToolCallDurationKey.Float64(v.Seconds())
 }
+
 func SlogToolCallDuration(v time.Duration) slog.Attr {
 	return slog.Float64(string(ToolCallDurationKey), v.Seconds())
 }
@@ -1221,6 +1250,7 @@ func SlogToolCallDuration(v time.Duration) slog.Attr {
 func VisibilityInternal() attribute.KeyValue {
 	return VisibilityKey.String(VisibilityInternalValue)
 }
+
 func SlogVisibilityInternal() slog.Attr {
 	return slog.String(string(VisibilityKey), VisibilityInternalValue)
 }
@@ -1228,6 +1258,7 @@ func SlogVisibilityInternal() slog.Attr {
 func PaginationTsStart(v time.Time) attribute.KeyValue {
 	return PaginationTsStartKey.String(v.Format(time.RFC3339))
 }
+
 func SlogPaginationTsStart(v time.Time) slog.Attr {
 	return slog.Time(string(PaginationTsStartKey), v)
 }
@@ -1235,6 +1266,7 @@ func SlogPaginationTsStart(v time.Time) slog.Attr {
 func PaginationTsEnd(v time.Time) attribute.KeyValue {
 	return PaginationTsEndKey.String(v.Format(time.RFC3339))
 }
+
 func SlogPaginationTsEnd(v time.Time) slog.Attr {
 	return slog.Time(string(PaginationTsEndKey), v)
 }
@@ -1242,6 +1274,7 @@ func SlogPaginationTsEnd(v time.Time) slog.Attr {
 func PaginationCursor(v string) attribute.KeyValue {
 	return PaginationCursorKey.String(v)
 }
+
 func SlogPaginationCursor(v time.Time) slog.Attr {
 	return slog.Time(string(PaginationCursorKey), v)
 }
@@ -1259,6 +1292,7 @@ func SlogPaginationSortOrder(v string) slog.Attr {
 func HTTPClientRequestDuration(v float64) attribute.KeyValue {
 	return HTTPClientRequestDurationKey.Float64(v)
 }
+
 func SlogHTTPClientRequestDuration(v float64) slog.Attr {
 	return slog.Float64(string(HTTPClientRequestDurationKey), v)
 }
@@ -1281,6 +1315,7 @@ func SlogPaginationHasNextPage(v bool) slog.Attr {
 func ClickhouseQueryDurationMs(v float64) attribute.KeyValue {
 	return ClickhouseQueryDurationMsKey.Float64(v)
 }
+
 func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(ClickhouseQueryDurationMsKey), v)
 }
@@ -1312,6 +1347,7 @@ func SlogRetryWait(v time.Duration) slog.Attr      { return slog.Duration(string
 // GenAI semantic convention helpers
 
 func GenAIOperationName(v string) attribute.KeyValue { return GenAIOperationNameKey.String(v) }
+
 func SlogGenAIOperationName(v string) slog.Attr {
 	return slog.String(string(GenAIOperationNameKey), v)
 }
@@ -1337,6 +1373,7 @@ func SlogGenAIResponseID(v string) slog.Attr      { return slog.String(string(Ge
 func GenAIResponseFinishReasons(v []string) attribute.KeyValue {
 	return GenAIResponseFinishReasonsKey.StringSlice(v)
 }
+
 func SlogGenAIResponseFinishReasons(v []string) slog.Attr {
 	return slog.Any(string(GenAIResponseFinishReasonsKey), v)
 }
@@ -1360,6 +1397,7 @@ func SlogGenAIUsageTotalTokens(v int) slog.Attr      { return slog.Int(string(Ge
 func GenAIRequestTemperature(v float64) attribute.KeyValue {
 	return GenAIRequestTemperatureKey.Float64(v)
 }
+
 func SlogGenAIRequestTemperature(v float64) slog.Attr {
 	return slog.Float64(string(GenAIRequestTemperatureKey), v)
 }
@@ -1400,6 +1438,7 @@ func SlogGenAIOutputMessages(v string) slog.Attr {
 func GenAISystemInstructions(v string) attribute.KeyValue {
 	return GenAISystemInstructionsKey.String(v)
 }
+
 func SlogGenAISystemInstructions(v string) slog.Attr {
 	return slog.String(string(GenAISystemInstructionsKey), v)
 }
@@ -1407,12 +1446,14 @@ func SlogGenAISystemInstructions(v string) slog.Attr {
 func GenAIConversationDurationMs(v float64) attribute.KeyValue {
 	return GenAIConversationDuration.Float64(v)
 }
+
 func SlogGenAIConversationDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(GenAIConversationDuration), v)
 }
 
 // GenAI Evaluation helpers
 func GenAIEvaluationName(v string) attribute.KeyValue { return GenAIEvaluationNameKey.String(v) }
+
 func SlogGenAIEvaluationName(v string) slog.Attr {
 	return slog.String(string(GenAIEvaluationNameKey), v)
 }
@@ -1425,6 +1466,7 @@ func SlogGenAIEvaluationScoreValue(v int) slog.Attr {
 func GenAIEvaluationScoreLabel(v string) attribute.KeyValue {
 	return GenAIEvaluationScoreLabelKey.String(v)
 }
+
 func SlogGenAIEvaluationScoreLabel(v string) slog.Attr {
 	return slog.String(string(GenAIEvaluationScoreLabelKey), v)
 }
@@ -1432,6 +1474,7 @@ func SlogGenAIEvaluationScoreLabel(v string) slog.Attr {
 func GenAIEvaluationExplanation(v string) attribute.KeyValue {
 	return GenAIEvaluationExplanationKey.String(v)
 }
+
 func SlogGenAIEvaluationExplanation(v string) slog.Attr {
 	return slog.String(string(GenAIEvaluationExplanationKey), v)
 }
@@ -1439,6 +1482,7 @@ func SlogGenAIEvaluationExplanation(v string) slog.Attr {
 func GenAIUsageCacheReadInputTokens(v int) attribute.KeyValue {
 	return GenAIUsageCacheReadInputTokensKey.Int(v)
 }
+
 func SlogGenAIUsageCacheReadInputTokens(v int) slog.Attr {
 	return slog.Int(string(GenAIUsageCacheReadInputTokensKey), v)
 }
@@ -1446,6 +1490,7 @@ func SlogGenAIUsageCacheReadInputTokens(v int) slog.Attr {
 func GenAIUsageCacheCreationInputTokens(v int) attribute.KeyValue {
 	return GenAIUsageCacheCreationInputTokensKey.Int(v)
 }
+
 func SlogGenAIUsageCacheCreationInputTokens(v int) slog.Attr {
 	return slog.Int(string(GenAIUsageCacheCreationInputTokensKey), v)
 }
@@ -1478,6 +1523,7 @@ func SlogWorkOSEventType(v string) slog.Attr      { return slog.String(string(Wo
 func WorkOSEventOrganizationID(v string) attribute.KeyValue {
 	return WorkOSEventOrganizationIDKey.String(v)
 }
+
 func SlogWorkOSEventOrganizationID(v string) slog.Attr {
 	return slog.String(string(WorkOSEventOrganizationIDKey), v)
 }
@@ -1494,6 +1540,7 @@ func SlogAssistantID(v string) slog.Attr      { return slog.String(string(Assist
 func AssistantRuntimeBackend(v string) attribute.KeyValue {
 	return AssistantRuntimeBackendKey.String(v)
 }
+
 func SlogAssistantRuntimeBackend(v string) slog.Attr {
 	return slog.String(string(AssistantRuntimeBackendKey), v)
 }
@@ -1553,6 +1600,7 @@ func SlogAIIntegrationConfigID(v string) slog.Attr {
 func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
 	return AIIntegrationUsagePollNextAfterKey.String(v.Format(time.RFC3339))
 }
+
 func SlogAIIntegrationUsagePollNextAfter(v time.Time) slog.Attr {
 	return slog.Time(string(AIIntegrationUsagePollNextAfterKey), v)
 }
