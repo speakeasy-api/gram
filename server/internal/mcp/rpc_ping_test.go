@@ -17,7 +17,7 @@ func TestHandlePing_IncludesEmptyResultObject(t *testing.T) {
 	ctx := context.Background()
 	logger := testenv.NewLogger(t)
 
-	bs, err := handlePing(ctx, logger, mcpjsonrpc.StringID("42"))
+	bs, err := handlePing(ctx, logger, mcpjsonrpc.NumberID(42))
 	require.NoError(t, err)
 
 	// MCP/JSON-RPC require the result field be present even when empty.
