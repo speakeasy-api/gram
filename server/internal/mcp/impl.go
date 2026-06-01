@@ -422,6 +422,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
+		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+			return err
+		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
 		// Fall through to legacy toolset lookup.
@@ -439,6 +442,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+	}
+
+	if err := s.enforceCustomDomainLockdown(ctx, logger, toolset.ProjectID); err != nil {
+		return err
 	}
 
 	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, "")

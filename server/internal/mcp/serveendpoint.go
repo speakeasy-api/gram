@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -45,7 +46,46 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 		return err
 	}
 
+	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+		return err
+	}
+
 	return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, slug, mcpRouteBase)
+}
+
+// enforceCustomDomainLockdown 403s a public-host MCP request when the owning
+// org's custom domain carries a non-empty IP allowlist. Such orgs require all
+// MCP traffic to flow through their custom domain, where the allowlist is
+// enforced at the ingress/gateway. Requests that arrived via a custom-domain
+// context are allowed through unconditionally — the ingress already enforced
+// the allowlist for that hostname. The lockdown engages as soon as an allowlist
+// is configured, regardless of whether the domain is verified/activated yet.
+func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
+	if customdomains.FromContext(ctx) != nil {
+		return nil
+	}
+
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "project not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").Log(ctx, logger)
+	}
+
+	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, project.OrganizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").Log(ctx, logger)
+	}
+
+	if len(domain.IpAllowlist) > 0 {
+		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
+	}
+
+	return nil
 }
 
 // serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,
