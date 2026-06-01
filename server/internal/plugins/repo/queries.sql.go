@@ -407,7 +407,7 @@ type ListPluginsWithServersForProjectRow struct {
 	ToolsetID         uuid.UUID
 	ToolsetMcpSlug    pgtype.Text
 	ToolsetIsPublic   bool
-	ToolsetIsOauth    bool
+	ToolsetIsOauth    pgtype.Bool
 }
 
 // Used during plugin generation: returns all active plugin servers joined with

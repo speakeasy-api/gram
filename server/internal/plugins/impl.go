@@ -1351,7 +1351,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				Policy:      r.ServerPolicy,
 				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
 				IsPublic:    r.ToolsetIsPublic,
-				IsOAuth:     r.ToolsetIsOauth,
+				IsOAuth:     r.ToolsetIsOauth.Bool,
 				EnvConfigs:  nil,
 			}
 
