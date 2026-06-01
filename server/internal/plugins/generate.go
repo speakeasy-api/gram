@@ -2,9 +2,11 @@ package plugins
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"path"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -66,6 +68,61 @@ type GenerateConfig struct {
 // just to exercise unrelated assertions.
 func pluginManifestVersion(cfg GenerateConfig) string {
 	return conv.Default(cfg.Version, "0.1.0")
+}
+
+// pluginGeneratorVersion is mixed into every plugin fingerprint. Bump it to
+// force the automated rollout to republish every connected project on the next
+// run, even when an individual project's generated output is byte-identical —
+// for generator changes that alter behaviour in ways the placeholder
+// fingerprint pass can't observe. The Plugin Generate Check CI workflow
+// requires this to change whenever generate.go does.
+const pluginGeneratorVersion = "1"
+
+// Fixed, non-empty sentinels substituted for the per-publish API keys when
+// computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
+// the observability plugin entirely (see GenerateConfig.HooksAPIKey), which
+// would make the fingerprint blind to it. Constant values keep the generated
+// bytes stable across publishes while the real keys rotate.
+const (
+	fingerprintAPIKeySentinel   = "gram_fingerprint_api_key"
+	fingerprintHooksKeySentinel = "gram_fingerprint_hooks_key"
+)
+
+// PluginFingerprint returns a stable content hash of the packages that would be
+// generated for the given plugins. It normalizes the per-publish fields
+// (manifest version and injected API keys) so two publishes with the same
+// plugin configuration and generator version produce the same fingerprint,
+// while any change to the plugin set, project/org config, or generator output
+// changes it. The automated rollout uses this to skip no-op republishes.
+func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error) {
+	cfg.Version = ""
+	cfg.APIKey = fingerprintAPIKeySentinel
+	cfg.HooksAPIKey = fingerprintHooksKeySentinel
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	if err != nil {
+		return "", fmt.Errorf("generate plugin packages for fingerprint: %w", err)
+	}
+
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+
+	h := sha256.New()
+	// A NUL after each component disambiguates boundaries so no concatenation
+	// of distinct (path, content) sequences can collide.
+	_, _ = h.Write([]byte(pluginGeneratorVersion))
+	_, _ = h.Write([]byte{0})
+	for _, p := range paths {
+		_, _ = h.Write([]byte(p))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(files[p])
+		_, _ = h.Write([]byte{0})
+	}
+
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
