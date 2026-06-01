@@ -14,7 +14,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
 // managedAssistantInstructions is the system prompt for the platform-managed
@@ -148,6 +150,25 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 		return fmt.Errorf("soft-delete managed assistant: %w", err)
 	}
 
+	triggerQueries := triggerrepo.New(tx)
+	instances, err := triggerQueries.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
+		ProjectID:      projectID,
+		DefinitionSlug: sourceKindDashboard,
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      row.ID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("list dashboard trigger instances: %w", err)
+	}
+	for _, inst := range instances {
+		if _, err := triggerQueries.DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
+			ID:        inst.ID,
+			ProjectID: projectID,
+		}); err != nil {
+			return fmt.Errorf("delete dashboard trigger instance: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit disable managed assistant tx: %w", err)
 	}
@@ -210,6 +231,24 @@ func (s *ServiceCore) createManagedAssistant(
 		AssistantID: record.ID,
 	}); err != nil {
 		return assistantRecord{}, fmt.Errorf("insert managed assistant mapping: %w", err)
+	}
+
+	// Dashboard sidebar messages reach the assistant through the trigger
+	// dispatch path, so the managed assistant gets a direct-ingress trigger
+	// instance. It's hidden from the user's trigger list (KindDirect).
+	if _, err := triggerrepo.New(tx).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		DefinitionSlug: sourceKindDashboard,
+		Name:           name,
+		EnvironmentID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      record.ID.String(),
+		TargetDisplay:  name,
+		ConfigJson:     []byte("{}"),
+		Status:         StatusActive,
+	}); err != nil {
+		return assistantRecord{}, fmt.Errorf("create dashboard trigger instance: %w", err)
 	}
 
 	if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {

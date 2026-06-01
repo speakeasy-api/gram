@@ -44,6 +44,7 @@ const (
 	sourceKindSlack      = "slack"
 	sourceKindCron       = "cron"
 	sourceKindWake       = "wake"
+	sourceKindDashboard  = "dashboard"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -1257,6 +1258,23 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 			}
 		}
 		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindDashboard:
+		var event dashboardEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode dashboard trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(dashboardSourceRef{UserID: event.UserID})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal dashboard source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindDashboard, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
 		return "", nil, nil, nil, fmt.Errorf("assistant source %q is not supported", task.DefinitionSlug)
 	}
