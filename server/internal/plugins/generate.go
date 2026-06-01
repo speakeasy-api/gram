@@ -402,11 +402,13 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]codexMCPServer)
+	mcpServers := make(map[string]any)
 	for _, s := range p.Servers {
 		if s.IsOAuth {
-			// Codex MCP server config does not support stdio/command-based entries.
-			// OAuth toolsets are skipped until Codex adds stdio support.
+			mcpServers[s.DisplayName] = codexStdioMCPServer{
+				Command: "npx",
+				Args:    []string{"mcp-remote@0.1.25", s.MCPURL},
+			}
 			continue
 		}
 
@@ -1581,7 +1583,7 @@ type codexInterface struct {
 }
 
 type codexMCPConfig struct {
-	MCPServers map[string]codexMCPServer `json:"mcpServers"`
+	MCPServers map[string]any `json:"mcpServers"`
 }
 
 type codexMCPServer struct {
@@ -1589,6 +1591,11 @@ type codexMCPServer struct {
 	BearerTokenEnvVar string            `json:"bearer_token_env_var,omitempty"`
 	HTTPHeaders       map[string]string `json:"http_headers,omitempty"`
 	EnvHTTPHeaders    map[string]string `json:"env_http_headers,omitempty"`
+}
+
+type codexStdioMCPServer struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
 }
 
 type codexMarketplaceManifest struct {
