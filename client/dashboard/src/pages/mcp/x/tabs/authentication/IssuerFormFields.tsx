@@ -279,8 +279,9 @@ export function ClientCredentialsFields({
       <Stack gap={1}>
         <Label className="text-sm font-medium">OAuth Client Credentials</Label>
         <Type muted small>
-          Gram acts as an OAuth client against the upstream issuer. Register a
-          client with the issuer out-of-band and paste the credentials here.
+          The platform acts as an OAuth client against the upstream issuer.
+          Register a client with the issuer out-of-band and paste the
+          credentials here.
         </Type>
       </Stack>
 
@@ -346,8 +347,9 @@ export function OverridesFields({
           placeholder="read, write, openid"
         />
         <Type muted small>
-          Comma-separated. When provided, Gram requests these scopes during the
-          OAuth dance; otherwise it falls back to the issuer's scopes_supported.
+          Comma-separated. When provided, the platform requests these scopes
+          during the OAuth dance; otherwise it falls back to the issuer's
+          scopes_supported.
         </Type>
       </Stack>
 
@@ -361,9 +363,9 @@ export function OverridesFields({
           placeholder="https://api.example.com"
         />
         <Type muted small>
-          When provided, Gram includes this audience in authorize and token
-          requests (RFC 8707). Required by some providers (e.g. Auth0) to return
-          JWT access tokens.
+          When provided, the platform includes this audience in authorize and
+          token requests (RFC 8707). Required by some providers (e.g. Auth0) to
+          return JWT access tokens.
         </Type>
       </Stack>
     </Stack>

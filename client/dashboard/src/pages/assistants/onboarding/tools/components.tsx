@@ -308,7 +308,7 @@ export function ShowSlackAppGuideComponent({
   const manifestResult = useMemo(
     () =>
       buildSlackManifest({
-        appName: a.app_name ?? assistantName ?? "Gram Assistant",
+        appName: a.app_name ?? assistantName ?? "Platform Assistant",
         webhookUrl: a.webhook_url,
         extraScopes: a.bot_scopes,
         extraBotEvents: a.bot_events,

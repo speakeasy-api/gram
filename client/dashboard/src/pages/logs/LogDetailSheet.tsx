@@ -202,7 +202,7 @@ function LogDetailContent({
           />
           {gramUrn && (
             <MetadataBadge
-              label="Gram URN"
+              label="Platform URN"
               value={gramUrn}
               mono
               copyValue={gramUrn}

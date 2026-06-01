@@ -1064,7 +1064,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
 
 const PARADIGM_LABELS: Record<OAuthParadigm, string> = {
   external: "External OAuth",
-  gram: "Gram OAuth",
+  gram: "Platform OAuth",
   proxy: "OAuth Proxy",
 };
 
@@ -1119,7 +1119,7 @@ function OAuthStatusDisplay({
           {oauthParadigm === "external" ? (
             "Users will authenticate with your external OAuth server before accessing this MCP server."
           ) : oauthParadigm === "gram" ? (
-            "Users will authenticate with Gram OAuth before accessing this MCP server."
+            "Users will authenticate with Platform OAuth before accessing this MCP server."
           ) : (
             <>
               The CLIENT_ID and CLIENT_SECRET values in the{" "}
