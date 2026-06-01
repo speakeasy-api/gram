@@ -83,7 +83,7 @@ func (c Code) IsTemporary() bool {
 func (c Code) MCPCode() MCPCode {
 	switch c {
 	case CodeBadRequest:
-		return MCPCodeParseError
+		return MCPCodeInvalidRequest
 	case CodeUnauthorized, CodeForbidden, CodeConflict, CodeUnsupportedMedia:
 		return MCPCodeInvalidRequest
 	case CodeMethodNotAllowed:
