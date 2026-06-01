@@ -6128,6 +6128,12 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 			res.CustomRuleIds[i] = val
 		}
 	}
+	if v.InputScopes != nil {
+		res.InputScopes = make([]string, len(v.InputScopes))
+		for i, val := range v.InputScopes {
+			res.InputScopes[i] = val
+		}
+	}
 
 	return res
 }

@@ -167,6 +167,9 @@ type CreateRiskPolicyPayload struct {
 	DisabledRules []string
 	// Custom detection rule ids to enable for this policy.
 	CustomRuleIds []string
+	// Scopes this policy applies to. When empty or omitted, the policy scans all
+	// supported scopes.
+	InputScopes []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -714,6 +717,9 @@ type UpdateRiskPolicyPayload struct {
 	// Custom detection rule ids to enable for this policy. Omit to preserve the
 	// current selection.
 	CustomRuleIds []string
+	// Scopes this policy applies to. Omit to preserve the current selection; send
+	// an empty array to apply to all scopes.
+	InputScopes []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

@@ -29,6 +29,9 @@ type RiskPolicy struct {
 	DisabledRules []string
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string
+	// Scopes this policy applies to. When empty or omitted, applies to all scopes.
+	// Valid values: user_message, tool_request, tool_response, assistant_message.
+	InputScopes []string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).

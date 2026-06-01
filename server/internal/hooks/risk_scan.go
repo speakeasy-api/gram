@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/riskscope"
 )
 
 // scanClaudeForEnforcement extracts the scannable text from a Claude hook
@@ -44,7 +45,12 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text)
+	inputScope, ok := hookEventToInputScope(hookEvent)
+	if !ok {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, inputScope)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
 			attr.SlogError(err),
@@ -98,7 +104,12 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text)
+	inputScope, ok := hookEventToInputScope(hookEvent)
+	if !ok {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, inputScope)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -132,7 +143,12 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text)
+	inputScope, ok := hookEventToInputScope(hookEvent)
+	if !ok {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, inputScope)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),
@@ -142,6 +158,19 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 	}
 
 	return result
+}
+
+func hookEventToInputScope(hookEvent HookEvent) (string, bool) {
+	switch hookEvent {
+	case HookEventUserPromptSubmit, HookEventBeforeSubmitPrompt:
+		return riskscope.InputScopeUserMessage, true
+	case HookEventPreToolUse, HookEventBeforeMCPExecution, HookEventPermissionRequest:
+		return riskscope.InputScopeToolRequest, true
+	case HookEventPostToolUse:
+		return riskscope.InputScopeToolResponse, true
+	default:
+		return "", false
+	}
 }
 
 // renderUserBlockReason returns the message shown to the agent when a tool

@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskscope"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -233,6 +234,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := validateCustomRuleIDs(payload.CustomRuleIds); err != nil {
 		return nil, err
 	}
+	if err := validateInputScopes(payload.InputScopes); err != nil {
+		return nil, err
+	}
 
 	enabled := true
 	if payload.Enabled != nil {
@@ -277,6 +281,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PromptInjectionRules: payload.PromptInjectionRules,
 		DisabledRules:        payload.DisabledRules,
 		CustomRuleIds:        payload.CustomRuleIds,
+		InputScopes:          payload.InputScopes,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -425,6 +430,14 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		customRuleIds = payload.CustomRuleIds
 	}
 
+	inputScopes := current.InputScopes
+	if payload.InputScopes != nil {
+		if err := validateInputScopes(payload.InputScopes); err != nil {
+			return nil, err
+		}
+		inputScopes = payload.InputScopes
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -489,6 +502,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
+		InputScopes:          inputScopes,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -1649,6 +1663,22 @@ func validateCustomRuleIDs(ids []string) error {
 	return nil
 }
 
+func validateInputScopes(inputScopes []string) error {
+	for _, inputScope := range inputScopes {
+		if riskscope.IsValid(inputScope) {
+			continue
+		}
+		return oops.E(
+			oops.CodeInvalid,
+			nil,
+			"input_scope %q must be one of: %s",
+			inputScope,
+			strings.Join(riskscope.All(), ", "),
+		)
+	}
+	return nil
+}
+
 func validateCustomDetectionRule(ruleID, title, regexPattern, severity string) error {
 	if !customRuleIDPattern.MatchString(ruleID) {
 		return oops.E(oops.CodeInvalid, nil, "rule_id must match custom.[a-z0-9_]+")
@@ -1976,6 +2006,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
 		CustomRuleIds:        row.CustomRuleIds,
+		InputScopes:          row.InputScopes,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,
@@ -2002,6 +2033,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
 		CustomRuleIds:        row.CustomRuleIds,
+		InputScopes:          row.InputScopes,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,

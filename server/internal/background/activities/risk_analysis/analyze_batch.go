@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskscope"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -93,6 +94,7 @@ type AnalyzeBatchArgs struct {
 	PolicyVersion        int64
 	MessageIDs           []uuid.UUID
 	Sources              []string
+	InputScopes          []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
 	CustomRuleIds        []string
@@ -161,7 +163,11 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
+	messages = filterMessagesByInputScopes(messages, args.InputScopes)
 	scannedCount = len(messages)
+	if len(messages) == 0 {
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
 
 	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds)
 	if err != nil {
@@ -215,6 +221,37 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 		return nil, fmt.Errorf("get message content batch: %w", err)
 	}
 	return messages, nil
+}
+
+func filterMessagesByInputScopes(messages []repo.GetMessageContentBatchRow, inputScopes []string) []repo.GetMessageContentBatchRow {
+	filtered := make([]repo.GetMessageContentBatchRow, 0, len(messages))
+	for _, msg := range messages {
+		inputScope, ok := messageRowInputScope(msg)
+		if !ok {
+			continue
+		}
+		if !riskscope.Allows(inputScopes, inputScope) {
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+	return filtered
+}
+
+func messageRowInputScope(msg repo.GetMessageContentBatchRow) (string, bool) {
+	switch msg.Role {
+	case "user":
+		return riskscope.InputScopeUserMessage, true
+	case "tool":
+		return riskscope.InputScopeToolResponse, true
+	case "assistant":
+		if len(msg.ToolCalls) > 0 {
+			return riskscope.InputScopeToolRequest, true
+		}
+		return riskscope.InputScopeAssistantMessage, true
+	default:
+		return "", false
+	}
 }
 
 // scan runs enabled scanners concurrently. Gitleaks (CPU-bound), presidio

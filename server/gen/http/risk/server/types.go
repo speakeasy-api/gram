@@ -32,6 +32,9 @@ type CreateRiskPolicyRequestBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids to enable for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Scopes this policy applies to. When empty or omitted, the policy scans all
+	// supported scopes.
+	InputScopes []string `form:"input_scopes,omitempty" json:"input_scopes,omitempty" xml:"input_scopes,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -63,6 +66,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// Custom detection rule ids to enable for this policy. Omit to preserve the
 	// current selection.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Scopes this policy applies to. Omit to preserve the current selection; send
+	// an empty array to apply to all scopes.
+	InputScopes []string `form:"input_scopes,omitempty" json:"input_scopes,omitempty" xml:"input_scopes,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -179,6 +185,9 @@ type CreateRiskPolicyResponseBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Scopes this policy applies to. When empty or omitted, applies to all scopes.
+	// Valid values: user_message, tool_request, tool_response, assistant_message.
+	InputScopes []string `form:"input_scopes,omitempty" json:"input_scopes,omitempty" xml:"input_scopes,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -238,6 +247,9 @@ type GetRiskPolicyResponseBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Scopes this policy applies to. When empty or omitted, applies to all scopes.
+	// Valid values: user_message, tool_request, tool_response, assistant_message.
+	InputScopes []string `form:"input_scopes,omitempty" json:"input_scopes,omitempty" xml:"input_scopes,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -283,6 +295,9 @@ type UpdateRiskPolicyResponseBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Scopes this policy applies to. When empty or omitted, applies to all scopes.
+	// Valid values: user_message, tool_request, tool_response, assistant_message.
+	InputScopes []string `form:"input_scopes,omitempty" json:"input_scopes,omitempty" xml:"input_scopes,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -5209,6 +5224,9 @@ type RiskPolicyResponseBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Scopes this policy applies to. When empty or omitted, applies to all scopes.
+	// Valid values: user_message, tool_request, tool_response, assistant_message.
+	InputScopes []string `form:"input_scopes,omitempty" json:"input_scopes,omitempty" xml:"input_scopes,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -5497,6 +5515,12 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 			body.CustomRuleIds[i] = val
 		}
 	}
+	if res.InputScopes != nil {
+		body.InputScopes = make([]string, len(res.InputScopes))
+		for i, val := range res.InputScopes {
+			body.InputScopes[i] = val
+		}
+	}
 	return body
 }
 
@@ -5577,6 +5601,12 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 			body.CustomRuleIds[i] = val
 		}
 	}
+	if res.InputScopes != nil {
+		body.InputScopes = make([]string, len(res.InputScopes))
+		for i, val := range res.InputScopes {
+			body.InputScopes[i] = val
+		}
+	}
 	return body
 }
 
@@ -5627,6 +5657,12 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		body.CustomRuleIds = make([]string, len(res.CustomRuleIds))
 		for i, val := range res.CustomRuleIds {
 			body.CustomRuleIds[i] = val
+		}
+	}
+	if res.InputScopes != nil {
+		body.InputScopes = make([]string, len(res.InputScopes))
+		for i, val := range res.InputScopes {
+			body.InputScopes[i] = val
 		}
 	}
 	return body
@@ -9658,6 +9694,12 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 			v.CustomRuleIds[i] = val
 		}
 	}
+	if body.InputScopes != nil {
+		v.InputScopes = make([]string, len(body.InputScopes))
+		for i, val := range body.InputScopes {
+			v.InputScopes[i] = val
+		}
+	}
 	if body.Action == nil {
 		v.Action = "flag"
 	}
@@ -9740,6 +9782,12 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
+		}
+	}
+	if body.InputScopes != nil {
+		v.InputScopes = make([]string, len(body.InputScopes))
+		for i, val := range body.InputScopes {
+			v.InputScopes[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
