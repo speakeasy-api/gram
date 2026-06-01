@@ -20,7 +20,6 @@ const (
 	CodeNotImplemented      Code = "not_implemented"
 	CodeInsufficientCredits Code = "insufficient_credits"
 	CodeRateLimitExceeded   Code = "rate_limit_exceeded"
-	CodeMethodNotAllowed    Code = "method_not_allowed"
 )
 
 var StatusCodes = map[Code]int{
@@ -39,7 +38,6 @@ var StatusCodes = map[Code]int{
 	CodeNotImplemented:      http.StatusNotImplemented,
 	CodeInsufficientCredits: http.StatusPaymentRequired,
 	CodeRateLimitExceeded:   http.StatusTooManyRequests,
-	CodeMethodNotAllowed:    http.StatusMethodNotAllowed,
 }
 
 func (c Code) UserMessage() string {
