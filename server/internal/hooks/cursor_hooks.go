@@ -220,28 +220,23 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
-		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason); err != nil {
+		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason, hookEvent); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
 		}
 	}
 }
 
 // persistCursorToolCallEvent writes tool call events to both ClickHouse and PostgreSQL
-func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) error {
+func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string, hookEvent HookEvent) error {
 	// Write to ClickHouse for telemetry
 	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, blockReason)
 
 	// Write to PostgreSQL for chat history
-	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
-	if !ok {
-		return nil
-	}
-
 	switch hookEvent {
 	case HookEventPreToolUse, HookEventBeforeMCPExecution:
 		return s.writeCursorToolCallRequestToPG(ctx, payload, metadata)
 	case HookEventPostToolUse, HookEventPostToolUseFailure, HookEventAfterMCPExecution:
-		return s.writeCursorToolCallResultToPG(ctx, payload, metadata)
+		return s.writeCursorToolCallResultToPG(ctx, payload, metadata, hookEvent)
 	default:
 		return nil
 	}
@@ -622,7 +617,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 }
 
 // writeCursorToolCallResultToPG writes a Cursor tool call result (postToolUse/postToolUseFailure) to PostgreSQL.
-func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) error {
+func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, hookEvent HookEvent) error {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
 		return nil
 	}
@@ -635,11 +630,6 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	var content string
-	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
-	if !ok {
-		return nil
-	}
-
 	switch hookEvent {
 	case HookEventPostToolUse:
 		if payload.ToolResponse == nil {
