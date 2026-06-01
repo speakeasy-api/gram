@@ -456,6 +456,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
 	if bodyReadErr == nil {
 		var req struct {
