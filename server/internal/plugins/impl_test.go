@@ -1321,10 +1321,13 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 	// without touching GitHub or minting keys.
 	mock.pushFilesCalled = false
 	mock.createRepoCalled = false
+	mock.addCollaboratorCalled = false
 	second, err := ti.service.PublishProject(ctx, input)
 	require.NoError(t, err)
 	require.True(t, second.Skipped, "unchanged project must be skipped")
 	require.False(t, mock.pushFilesCalled, "skipped publish must not push to GitHub")
+	require.False(t, mock.createRepoCalled, "skipped publish must not call CreateRepo")
+	require.False(t, mock.addCollaboratorCalled, "skipped publish must not add collaborators")
 
 	// Changing the plugin set changes the fingerprint, forcing a re-publish.
 	toolset2 := createTestToolset(t, ctx, ti.conn, "skip-toolset-2")
