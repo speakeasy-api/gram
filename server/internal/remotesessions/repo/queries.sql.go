@@ -1132,6 +1132,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -1165,6 +1166,7 @@ type ListRemoteSessionClientsForUserSessionIssuerLegacyRow struct {
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
 	ClientAudience          pgtype.Text
+	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -1194,6 +1196,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuerLegacy(ctx context
 			&i.TokenEndpointAuthMethod,
 			&i.ClientScope,
 			&i.ClientAudience,
+			&i.LegacyCallbackUrl,
 			&i.RemoteSessionIssuerID,
 			&i.UserSessionIssuerID,
 			&i.IssuerSlug,
