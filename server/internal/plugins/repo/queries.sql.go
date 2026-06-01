@@ -386,7 +386,7 @@ SELECT
   ps.toolset_id,
   t.mcp_slug AS toolset_mcp_slug,
   t.mcp_is_public AS toolset_is_public,
-  (t.external_oauth_server_id IS NOT NULL OR t.oauth_proxy_server_id IS NOT NULL) AS toolset_is_oauth
+  (t.user_session_issuer_id IS NOT NULL) AS toolset_is_oauth
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE

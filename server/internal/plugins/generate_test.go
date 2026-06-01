@@ -86,9 +86,8 @@ func TestGenerateClaudeMCPConfigAlwaysHasAuthHeaders(t *testing.T) {
 	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	for name, entry := range mcpConfig.MCPServers {
-		require.NotNil(t, entry.HTTP, "server %s: expected HTTP entry", name)
-		require.Equal(t, "Bearer ${user_config.GRAM_API_KEY}", entry.HTTP.Headers["Authorization"], "server %s missing auth header", name)
+	for name, server := range mcpConfig.MCPServers {
+		require.Equal(t, "Bearer ${user_config.GRAM_API_KEY}", server.Headers["Authorization"], "server %s missing auth header", name)
 	}
 }
 
@@ -115,9 +114,8 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	entry := mcpConfig.MCPServers["gram-server"]
-	require.NotNil(t, entry.HTTP, "gram-server: expected HTTP entry")
-	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", entry.HTTP.Headers["Authorization"])
+	server := mcpConfig.MCPServers["gram-server"]
+	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", server.Headers["Authorization"])
 }
 
 func TestGenerateClaudeOAuthServerEmitsStdioEntry(t *testing.T) {
@@ -138,13 +136,13 @@ func TestGenerateClaudeOAuthServerEmitsStdioEntry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	raw := string(files["test/.mcp.json"])
-	require.Contains(t, raw, `"command"`, "OAuth server should emit stdio command field")
-	require.Contains(t, raw, `"npx"`, "OAuth server should emit npx command")
-	require.Contains(t, raw, `"mcp-remote@0.1.25"`, "OAuth server should pin mcp-remote version")
-	require.Contains(t, raw, `"https://mcp.example.com/oauth-tool"`, "OAuth server should emit MCP URL in args")
-	require.NotContains(t, raw, `"Authorization"`, "OAuth server must not emit Authorization header")
-	require.NotContains(t, raw, `"type"`, "OAuth stdio entry must not have HTTP type field")
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.Headers, "OAuth server must not emit any auth headers")
 
 	// plugin.json must not include a GRAM_API_KEY userConfig entry for OAuth-only plugins.
 	var pluginMeta claudePluginMeta
@@ -153,7 +151,7 @@ func TestGenerateClaudeOAuthServerEmitsStdioEntry(t *testing.T) {
 	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY", "OAuth-only plugin must not prompt for GRAM_API_KEY")
 }
 
-func TestGenerateCursorOAuthServerEmitsStdioEntry(t *testing.T) {
+func TestGenerateCursorOAuthServerEmitsURLWithNoHeaders(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
 		{
@@ -171,15 +169,16 @@ func TestGenerateCursorOAuthServerEmitsStdioEntry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	raw := string(files["test-cursor/mcp.json"])
-	require.Contains(t, raw, `"command"`, "OAuth server should emit stdio command field")
-	require.Contains(t, raw, `"npx"`, "OAuth server should emit npx command")
-	require.Contains(t, raw, `"mcp-remote@0.1.25"`, "OAuth server should pin mcp-remote version")
-	require.Contains(t, raw, `"https://mcp.example.com/oauth-tool"`, "OAuth server should emit MCP URL in args")
-	require.NotContains(t, raw, `"Authorization"`, "OAuth server must not emit Authorization header")
+	var mcpConfig cursorMCPConfig
+	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.Headers, "OAuth server must not emit any auth headers")
 }
 
-func TestGenerateCodexOAuthServerEmitsStdioEntry(t *testing.T) {
+func TestGenerateCodexOAuthServerEmitsURLWithNoCredentials(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
 		{
@@ -197,12 +196,14 @@ func TestGenerateCodexOAuthServerEmitsStdioEntry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	raw := string(files["test-codex/.mcp.json"])
-	require.Contains(t, raw, `"command"`, "Codex OAuth server should emit stdio command field")
-	require.Contains(t, raw, `"npx"`, "Codex OAuth server should emit npx command")
-	require.Contains(t, raw, `"mcp-remote@0.1.25"`, "Codex OAuth server should pin mcp-remote version")
-	require.Contains(t, raw, `"https://mcp.example.com/oauth-tool"`, "Codex OAuth server should emit MCP URL in args")
-	require.NotContains(t, raw, `"bearer_token_env_var"`, "Codex OAuth server must not emit bearer_token_env_var")
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.BearerTokenEnvVar, "OAuth server must not set bearer_token_env_var")
+	require.Empty(t, server.HTTPHeaders, "OAuth server must not emit http_headers")
 }
 
 func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
@@ -229,17 +230,14 @@ func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mcpConfig.MCPServers, 2, "both servers should appear in .mcp.json")
 
-	// OAuth server emits stdio shape.
-	oauthEntry := mcpConfig.MCPServers["oauth-server"]
-	require.NotNil(t, oauthEntry.Stdio)
-	require.Nil(t, oauthEntry.HTTP)
-	require.Equal(t, "npx", oauthEntry.Stdio.Command)
+	// OAuth server emits URL with no auth headers.
+	oauthServer := mcpConfig.MCPServers["oauth-server"]
+	require.Empty(t, oauthServer.Headers, "OAuth server must not emit auth headers")
+	require.Equal(t, "https://mcp.example.com/oauth-tool", oauthServer.URL)
 
 	// Private HTTP server retains its Authorization header.
-	privateEntry := mcpConfig.MCPServers["private-server"]
-	require.NotNil(t, privateEntry.HTTP)
-	require.Nil(t, privateEntry.Stdio)
-	require.Contains(t, privateEntry.HTTP.Headers, "Authorization")
+	privateServer := mcpConfig.MCPServers["private-server"]
+	require.Contains(t, privateServer.Headers, "Authorization")
 
 	// plugin.json must still prompt for GRAM_API_KEY because the private HTTP server needs it.
 	var pluginMeta claudePluginMeta
@@ -271,11 +269,10 @@ func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
 	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	for name, entry := range mcpConfig.MCPServers {
-		require.NotNil(t, entry.HTTP, "server %s: expected HTTP entry", name)
-		require.Equal(t, "GRAM_API_KEY", entry.HTTP.BearerTokenEnvVar, "server %s missing bearer_token_env_var", name)
-		require.Empty(t, entry.HTTP.HTTPHeaders, "server %s should not bake headers when no APIKey is set", name)
-		require.Empty(t, entry.HTTP.EnvHTTPHeaders, "server %s is private; env_http_headers is for public servers", name)
+	for name, server := range mcpConfig.MCPServers {
+		require.Equal(t, "GRAM_API_KEY", server.BearerTokenEnvVar, "server %s missing bearer_token_env_var", name)
+		require.Empty(t, server.HTTPHeaders, "server %s should not bake headers when no APIKey is set", name)
+		require.Empty(t, server.EnvHTTPHeaders, "server %s is private; env_http_headers is for public servers", name)
 	}
 }
 
@@ -300,10 +297,9 @@ func TestGenerateCodexMCPConfigBakesInjectedAPIKey(t *testing.T) {
 	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	entry := mcpConfig.MCPServers["gram-server"]
-	require.NotNil(t, entry.HTTP, "gram-server: expected HTTP entry")
-	require.Equal(t, "Bearer gram_test_key_123", entry.HTTP.HTTPHeaders["Authorization"])
-	require.Empty(t, entry.HTTP.BearerTokenEnvVar, "baked-key path must not also set bearer_token_env_var")
+	server := mcpConfig.MCPServers["gram-server"]
+	require.Equal(t, "Bearer gram_test_key_123", server.HTTPHeaders["Authorization"])
+	require.Empty(t, server.BearerTokenEnvVar, "baked-key path must not also set bearer_token_env_var")
 }
 
 func TestGenerateCodexMCPConfigUsesEnvHTTPHeadersForPublicServers(t *testing.T) {
@@ -333,11 +329,10 @@ func TestGenerateCodexMCPConfigUsesEnvHTTPHeadersForPublicServers(t *testing.T) 
 	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	entry := mcpConfig.MCPServers["public-api"]
-	require.NotNil(t, entry.HTTP, "public-api: expected HTTP entry")
-	require.Equal(t, "OPENAI_API_KEY", entry.HTTP.EnvHTTPHeaders["X-OpenAI-Key"])
-	require.Empty(t, entry.HTTP.BearerTokenEnvVar, "public servers should not set bearer_token_env_var")
-	require.Empty(t, entry.HTTP.HTTPHeaders, "public servers should not bake Authorization")
+	server := mcpConfig.MCPServers["public-api"]
+	require.Equal(t, "OPENAI_API_KEY", server.EnvHTTPHeaders["X-OpenAI-Key"])
+	require.Empty(t, server.BearerTokenEnvVar, "public servers should not set bearer_token_env_var")
+	require.Empty(t, server.HTTPHeaders, "public servers should not bake Authorization")
 }
 
 // TestCodexJSONKeysMatchPinnedSchema asserts the literal JSON key casing in
