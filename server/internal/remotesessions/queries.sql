@@ -140,21 +140,151 @@ VALUES (
 )
 RETURNING *;
 
+-- name: AttachRemoteSessionClientToUserSessionIssuer :exec
+INSERT INTO remote_session_client_user_session_issuers (
+    remote_session_client_id,
+    user_session_issuer_id
+) VALUES (
+    @remote_session_client_id,
+    @user_session_issuer_id
+)
+ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING;
+
+-- name: CountRemoteSessionClientUserSessionIssuerBindings :one
+SELECT COUNT(remote_session_client_id)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id
+  AND user_session_issuer_id = @user_session_issuer_id;
+
+-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = @remote_session_client_id
+  AND c.project_id = @project_id;
+
 -- name: GetRemoteSessionClientByID :one
-SELECT *
+SELECT
+    id,
+    project_id,
+    remote_session_issuer_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_encrypted,
+    client_id_issued_at,
+    client_secret_expires_at,
+    token_endpoint_auth_method,
+    scope,
+    audience,
+    legacy_callback_url,
+    created_at,
+    updated_at,
+    deleted_at,
+    deleted
 FROM remote_session_clients
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetUserSessionIssuerForProject :one
+SELECT id
+FROM user_session_issuers
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: ListRemoteSessionClientsByProjectID :many
-SELECT *
+SELECT
+    id,
+    project_id,
+    remote_session_issuer_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_encrypted,
+    client_id_issued_at,
+    client_secret_expires_at,
+    token_endpoint_auth_method,
+    scope,
+    audience,
+    legacy_callback_url,
+    created_at,
+    updated_at,
+    deleted_at,
+    deleted
 FROM remote_session_clients
 WHERE project_id = @project_id
   AND deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
-  AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
 ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');
+
+-- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuer :many
+SELECT
+    c.id,
+    c.project_id,
+    c.remote_session_issuer_id,
+    c.user_session_issuer_id,
+    c.client_id,
+    c.client_secret_encrypted,
+    c.client_id_issued_at,
+    c.client_secret_expires_at,
+    c.token_endpoint_auth_method,
+    c.scope,
+    c.audience,
+    c.legacy_callback_url,
+    c.created_at,
+    c.updated_at,
+    c.deleted_at,
+    c.deleted
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
+ORDER BY c.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuerLegacy :many
+SELECT
+    c.id,
+    c.project_id,
+    c.remote_session_issuer_id,
+    c.user_session_issuer_id,
+    c.client_id,
+    c.client_secret_encrypted,
+    c.client_id_issued_at,
+    c.client_secret_expires_at,
+    c.token_endpoint_auth_method,
+    c.scope,
+    c.audience,
+    c.legacy_callback_url,
+    c.created_at,
+    c.updated_at,
+    c.deleted_at,
+    c.deleted
+FROM remote_session_clients AS c
+JOIN user_session_issuers AS usi ON usi.id = c.user_session_issuer_id
+WHERE c.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
+ORDER BY c.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: CountLegacyRemoteSessionClientsForUserSessionIssuer :one
+SELECT COUNT(c.id)
+FROM remote_session_clients AS c
+JOIN user_session_issuers AS usi ON usi.id = c.user_session_issuer_id
+WHERE c.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND c.project_id = @project_id
+  AND c.deleted IS FALSE;
 
 -- name: UpdateRemoteSessionClient :one
 UPDATE remote_session_clients
@@ -295,7 +425,38 @@ WHERE c.id = @id
 -- name: ListRemoteSessionClientsForUserSessionIssuer :many
 -- Joined client + issuer view used by the consent renderer and the
 -- ChallengeManager. Returns one row per remote_session_client linked to
--- the given user_session_issuer.
+-- the given user_session_issuer through the join table.
+SELECT
+    c.id                                   AS client_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    c.user_session_issuer_id               AS user_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND c.project_id = @project_id
+  AND usi.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+  AND usi.deleted IS FALSE
+ORDER BY c.id ASC;
+
+-- name: ListRemoteSessionClientsForUserSessionIssuerLegacy :many
+-- Legacy-column fallback used during AGE-2520 while untouched rows may not
+-- have a join-table binding yet.
 SELECT
     c.id                                   AS client_id,
     c.client_id                            AS external_client_id,
@@ -314,10 +475,13 @@ SELECT
     i.oidc                                 AS oidc
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = c.user_session_issuer_id
 WHERE c.user_session_issuer_id = @user_session_issuer_id
-  AND c.project_id              = @project_id
+  AND c.project_id = @project_id
+  AND usi.project_id = @project_id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  AND usi.deleted IS FALSE
 ORDER BY c.id ASC;
 
 -- name: ListRemoteSessionsByProjectID :many
