@@ -53,6 +53,16 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
     ? `Installed from ${toolset.origin.registrySpecifier}`
     : undefined;
 
+  // External MCP "proxy" servers can't enumerate their tools until a user
+  // authenticates against them, so hide the misleading "No Tools" badge and
+  // surface the visible (non-proxy) tools only.
+  const visibleToolNames = toolset.tools
+    .filter((t) => !(t.type === "externalmcp" && t.name.endsWith(":proxy")))
+    .map((t) => t.name);
+  const isExternalMcpProxy = toolset.tools.some(
+    (t) => t.type === "externalmcp" && t.name.endsWith(":proxy"),
+  );
+
   return (
     <DotRow
       onClick={handleClick}
@@ -134,7 +144,10 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
 
       {/* Tools */}
       <td className="px-3 py-3">
-        <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+        <ToolCollectionBadge
+          toolNames={visibleToolNames}
+          emptyLabel={isExternalMcpProxy ? null : undefined}
+        />
       </td>
     </DotRow>
   );
