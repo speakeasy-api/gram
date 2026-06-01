@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.65.1
+
+### Patch Changes
+
+- 3d2afcf: Added a risk-only toggle to trace panels and deep-linked Risk Events to open with risk filtering enabled
+
 ## 0.65.0
 
 ### Minor Changes
