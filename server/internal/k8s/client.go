@@ -14,12 +14,13 @@ import (
 )
 
 type KubernetesClients struct {
-	Clientset     *kubernetes.Clientset
-	DynamicClient dynamic.Interface
-	gatewayClient gatewayclient.Interface
-	logger        *slog.Logger
-	namespace     string
-	enabled       bool
+	Clientset             *kubernetes.Clientset
+	DynamicClient         dynamic.Interface
+	gatewayClient         gatewayclient.Interface
+	logger                *slog.Logger
+	namespace             string
+	enabled               bool
+	securityPolicyEnabled bool
 }
 
 var (
@@ -28,16 +29,22 @@ var (
 )
 
 // InitializeK8sClient initializes and returns KubernetesClients singleton.
-func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string) (*KubernetesClients, error) {
+//
+// gatewayIPAllowlistEnabled gates the Envoy Gateway SecurityPolicy reconcile
+// used for gateway-kind custom domain IP allow listing. Keep it off until the
+// Envoy Gateway SecurityPolicy CRD is installed in the target namespaces; the
+// ingress path is unaffected.
+func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string, gatewayIPAllowlistEnabled bool) (*KubernetesClients, error) {
 	// not supporting k8s client in local dev mode currently
 	if env == "local" {
 		return &KubernetesClients{
-			Clientset:     nil,
-			DynamicClient: nil,
-			gatewayClient: nil,
-			logger:        logger.With(attr.SlogComponent("k8s_client")),
-			enabled:       false,
-			namespace:     "",
+			Clientset:             nil,
+			DynamicClient:         nil,
+			gatewayClient:         nil,
+			logger:                logger.With(attr.SlogComponent("k8s_client")),
+			enabled:               false,
+			securityPolicyEnabled: false,
+			namespace:             "",
 		}, nil
 	}
 
@@ -67,12 +74,13 @@ func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string) (
 		}
 
 		k8sClients = &KubernetesClients{
-			Clientset:     clientset,
-			DynamicClient: dynamicClient,
-			gatewayClient: gatewayClient,
-			logger:        logger,
-			enabled:       true,
-			namespace:     fmt.Sprintf("gram-%s", env),
+			Clientset:             clientset,
+			DynamicClient:         dynamicClient,
+			gatewayClient:         gatewayClient,
+			logger:                logger,
+			enabled:               true,
+			securityPolicyEnabled: gatewayIPAllowlistEnabled,
+			namespace:             fmt.Sprintf("gram-%s", env),
 		}
 
 		logger.InfoContext(ctx, "Kubernetes clients initialized successfully.")
@@ -88,7 +96,7 @@ func (k *KubernetesClients) Provisioner(kind ProvisionerKind) CustomDomainProvis
 		return &StubProvisioner{kind: kind, logger: k.logger, calls: nil}
 	}
 	if kind == ProvisionerKindGateway {
-		return &GatewayProvisioner{client: k.gatewayClient, namespace: k.namespace, logger: k.logger}
+		return &GatewayProvisioner{client: k.gatewayClient, dynamic: k.DynamicClient, securityPolicyEnabled: k.securityPolicyEnabled, namespace: k.namespace, logger: k.logger}
 	}
 	return &IngressProvisioner{clientset: k.Clientset, namespace: k.namespace, logger: k.logger}
 }
