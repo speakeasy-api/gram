@@ -147,7 +147,7 @@ func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) erro
 }
 
 const getGitHubConnection = `-- name: GetGitHubConnection :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
 FROM plugin_github_connections
 WHERE project_id = $1
 `
@@ -162,6 +162,7 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.PublishedFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -169,7 +170,7 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 }
 
 const getGitHubConnectionByMarketplaceToken = `-- name: GetGitHubConnectionByMarketplaceToken :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
 FROM plugin_github_connections
 WHERE marketplace_token = $1
 `
@@ -186,6 +187,7 @@ func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, mar
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.PublishedFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -588,7 +590,7 @@ ON CONFLICT (project_id) DO UPDATE
       repo_name = EXCLUDED.repo_name,
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       updated_at = clock_timestamp()
-RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, created_at, updated_at
+RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
 `
 
 type UpsertGitHubConnectionParams struct {
@@ -620,6 +622,7 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.PublishedFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
