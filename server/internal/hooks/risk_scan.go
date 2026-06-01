@@ -180,6 +180,8 @@ func extractClaudeText(payload *gen.ClaudePayload, hookEvent HookEvent) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }
@@ -199,6 +201,8 @@ func extractCursorText(payload *gen.CursorPayload, hookEvent HookEvent) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }
@@ -218,6 +222,8 @@ func extractCodexText(payload *gen.CodexPayload, hookEvent HookEvent) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }

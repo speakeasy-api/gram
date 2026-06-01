@@ -212,6 +212,8 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 			err = s.persistCursorAgentResponse(ctx, payload, metadata)
 			// afterAgentResponse also carries token usage — record a metrics entry in ClickHouse
 			s.writeCursorMetricsToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
+		default:
+			return
 		}
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
@@ -240,8 +242,9 @@ func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.C
 		return s.writeCursorToolCallRequestToPG(ctx, payload, metadata)
 	case HookEventPostToolUse, HookEventPostToolUseFailure, HookEventAfterMCPExecution:
 		return s.writeCursorToolCallResultToPG(ctx, payload, metadata)
+	default:
+		return nil
 	}
-	return nil
 }
 
 // isCursorConversationEvent returns true if the event is a conversation capture event (not a tool call).
