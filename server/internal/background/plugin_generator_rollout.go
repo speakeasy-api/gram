@@ -36,6 +36,13 @@ const (
 type PluginGeneratorRolloutInput struct {
 	BatchSize     int32
 	CommitMessage string
+
+	// AfterProjectID and Carried hold the pagination cursor and running tallies
+	// that survive a continue-as-new. They are zero on a fresh (scheduled) run
+	// and are repopulated when the workflow continues itself, so a large rollout
+	// resumes from where it left off instead of restarting at the first page.
+	AfterProjectID *uuid.UUID
+	Carried        PluginGeneratorRolloutResult
 }
 
 type PluginGeneratorRolloutResult struct {
@@ -76,10 +83,10 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 
 	var a *Activities
 	result := &PluginGeneratorRolloutResult{
-		Scanned:   0,
-		Published: 0,
-		Skipped:   0,
-		Failed:    0,
+		Scanned:   input.Carried.Scanned,
+		Published: input.Carried.Published,
+		Skipped:   input.Carried.Skipped,
+		Failed:    input.Carried.Failed,
 	}
 
 	// At a frequent cadence most runs publish nothing (the fingerprint skips
@@ -96,10 +103,13 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 		}
 	}
 
-	var after *uuid.UUID
+	after := input.AfterProjectID
 	for {
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
-			return nil, workflow.NewContinueAsNewError(ctx, PluginGeneratorRolloutWorkflow, input)
+			next := input
+			next.AfterProjectID = after
+			next.Carried = *result
+			return nil, workflow.NewContinueAsNewError(ctx, PluginGeneratorRolloutWorkflow, next)
 		}
 
 		var candidates bgactivities.ListPluginPublishCandidatesResult
@@ -165,7 +175,7 @@ func AddPluginGeneratorRolloutSchedule(ctx context.Context, temporalEnv *tenv.En
 	action := &client.ScheduleWorkflowAction{
 		ID:                 pluginGeneratorRolloutWorkflowID,
 		Workflow:           PluginGeneratorRolloutWorkflow,
-		Args:               []any{PluginGeneratorRolloutInput{BatchSize: 0, CommitMessage: ""}},
+		Args:               []any{PluginGeneratorRolloutInput{BatchSize: 0, CommitMessage: "", AfterProjectID: nil, Carried: PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Failed: 0}}},
 		TaskQueue:          string(temporalEnv.Queue()),
 		WorkflowRunTimeout: 6 * time.Hour,
 	}
