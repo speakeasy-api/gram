@@ -124,7 +124,8 @@ INSERT INTO remote_session_clients (
     client_secret_expires_at,
     token_endpoint_auth_method,
     scope,
-    audience
+    audience,
+    legacy_callback_url
 )
 VALUES (
     @project_id,
@@ -136,7 +137,8 @@ VALUES (
     @client_secret_expires_at,
     @token_endpoint_auth_method,
     sqlc.narg('scope')::text[],
-    @audience
+    @audience,
+    @legacy_callback_url
 )
 RETURNING *;
 
@@ -407,6 +409,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -433,6 +436,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -464,6 +468,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
