@@ -2646,6 +2646,13 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- existing connections (and any future connection without the marketplace
   -- surface enabled) are unconstrained.
   marketplace_token TEXT,
+  -- Stable content hash of the plugin packages last published to this repo,
+  -- independent of per-publish values (manifest version, injected API keys).
+  -- The automated generator rollout compares the current fingerprint against
+  -- this value and skips republishing when nothing has changed. Nullable so
+  -- connections published before fingerprinting existed re-publish once to
+  -- backfill it.
+  published_fingerprint TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
