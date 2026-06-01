@@ -1,14 +1,7 @@
-server/internal/authz/selector.go
-  h_2620cc60cfd1e9 55,57-58,60,62,64,66,68-69,75
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.5.2",
   "base_commit_sha": "fac2bb0fff741d6592b83324dc370d0fa0bb4300",
-  "prompts": {},
-  "humans": {
-    "h_2620cc60cfd1e9": {
-      "author": "tgmendes <tiago@speakeasy.com>"
-    }
-  }
+  "prompts": {}
 }
