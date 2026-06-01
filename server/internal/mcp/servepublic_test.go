@@ -306,7 +306,7 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 
 	errorBody, ok := response["error"].(map[string]any)
 	require.True(t, ok, "expected JSON-RPC error: %v", response)
-	require.InDelta(t, -32600, errorBody["code"], 0)
+	require.InDelta(t, -32001, errorBody["code"], 0)
 	require.Contains(t, errorBody["message"], "expired or invalid access token")
 }
 
