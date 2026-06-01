@@ -402,17 +402,17 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]any)
+	mcpServers := make(map[string]codexMCPEntry)
 	for _, s := range p.Servers {
 		if s.IsOAuth {
-			mcpServers[s.DisplayName] = codexStdioMCPServer{
-				Command: "npx",
-				Args:    []string{"mcp-remote@0.1.25", s.MCPURL},
+			mcpServers[s.DisplayName] = codexMCPEntry{
+				HTTP:  nil,
+				Stdio: &codexStdioMCPServer{Command: "npx", Args: []string{"mcp-remote@0.1.25", s.MCPURL}},
 			}
 			continue
 		}
 
-		entry := codexMCPServer{
+		http := codexMCPServer{
 			URL:               s.MCPURL,
 			BearerTokenEnvVar: "",
 			HTTPHeaders:       nil,
@@ -423,22 +423,22 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			// User provides each variable in their shell env; Codex
 			// substitutes the value into the named header at runtime.
 			if len(s.EnvConfigs) > 0 {
-				entry.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
+				http.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
 				for _, ec := range s.EnvConfigs {
-					entry.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
+					http.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
 				}
 			}
 		} else if cfg.APIKey != "" {
 			// Private server: bake the Gram-issued key directly into the
 			// published config. Repo is private, so this matches the Cursor/Claude pattern.
-			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
+			http.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
 			// Private server, no key available: ask Codex to read GRAM_API_KEY
 			// from the user's environment at startup.
-			entry.BearerTokenEnvVar = "GRAM_API_KEY"
+			http.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
-		mcpServers[s.DisplayName] = entry
+		mcpServers[s.DisplayName] = codexMCPEntry{HTTP: &http, Stdio: nil}
 	}
 	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -1332,14 +1332,14 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 	files[path.Join(subdir, ".claude-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]any)
+	mcpServers := make(map[string]claudeMCPEntry)
 	for _, s := range p.Servers {
 		if s.IsOAuth {
 			// OAuth servers use mcp-remote as a stdio proxy; OAuth handles identity at the HTTP
 			// layer, so no Authorization header is emitted.
-			mcpServers[s.DisplayName] = claudeStdioMCPServer{
-				Command: "npx",
-				Args:    []string{"mcp-remote@0.1.25", s.MCPURL},
+			mcpServers[s.DisplayName] = claudeMCPEntry{
+				HTTP:  nil,
+				Stdio: &claudeStdioMCPServer{Command: "npx", Args: []string{"mcp-remote@0.1.25", s.MCPURL}},
 			}
 			continue
 		}
@@ -1359,10 +1359,9 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 			headers["Authorization"] = "Bearer ${user_config.GRAM_API_KEY}"
 		}
 
-		mcpServers[s.DisplayName] = claudeMCPServer{
-			Type:    "http",
-			URL:     s.MCPURL,
-			Headers: headers,
+		mcpServers[s.DisplayName] = claudeMCPEntry{
+			HTTP:  &claudeMCPServer{Type: "http", URL: s.MCPURL, Headers: headers},
+			Stdio: nil,
 		}
 	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
@@ -1393,12 +1392,12 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]any)
+	mcpServers := make(map[string]cursorMCPEntry)
 	for _, s := range p.Servers {
 		if s.IsOAuth {
-			mcpServers[s.DisplayName] = cursorStdioMCPServer{
-				Command: "npx",
-				Args:    []string{"mcp-remote@0.1.25", s.MCPURL},
+			mcpServers[s.DisplayName] = cursorMCPEntry{
+				HTTP:  nil,
+				Stdio: &cursorStdioMCPServer{Command: "npx", Args: []string{"mcp-remote@0.1.25", s.MCPURL}},
 			}
 			continue
 		}
@@ -1415,9 +1414,9 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 			headers["Authorization"] = "Bearer ${env:GRAM_API_KEY}"
 		}
 
-		mcpServers[s.DisplayName] = cursorMCPServer{
-			URL:     s.MCPURL,
-			Headers: headers,
+		mcpServers[s.DisplayName] = cursorMCPEntry{
+			HTTP:  &cursorMCPServer{URL: s.MCPURL, Headers: headers},
+			Stdio: nil,
 		}
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})
@@ -1468,7 +1467,49 @@ type userConfigEntry struct {
 }
 
 type claudeMCPConfig struct {
-	MCPServers map[string]any `json:"mcpServers"`
+	MCPServers map[string]claudeMCPEntry `json:"mcpServers"`
+}
+
+// claudeMCPEntry is a discriminated union: exactly one of HTTP or Stdio is non-nil.
+type claudeMCPEntry struct {
+	HTTP  *claudeMCPServer
+	Stdio *claudeStdioMCPServer
+}
+
+func (e claudeMCPEntry) MarshalJSON() ([]byte, error) {
+	if e.Stdio != nil {
+		b, err := json.Marshal(e.Stdio)
+		if err != nil {
+			return nil, fmt.Errorf("marshal claude stdio mcp server: %w", err)
+		}
+		return b, nil
+	}
+	b, err := json.Marshal(e.HTTP)
+	if err != nil {
+		return nil, fmt.Errorf("marshal claude http mcp server: %w", err)
+	}
+	return b, nil
+}
+
+func (e *claudeMCPEntry) UnmarshalJSON(data []byte) error {
+	var probe struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("probe claude mcp entry: %w", err)
+	}
+	if probe.Command != "" {
+		e.Stdio = &claudeStdioMCPServer{Command: "", Args: nil}
+		if err := json.Unmarshal(data, e.Stdio); err != nil {
+			return fmt.Errorf("unmarshal claude stdio mcp server: %w", err)
+		}
+		return nil
+	}
+	e.HTTP = &claudeMCPServer{Type: "", URL: "", Headers: nil}
+	if err := json.Unmarshal(data, e.HTTP); err != nil {
+		return fmt.Errorf("unmarshal claude http mcp server: %w", err)
+	}
+	return nil
 }
 
 type claudeMCPServer struct {
@@ -1492,7 +1533,49 @@ type cursorPluginMeta struct {
 }
 
 type cursorMCPConfig struct {
-	MCPServers map[string]any `json:"mcpServers"`
+	MCPServers map[string]cursorMCPEntry `json:"mcpServers"`
+}
+
+// cursorMCPEntry is a discriminated union: exactly one of HTTP or Stdio is non-nil.
+type cursorMCPEntry struct {
+	HTTP  *cursorMCPServer
+	Stdio *cursorStdioMCPServer
+}
+
+func (e cursorMCPEntry) MarshalJSON() ([]byte, error) {
+	if e.Stdio != nil {
+		b, err := json.Marshal(e.Stdio)
+		if err != nil {
+			return nil, fmt.Errorf("marshal cursor stdio mcp server: %w", err)
+		}
+		return b, nil
+	}
+	b, err := json.Marshal(e.HTTP)
+	if err != nil {
+		return nil, fmt.Errorf("marshal cursor http mcp server: %w", err)
+	}
+	return b, nil
+}
+
+func (e *cursorMCPEntry) UnmarshalJSON(data []byte) error {
+	var probe struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("probe cursor mcp entry: %w", err)
+	}
+	if probe.Command != "" {
+		e.Stdio = &cursorStdioMCPServer{Command: "", Args: nil}
+		if err := json.Unmarshal(data, e.Stdio); err != nil {
+			return fmt.Errorf("unmarshal cursor stdio mcp server: %w", err)
+		}
+		return nil
+	}
+	e.HTTP = &cursorMCPServer{URL: "", Headers: nil}
+	if err := json.Unmarshal(data, e.HTTP); err != nil {
+		return fmt.Errorf("unmarshal cursor http mcp server: %w", err)
+	}
+	return nil
 }
 
 type cursorMCPServer struct {
@@ -1583,7 +1666,49 @@ type codexInterface struct {
 }
 
 type codexMCPConfig struct {
-	MCPServers map[string]any `json:"mcpServers"`
+	MCPServers map[string]codexMCPEntry `json:"mcpServers"`
+}
+
+// codexMCPEntry is a discriminated union: exactly one of HTTP or Stdio is non-nil.
+type codexMCPEntry struct {
+	HTTP  *codexMCPServer
+	Stdio *codexStdioMCPServer
+}
+
+func (e codexMCPEntry) MarshalJSON() ([]byte, error) {
+	if e.Stdio != nil {
+		b, err := json.Marshal(e.Stdio)
+		if err != nil {
+			return nil, fmt.Errorf("marshal codex stdio mcp server: %w", err)
+		}
+		return b, nil
+	}
+	b, err := json.Marshal(e.HTTP)
+	if err != nil {
+		return nil, fmt.Errorf("marshal codex http mcp server: %w", err)
+	}
+	return b, nil
+}
+
+func (e *codexMCPEntry) UnmarshalJSON(data []byte) error {
+	var probe struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("probe codex mcp entry: %w", err)
+	}
+	if probe.Command != "" {
+		e.Stdio = &codexStdioMCPServer{Command: "", Args: nil}
+		if err := json.Unmarshal(data, e.Stdio); err != nil {
+			return fmt.Errorf("unmarshal codex stdio mcp server: %w", err)
+		}
+		return nil
+	}
+	e.HTTP = &codexMCPServer{URL: "", BearerTokenEnvVar: "", HTTPHeaders: nil, EnvHTTPHeaders: nil}
+	if err := json.Unmarshal(data, e.HTTP); err != nil {
+		return fmt.Errorf("unmarshal codex http mcp server: %w", err)
+	}
+	return nil
 }
 
 type codexMCPServer struct {
