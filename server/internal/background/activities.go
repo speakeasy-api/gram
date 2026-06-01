@@ -52,7 +52,6 @@ type Activities struct {
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
-	freeTierReportingUsageMetrics   *activities.FreeTierReportingUsageMetrics
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
 	getSlackProjectContext          *activities.GetSlackProjectContext
@@ -144,7 +143,6 @@ func NewActivities(
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		freeTierReportingUsageMetrics:   activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:          activities.NewSlackProjectContextActivity(logger, db, slackClient),
@@ -260,10 +258,6 @@ func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args a
 
 func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
 	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
-}
-
-func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs []string) error {
-	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
 }
 
 func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {

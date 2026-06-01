@@ -278,7 +278,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
-	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
