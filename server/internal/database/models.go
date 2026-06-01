@@ -1064,6 +1064,13 @@ type ProjectAllowedOrigin struct {
 	Deleted   bool
 }
 
+type ProjectManagedAssistant struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type ProjectMarketplaceSetting struct {
 	ProjectID       uuid.UUID
 	MarketplaceName pgtype.Text
