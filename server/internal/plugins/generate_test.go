@@ -114,8 +114,136 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	gramServer := mcpConfig.MCPServers["gram-server"]
-	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", gramServer.Headers["Authorization"])
+	server := mcpConfig.MCPServers["gram-server"]
+	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", server.Headers["Authorization"])
+}
+
+func TestGenerateClaudeOAuthServerEmitsStdioEntry(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://mcp.example.com/oauth-tool", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.Headers, "OAuth server must not emit any auth headers")
+
+	// plugin.json must not include a GRAM_API_KEY userConfig entry for OAuth-only plugins.
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY", "OAuth-only plugin must not prompt for GRAM_API_KEY")
+}
+
+func TestGenerateCursorOAuthServerEmitsURLWithNoHeaders(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://mcp.example.com/oauth-tool", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig cursorMCPConfig
+	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.Headers, "OAuth server must not emit any auth headers")
+}
+
+func TestGenerateCodexOAuthServerEmitsURLWithNoCredentials(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://mcp.example.com/oauth-tool", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.BearerTokenEnvVar, "OAuth server must not set bearer_token_env_var")
+	require.Empty(t, server.HTTPHeaders, "OAuth server must not emit http_headers")
+}
+
+func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://mcp.example.com/oauth-tool", IsOAuth: true},
+				{DisplayName: "private-server", MCPURL: "https://app.getgram.ai/mcp/private"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 2, "both servers should appear in .mcp.json")
+
+	// OAuth server emits URL with no auth headers.
+	oauthServer := mcpConfig.MCPServers["oauth-server"]
+	require.Empty(t, oauthServer.Headers, "OAuth server must not emit auth headers")
+	require.Equal(t, "https://mcp.example.com/oauth-tool", oauthServer.URL)
+
+	// Private HTTP server retains its Authorization header.
+	privateServer := mcpConfig.MCPServers["private-server"]
+	require.Contains(t, privateServer.Headers, "Authorization")
+
+	// plugin.json must still prompt for GRAM_API_KEY because the private HTTP server needs it.
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.Contains(t, pluginMeta.UserConfig, "GRAM_API_KEY")
 }
 
 func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
