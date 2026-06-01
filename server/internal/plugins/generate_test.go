@@ -87,7 +87,11 @@ func TestGenerateClaudeMCPConfigAlwaysHasAuthHeaders(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, server := range mcpConfig.MCPServers {
-		require.Equal(t, "Bearer ${user_config.GRAM_API_KEY}", server.Headers["Authorization"], "server %s missing auth header", name)
+		serverMap, ok := server.(map[string]any)
+		require.True(t, ok, "server %s: expected map[string]any", name)
+		headers, ok := serverMap["headers"].(map[string]any)
+		require.True(t, ok, "server %s: expected headers map", name)
+		require.Equal(t, "Bearer ${user_config.GRAM_API_KEY}", headers["Authorization"], "server %s missing auth header", name)
 	}
 }
 
@@ -114,8 +118,141 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	gramServer := mcpConfig.MCPServers["gram-server"]
-	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", gramServer.Headers["Authorization"])
+	gramServerRaw := mcpConfig.MCPServers["gram-server"]
+	gramServer, ok := gramServerRaw.(map[string]any)
+	require.True(t, ok, "gram-server: expected map[string]any")
+	headers, ok := gramServer["headers"].(map[string]any)
+	require.True(t, ok, "gram-server: expected headers map")
+	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", headers["Authorization"])
+}
+
+func TestGenerateClaudeOAuthServerEmitsStdioEntry(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://chat.speakeasy.com/mcp/int-linear", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	raw := string(files["test/.mcp.json"])
+	require.Contains(t, raw, `"command"`, "OAuth server should emit stdio command field")
+	require.Contains(t, raw, `"npx"`, "OAuth server should emit npx command")
+	require.Contains(t, raw, `"mcp-remote@0.1.25"`, "OAuth server should pin mcp-remote version")
+	require.Contains(t, raw, `"https://chat.speakeasy.com/mcp/int-linear"`, "OAuth server should emit MCP URL in args")
+	require.NotContains(t, raw, `"Authorization"`, "OAuth server must not emit Authorization header")
+	require.NotContains(t, raw, `"type"`, "OAuth stdio entry must not have HTTP type field")
+
+	// plugin.json must not include a GRAM_API_KEY userConfig entry for OAuth-only plugins.
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY", "OAuth-only plugin must not prompt for GRAM_API_KEY")
+}
+
+func TestGenerateCursorOAuthServerEmitsStdioEntry(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://chat.speakeasy.com/mcp/int-linear", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	raw := string(files["test-cursor/mcp.json"])
+	require.Contains(t, raw, `"command"`, "OAuth server should emit stdio command field")
+	require.Contains(t, raw, `"npx"`, "OAuth server should emit npx command")
+	require.Contains(t, raw, `"mcp-remote@0.1.25"`, "OAuth server should pin mcp-remote version")
+	require.Contains(t, raw, `"https://chat.speakeasy.com/mcp/int-linear"`, "OAuth server should emit MCP URL in args")
+	require.NotContains(t, raw, `"Authorization"`, "OAuth server must not emit Authorization header")
+}
+
+func TestGenerateCodexOAuthServerIsSkipped(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://chat.speakeasy.com/mcp/int-linear", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Empty(t, mcpConfig.MCPServers, "Codex must skip OAuth servers until stdio support is added")
+}
+
+func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://chat.speakeasy.com/mcp/int-linear", IsOAuth: true},
+				{DisplayName: "private-server", MCPURL: "https://app.getgram.ai/mcp/private"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 2, "both servers should appear in .mcp.json")
+
+	// OAuth server emits stdio shape.
+	oauthRaw := mcpConfig.MCPServers["oauth-server"]
+	oauthMap, ok := oauthRaw.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "npx", oauthMap["command"])
+	require.NotContains(t, oauthMap, "headers")
+
+	// Private HTTP server retains its Authorization header.
+	privateRaw := mcpConfig.MCPServers["private-server"]
+	privateMap, ok := privateRaw.(map[string]any)
+	require.True(t, ok)
+	headers, ok := privateMap["headers"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, headers, "Authorization")
+
+	// plugin.json must still prompt for GRAM_API_KEY because the private HTTP server needs it.
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.Contains(t, pluginMeta.UserConfig, "GRAM_API_KEY")
 }
 
 func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {

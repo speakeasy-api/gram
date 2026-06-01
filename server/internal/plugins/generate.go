@@ -25,6 +25,9 @@ type PluginServerInfo struct {
 	MCPURL string
 	// IsPublic indicates whether the toolset is publicly accessible (no Gram API key needed).
 	IsPublic bool
+	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
+	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
+	IsOAuth bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
 }
@@ -401,6 +404,12 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 
 	mcpServers := make(map[string]codexMCPServer)
 	for _, s := range p.Servers {
+		if s.IsOAuth {
+			// Codex MCP server config does not support stdio/command-based entries.
+			// OAuth toolsets are skipped until Codex adds stdio support.
+			continue
+		}
+
 		entry := codexMCPServer{
 			URL:               s.MCPURL,
 			BearerTokenEnvVar: "",
@@ -1284,10 +1293,10 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Determine if any private server needs a Gram API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && cfg.APIKey == "" {
+		if !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
 			needsGramKeyPrompt = true
 		}
-		// Public servers may need user-provided env vars.
+		// Public non-OAuth servers may need user-provided env vars.
 		for _, ec := range s.EnvConfigs {
 			userConfig[ec.VariableName] = userConfigEntry{
 				Description: ec.DisplayName,
@@ -1321,8 +1330,18 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 	files[path.Join(subdir, ".claude-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]claudeMCPServer)
+	mcpServers := make(map[string]any)
 	for _, s := range p.Servers {
+		if s.IsOAuth {
+			// OAuth servers use mcp-remote as a stdio proxy; OAuth handles identity at the HTTP
+			// layer, so no Authorization header is emitted.
+			mcpServers[s.DisplayName] = claudeStdioMCPServer{
+				Command: "npx",
+				Args:    []string{"mcp-remote@0.1.25", s.MCPURL},
+			}
+			continue
+		}
+
 		headers := make(map[string]string)
 
 		if s.IsPublic {
@@ -1372,8 +1391,16 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]cursorMCPServer)
+	mcpServers := make(map[string]any)
 	for _, s := range p.Servers {
+		if s.IsOAuth {
+			mcpServers[s.DisplayName] = cursorStdioMCPServer{
+				Command: "npx",
+				Args:    []string{"mcp-remote@0.1.25", s.MCPURL},
+			}
+			continue
+		}
+
 		headers := make(map[string]string)
 
 		if s.IsPublic {
@@ -1439,13 +1466,18 @@ type userConfigEntry struct {
 }
 
 type claudeMCPConfig struct {
-	MCPServers map[string]claudeMCPServer `json:"mcpServers"`
+	MCPServers map[string]any `json:"mcpServers"`
 }
 
 type claudeMCPServer struct {
 	Type    string            `json:"type"`
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers,omitempty"`
+}
+
+type claudeStdioMCPServer struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
 }
 
 type cursorPluginMeta struct {
@@ -1458,12 +1490,17 @@ type cursorPluginMeta struct {
 }
 
 type cursorMCPConfig struct {
-	MCPServers map[string]cursorMCPServer `json:"mcpServers"`
+	MCPServers map[string]any `json:"mcpServers"`
 }
 
 type cursorMCPServer struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers,omitempty"`
+}
+
+type cursorStdioMCPServer struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
 }
 
 // Hook config types — Claude uses PascalCase event names + a matcher
