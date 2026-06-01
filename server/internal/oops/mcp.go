@@ -61,13 +61,18 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 type MCPCode int
 
 const (
-	MCPCodeParseError       MCPCode = -32700
-	MCPCodeInvalidRequest   MCPCode = -32600
-	MCPCodeMethodNotFound   MCPCode = -32601
-	MCPCodeInvalidParams    MCPCode = -32602
-	MCPCodeInternalError    MCPCode = -32603
+	MCPCodeParseError     MCPCode = -32700
+	MCPCodeInvalidRequest MCPCode = -32600
+	MCPCodeMethodNotFound MCPCode = -32601
+	MCPCodeInvalidParams  MCPCode = -32602
+	MCPCodeInternalError  MCPCode = -32603
+
+	// Server-defined codes occupy the JSON-RPC 2.0 reserved range -32000 to
+	// -32099 and are used for application-level errors.
 	MCPCodeServerError      MCPCode = -32000
+	MCPCodeUnauthorized     MCPCode = -32001
 	MCPCodeResourceNotFound MCPCode = -32002
+	MCPCodeForbidden        MCPCode = -32003
 )
 
 func (c MCPCode) Message() string {
@@ -82,8 +87,12 @@ func (c MCPCode) Message() string {
 		return "Invalid params"
 	case MCPCodeServerError:
 		return "Server error"
+	case MCPCodeUnauthorized:
+		return "Unauthorized"
 	case MCPCodeResourceNotFound:
 		return "Resource not found"
+	case MCPCodeForbidden:
+		return "Forbidden"
 	default:
 		return "Internal error"
 	}

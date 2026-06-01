@@ -90,6 +90,44 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 	require.NotContains(t, errorBody, "data")
 }
 
+func TestCodeMCPCode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		code Code
+		want MCPCode
+	}{
+		{"unauthorized_uses_server_defined_code", CodeUnauthorized, MCPCodeUnauthorized},
+		{"forbidden_uses_server_defined_code", CodeForbidden, MCPCodeForbidden},
+		{"bad_request_is_invalid_request", CodeBadRequest, MCPCodeInvalidRequest},
+		{"conflict_is_invalid_request", CodeConflict, MCPCodeInvalidRequest},
+		{"unsupported_media_is_invalid_request", CodeUnsupportedMedia, MCPCodeInvalidRequest},
+		{"method_not_allowed_is_server_error", CodeMethodNotAllowed, MCPCodeServerError},
+		{"not_found_is_resource_not_found", CodeNotFound, MCPCodeResourceNotFound},
+		{"invalid_is_invalid_params", CodeInvalid, MCPCodeInvalidParams},
+		{"not_implemented_is_method_not_found", CodeNotImplemented, MCPCodeMethodNotFound},
+		{"unexpected_defaults_to_internal", CodeUnexpected, MCPCodeInternalError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, tt.code.MCPCode())
+		})
+	}
+
+	t.Run("auth_codes_are_in_server_defined_range", func(t *testing.T) {
+		t.Parallel()
+
+		for _, c := range []MCPCode{MCPCodeUnauthorized, MCPCodeForbidden} {
+			require.GreaterOrEqual(t, int(c), -32099, "server-defined codes must be >= -32099")
+			require.LessOrEqual(t, int(c), -32000, "server-defined codes must be <= -32000")
+		}
+	})
+}
+
 func TestNewMCPErrorFromCause(t *testing.T) {
 	t.Parallel()
 

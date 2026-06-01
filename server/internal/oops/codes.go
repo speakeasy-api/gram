@@ -82,9 +82,11 @@ func (c Code) IsTemporary() bool {
 
 func (c Code) MCPCode() MCPCode {
 	switch c {
-	case CodeBadRequest:
-		return MCPCodeInvalidRequest
-	case CodeUnauthorized, CodeForbidden, CodeConflict, CodeUnsupportedMedia:
+	case CodeUnauthorized:
+		return MCPCodeUnauthorized
+	case CodeForbidden:
+		return MCPCodeForbidden
+	case CodeBadRequest, CodeConflict, CodeUnsupportedMedia:
 		return MCPCodeInvalidRequest
 	case CodeMethodNotAllowed:
 		return MCPCodeServerError
