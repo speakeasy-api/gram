@@ -79,12 +79,11 @@ function CopyButton({
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't trigger row selection
-      // Copy with the label prefix
-      navigator.clipboard.writeText(`${label}: ${value}`);
+      navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     },
-    [value, label],
+    [value],
   );
 
   return (
