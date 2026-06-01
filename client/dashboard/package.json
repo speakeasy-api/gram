@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
     "build": "vite build",
-    "lint": "oxfmt --check . && eslint . && tsc -b --noEmit",
+    "lint": "pnpm lint:format && pnpm lint:eslint && pnpm type-check",
+    "lint:eslint": "eslint .",
+    "lint:format": "oxfmt --check .",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -65,9 +65,9 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 <commands>
 
-- `cd client/dashboard && npx tsc --noEmit`: Type-check the dashboard
-- `cd client/dashboard && pnpm build`: Build the dashboard
-- `cd client/dashboard && pnpm dev`: Run dev server
+- `pnpm -F dashboard type-check`: Type-check the dashboard
+- `pnpm -F dashboard build`: Build the dashboard
+- `pnpm -F dashboard dev`: Run dev server
 
 </commands>
 
