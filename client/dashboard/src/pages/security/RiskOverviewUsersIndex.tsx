@@ -5,7 +5,8 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useRoutes } from "@/routes";
-import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useMemo } from "react";

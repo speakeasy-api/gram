@@ -98,7 +98,7 @@ export const RULE_CATEGORY_META: Record<
   destructive_tool: {
     label: "Destructive Tools",
     description:
-      "MCP tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued MCP tool metadata.",
+      "MCP tool calls whose platform tool definition is annotated as destructive. Requires Speakeasy hooks and platform-issued MCP tool metadata.",
     icon: "shield-alert",
   },
   cli_destructive: {

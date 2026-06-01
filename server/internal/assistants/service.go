@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	DefaultWarmTTLSeconds = 300
-	DefaultMaxConcurrency = 1
+	DefaultWarmTTLSeconds = 60
+	DefaultMaxConcurrency = 5
 
 	StatusActive = "active"
 	StatusPaused = "paused"

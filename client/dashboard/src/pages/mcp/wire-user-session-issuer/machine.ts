@@ -66,17 +66,17 @@ const STEP_META: Record<
   userSessionIssuer: {
     resourceLabel: "User Session Issuer",
     description:
-      "Authorization server identity Gram presents to MCP clients. Mints user sessions that MCP clients exchange for access tokens.",
+      "Authorization server identity the platform presents to MCP clients. Mints user sessions that MCP clients exchange for access tokens.",
   },
   remoteSessionIssuer: {
     resourceLabel: "Remote Session Issuer",
     description:
-      "Upstream authorization server identity Gram speaks OAuth to as a client. Pre-filled by hitting the upstream's RFC 8414 well-known document.",
+      "Upstream authorization server identity the platform speaks OAuth to as a client. Pre-filled by hitting the upstream's RFC 8414 well-known document.",
   },
   remoteSessionClient: {
     resourceLabel: "Remote Session Client",
     description:
-      "Credentials Gram uses when acting as the remote session issuer's OAuth client. Cloned, registered, or supplied manually depending on the strategy you pick.",
+      "Credentials the platform uses when acting as the remote session issuer's OAuth client. Cloned, registered, or supplied manually depending on the strategy you pick.",
   },
 };
 

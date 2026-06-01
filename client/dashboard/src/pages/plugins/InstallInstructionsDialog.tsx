@@ -422,7 +422,8 @@ function CursorInstallContent({
             <p className="text-muted-foreground text-sm">
               In Cursor's team marketplace settings, mark the observability
               plugin (it ships first in your marketplace) as required so tool
-              events flow to Gram for every team member without per-user setup.
+              events flow to the platform for every team member without per-user
+              setup.
             </p>
           </div>
 

@@ -2628,6 +2628,11 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
   ON plugin_assignments (plugin_id, principal_urn);
 
+-- Read-side index for the device-agent endpoint, which resolves an
+-- organization to its assignments by principal URN on every poll.
+CREATE INDEX IF NOT EXISTS plugin_assignments_organization_id_principal_urn_idx
+  ON plugin_assignments (organization_id, principal_urn);
+
 -- Tracks the GitHub repository where plugin packages are published for a project.
 CREATE TABLE IF NOT EXISTS plugin_github_connections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2704,6 +2709,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
   action TEXT NOT NULL DEFAULT 'flag',
+  audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
   version BIGINT NOT NULL,
@@ -2714,12 +2720,17 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policies_audience_type_check CHECK (audience_type IN ('everyone', 'targeted')),
   CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policies_project_id_audience_type_idx
+ON risk_policies (project_id, audience_type)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
