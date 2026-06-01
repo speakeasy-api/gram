@@ -139,9 +139,9 @@ func (e *MCPError) MarshalJSON() ([]byte, error) {
 
 	payload := map[string]any{
 		"jsonrpc": "2.0",
+		"id":      e.ID,
 		"error":   errorBody,
 	}
-	payload["id"] = e.ID
 
 	bs, err := json.Marshal(payload)
 	if err != nil {

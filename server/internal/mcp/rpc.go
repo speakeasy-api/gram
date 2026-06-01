@@ -22,12 +22,12 @@ var (
 type resultEnvelope[T any] struct {
 	JSONRPC string        `json:"jsonrpc"`
 	ID      mcpjsonrpc.ID `json:"id"`
-	Result  T             `json:"result,omitempty,omitzero"`
+	Result  T             `json:"result"`
 }
 
 type result[T any] struct {
 	ID     mcpjsonrpc.ID `json:"id"`
-	Result T             `json:"result,omitempty,omitzero"`
+	Result T             `json:"result"`
 }
 
 func (m result[T]) MarshalJSON() ([]byte, error) {

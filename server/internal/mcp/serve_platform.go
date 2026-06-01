@@ -136,7 +136,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	case "tools/call":
 		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
 	default:
-		return nil, oops.E(oops.CodeMethodNotAllowed, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
+		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
 	}
 }
 
