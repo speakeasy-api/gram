@@ -45,6 +45,67 @@ func TestBuildEmployeeDataFlowGraph_DoesNotCollideEdgesWhenLabelsContainDelimite
 	require.NotEqual(t, edgeOne.ID, edgeTwo.ID)
 }
 
+func TestBuildEmployeeDataFlowGraph_PrunesNodesNotReachableFromOrigin(t *testing.T) {
+	t.Parallel()
+
+	rows := []repo.EmployeeDataFlowRow{
+		// Full path anchored at an origin: everything here is reachable.
+		{
+			Origin:       "host-a",
+			Client:       "cursor",
+			Server:       "github",
+			ServerClass:  "external",
+			Tool:         "list_issues",
+			CallCount:    2,
+			SuccessCount: 2,
+		},
+		// Dangling path with no origin tier: the client (and everything that
+		// hangs off it) must be pruned.
+		{
+			Client:    "orphan-client",
+			Server:    "orphan-server",
+			Tool:      "orphan-tool",
+			CallCount: 5,
+		},
+	}
+
+	nodes, edges := buildEmployeeDataFlowGraph(rows)
+
+	require.NotNil(t, findEmployeeDataFlowNode(nodes, "origin", "host-a"))
+	require.NotNil(t, findEmployeeDataFlowNode(nodes, "client", "cursor"))
+	require.NotNil(t, findEmployeeDataFlowNode(nodes, "server", "github"))
+	require.NotNil(t, findEmployeeDataFlowNode(nodes, "tool", "list_issues"))
+
+	require.Nil(t, findEmployeeDataFlowNode(nodes, "client", "orphan-client"))
+	require.Nil(t, findEmployeeDataFlowNode(nodes, "server", "orphan-server"))
+	require.Nil(t, findEmployeeDataFlowNode(nodes, "tool", "orphan-tool"))
+
+	for _, edge := range edges {
+		require.NotNil(t, findEmployeeDataFlowNodeByID(nodes, edge.Source))
+		require.NotNil(t, findEmployeeDataFlowNodeByID(nodes, edge.Target))
+	}
+}
+
+func findEmployeeDataFlowNode(nodes []*telem_gen.EmployeeDataFlowNode, tier, label string) *telem_gen.EmployeeDataFlowNode {
+	for _, node := range nodes {
+		if node.Tier == tier && node.Label == label {
+			return node
+		}
+	}
+
+	return nil
+}
+
+func findEmployeeDataFlowNodeByID(nodes []*telem_gen.EmployeeDataFlowNode, id string) *telem_gen.EmployeeDataFlowNode {
+	for _, node := range nodes {
+		if node.ID == id {
+			return node
+		}
+	}
+
+	return nil
+}
+
 func findEmployeeDataFlowEdge(edges []*telem_gen.EmployeeDataFlowEdge, source, target string) *telem_gen.EmployeeDataFlowEdge {
 	for _, edge := range edges {
 		if edge.Source == source && edge.Target == target {

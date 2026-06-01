@@ -915,7 +915,55 @@ func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.E
 		return edges[i].ID < edges[j].ID
 	})
 
-	return nodes, edges
+	return pruneUnreachableEmployeeDataFlowGraph(nodes, edges)
+}
+
+// pruneUnreachableEmployeeDataFlowGraph keeps only the nodes reachable forward
+// from an origin-tier node (and the edges between them). This drops dangling
+// nodes such as an MCP client with no inbound connection, and anything that
+// hangs off them. When there are no origin nodes the result is empty.
+func pruneUnreachableEmployeeDataFlowGraph(nodes []*telem_gen.EmployeeDataFlowNode, edges []*telem_gen.EmployeeDataFlowEdge) ([]*telem_gen.EmployeeDataFlowNode, []*telem_gen.EmployeeDataFlowEdge) {
+	adjacency := make(map[string][]string)
+	for _, edge := range edges {
+		adjacency[edge.Source] = append(adjacency[edge.Source], edge.Target)
+	}
+
+	reachable := make(map[string]struct{})
+	queue := make([]string, 0)
+	for _, node := range nodes {
+		if node.Tier == "origin" {
+			reachable[node.ID] = struct{}{}
+			queue = append(queue, node.ID)
+		}
+	}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for _, target := range adjacency[id] {
+			if _, ok := reachable[target]; !ok {
+				reachable[target] = struct{}{}
+				queue = append(queue, target)
+			}
+		}
+	}
+
+	prunedNodes := make([]*telem_gen.EmployeeDataFlowNode, 0, len(nodes))
+	for _, node := range nodes {
+		if _, ok := reachable[node.ID]; ok {
+			prunedNodes = append(prunedNodes, node)
+		}
+	}
+
+	prunedEdges := make([]*telem_gen.EmployeeDataFlowEdge, 0, len(edges))
+	for _, edge := range edges {
+		_, sourceOK := reachable[edge.Source]
+		_, targetOK := reachable[edge.Target]
+		if sourceOK && targetOK {
+			prunedEdges = append(prunedEdges, edge)
+		}
+	}
+
+	return prunedNodes, prunedEdges
 }
 
 func employeeDataFlowPath(row repo.EmployeeDataFlowRow) []employeeGraphTupleNode {

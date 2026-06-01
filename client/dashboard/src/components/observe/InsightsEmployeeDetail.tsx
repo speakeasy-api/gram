@@ -973,37 +973,10 @@ function augmentGraphWithUser(
   userName: string,
   userPhotoUrl?: string,
 ): DataFlowSourceGraph {
-  // Only keep nodes reachable forward from an origin (the entry tier). This
-  // drops dangling nodes such as an MCP client with no inbound connection, and
-  // anything that hangs off them.
-  const adjacency = new Map<string, string[]>();
-  for (const edge of graph.edges) {
-    const targets = adjacency.get(edge.source) ?? [];
-    targets.push(edge.target);
-    adjacency.set(edge.source, targets);
-  }
-
-  const reachable = new Set<string>();
-  const queue = graph.nodes
-    .filter((node) => node.tier === "origin")
-    .map((node) => node.id);
-  for (const id of queue) reachable.add(id);
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    for (const target of adjacency.get(id) ?? []) {
-      if (!reachable.has(target)) {
-        reachable.add(target);
-        queue.push(target);
-      }
-    }
-  }
-
-  const nodes: DataFlowSourceNode[] = graph.nodes
-    .filter((node) => reachable.has(node.id))
-    .map((node) => ({ ...node }));
-  const edges = graph.edges
-    .filter((edge) => reachable.has(edge.source) && reachable.has(edge.target))
-    .map((edge) => ({ ...edge }));
+  // The backend already prunes nodes that aren't reachable from an origin, so
+  // here we only attach the synthetic "user" node that fronts the origins.
+  const nodes: DataFlowSourceNode[] = graph.nodes.map((node) => ({ ...node }));
+  const edges = graph.edges.map((edge) => ({ ...edge }));
 
   const origins = nodes.filter((node) => node.tier === "origin");
   if (origins.length === 0) return { nodes, edges };

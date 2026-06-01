@@ -151,14 +151,6 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if authCtx.Email != nil && *authCtx.Email != "" {
 		logAttrs[attr.UserEmailKey] = *authCtx.Email
 	}
-	if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx != nil {
-		if requestCtx.UserAgent != "" {
-			logAttrs.RecordUserAgent(requestCtx.UserAgent)
-		}
-		if requestCtx.Host != "" {
-			logAttrs[attr.HostNameKey] = requestCtx.Host
-		}
-	}
 
 	params := tm.LogParams{
 		Timestamp: end,
