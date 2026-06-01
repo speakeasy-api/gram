@@ -292,6 +292,21 @@ export function GrantRuleDrawerContent({
       .filter((g) => g.servers.length > 0);
   }, [scopedMcpServers, resourceSearch]);
 
+  // The "Specific tools" picker only makes sense for servers with enumerable
+  // tools. Proxy servers (no tools/list at deploy time) appear in the
+  // "Specific servers" picker for server-level grants but must not render
+  // a zero-tools row here.
+  const toolPanelMcpServers = useMemo(
+    () =>
+      scopedMcpServers
+        .map((g) => ({
+          ...g,
+          servers: g.servers.filter((s) => s.tools.length > 0),
+        }))
+        .filter((g) => g.servers.length > 0),
+    [scopedMcpServers],
+  );
+
   // Fixed-scope permissions have no resource picker — their granularity is
   // baked into the scope definition. Org scopes are always org-wide;
   // environment scopes apply to every environment in the project.
@@ -540,7 +555,7 @@ export function GrantRuleDrawerContent({
 
   const customTabs = (toolScrollClass?: string) => (
     <ToolSelectionPanel
-      mcpServers={scopedMcpServers}
+      mcpServers={toolPanelMcpServers}
       selectors={selectors ?? []}
       annotations={annotations}
       onChangeAnnotations={onChangeAnnotations}
