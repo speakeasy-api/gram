@@ -4,12 +4,34 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // ReplaceGrantsForResource replaces allow grants for one resource-scoped permission.
-func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceID string, principals []urn.Principal) error {
+func ReplaceGrantsForResource(ctx context.Context, db *pgxpool.Pool, organizationID string, scope Scope, resourceID string, principals []urn.Principal) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin resource grant transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if err := ReplaceGrantsForResourceTx(ctx, tx, organizationID, scope, resourceID, principals); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit resource grant transaction: %w", err)
+	}
+
+	return nil
+}
+
+// ReplaceGrantsForResourceTx replaces allow grants using the caller's transaction.
+func ReplaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceID string, principals []urn.Principal) error {
 	if organizationID == "" {
 		return fmt.Errorf("organization id is required")
 	}
