@@ -13,13 +13,14 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-func TestRefreshBillingUsageWorkflow_ContinuesAsNewAfterMaxBatches(t *testing.T) {
+func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	env.SetWorkflowRunTimeout(refreshBillingUsageActivityWorstCaseRetryWindow + refreshBillingUsagesWaitInterval)
 
-	orgIDs := make([]string, (maxBillingUsageBatchesPerRun+1)*refreshBillingUsageBatchSize)
+	orgIDs := make([]string, (billingUsagePauseEveryBatches+1)*refreshBillingUsageBatchSize)
 	for i := range orgIDs {
 		orgIDs[i] = "org_" + strconv.Itoa(i)
 	}
@@ -56,12 +57,12 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewAfterMaxBatches(t *testing.T)
 	require.ErrorAs(t, env.GetWorkflowError(), &continueAsNewErr)
 	require.Equal(t, "RefreshBillingUsageWorkflow", continueAsNewErr.WorkflowType.Name)
 	require.Equal(t, 1, getAllCallCount)
-	require.Equal(t, maxBillingUsageBatchesPerRun, refreshCallCount)
+	require.Equal(t, billingUsagePauseEveryBatches, refreshCallCount)
 
 	var nextInput RefreshBillingUsageInput
 	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(continueAsNewErr.Input, &nextInput))
 	require.Equal(t, orgIDs, nextInput.OrgIDs)
-	require.Equal(t, maxBillingUsageBatchesPerRun*refreshBillingUsageBatchSize, nextInput.StartIndex)
+	require.Equal(t, billingUsagePauseEveryBatches*refreshBillingUsageBatchSize, nextInput.StartIndex)
 	require.Zero(t, nextInput.FailedBatchCount)
 	require.Zero(t, nextInput.FailedOrgCount)
 }

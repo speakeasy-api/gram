@@ -14,10 +14,15 @@ import (
 
 // safely wait for polar rate limits
 const (
-	refreshBillingUsageBatchSize     = 5
-	maxBillingUsageBatchesPerRun     = 7
-	billingUsagePauseEveryBatches    = 2
-	refreshBillingUsagesWaitInterval = 10 * time.Second
+	refreshBillingUsageBatchSize                   = 5
+	billingUsagePauseEveryBatches                  = 2
+	refreshBillingUsageActivityStartToCloseTimeout = 60 * time.Second
+	refreshBillingUsageActivityMaximumAttempts     = 3
+	// Reserve more than the worst-case retry path for one batch:
+	// 3 activity attempts plus 10s/15s retry backoffs and Temporal jitter.
+	refreshBillingUsageActivityWorstCaseRetryWindow = 5 * time.Minute
+	refreshBillingUsageWorkflowRunTimeout           = 30 * time.Minute
+	refreshBillingUsagesWaitInterval                = 10 * time.Second
 )
 
 type RefreshBillingUsageInput struct {
@@ -34,8 +39,9 @@ type RefreshBillingUsageClient struct {
 func (c *RefreshBillingUsageClient) StartRefreshBillingUsage(ctx context.Context) (client.WorkflowRun, error) {
 	id := "v1:refresh-billing-usage"
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:        id,
-		TaskQueue: string(c.TemporalEnv.Queue()),
+		ID:                 id,
+		TaskQueue:          string(c.TemporalEnv.Queue()),
+		WorkflowRunTimeout: refreshBillingUsageWorkflowRunTimeout,
 		// Allow restarting if needed
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 	}, RefreshBillingUsageWorkflow, RefreshBillingUsageInput{
@@ -52,9 +58,9 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 
 	// Configure activity options with retry policy
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 60 * time.Second,
+		StartToCloseTimeout: refreshBillingUsageActivityStartToCloseTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
+			MaximumAttempts:    refreshBillingUsageActivityMaximumAttempts,
 			InitialInterval:    refreshBillingUsagesWaitInterval,
 			BackoffCoefficient: 1.5,
 			// Temporal automatically adds some jitter to retries here
@@ -86,6 +92,22 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 	failedBatchCount := input.FailedBatchCount
 	failedOrgCount := input.FailedOrgCount
 	batchesProcessed := 0
+	continueAsNew := func(nextStartIndex int) error {
+		nextInput := RefreshBillingUsageInput{
+			OrgIDs:           orgIDs,
+			StartIndex:       nextStartIndex,
+			FailedBatchCount: failedBatchCount,
+			FailedOrgCount:   failedOrgCount,
+		}
+		logger.Info(
+			"Continuing billing usage refresh as new",
+			"next_start_index", nextStartIndex,
+			"total_count", len(orgIDs),
+			"failed_batch_count", failedBatchCount,
+			"failed_org_count", failedOrgCount,
+		)
+		return workflow.NewContinueAsNewError(ctx, RefreshBillingUsageWorkflow, nextInput)
+	}
 
 	for i := startIndex; i < len(orgIDs); i += refreshBillingUsageBatchSize {
 		end := min(i+refreshBillingUsageBatchSize, len(orgIDs))
@@ -98,30 +120,18 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 		}
 
 		batchesProcessed++
-		if batchesProcessed >= maxBillingUsageBatchesPerRun && end < len(orgIDs) {
-			nextInput := RefreshBillingUsageInput{
-				OrgIDs:           orgIDs,
-				StartIndex:       end,
-				FailedBatchCount: failedBatchCount,
-				FailedOrgCount:   failedOrgCount,
+		if end < len(orgIDs) {
+			// Polar's usage endpoints are rate-limited, so keep a deterministic
+			// pause after small groups of batches instead of after every batch.
+			if batchesProcessed%billingUsagePauseEveryBatches == 0 {
+				if err := workflow.Sleep(ctx, refreshBillingUsagesWaitInterval); err != nil {
+					logger.Error("Failed to sleep to pause between billing usage batches", "error", err)
+					return fmt.Errorf("sleep between billing usage batches: %w", err)
+				}
 			}
-			logger.Info(
-				"Continuing billing usage refresh as new",
-				"next_start_index", end,
-				"total_count", len(orgIDs),
-				"failed_batch_count", failedBatchCount,
-				"failed_org_count", failedOrgCount,
-			)
-			return workflow.NewContinueAsNewError(ctx, RefreshBillingUsageWorkflow, nextInput)
-		}
 
-		// Polar's usage endpoints are rate-limited, so keep a deterministic
-		// pause after small groups of batches instead of after every batch. The
-		// per-run batch cap keeps worst-case activity retries inside the run timeout.
-		if end < len(orgIDs) && batchesProcessed%billingUsagePauseEveryBatches == 0 {
-			if err := workflow.Sleep(ctx, refreshBillingUsagesWaitInterval); err != nil {
-				logger.Error("Failed to sleep to pause between billing usage batches", "error", err)
-				return fmt.Errorf("sleep between billing usage batches: %w", err)
+			if shouldContinueRefreshBillingUsageAsNew(ctx) {
+				return continueAsNew(end)
 			}
 		}
 	}
@@ -138,6 +148,24 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 
 	logger.Info("Billing usage refreshing completed successfully", "total_count", len(orgIDs))
 	return nil
+}
+
+func shouldContinueRefreshBillingUsageAsNew(ctx workflow.Context) bool {
+	info := workflow.GetInfo(ctx)
+	if info.GetContinueAsNewSuggested() {
+		return true
+	}
+
+	runTimeout := info.WorkflowRunTimeout
+	if runTimeout == 0 {
+		runTimeout = refreshBillingUsageWorkflowRunTimeout
+	}
+	if runTimeout == 0 || info.WorkflowStartTime.IsZero() {
+		return false
+	}
+
+	elapsed := workflow.Now(ctx).Sub(info.WorkflowStartTime)
+	return elapsed+refreshBillingUsageActivityWorstCaseRetryWindow >= runTimeout
 }
 
 func AddRefreshBillingUsageSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
@@ -158,7 +186,7 @@ func AddRefreshBillingUsageSchedule(ctx context.Context, temporalEnv *tenv.Envir
 			Workflow:           RefreshBillingUsageWorkflow,
 			Args:               []any{RefreshBillingUsageInput{OrgIDs: nil, StartIndex: 0, FailedBatchCount: 0, FailedOrgCount: 0}},
 			TaskQueue:          string(temporalEnv.Queue()),
-			WorkflowRunTimeout: 30 * time.Minute,
+			WorkflowRunTimeout: refreshBillingUsageWorkflowRunTimeout,
 		},
 	})
 	if err != nil {
