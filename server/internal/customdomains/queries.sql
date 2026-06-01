@@ -4,13 +4,15 @@ INSERT INTO custom_domains (
     domain,
     ingress_name,
     cert_secret_name,
-    provisioner_kind
+    provisioner_kind,
+    ip_allowlist
 ) VALUES (
     @organization_id,
     @domain,
     @ingress_name,
     @cert_secret_name,
-    @provisioner_kind
+    @provisioner_kind,
+    @ip_allowlist
 )
 RETURNING *;
 
@@ -55,6 +57,15 @@ SET
     provisioner_kind = @provisioner_kind,
     updated_at = clock_timestamp()
 WHERE id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateCustomDomainIPAllowlist :one
+UPDATE custom_domains
+SET
+    ip_allowlist = @ip_allowlist,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 

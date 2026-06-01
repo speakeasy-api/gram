@@ -20,7 +20,7 @@ function ClaudeInstallContent() {
       <div>
         <h3 className="mb-2 text-sm font-semibold">Test Yourself</h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Try Gram Hooks in your Claude Code instance:
+          Try hooks in your Claude Code instance:
         </p>
         <div className="bg-muted/50 space-y-2 rounded-lg p-4 font-mono text-sm">
           <div className="flex items-center justify-between">
@@ -35,7 +35,7 @@ function ClaudeInstallContent() {
       <div>
         <h3 className="mb-2 text-sm font-semibold">Distribute to Your Team</h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Require your team to use Gram Hooks by configuring their Claude Code
+          Require your team to use hooks by configuring their Claude Code
           settings:
         </p>
 
@@ -93,8 +93,8 @@ function CursorInstallContent() {
       <div>
         <h3 className="mb-2 text-sm font-semibold">1. Publish the Plugin</h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Add the Gram hooks plugin to your Cursor team marketplace and mark it
-          as required so it auto-installs for all team members:
+          Add the hooks plugin to your Cursor team marketplace and mark it as
+          required so it auto-installs for all team members:
         </p>
         <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
           <a
@@ -115,7 +115,7 @@ function CursorInstallContent() {
           <code className="bg-muted rounded px-1 py-0.5 text-xs">
             Session Start
           </code>{" "}
-          hook that injects your Gram credentials. These are automatically
+          hook that injects your platform credentials. These are automatically
           passed to all subsequent hooks in the session.
         </p>
         <p className="text-muted-foreground mb-4 text-sm">
@@ -135,7 +135,7 @@ function CursorInstallContent() {
             <span className="text-muted-foreground shrink-0 font-medium">
               Hook Name:
             </span>
-            <code>Gram Hooks</code>
+            <code>Platform Hooks</code>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-muted-foreground shrink-0 font-medium">
@@ -172,8 +172,9 @@ function CursorInstallContent() {
           Replace{" "}
           <code className="text-primary text-xs">{`<YOUR_API_KEY>`}</code> and{" "}
           <code className="text-primary text-xs">{`<YOUR_PROJECT_SLUG>`}</code>{" "}
-          with your Gram credentials. Find your API key in your project's API
-          Keys settings. This config syncs to all team members automatically.
+          with your platform credentials. Find your API key in your project's
+          API Keys settings. This config syncs to all team members
+          automatically.
         </p>
       </div>
 

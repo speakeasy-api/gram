@@ -68,6 +68,10 @@ export type CodexHookPayload = {
    * Path to the conversation transcript file
    */
   transcriptPath?: string | undefined;
+  /**
+   * Email of the authenticated Codex user, if available
+   */
+  userEmail?: string | undefined;
 };
 
 /** @internal */
@@ -87,6 +91,7 @@ export type CodexHookPayload$Outbound = {
   tool_name?: string | undefined;
   tool_output?: any | undefined;
   transcript_path?: string | undefined;
+  user_email?: string | undefined;
 };
 
 /** @internal */
@@ -105,6 +110,7 @@ export const CodexHookPayload$outboundSchema: z.ZodMiniType<
     toolName: z.optional(z.string()),
     toolOutput: z.optional(z.any()),
     transcriptPath: z.optional(z.string()),
+    userEmail: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -115,6 +121,7 @@ export const CodexHookPayload$outboundSchema: z.ZodMiniType<
       toolName: "tool_name",
       toolOutput: "tool_output",
       transcriptPath: "transcript_path",
+      userEmail: "user_email",
     });
   }),
 );

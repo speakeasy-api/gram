@@ -252,6 +252,7 @@ export * from "./toolset.js";
 export * from "./trigger.js";
 export * from "./triggerDefinitions.js";
 export * from "./triggers.js";
+export * from "./updateDomain.js";
 export * from "./updateEnvironment.js";
 export * from "./updateInviteRole.js";
 export * from "./updateMcpEndpoint.js";

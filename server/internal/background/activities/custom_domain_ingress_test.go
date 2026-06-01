@@ -114,6 +114,7 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 
@@ -167,6 +168,7 @@ func TestCustomDomainIngress_Setup_Gateway_WritesNullCertSecret(t *testing.T) {
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "gateway",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 
@@ -214,6 +216,7 @@ func TestCustomDomainIngress_Setup_KindResolution_DefaultsToIngress(t *testing.T
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 
@@ -257,6 +260,7 @@ func TestCustomDomainIngress_Setup_WrongOrg_Errors(t *testing.T) {
 		OrganizationID:  ownerOrg,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 

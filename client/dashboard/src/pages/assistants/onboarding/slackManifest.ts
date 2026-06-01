@@ -297,7 +297,7 @@ function uniqueSorted(values: Iterable<string>): string[] {
 export function buildSlackManifest(
   input: SlackManifestInput,
 ): SlackManifestResult {
-  const displayName = (input.appName.trim() || "Gram Assistant").slice(
+  const displayName = (input.appName.trim() || "Platform Assistant").slice(
     0,
     SLACK_DISPLAY_NAME_LIMIT,
   );

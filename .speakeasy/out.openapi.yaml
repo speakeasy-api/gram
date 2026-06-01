@@ -8167,6 +8167,94 @@ paths:
       x-speakeasy-name-override: registerDomain
       x-speakeasy-react-hook:
         name: registerDomain
+  /rpc/domain.update:
+    post:
+      description: Update the IP allowlist for the organization's custom domain
+      operationId: updateDomain
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDomainRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomDomain'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateDomain domains
+      tags:
+        - domains
+      x-speakeasy-name-override: updateDomain
+      x-speakeasy-react-hook:
+        name: updateDomain
   /rpc/environments.clone:
     post:
       description: Clone an environment into a new one. Either copies only the variable names with empty placeholder values, or copies the encrypted values verbatim. Encrypted secret values are never decrypted by the application during the clone operation.
@@ -30832,6 +30920,9 @@ components:
         transcript_path:
           type: string
           description: Path to the conversation transcript file
+        user_email:
+          type: string
+          description: Email of the authenticated Codex user, if available
       description: Payload for Codex hook events
       required:
         - hook_event_name
@@ -31032,6 +31123,11 @@ components:
         domain:
           type: string
           description: The custom domain
+        ip_allowlist:
+          type: array
+          items:
+            type: string
+          description: IP addresses or CIDR ranges to allow. Leave empty for unrestricted access.
       required:
         - domain
     CreateEnvironmentForm:
@@ -31958,6 +32054,11 @@ components:
         id:
           type: string
           description: The ID of the custom domain
+        ip_allowlist:
+          type: array
+          items:
+            type: string
+          description: IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.
         is_updating:
           type: boolean
           description: The custom domain is actively being registered
@@ -31980,6 +32081,7 @@ components:
         - created_at
         - updated_at
         - is_updating
+        - ip_allowlist
     CustomDomainMcpEndpoint:
       type: object
       properties:
@@ -40442,6 +40544,16 @@ components:
         - title
         - regex
         - severity
+    UpdateDomainRequestBody:
+      type: object
+      properties:
+        ip_allowlist:
+          type: array
+          items:
+            type: string
+          description: Replacement IP allowlist. Pass an empty list to remove all restrictions.
+      required:
+        - ip_allowlist
     UpdateEnvironmentForm:
       type: object
       properties:
