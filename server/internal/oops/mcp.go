@@ -141,9 +141,7 @@ func (e *MCPError) MarshalJSON() ([]byte, error) {
 		"jsonrpc": "2.0",
 		"error":   errorBody,
 	}
-	if e.ID.IsSet() {
-		payload["id"] = e.ID
-	}
+	payload["id"] = e.ID
 
 	bs, err := json.Marshal(payload)
 	if err != nil {
