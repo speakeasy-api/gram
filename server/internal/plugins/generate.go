@@ -25,6 +25,10 @@ type PluginServerInfo struct {
 	MCPURL string
 	// IsPublic indicates whether the toolset is publicly accessible (no Gram API key needed).
 	IsPublic bool
+	// OAuthEnabled indicates the toolset authenticates via OAuth at the MCP
+	// endpoint. Such servers need no auth headers baked into the published
+	// config — the client negotiates auth through the OAuth flow.
+	OAuthEnabled bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
 }
@@ -408,7 +412,10 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			EnvHTTPHeaders:    nil,
 		}
 
-		if s.IsPublic {
+		switch {
+		case s.OAuthEnabled:
+			// OAuth servers negotiate auth through the OAuth flow — no headers.
+		case s.IsPublic:
 			// User provides each variable in their shell env; Codex
 			// substitutes the value into the named header at runtime.
 			if len(s.EnvConfigs) > 0 {
@@ -417,11 +424,11 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 					entry.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
 				}
 			}
-		} else if cfg.APIKey != "" {
+		case cfg.APIKey != "":
 			// Private server: bake the Gram-issued key directly into the
 			// published config. Repo is private, so this matches the Cursor/Claude pattern.
 			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
-		} else {
+		default:
 			// Private server, no key available: ask Codex to read GRAM_API_KEY
 			// from the user's environment at startup.
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
@@ -1284,7 +1291,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Determine if any private server needs a Gram API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && cfg.APIKey == "" {
+		if !s.OAuthEnabled && !s.IsPublic && cfg.APIKey == "" {
 			needsGramKeyPrompt = true
 		}
 		// Public servers may need user-provided env vars.
@@ -1325,15 +1332,18 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	for _, s := range p.Servers {
 		headers := make(map[string]string)
 
-		if s.IsPublic {
+		switch {
+		case s.OAuthEnabled:
+			// OAuth servers negotiate auth through the OAuth flow — no headers.
+		case s.IsPublic:
 			// Public servers use env config variables for auth.
 			for _, ec := range s.EnvConfigs {
 				headers[ec.DisplayName] = "${user_config." + ec.VariableName + "}"
 			}
-		} else if cfg.APIKey != "" {
+		case cfg.APIKey != "":
 			// Private server with injected key.
 			headers["Authorization"] = "Bearer " + cfg.APIKey
-		} else {
+		default:
 			// Private server without key — prompt user.
 			headers["Authorization"] = "Bearer ${user_config.GRAM_API_KEY}"
 		}
@@ -1376,13 +1386,16 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	for _, s := range p.Servers {
 		headers := make(map[string]string)
 
-		if s.IsPublic {
+		switch {
+		case s.OAuthEnabled:
+			// OAuth servers negotiate auth through the OAuth flow — no headers.
+		case s.IsPublic:
 			for _, ec := range s.EnvConfigs {
 				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
 			}
-		} else if cfg.APIKey != "" {
+		case cfg.APIKey != "":
 			headers["Authorization"] = "Bearer " + cfg.APIKey
-		} else {
+		default:
 			headers["Authorization"] = "Bearer ${env:GRAM_API_KEY}"
 		}
 

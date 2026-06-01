@@ -1347,11 +1347,12 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 
 		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
 			serverInfo := PluginServerInfo{
-				DisplayName: r.ServerDisplayName,
-				Policy:      r.ServerPolicy,
-				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
-				IsPublic:    r.ToolsetIsPublic,
-				EnvConfigs:  nil,
+				DisplayName:  r.ServerDisplayName,
+				Policy:       r.ServerPolicy,
+				MCPURL:       fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
+				IsPublic:     r.ToolsetIsPublic,
+				OAuthEnabled: r.ToolsetOauthEnabled.Bool,
+				EnvConfigs:   nil,
 			}
 
 			// For public servers, load user-facing environment configs. A public

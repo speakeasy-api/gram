@@ -259,6 +259,51 @@ func TestCodexJSONKeysMatchPinnedSchema(t *testing.T) {
 	}
 }
 
+// TestGenerateConfigsOmitHeadersForOAuthServers asserts that OAuth-enabled
+// servers carry no auth headers in any generated config — the client
+// negotiates auth through the OAuth flow at the MCP endpoint. This holds even
+// when a Gram API key is injected.
+func TestGenerateConfigsOmitHeadersForOAuthServers(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://app.getgram.ai/mcp/test", OAuthEnabled: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+		APIKey:    "gram_test_key_123",
+	})
+	require.NoError(t, err)
+
+	var claudeConfig claudeMCPConfig
+	require.NoError(t, json.Unmarshal(files["test/.mcp.json"], &claudeConfig))
+	require.Empty(t, claudeConfig.MCPServers["oauth-server"].Headers, "claude oauth server must have no headers")
+
+	var cursorConfig cursorMCPConfig
+	require.NoError(t, json.Unmarshal(files["test-cursor/mcp.json"], &cursorConfig))
+	require.Empty(t, cursorConfig.MCPServers["oauth-server"].Headers, "cursor oauth server must have no headers")
+
+	var codexConfig codexMCPConfig
+	require.NoError(t, json.Unmarshal(files["test-codex/.mcp.json"], &codexConfig))
+	codexServer := codexConfig.MCPServers["oauth-server"]
+	require.Empty(t, codexServer.HTTPHeaders, "codex oauth server must not bake Authorization")
+	require.Empty(t, codexServer.EnvHTTPHeaders, "codex oauth server must not set env_http_headers")
+	require.Empty(t, codexServer.BearerTokenEnvVar, "codex oauth server must not set bearer_token_env_var")
+
+	// The Claude manifest must not prompt for a Gram API key on behalf of an
+	// OAuth-only plugin.
+	var claudeMeta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files["test/.claude-plugin/plugin.json"], &claudeMeta))
+	require.NotContains(t, claudeMeta.UserConfig, "GRAM_API_KEY", "oauth-only plugin must not prompt for GRAM_API_KEY")
+}
+
 func codexPrivateServer() PluginServerInfo {
 	return PluginServerInfo{DisplayName: "priv", MCPURL: "https://x"}
 }

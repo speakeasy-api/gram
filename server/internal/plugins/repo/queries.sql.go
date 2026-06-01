@@ -387,7 +387,8 @@ SELECT
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
   t.mcp_slug AS toolset_mcp_slug,
-  t.mcp_is_public AS toolset_is_public
+  t.mcp_is_public AS toolset_is_public,
+  (t.external_oauth_server_id IS NOT NULL OR t.oauth_proxy_server_id IS NOT NULL) AS toolset_oauth_enabled
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
@@ -397,17 +398,18 @@ ORDER BY p.slug, ps.sort_order ASC
 `
 
 type ListPluginsWithServersForProjectRow struct {
-	PluginID          uuid.UUID
-	PluginName        string
-	PluginSlug        string
-	PluginDescription pgtype.Text
-	ServerID          uuid.UUID
-	ServerDisplayName string
-	ServerPolicy      string
-	ServerSortOrder   int32
-	ToolsetID         uuid.UUID
-	ToolsetMcpSlug    pgtype.Text
-	ToolsetIsPublic   bool
+	PluginID            uuid.UUID
+	PluginName          string
+	PluginSlug          string
+	PluginDescription   pgtype.Text
+	ServerID            uuid.UUID
+	ServerDisplayName   string
+	ServerPolicy        string
+	ServerSortOrder     int32
+	ToolsetID           uuid.UUID
+	ToolsetMcpSlug      pgtype.Text
+	ToolsetIsPublic     bool
+	ToolsetOauthEnabled pgtype.Bool
 }
 
 // Used during plugin generation: returns all active plugin servers joined with
@@ -433,6 +435,7 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 			&i.ToolsetID,
 			&i.ToolsetMcpSlug,
 			&i.ToolsetIsPublic,
+			&i.ToolsetOauthEnabled,
 		); err != nil {
 			return nil, err
 		}
