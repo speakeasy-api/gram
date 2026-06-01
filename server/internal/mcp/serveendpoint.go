@@ -165,23 +165,37 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 	return &endpoint, &mcpServer, nil
 }
 
-// LoadResolvedMcpEndpointBySlug resolves a slug all the way to a
-// *ResolvedMcpEndpoint via the mcp_endpoints → mcp_servers path,
-// verifying its issuer FK is still live. Used by the OAuth route adapters
-// in /x/mcp (and eventually /mcp) that need to dispatch to Serve*
-// post-resolution handlers. Returns CodeNotFound when either the
-// addressing resolves to no row or the resolved mcp_server is not
-// issuer-gated. mcpRouteBase ("mcp" or "x/mcp") propagates into the
-// resolved endpoint's URL building.
+// LoadResolvedMcpEndpointBySlug resolves a slug to a *ResolvedMcpEndpoint
+// for the issuer-gated OAuth handlers, shared by both the /mcp and /x/mcp
+// surfaces. It mirrors the well-known handlers' resolution model:
+//
+//   - Addressing hit, issuer-gated: build the endpoint from the
+//     (mcp_endpoint, mcp_server) pair.
+//   - Addressing hit, not issuer-gated: CodeNotFound. The mcp_server is
+//     authoritative for the slug and is not an OAuth endpoint, so we do
+//     NOT fall back — this keeps non-issuer-gated remote-backed servers
+//     returning not-found, matching the well-known surface.
+//   - Addressing miss (CodeNotFound): fall back to the legacy
+//     toolsets.mcp_slug lookup so issuer-gated toolset-backed servers
+//     without an mcp_endpoint row (predating the toolsets → mcp_servers
+//     migration) still resolve.
+//
+// mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
+// URL building on both the primary and fallback paths.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
 	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
-	if err != nil {
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+		if !mcpServer.UserSessionIssuerID.Valid {
+			return nil, oops.E(oops.CodeNotFound, nil, "not found")
+		}
+		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
+	default:
 		return nil, err
 	}
-	if !mcpServer.UserSessionIssuerID.Valid {
-		return nil, oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 }
 
 // BuildResolvedMcpEndpointForServer materialises a ResolvedMcpEndpoint
