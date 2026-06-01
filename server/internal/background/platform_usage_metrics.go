@@ -75,26 +75,6 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 		}
 	}
 
-	// send reporting to posthog
-	for i := 0; i < len(allMetrics); i += platformUsageMetricsBatchSize {
-		end := min(i+platformUsageMetricsBatchSize, len(allMetrics))
-
-		batch := allMetrics[i:end]
-
-		var orgIDs []string
-		for _, metric := range batch {
-			if metric.TotalToolsets > 0 {
-				orgIDs = append(orgIDs, metric.OrganizationID)
-			}
-		}
-
-		err := workflow.ExecuteActivity(ctx, a.FreeTierReportingUsageMetrics, orgIDs).Get(ctx, nil)
-		if err != nil {
-			logger.Error("Failed to compile free tier reporting usage metrics batch", "error", err, "batch_start", i)
-			return fmt.Errorf("failed to to compile free tier reporting usage metrics batct %d: %w", i, err)
-		}
-	}
-
 	logger.Info("Platform usage metrics collection and firing completed successfully")
 	return nil
 }
