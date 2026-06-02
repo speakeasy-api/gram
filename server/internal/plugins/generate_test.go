@@ -14,6 +14,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "custom-server", MCPURL: "https://mcp.acme.com/mcp/my-slug"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["custom-server"]
+	require.Equal(t, "https://mcp.acme.com/mcp/my-slug", server.URL, "custom domain URL must be preserved verbatim in generated config")
+}
+
 func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{

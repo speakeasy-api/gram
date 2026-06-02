@@ -122,10 +122,12 @@ SELECT
   ps.toolset_id,
   t.mcp_slug AS toolset_mcp_slug,
   t.mcp_is_public AS toolset_is_public,
-  (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth
+  (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth,
+  cd.domain AS toolset_custom_domain
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
+LEFT JOIN custom_domains cd ON cd.id = t.custom_domain_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;

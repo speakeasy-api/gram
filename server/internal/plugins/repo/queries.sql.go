@@ -388,28 +388,31 @@ SELECT
   ps.toolset_id,
   t.mcp_slug AS toolset_mcp_slug,
   t.mcp_is_public AS toolset_is_public,
-  (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth
+  (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth,
+  cd.domain AS toolset_custom_domain
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
+LEFT JOIN custom_domains cd ON cd.id = t.custom_domain_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC
 `
 
 type ListPluginsWithServersForProjectRow struct {
-	PluginID          uuid.UUID
-	PluginName        string
-	PluginSlug        string
-	PluginDescription pgtype.Text
-	ServerID          uuid.UUID
-	ServerDisplayName string
-	ServerPolicy      string
-	ServerSortOrder   int32
-	ToolsetID         uuid.UUID
-	ToolsetMcpSlug    pgtype.Text
-	ToolsetIsPublic   bool
-	ToolsetIsOauth    bool
+	PluginID            uuid.UUID
+	PluginName          string
+	PluginSlug          string
+	PluginDescription   pgtype.Text
+	ServerID            uuid.UUID
+	ServerDisplayName   string
+	ServerPolicy        string
+	ServerSortOrder     int32
+	ToolsetID           uuid.UUID
+	ToolsetMcpSlug      pgtype.Text
+	ToolsetIsPublic     bool
+	ToolsetIsOauth      bool
+	ToolsetCustomDomain pgtype.Text
 }
 
 // Used during plugin generation: returns all active plugin servers joined with
@@ -436,6 +439,7 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 			&i.ToolsetMcpSlug,
 			&i.ToolsetIsPublic,
 			&i.ToolsetIsOauth,
+			&i.ToolsetCustomDomain,
 		); err != nil {
 			return nil, err
 		}
