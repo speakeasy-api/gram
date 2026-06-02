@@ -1135,6 +1135,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
+-- project_managed_assistants maps a project to its single platform-managed
+-- assistant (the one powering the AI Insights sidebar). Kept in its own table
+-- rather than a flag on assistants/projects so the relation has an explicit
+-- lifecycle: the row exists only while the feature is toggled on for the
+-- project, and cascades away when either the project or the assistant is
+-- removed. project_id is the primary key, enforcing 0-or-1 managed assistant
+-- per project.
+CREATE TABLE IF NOT EXISTS project_managed_assistants (
+  project_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT project_managed_assistants_pkey PRIMARY KEY (project_id),
+  CONSTRAINT project_managed_assistants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT project_managed_assistants_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS project_managed_assistants_assistant_id_idx ON project_managed_assistants (assistant_id);
+
 CREATE TABLE IF NOT EXISTS assistant_toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   assistant_id uuid NOT NULL,
