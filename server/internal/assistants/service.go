@@ -41,10 +41,10 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack      = "slack"
-	sourceKindCron       = "cron"
-	sourceKindWake       = "wake"
-	sourceKindDashboard  = "dashboard"
+	sourceKindSlack      = bgtriggers.DefinitionSlugSlack
+	sourceKindCron       = bgtriggers.DefinitionSlugCron
+	sourceKindWake       = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -295,17 +295,17 @@ type DashboardIngestor interface {
 }
 
 type ServiceCore struct {
-	logger           *slog.Logger
-	tracer           trace.Tracer
-	db               *pgxpool.Pool
-	guardianPolicy   *guardian.Policy
-	encryptionClient *encryption.Client
-	runtime          RuntimeBackend
-	slackClient      *slackclient.SlackClient
-	assistantTokens  *assistanttokens.Manager
-	serverURL        *url.URL
-	telemetryLogger  *telemetry.Logger
-	contextWindow    *openrouter.ContextWindowResolver
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	db                *pgxpool.Pool
+	guardianPolicy    *guardian.Policy
+	encryptionClient  *encryption.Client
+	runtime           RuntimeBackend
+	slackClient       *slackclient.SlackClient
+	assistantTokens   *assistanttokens.Manager
+	serverURL         *url.URL
+	telemetryLogger   *telemetry.Logger
+	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	dashboardIngestor DashboardIngestor
@@ -325,17 +325,17 @@ func NewServiceCore(
 	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
 	return &ServiceCore{
-		logger:           logger,
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:               db,
-		guardianPolicy:   guardianPolicy,
-		encryptionClient: encryptionClient,
-		runtime:          newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:      slackClient,
-		assistantTokens:  assistantTokens,
-		serverURL:        serverURL,
-		telemetryLogger:  telemetryLogger,
-		contextWindow:    contextWindow,
+		logger:            logger,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:                db,
+		guardianPolicy:    guardianPolicy,
+		encryptionClient:  encryptionClient,
+		runtime:           newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:       slackClient,
+		assistantTokens:   assistantTokens,
+		serverURL:         serverURL,
+		telemetryLogger:   telemetryLogger,
+		contextWindow:     contextWindow,
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		dashboardIngestor: nil,

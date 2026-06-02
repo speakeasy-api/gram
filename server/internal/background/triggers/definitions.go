@@ -642,10 +642,10 @@ var supportedSlackEventTypes = []string{
 }
 
 var registry = map[string]Definition{
-	"slack":     newSlackDefinition(),
-	"cron":      newCronDefinition(),
-	"wake":      newWakeDefinition(),
-	"dashboard": newDashboardDefinition(),
+	DefinitionSlugSlack:     newSlackDefinition(),
+	DefinitionSlugCron:      newCronDefinition(),
+	DefinitionSlugWake:      newWakeDefinition(),
+	DefinitionSlugDashboard: newDashboardDefinition(),
 }
 
 func List() []Definition {
@@ -701,7 +701,7 @@ func newSlackDefinition() Definition {
 	)
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "slack",
+		Slug:                 DefinitionSlugSlack,
 		Title:                "Slack",
 		Description:          "Receive Slack Events API callbacks and map them to Gram trigger events.",
 		Kind:                 KindWebhook,
@@ -854,7 +854,7 @@ func newCronDefinition() Definition {
 	schema := buildInputSchema[cronTriggerConfig]()
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "cron",
+		Slug:                 DefinitionSlugCron,
 		Title:                "Cron",
 		Description:          "Run a trigger on a Temporal-backed cron schedule.",
 		Kind:                 KindSchedule,
@@ -918,7 +918,7 @@ func newWakeDefinition() Definition {
 	schema := buildInputSchema[wakeTriggerConfig]()
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "wake",
+		Slug:                 DefinitionSlugWake,
 		Title:                "Wake",
 		Description:          "One-shot self-wake of an assistant thread at an absolute future time.",
 		Kind:                 KindSchedule,
@@ -985,7 +985,7 @@ func newDashboardDefinition() Definition {
 	schema := buildInputSchema[dashboardTriggerConfig]()
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "dashboard",
+		Slug:                 DefinitionSlugDashboard,
 		Title:                "Dashboard",
 		Description:          "Direct messages from the Gram dashboard assistant sidebar.",
 		Kind:                 KindDirect,

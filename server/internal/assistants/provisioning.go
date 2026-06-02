@@ -158,12 +158,7 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 	}
 
 	triggerQueries := triggerrepo.New(tx)
-	instances, err := triggerQueries.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
-		ProjectID:      projectID,
-		DefinitionSlug: sourceKindDashboard,
-		TargetKind:     bgtriggers.TargetKindAssistant,
-		TargetRef:      row.ID.String(),
-	})
+	instances, err := triggerQueries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, row.ID))
 	if err != nil {
 		return fmt.Errorf("list dashboard trigger instances: %w", err)
 	}
@@ -182,18 +177,25 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 	return nil
 }
 
+// dashboardTriggerTarget selects the managed assistant's dashboard direct-ingress
+// trigger instance. Provisioning and teardown must key on the same target, so the
+// selector lives in one place.
+func dashboardTriggerTarget(projectID, assistantID uuid.UUID) triggerrepo.ListActiveTriggerInstancesByTargetParams {
+	return triggerrepo.ListActiveTriggerInstancesByTargetParams{
+		ProjectID:      projectID,
+		DefinitionSlug: sourceKindDashboard,
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+	}
+}
+
 // ensureDashboardTrigger provisions the direct-ingress trigger instance that
 // routes dashboard sidebar messages to the managed assistant, creating one only
 // when absent. Idempotent so the enable fast path can heal a managed assistant
 // that predates dashboard ingress without depending on a fresh create.
 func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo.DBTX, organizationID string, projectID, assistantID uuid.UUID, name string) error {
 	queries := triggerrepo.New(db)
-	existing, err := queries.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
-		ProjectID:      projectID,
-		DefinitionSlug: sourceKindDashboard,
-		TargetKind:     bgtriggers.TargetKindAssistant,
-		TargetRef:      assistantID.String(),
-	})
+	existing, err := queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
 	if err != nil {
 		return fmt.Errorf("list dashboard trigger instances: %w", err)
 	}
@@ -394,12 +396,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 // dashboard ingress.
 func (s *ServiceCore) resolveDashboardTriggerInstance(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, name string) (uuid.UUID, error) {
 	queries := triggerrepo.New(s.db)
-	instances, err := queries.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
-		ProjectID:      projectID,
-		DefinitionSlug: sourceKindDashboard,
-		TargetKind:     bgtriggers.TargetKindAssistant,
-		TargetRef:      assistantID.String(),
-	})
+	instances, err := queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("list dashboard trigger instances: %w", err)
 	}
@@ -407,12 +404,7 @@ func (s *ServiceCore) resolveDashboardTriggerInstance(ctx context.Context, organ
 		if err := s.ensureDashboardTrigger(ctx, s.db, organizationID, projectID, assistantID, name); err != nil {
 			return uuid.Nil, err
 		}
-		instances, err = queries.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
-			ProjectID:      projectID,
-			DefinitionSlug: sourceKindDashboard,
-			TargetKind:     bgtriggers.TargetKindAssistant,
-			TargetRef:      assistantID.String(),
-		})
+		instances, err = queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("list dashboard trigger instances: %w", err)
 		}
