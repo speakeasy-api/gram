@@ -58,10 +58,10 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
-  POLICY_INPUT_TYPE_META,
+  POLICY_MESSAGE_TYPE_META,
   type RuleCategory,
   type PolicyAction,
-  type PolicyInputType,
+  type PolicyMessageType,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
@@ -105,9 +105,9 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "cli_destructive",
 ]);
 
-const ALL_POLICY_INPUT_TYPES = Object.keys(
-  POLICY_INPUT_TYPE_META,
-) as Array<PolicyInputType>;
+const ALL_POLICY_MESSAGE_TYPES = Object.keys(
+  POLICY_MESSAGE_TYPE_META,
+) as Array<PolicyMessageType>;
 
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
@@ -198,40 +198,46 @@ function sourcesToCategories(
   return [...policyToCategories(sources, presidioEntities)];
 }
 
-function policyInputTypesForForm(inputTypes?: string[]): Set<PolicyInputType> {
-  if (!inputTypes?.length) {
-    return new Set(ALL_POLICY_INPUT_TYPES);
+function policyMessageTypesForForm(
+  messageTypes?: string[],
+): Set<PolicyMessageType> {
+  if (!messageTypes?.length) {
+    return new Set(ALL_POLICY_MESSAGE_TYPES);
   }
 
   return new Set(
-    inputTypes.filter((type): type is PolicyInputType =>
-      ALL_POLICY_INPUT_TYPES.includes(type as PolicyInputType),
+    messageTypes.filter((type): type is PolicyMessageType =>
+      ALL_POLICY_MESSAGE_TYPES.includes(type as PolicyMessageType),
     ),
   );
 }
 
-function policyInputTypesForPayload(
-  selectedInputTypes: Set<PolicyInputType>,
-): PolicyInputType[] {
-  const orderedTypes = ALL_POLICY_INPUT_TYPES.filter((type) =>
-    selectedInputTypes.has(type),
+function policyMessageTypesForPayload(
+  selectedMessageTypes: Set<PolicyMessageType>,
+): PolicyMessageType[] {
+  const orderedTypes = ALL_POLICY_MESSAGE_TYPES.filter((type) =>
+    selectedMessageTypes.has(type),
   );
-  if (orderedTypes.length === ALL_POLICY_INPUT_TYPES.length) {
+  if (orderedTypes.length === ALL_POLICY_MESSAGE_TYPES.length) {
     return [];
   }
   return orderedTypes;
 }
 
-function policyInputTypesForDisplay(inputTypes?: string[]): PolicyInputType[] {
-  return [...policyInputTypesForForm(inputTypes)];
+function policyMessageTypesForDisplay(
+  messageTypes?: string[],
+): PolicyMessageType[] {
+  return [...policyMessageTypesForForm(messageTypes)];
 }
 
-function inputTypesSummary(selectedInputTypes: Set<PolicyInputType>): string {
-  if (selectedInputTypes.size === ALL_POLICY_INPUT_TYPES.length) {
+function messageTypesSummary(
+  selectedMessageTypes: Set<PolicyMessageType>,
+): string {
+  if (selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length) {
     return "All types";
   }
 
-  return `${selectedInputTypes.size} of ${ALL_POLICY_INPUT_TYPES.length} types selected`;
+  return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
 
 export default function PolicyCenter() {
@@ -260,9 +266,9 @@ function PolicyCenterContent() {
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(new Set<string>());
-  const [selectedInputTypes, setSelectedInputTypes] = useState<
-    Set<PolicyInputType>
-  >(new Set(ALL_POLICY_INPUT_TYPES));
+  const [selectedMessageTypes, setSelectedMessageTypes] = useState<
+    Set<PolicyMessageType>
+  >(new Set(ALL_POLICY_MESSAGE_TYPES));
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
@@ -299,7 +305,7 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
-    setSelectedInputTypes(new Set(ALL_POLICY_INPUT_TYPES));
+    setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
@@ -321,7 +327,7 @@ function PolicyCenterContent() {
     setSelectedCategories(categories);
     setDisabledRules(new Set(policy.disabledRules ?? []));
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
-    setSelectedInputTypes(policyInputTypesForForm(policy.inputTypes));
+    setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
@@ -335,7 +341,7 @@ function PolicyCenterContent() {
       promptInjectionRules,
       disabledRules: payloadDisabled,
     } = categoriesToPayload(selectedCategories, disabledRules);
-    const inputTypes = policyInputTypesForPayload(selectedInputTypes);
+    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
@@ -352,7 +358,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            inputTypes,
+            messageTypes,
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -370,7 +376,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            inputTypes,
+            messageTypes,
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -391,7 +397,7 @@ function PolicyCenterContent() {
           id: policy.id,
           name: policy.name,
           enabled,
-          inputTypes: policy.inputTypes ?? [],
+          messageTypes: policy.messageTypes ?? [],
         },
       },
     });
@@ -550,17 +556,17 @@ function PolicyCenterContent() {
       },
     },
     {
-      key: "inputTypes",
+      key: "messageTypes",
       header: "Message Types",
       width: "2.1fr",
       render: (policy) => {
-        const types = policyInputTypesForDisplay(policy.inputTypes);
+        const types = policyMessageTypesForDisplay(policy.messageTypes);
 
         return (
           <div className="flex flex-wrap gap-1">
             {types.map((type) => (
               <Badge key={type} variant="secondary">
-                {POLICY_INPUT_TYPE_META[type].label}
+                {POLICY_MESSAGE_TYPE_META[type].label}
               </Badge>
             ))}
           </div>
@@ -679,8 +685,8 @@ function PolicyCenterContent() {
                 customRules={customRules}
                 selectedCustomRuleIds={selectedCustomRuleIds}
                 setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                selectedInputTypes={selectedInputTypes}
-                setSelectedInputTypes={setSelectedInputTypes}
+                selectedMessageTypes={selectedMessageTypes}
+                setSelectedMessageTypes={setSelectedMessageTypes}
                 formAction={formAction}
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
@@ -694,7 +700,7 @@ function PolicyCenterContent() {
                 onClick={handleSave}
                 disabled={
                   (!formAutoName && !formName.trim()) ||
-                  selectedInputTypes.size === 0 ||
+                  selectedMessageTypes.size === 0 ||
                   createMutation.isPending ||
                   updateMutation.isPending
                 }
@@ -748,8 +754,8 @@ function PolicySheetBody({
   customRules,
   selectedCustomRuleIds,
   setSelectedCustomRuleIds,
-  selectedInputTypes,
-  setSelectedInputTypes,
+  selectedMessageTypes,
+  setSelectedMessageTypes,
   formAction,
   setFormAction,
   formAutoName,
@@ -768,8 +774,8 @@ function PolicySheetBody({
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
   selectedCustomRuleIds: Set<string>;
   setSelectedCustomRuleIds: (v: Set<string>) => void;
-  selectedInputTypes: Set<PolicyInputType>;
-  setSelectedInputTypes: (v: Set<PolicyInputType>) => void;
+  selectedMessageTypes: Set<PolicyMessageType>;
+  setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
@@ -780,8 +786,8 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
   >(null);
-  const [inputTypesOpen, setInputTypesOpen] = useState(
-    () => selectedInputTypes.size !== ALL_POLICY_INPUT_TYPES.length,
+  const [messageTypesOpen, setMessageTypesOpen] = useState(
+    () => selectedMessageTypes.size !== ALL_POLICY_MESSAGE_TYPES.length,
   );
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
@@ -1019,8 +1025,8 @@ function PolicySheetBody({
       )}
 
       <Collapsible
-        open={inputTypesOpen}
-        onOpenChange={setInputTypesOpen}
+        open={messageTypesOpen}
+        onOpenChange={setMessageTypesOpen}
         className="space-y-3"
       >
         <div className="space-y-1">
@@ -1035,12 +1041,12 @@ function PolicySheetBody({
             <ChevronRight
               className={cn(
                 "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                inputTypesOpen && "rotate-90",
+                messageTypesOpen && "rotate-90",
               )}
             />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">
-                {inputTypesSummary(selectedInputTypes)}
+                {messageTypesSummary(selectedMessageTypes)}
               </div>
               <div className="text-muted-foreground text-xs">
                 Advanced: narrow scanning to specific parts of a session
@@ -1049,9 +1055,9 @@ function PolicySheetBody({
           </CollapsibleTrigger>
           <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
             <div className="divide-border divide-y">
-              {ALL_POLICY_INPUT_TYPES.map((type) => {
-                const meta = POLICY_INPUT_TYPE_META[type];
-                const checked = selectedInputTypes.has(type);
+              {ALL_POLICY_MESSAGE_TYPES.map((type) => {
+                const meta = POLICY_MESSAGE_TYPE_META[type];
+                const checked = selectedMessageTypes.has(type);
 
                 return (
                   <label
@@ -1061,13 +1067,13 @@ function PolicySheetBody({
                     <Checkbox
                       checked={checked}
                       onCheckedChange={(next) => {
-                        const updated = new Set(selectedInputTypes);
+                        const updated = new Set(selectedMessageTypes);
                         if (next) {
                           updated.add(type);
                         } else {
                           updated.delete(type);
                         }
-                        setSelectedInputTypes(updated);
+                        setSelectedMessageTypes(updated);
                       }}
                     />
                     <div className="min-w-0 flex-1">
@@ -1082,7 +1088,7 @@ function PolicySheetBody({
             </div>
           </CollapsibleContent>
         </div>
-        {selectedInputTypes.size === 0 && (
+        {selectedMessageTypes.size === 0 && (
           <p className="text-destructive text-xs">
             Select at least one type. An empty API value means “all types,” so
             the UI keeps that choice explicit here.

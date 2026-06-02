@@ -34,7 +34,7 @@ type CreateRiskPolicyRequestBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
-	InputTypes []string `form:"input_types,omitempty" json:"input_types,omitempty" xml:"input_types,omitempty"`
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -68,7 +68,7 @@ type UpdateRiskPolicyRequestBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
-	InputTypes []string `form:"input_types,omitempty" json:"input_types,omitempty" xml:"input_types,omitempty"`
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -188,7 +188,7 @@ type CreateRiskPolicyResponseBody struct {
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
-	InputTypes []string `form:"input_types,omitempty" json:"input_types,omitempty" xml:"input_types,omitempty"`
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -251,7 +251,7 @@ type GetRiskPolicyResponseBody struct {
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
-	InputTypes []string `form:"input_types,omitempty" json:"input_types,omitempty" xml:"input_types,omitempty"`
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -300,7 +300,7 @@ type UpdateRiskPolicyResponseBody struct {
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
-	InputTypes []string `form:"input_types,omitempty" json:"input_types,omitempty" xml:"input_types,omitempty"`
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -5230,7 +5230,7 @@ type RiskPolicyResponseBody struct {
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
-	InputTypes []string `form:"input_types,omitempty" json:"input_types,omitempty" xml:"input_types,omitempty"`
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -5519,10 +5519,10 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.InputTypes != nil {
-		body.InputTypes = make([]string, len(res.InputTypes))
-		for i, val := range res.InputTypes {
-			body.InputTypes[i] = val
+	if res.MessageTypes != nil {
+		body.MessageTypes = make([]string, len(res.MessageTypes))
+		for i, val := range res.MessageTypes {
+			body.MessageTypes[i] = val
 		}
 	}
 	return body
@@ -5605,10 +5605,10 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.InputTypes != nil {
-		body.InputTypes = make([]string, len(res.InputTypes))
-		for i, val := range res.InputTypes {
-			body.InputTypes[i] = val
+	if res.MessageTypes != nil {
+		body.MessageTypes = make([]string, len(res.MessageTypes))
+		for i, val := range res.MessageTypes {
+			body.MessageTypes[i] = val
 		}
 	}
 	return body
@@ -5663,10 +5663,10 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.InputTypes != nil {
-		body.InputTypes = make([]string, len(res.InputTypes))
-		for i, val := range res.InputTypes {
-			body.InputTypes[i] = val
+	if res.MessageTypes != nil {
+		body.MessageTypes = make([]string, len(res.MessageTypes))
+		for i, val := range res.MessageTypes {
+			body.MessageTypes[i] = val
 		}
 	}
 	return body
@@ -9698,10 +9698,10 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 			v.CustomRuleIds[i] = val
 		}
 	}
-	if body.InputTypes != nil {
-		v.InputTypes = make([]string, len(body.InputTypes))
-		for i, val := range body.InputTypes {
-			v.InputTypes[i] = val
+	if body.MessageTypes != nil {
+		v.MessageTypes = make([]string, len(body.MessageTypes))
+		for i, val := range body.MessageTypes {
+			v.MessageTypes[i] = val
 		}
 	}
 	if body.Action == nil {
@@ -9788,10 +9788,10 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 			v.CustomRuleIds[i] = val
 		}
 	}
-	if body.InputTypes != nil {
-		v.InputTypes = make([]string, len(body.InputTypes))
-		for i, val := range body.InputTypes {
-			v.InputTypes[i] = val
+	if body.MessageTypes != nil {
+		v.MessageTypes = make([]string, len(body.MessageTypes))
+		for i, val := range body.MessageTypes {
+			v.MessageTypes[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

@@ -15,9 +15,9 @@ import (
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/messagetype"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/riskinputtype"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -97,7 +97,7 @@ func insertPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 	require.NoError(t, err)
 }
 
-func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx context.Context, name string, entities, inputTypes []string) {
+func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx context.Context, name string, entities, messageTypes []string) {
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
@@ -108,7 +108,7 @@ func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx cont
 		Name:             name,
 		Sources:          []string{"presidio"},
 		PresidioEntities: entities,
-		InputTypes:       inputTypes,
+		MessageTypes:     messageTypes,
 		Enabled:          true,
 		Action:           "block",
 		AutoName:         false,
@@ -142,7 +142,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", riskinputtype.InputTypeUserMessage)
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", messagetype.UserMessage)
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", riskinputtype.InputTypeUserMessage)
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", messagetype.UserMessage)
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "deploy ACME-ABC12345 now", riskinputtype.InputTypeUserMessage)
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "deploy ACME-ABC12345 now", messagetype.UserMessage)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "custom block", result.PolicyName)
@@ -255,11 +255,11 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 	require.Equal(t, "ACME token", result.Description)
 }
 
-func TestScanner_RespectsInputTypes(t *testing.T) {
+func TestScanner_RespectsMessageTypes(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	insertPresidioBlockPolicyWithTypes(t, ti, ctx, "tool only", []string{"FAST"}, []string{riskinputtype.InputTypeToolRequest})
+	insertPresidioBlockPolicyWithTypes(t, ti, ctx, "tool only", []string{"FAST"}, []string{messagetype.ToolRequest})
 
 	pii := &instrumentedPIIScanner{findOnEntity: "FAST"}
 	scanner, err := risk.NewScanner(
@@ -273,13 +273,13 @@ func TestScanner_RespectsInputTypes(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	userResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", riskinputtype.InputTypeUserMessage)
+	userResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", messagetype.UserMessage)
 	require.NoError(t, err)
 	require.Nil(t, userResult)
 
-	toolResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", riskinputtype.InputTypeToolRequest)
+	toolResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", messagetype.ToolRequest)
 	require.NoError(t, err)
 	require.NotNil(t, toolResult)
 	require.Equal(t, "tool only", toolResult.PolicyName)
-	require.Equal(t, riskinputtype.InputTypeToolRequest, toolResult.InputType)
+	require.Equal(t, messagetype.ToolRequest, toolResult.MessageType)
 }

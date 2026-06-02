@@ -9,8 +9,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/messagetype"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/riskinputtype"
 )
 
 // scanClaudeForEnforcement extracts the scannable text from a Claude hook
@@ -45,12 +45,12 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	inputType, ok := hookEventToInputType(hookEvent)
+	messageType, ok := hookEventToMessageType(hookEvent)
 	if !ok {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, inputType)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, messageType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
 			attr.SlogError(err),
@@ -104,12 +104,12 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	inputType, ok := hookEventToInputType(hookEvent)
+	messageType, ok := hookEventToMessageType(hookEvent)
 	if !ok {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, inputType)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -143,12 +143,12 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	inputType, ok := hookEventToInputType(hookEvent)
+	messageType, ok := hookEventToMessageType(hookEvent)
 	if !ok {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, inputType)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),
@@ -160,14 +160,14 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 	return result
 }
 
-func hookEventToInputType(hookEvent HookEvent) (string, bool) {
+func hookEventToMessageType(hookEvent HookEvent) (messagetype.MessageType, bool) {
 	switch hookEvent {
 	case HookEventUserPromptSubmit, HookEventBeforeSubmitPrompt:
-		return riskinputtype.InputTypeUserMessage, true
+		return messagetype.UserMessage, true
 	case HookEventPreToolUse, HookEventBeforeMCPExecution, HookEventPermissionRequest:
-		return riskinputtype.InputTypeToolRequest, true
+		return messagetype.ToolRequest, true
 	case HookEventPostToolUse:
-		return riskinputtype.InputTypeToolResponse, true
+		return messagetype.ToolResponse, true
 	default:
 		return "", false
 	}

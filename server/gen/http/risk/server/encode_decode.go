@@ -6014,10 +6014,10 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 			res.CustomRuleIds[i] = val
 		}
 	}
-	if v.InputTypes != nil {
-		res.InputTypes = make([]string, len(v.InputTypes))
-		for i, val := range v.InputTypes {
-			res.InputTypes[i] = val
+	if v.MessageTypes != nil {
+		res.MessageTypes = make([]string, len(v.MessageTypes))
+		for i, val := range v.MessageTypes {
+			res.MessageTypes[i] = val
 		}
 	}
 

@@ -6,11 +6,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/messagetype"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/riskinputtype"
 )
 
-func TestFilterMessagesByInputTypes(t *testing.T) {
+func TestFilterMessagesByMessageTypes(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
@@ -26,12 +26,12 @@ func TestFilterMessagesByInputTypes(t *testing.T) {
 		{ID: uuid.New(), Role: "system", Content: "ignore"},
 	}
 
-	filtered := filterMessagesByInputTypes(messages, []string{riskinputtype.InputTypeToolRequest, riskinputtype.InputTypeToolResponse})
+	filtered := filterMessagesByMessageTypes(messages, []string{messagetype.ToolRequest, messagetype.ToolResponse})
 	require.Len(t, filtered, 2)
 	require.Equal(t, toolRequestID, filtered[0].ID)
 	require.Equal(t, toolResponseID, filtered[1].ID)
 
-	all := filterMessagesByInputTypes(messages, nil)
+	all := filterMessagesByMessageTypes(messages, nil)
 	require.Len(t, all, 4)
 	require.Equal(t, []uuid.UUID{userID, assistantID, toolRequestID, toolResponseID}, []uuid.UUID{all[0].ID, all[1].ID, all[2].ID, all[3].ID})
 }

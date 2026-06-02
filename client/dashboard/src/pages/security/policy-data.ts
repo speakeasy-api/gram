@@ -1,6 +1,6 @@
 export type PolicyAction = "flag" | "block";
 
-export type PolicyInputType =
+export type PolicyMessageType =
   | "user_message"
   | "tool_request"
   | "tool_response"
@@ -42,7 +42,7 @@ export type DlpPolicy = {
   ruleCategories: RuleCategory[];
   selectedRules: string[];
   action: PolicyAction;
-  types: PolicyInputType[];
+  types: PolicyMessageType[];
   mcpScope: McpScope;
   createdAt: Date;
   updatedAt: Date;
@@ -113,8 +113,8 @@ export const RULE_CATEGORY_META: Record<
   },
 };
 
-export const POLICY_INPUT_TYPE_META: Record<
-  PolicyInputType,
+export const POLICY_MESSAGE_TYPE_META: Record<
+  PolicyMessageType,
   { label: string; description: string }
 > = {
   user_message: {

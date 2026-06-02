@@ -48,7 +48,7 @@ export type UpdateRiskPolicyRequestBody = {
   /**
    * Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
    */
-  inputTypes?: Array<string> | undefined;
+  messageTypes?: Array<string> | undefined;
   /**
    * The policy name.
    */
@@ -84,7 +84,7 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   id: string;
-  input_types?: Array<string> | undefined;
+  message_types?: Array<string> | undefined;
   name: string;
   presidio_entities?: Array<string> | undefined;
   prompt_injection_rules?: Array<string> | undefined;
@@ -104,7 +104,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     id: z.string(),
-    inputTypes: z.optional(z.array(z.string())),
+    messageTypes: z.optional(z.array(z.string())),
     name: z.string(),
     presidioEntities: z.optional(z.array(z.string())),
     promptInjectionRules: z.optional(z.array(z.string())),
@@ -116,7 +116,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",
-      inputTypes: "input_types",
+      messageTypes: "message_types",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
       userMessage: "user_message",

@@ -169,7 +169,7 @@ type CreateRiskPolicyPayload struct {
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
-	InputTypes []string
+	MessageTypes []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -719,7 +719,7 @@ type UpdateRiskPolicyPayload struct {
 	CustomRuleIds []string
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
-	InputTypes []string
+	MessageTypes []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

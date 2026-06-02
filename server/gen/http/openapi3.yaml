@@ -33221,7 +33221,7 @@ components:
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
-                input_types:
+                message_types:
                     type: array
                     items:
                         type: string
@@ -39609,7 +39609,7 @@ components:
                     type: string
                     description: The risk policy ID.
                     format: uuid
-                input_types:
+                message_types:
                     type: array
                     items:
                         type: string
@@ -42910,7 +42910,7 @@ components:
                     type: string
                     description: The policy ID.
                     format: uuid
-                input_types:
+                message_types:
                     type: array
                     items:
                         type: string

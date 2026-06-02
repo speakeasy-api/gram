@@ -42,7 +42,7 @@ export type CreateRiskPolicyRequestBody = {
   /**
    * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
    */
-  inputTypes?: Array<string> | undefined;
+  messageTypes?: Array<string> | undefined;
   /**
    * The policy name. If omitted, a name will be auto-generated.
    */
@@ -77,7 +77,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   custom_rule_ids?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
-  input_types?: Array<string> | undefined;
+  message_types?: Array<string> | undefined;
   name?: string | undefined;
   presidio_entities?: Array<string> | undefined;
   prompt_injection_rules?: Array<string> | undefined;
@@ -96,7 +96,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
-    inputTypes: z.optional(z.array(z.string())),
+    messageTypes: z.optional(z.array(z.string())),
     name: z.optional(z.string()),
     presidioEntities: z.optional(z.array(z.string())),
     promptInjectionRules: z.optional(z.array(z.string())),
@@ -108,7 +108,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",
-      inputTypes: "input_types",
+      messageTypes: "message_types",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
       userMessage: "user_message",

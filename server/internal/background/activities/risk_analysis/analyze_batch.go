@@ -24,11 +24,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/messagetype"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/riskinputtype"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -94,7 +94,7 @@ type AnalyzeBatchArgs struct {
 	PolicyVersion        int64
 	MessageIDs           []uuid.UUID
 	Sources              []string
-	InputTypes           []string
+	MessageTypes         []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
 	CustomRuleIds        []string
@@ -163,7 +163,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	messages = filterMessagesByInputTypes(messages, args.InputTypes)
+	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
 	scannedCount = len(messages)
 	if len(messages) == 0 {
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
@@ -223,14 +223,14 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 	return messages, nil
 }
 
-func filterMessagesByInputTypes(messages []repo.GetMessageContentBatchRow, inputTypes []string) []repo.GetMessageContentBatchRow {
+func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, messageTypes []string) []repo.GetMessageContentBatchRow {
 	filtered := make([]repo.GetMessageContentBatchRow, 0, len(messages))
 	for _, msg := range messages {
-		inputType, ok := messageRowInputType(msg)
+		messageType, ok := messageRowMessageType(msg)
 		if !ok {
 			continue
 		}
-		if !riskinputtype.Allows(inputTypes, inputType) {
+		if !messagetype.Allows(messageTypes, messageType) {
 			continue
 		}
 		filtered = append(filtered, msg)
@@ -238,17 +238,17 @@ func filterMessagesByInputTypes(messages []repo.GetMessageContentBatchRow, input
 	return filtered
 }
 
-func messageRowInputType(msg repo.GetMessageContentBatchRow) (string, bool) {
+func messageRowMessageType(msg repo.GetMessageContentBatchRow) (messagetype.MessageType, bool) {
 	switch msg.Role {
 	case "user":
-		return riskinputtype.InputTypeUserMessage, true
+		return messagetype.UserMessage, true
 	case "tool":
-		return riskinputtype.InputTypeToolResponse, true
+		return messagetype.ToolResponse, true
 	case "assistant":
 		if len(msg.ToolCalls) > 0 {
-			return riskinputtype.InputTypeToolRequest, true
+			return messagetype.ToolRequest, true
 		}
-		return riskinputtype.InputTypeAssistantMessage, true
+		return messagetype.AssistantMessage, true
 	default:
 		return "", false
 	}
