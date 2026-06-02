@@ -28,7 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/riskscope"
+	"github.com/speakeasy-api/gram/server/internal/riskinputtype"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -94,7 +94,7 @@ type AnalyzeBatchArgs struct {
 	PolicyVersion        int64
 	MessageIDs           []uuid.UUID
 	Sources              []string
-	InputScopes          []string
+	InputTypes           []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
 	CustomRuleIds        []string
@@ -163,7 +163,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	messages = filterMessagesByInputScopes(messages, args.InputScopes)
+	messages = filterMessagesByInputTypes(messages, args.InputTypes)
 	scannedCount = len(messages)
 	if len(messages) == 0 {
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
@@ -223,14 +223,14 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 	return messages, nil
 }
 
-func filterMessagesByInputScopes(messages []repo.GetMessageContentBatchRow, inputScopes []string) []repo.GetMessageContentBatchRow {
+func filterMessagesByInputTypes(messages []repo.GetMessageContentBatchRow, inputTypes []string) []repo.GetMessageContentBatchRow {
 	filtered := make([]repo.GetMessageContentBatchRow, 0, len(messages))
 	for _, msg := range messages {
-		inputScope, ok := messageRowInputScope(msg)
+		inputType, ok := messageRowInputType(msg)
 		if !ok {
 			continue
 		}
-		if !riskscope.Allows(inputScopes, inputScope) {
+		if !riskinputtype.Allows(inputTypes, inputType) {
 			continue
 		}
 		filtered = append(filtered, msg)
@@ -238,17 +238,17 @@ func filterMessagesByInputScopes(messages []repo.GetMessageContentBatchRow, inpu
 	return filtered
 }
 
-func messageRowInputScope(msg repo.GetMessageContentBatchRow) (string, bool) {
+func messageRowInputType(msg repo.GetMessageContentBatchRow) (string, bool) {
 	switch msg.Role {
 	case "user":
-		return riskscope.InputScopeUserMessage, true
+		return riskinputtype.InputTypeUserMessage, true
 	case "tool":
-		return riskscope.InputScopeToolResponse, true
+		return riskinputtype.InputTypeToolResponse, true
 	case "assistant":
 		if len(msg.ToolCalls) > 0 {
-			return riskscope.InputScopeToolRequest, true
+			return riskinputtype.InputTypeToolRequest, true
 		}
-		return riskscope.InputScopeAssistantMessage, true
+		return riskinputtype.InputTypeAssistantMessage, true
 	default:
 		return "", false
 	}

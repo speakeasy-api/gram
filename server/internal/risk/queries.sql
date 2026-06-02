@@ -9,7 +9,7 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
-  , input_scopes
+  , input_types
   , enabled
   , action
   , auto_name
@@ -26,7 +26,7 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , sqlc.arg(input_scopes)::text[]
+  , sqlc.arg(input_types)::text[]
   , @enabled
   , @action
   , @auto_name
@@ -64,7 +64,7 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , input_scopes = sqlc.arg(input_scopes)::text[]
+  , input_types = sqlc.arg(input_types)::text[]
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
@@ -75,7 +75,7 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-        OR input_scopes IS DISTINCT FROM sqlc.arg(input_scopes)::text[]
+        OR input_types IS DISTINCT FROM sqlc.arg(input_types)::text[]
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
       THEN version + 1

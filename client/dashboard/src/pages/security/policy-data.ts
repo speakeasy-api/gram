@@ -1,6 +1,6 @@
 export type PolicyAction = "flag" | "block";
 
-export type PolicyInputScope =
+export type PolicyInputType =
   | "user_message"
   | "tool_request"
   | "tool_response"
@@ -42,7 +42,7 @@ export type DlpPolicy = {
   ruleCategories: RuleCategory[];
   selectedRules: string[];
   action: PolicyAction;
-  scopes: PolicyInputScope[];
+  types: PolicyInputType[];
   mcpScope: McpScope;
   createdAt: Date;
   updatedAt: Date;
@@ -113,8 +113,8 @@ export const RULE_CATEGORY_META: Record<
   },
 };
 
-export const POLICY_INPUT_SCOPE_META: Record<
-  PolicyInputScope,
+export const POLICY_INPUT_TYPE_META: Record<
+  PolicyInputType,
   { label: string; description: string }
 > = {
   user_message: {
@@ -1429,7 +1429,7 @@ export const MOCK_POLICIES: DlpPolicy[] = [
       "secret.jwt",
     ],
     action: "block",
-    scopes: [
+    types: [
       "user_message",
       "tool_request",
       "tool_response",
@@ -1452,7 +1452,7 @@ export const MOCK_POLICIES: DlpPolicy[] = [
       "pii.us_driver_license",
     ],
     action: "flag",
-    scopes: ["user_message", "assistant_message", "tool_response"],
+    types: ["user_message", "assistant_message", "tool_response"],
     mcpScope: { mode: "all" },
     createdAt: new Date("2026-03-20"),
     updatedAt: new Date("2026-04-08"),
@@ -1464,7 +1464,7 @@ export const MOCK_POLICIES: DlpPolicy[] = [
     ruleCategories: ["financial"],
     selectedRules: ["pii.credit_card", "pii.iban_code", "pii.us_bank_number"],
     action: "block",
-    scopes: ["user_message", "tool_request", "tool_response"],
+    types: ["user_message", "tool_request", "tool_response"],
     mcpScope: { mode: "all" },
     createdAt: new Date("2026-04-01"),
     updatedAt: new Date("2026-04-01"),
@@ -1479,7 +1479,7 @@ export function createEmptyPolicy(): DlpPolicy {
     ruleCategories: [],
     selectedRules: [],
     action: "flag",
-    scopes: ["user_message", "tool_request", "tool_response"],
+    types: ["user_message", "tool_request", "tool_response"],
     mcpScope: { mode: "all" },
     createdAt: new Date(),
     updatedAt: new Date(),

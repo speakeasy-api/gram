@@ -3,6 +3,11 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -53,10 +58,10 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
-  POLICY_INPUT_SCOPE_META,
+  POLICY_INPUT_TYPE_META,
   type RuleCategory,
   type PolicyAction,
-  type PolicyInputScope,
+  type PolicyInputType,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
@@ -100,9 +105,9 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "cli_destructive",
 ]);
 
-const ALL_POLICY_INPUT_SCOPES = Object.keys(POLICY_INPUT_SCOPE_META) as Array<
-  PolicyInputScope
->;
+const ALL_POLICY_INPUT_TYPES = Object.keys(
+  POLICY_INPUT_TYPE_META,
+) as Array<PolicyInputType>;
 
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
@@ -193,34 +198,40 @@ function sourcesToCategories(
   return [...policyToCategories(sources, presidioEntities)];
 }
 
-function policyInputScopesForForm(
-  inputScopes?: string[],
-): Set<PolicyInputScope> {
-  if (!inputScopes?.length) {
-    return new Set(ALL_POLICY_INPUT_SCOPES);
+function policyInputTypesForForm(inputTypes?: string[]): Set<PolicyInputType> {
+  if (!inputTypes?.length) {
+    return new Set(ALL_POLICY_INPUT_TYPES);
   }
 
   return new Set(
-    inputScopes.filter((scope): scope is PolicyInputScope =>
-      ALL_POLICY_INPUT_SCOPES.includes(scope as PolicyInputScope),
+    inputTypes.filter((type): type is PolicyInputType =>
+      ALL_POLICY_INPUT_TYPES.includes(type as PolicyInputType),
     ),
   );
 }
 
-function policyInputScopesForPayload(
-  selectedInputScopes: Set<PolicyInputScope>,
-): PolicyInputScope[] {
-  const orderedScopes = ALL_POLICY_INPUT_SCOPES.filter((scope) =>
-    selectedInputScopes.has(scope),
+function policyInputTypesForPayload(
+  selectedInputTypes: Set<PolicyInputType>,
+): PolicyInputType[] {
+  const orderedTypes = ALL_POLICY_INPUT_TYPES.filter((type) =>
+    selectedInputTypes.has(type),
   );
-  if (orderedScopes.length === ALL_POLICY_INPUT_SCOPES.length) {
+  if (orderedTypes.length === ALL_POLICY_INPUT_TYPES.length) {
     return [];
   }
-  return orderedScopes;
+  return orderedTypes;
 }
 
-function policyInputScopesForDisplay(inputScopes?: string[]): PolicyInputScope[] {
-  return [...policyInputScopesForForm(inputScopes)];
+function policyInputTypesForDisplay(inputTypes?: string[]): PolicyInputType[] {
+  return [...policyInputTypesForForm(inputTypes)];
+}
+
+function inputTypesSummary(selectedInputTypes: Set<PolicyInputType>): string {
+  if (selectedInputTypes.size === ALL_POLICY_INPUT_TYPES.length) {
+    return "All types";
+  }
+
+  return `${selectedInputTypes.size} of ${ALL_POLICY_INPUT_TYPES.length} types selected`;
 }
 
 export default function PolicyCenter() {
@@ -249,9 +260,9 @@ function PolicyCenterContent() {
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(new Set<string>());
-  const [selectedInputScopes, setSelectedInputScopes] = useState<
-    Set<PolicyInputScope>
-  >(new Set(ALL_POLICY_INPUT_SCOPES));
+  const [selectedInputTypes, setSelectedInputTypes] = useState<
+    Set<PolicyInputType>
+  >(new Set(ALL_POLICY_INPUT_TYPES));
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
@@ -288,7 +299,7 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
-    setSelectedInputScopes(new Set(ALL_POLICY_INPUT_SCOPES));
+    setSelectedInputTypes(new Set(ALL_POLICY_INPUT_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
@@ -310,7 +321,7 @@ function PolicyCenterContent() {
     setSelectedCategories(categories);
     setDisabledRules(new Set(policy.disabledRules ?? []));
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
-    setSelectedInputScopes(policyInputScopesForForm(policy.inputScopes));
+    setSelectedInputTypes(policyInputTypesForForm(policy.inputTypes));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
@@ -324,7 +335,7 @@ function PolicyCenterContent() {
       promptInjectionRules,
       disabledRules: payloadDisabled,
     } = categoriesToPayload(selectedCategories, disabledRules);
-    const inputScopes = policyInputScopesForPayload(selectedInputScopes);
+    const inputTypes = policyInputTypesForPayload(selectedInputTypes);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
@@ -341,7 +352,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            inputScopes,
+            inputTypes,
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -359,7 +370,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            inputScopes,
+            inputTypes,
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -380,7 +391,7 @@ function PolicyCenterContent() {
           id: policy.id,
           name: policy.name,
           enabled,
-          inputScopes: policy.inputScopes ?? [],
+          inputTypes: policy.inputTypes ?? [],
         },
       },
     });
@@ -517,7 +528,7 @@ function PolicyCenterContent() {
     {
       key: "sources",
       header: "Categories",
-      width: "3fr",
+      width: "2fr",
       render: (policy) => {
         const categories = sourcesToCategories(
           policy.sources,
@@ -539,17 +550,17 @@ function PolicyCenterContent() {
       },
     },
     {
-      key: "inputScopes",
-      header: "Scopes",
-      width: "1.8fr",
+      key: "inputTypes",
+      header: "Message Types",
+      width: "2.1fr",
       render: (policy) => {
-        const scopes = policyInputScopesForDisplay(policy.inputScopes);
+        const types = policyInputTypesForDisplay(policy.inputTypes);
 
         return (
           <div className="flex flex-wrap gap-1">
-            {scopes.map((scope) => (
-              <Badge key={scope} variant="outline">
-                {POLICY_INPUT_SCOPE_META[scope].label}
+            {types.map((type) => (
+              <Badge key={type} variant="secondary">
+                {POLICY_INPUT_TYPE_META[type].label}
               </Badge>
             ))}
           </div>
@@ -668,8 +679,8 @@ function PolicyCenterContent() {
                 customRules={customRules}
                 selectedCustomRuleIds={selectedCustomRuleIds}
                 setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                selectedInputScopes={selectedInputScopes}
-                setSelectedInputScopes={setSelectedInputScopes}
+                selectedInputTypes={selectedInputTypes}
+                setSelectedInputTypes={setSelectedInputTypes}
                 formAction={formAction}
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
@@ -683,7 +694,7 @@ function PolicyCenterContent() {
                 onClick={handleSave}
                 disabled={
                   (!formAutoName && !formName.trim()) ||
-                  selectedInputScopes.size === 0 ||
+                  selectedInputTypes.size === 0 ||
                   createMutation.isPending ||
                   updateMutation.isPending
                 }
@@ -737,8 +748,8 @@ function PolicySheetBody({
   customRules,
   selectedCustomRuleIds,
   setSelectedCustomRuleIds,
-  selectedInputScopes,
-  setSelectedInputScopes,
+  selectedInputTypes,
+  setSelectedInputTypes,
   formAction,
   setFormAction,
   formAutoName,
@@ -757,8 +768,8 @@ function PolicySheetBody({
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
   selectedCustomRuleIds: Set<string>;
   setSelectedCustomRuleIds: (v: Set<string>) => void;
-  selectedInputScopes: Set<PolicyInputScope>;
-  setSelectedInputScopes: (v: Set<PolicyInputScope>) => void;
+  selectedInputTypes: Set<PolicyInputType>;
+  setSelectedInputTypes: (v: Set<PolicyInputType>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
@@ -769,6 +780,9 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
   >(null);
+  const [inputTypesOpen, setInputTypesOpen] = useState(
+    () => selectedInputTypes.size !== ALL_POLICY_INPUT_TYPES.length,
+  );
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
@@ -1004,51 +1018,77 @@ function PolicySheetBody({
         />
       )}
 
-      <div className="space-y-3">
-        <Label className="text-sm font-medium">Input Scopes</Label>
-        <p className="text-muted-foreground text-xs">
-          Choose which parts of an agent session this policy scans. Leaving all
-          four selected applies the policy everywhere.
-        </p>
-        <div className="border-border divide-border divide-y rounded-lg border">
-          {ALL_POLICY_INPUT_SCOPES.map((scope) => {
-            const meta = POLICY_INPUT_SCOPE_META[scope];
-            const checked = selectedInputScopes.has(scope);
-
-            return (
-              <label
-                key={scope}
-                className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
-              >
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={(next) => {
-                    const updated = new Set(selectedInputScopes);
-                    if (next) {
-                      updated.add(scope);
-                    } else {
-                      updated.delete(scope);
-                    }
-                    setSelectedInputScopes(updated);
-                  }}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{meta.label}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {meta.description}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
+      <Collapsible
+        open={inputTypesOpen}
+        onOpenChange={setInputTypesOpen}
+        className="space-y-3"
+      >
+        <div className="space-y-1">
+          <Label className="text-sm font-medium">Message Types</Label>
+          <p className="text-muted-foreground text-xs">
+            Choose which parts of an agent session this policy scans. Leaving
+            all four selected applies the policy everywhere.
+          </p>
         </div>
-        {selectedInputScopes.size === 0 && (
+        <div className="border-border rounded-lg border">
+          <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
+            <ChevronRight
+              className={cn(
+                "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                inputTypesOpen && "rotate-90",
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">
+                {inputTypesSummary(selectedInputTypes)}
+              </div>
+              <div className="text-muted-foreground text-xs">
+                Advanced: narrow scanning to specific parts of a session
+              </div>
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
+            <div className="divide-border divide-y">
+              {ALL_POLICY_INPUT_TYPES.map((type) => {
+                const meta = POLICY_INPUT_TYPE_META[type];
+                const checked = selectedInputTypes.has(type);
+
+                return (
+                  <label
+                    key={type}
+                    className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(next) => {
+                        const updated = new Set(selectedInputTypes);
+                        if (next) {
+                          updated.add(type);
+                        } else {
+                          updated.delete(type);
+                        }
+                        setSelectedInputTypes(updated);
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{meta.label}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {meta.description}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </CollapsibleContent>
+        </div>
+        {selectedInputTypes.size === 0 && (
           <p className="text-destructive text-xs">
-            Select at least one scope. An empty API value means “all scopes,” so
+            Select at least one type. An empty API value means “all types,” so
             the UI keeps that choice explicit here.
           </p>
         )}
-      </div>
+      </Collapsible>
 
       {/* Action */}
       <div className="space-y-2">

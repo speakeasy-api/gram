@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/riskscope"
+	"github.com/speakeasy-api/gram/server/internal/riskinputtype"
 )
 
 // scanClaudeForEnforcement extracts the scannable text from a Claude hook
@@ -45,12 +45,12 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	inputScope, ok := hookEventToInputScope(hookEvent)
+	inputType, ok := hookEventToInputType(hookEvent)
 	if !ok {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, inputScope)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, inputType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
 			attr.SlogError(err),
@@ -104,12 +104,12 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	inputScope, ok := hookEventToInputScope(hookEvent)
+	inputType, ok := hookEventToInputType(hookEvent)
 	if !ok {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, inputScope)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, inputType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -143,12 +143,12 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	inputScope, ok := hookEventToInputScope(hookEvent)
+	inputType, ok := hookEventToInputType(hookEvent)
 	if !ok {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, inputScope)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, inputType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),
@@ -160,14 +160,14 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 	return result
 }
 
-func hookEventToInputScope(hookEvent HookEvent) (string, bool) {
+func hookEventToInputType(hookEvent HookEvent) (string, bool) {
 	switch hookEvent {
 	case HookEventUserPromptSubmit, HookEventBeforeSubmitPrompt:
-		return riskscope.InputScopeUserMessage, true
+		return riskinputtype.InputTypeUserMessage, true
 	case HookEventPreToolUse, HookEventBeforeMCPExecution, HookEventPermissionRequest:
-		return riskscope.InputScopeToolRequest, true
+		return riskinputtype.InputTypeToolRequest, true
 	case HookEventPostToolUse:
-		return riskscope.InputScopeToolResponse, true
+		return riskinputtype.InputTypeToolResponse, true
 	default:
 		return "", false
 	}

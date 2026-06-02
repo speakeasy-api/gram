@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/riskscope"
+	"github.com/speakeasy-api/gram/server/internal/riskinputtype"
 )
 
-func TestFilterMessagesByInputScopes(t *testing.T) {
+func TestFilterMessagesByInputTypes(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
@@ -26,12 +26,12 @@ func TestFilterMessagesByInputScopes(t *testing.T) {
 		{ID: uuid.New(), Role: "system", Content: "ignore"},
 	}
 
-	filtered := filterMessagesByInputScopes(messages, []string{riskscope.InputScopeToolRequest, riskscope.InputScopeToolResponse})
+	filtered := filterMessagesByInputTypes(messages, []string{riskinputtype.InputTypeToolRequest, riskinputtype.InputTypeToolResponse})
 	require.Len(t, filtered, 2)
 	require.Equal(t, toolRequestID, filtered[0].ID)
 	require.Equal(t, toolResponseID, filtered[1].ID)
 
-	all := filterMessagesByInputScopes(messages, nil)
+	all := filterMessagesByInputTypes(messages, nil)
 	require.Len(t, all, 4)
 	require.Equal(t, []uuid.UUID{userID, assistantID, toolRequestID, toolResponseID}, []uuid.UUID{all[0].ID, all[1].ID, all[2].ID, all[3].ID})
 }
