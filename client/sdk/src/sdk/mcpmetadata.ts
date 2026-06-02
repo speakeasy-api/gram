@@ -34,10 +34,10 @@ export class McpMetadata extends ClientSDK {
    * getMcpMetadata mcpMetadata
    *
    * @remarks
-   * Fetch the metadata that powers the MCP install page.
+   * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
    */
   async get(
-    request: operations.GetMcpMetadataRequest,
+    request?: operations.GetMcpMetadataRequest | undefined,
     security?: operations.GetMcpMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.GetMcpMetadataResponseBody> {
@@ -53,7 +53,7 @@ export class McpMetadata extends ClientSDK {
    * setMcpMetadata mcpMetadata
    *
    * @remarks
-   * Create or update the metadata that powers the MCP install page.
+   * Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
    */
   async set(
     request: operations.SetMcpMetadataRequest,

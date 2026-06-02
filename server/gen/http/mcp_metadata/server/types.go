@@ -18,8 +18,12 @@ import (
 // SetMcpMetadataRequestBody is the type of the "mcpMetadata" service
 // "setMcpMetadata" endpoint HTTP request body.
 type SetMcpMetadataRequestBody struct {
-	// The slug of the toolset associated with this install page metadata
+	// The slug of the toolset associated with this install page metadata. Mutually
+	// exclusive with mcp_server_id.
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	// The ID of the MCP server associated with this install page metadata.
+	// Mutually exclusive with toolset_slug.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
@@ -28,7 +32,8 @@ type SetMcpMetadataRequestBody struct {
 	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// The default environment to load variables from
+	// The default environment to load variables from. Not supported when
+	// mcp_server_id is provided.
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string `form:"installation_override_url,omitempty" json:"installation_override_url,omitempty" xml:"installation_override_url,omitempty"`
@@ -55,8 +60,12 @@ type GetMcpMetadataResponseBody struct {
 type SetMcpMetadataResponseBody struct {
 	// The ID of the metadata record
 	ID string `form:"id" json:"id" xml:"id"`
-	// The toolset associated with this install page metadata
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
+	// The toolset associated with this install page metadata. Mutually exclusive
+	// with mcp_server_id.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The MCP server associated with this install page metadata. Mutually
+	// exclusive with toolset_id.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
@@ -666,8 +675,12 @@ type ExportMcpMetadataGatewayErrorResponseBody struct {
 type McpMetadataResponseBody struct {
 	// The ID of the metadata record
 	ID string `form:"id" json:"id" xml:"id"`
-	// The toolset associated with this install page metadata
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
+	// The toolset associated with this install page metadata. Mutually exclusive
+	// with mcp_server_id.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The MCP server associated with this install page metadata. Mutually
+	// exclusive with toolset_id.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
@@ -760,6 +773,7 @@ func NewSetMcpMetadataResponseBody(res *types.McpMetadata) *SetMcpMetadataRespon
 	body := &SetMcpMetadataResponseBody{
 		ID:                        res.ID,
 		ToolsetID:                 res.ToolsetID,
+		McpServerID:               res.McpServerID,
 		LogoAssetID:               res.LogoAssetID,
 		ExternalDocumentationURL:  res.ExternalDocumentationURL,
 		ExternalDocumentationText: res.ExternalDocumentationText,
@@ -1244,9 +1258,13 @@ func NewExportMcpMetadataGatewayErrorResponseBody(res *goa.ServiceError) *Export
 
 // NewGetMcpMetadataPayload builds a mcpMetadata service getMcpMetadata
 // endpoint payload.
-func NewGetMcpMetadataPayload(toolsetSlug string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.GetMcpMetadataPayload {
+func NewGetMcpMetadataPayload(toolsetSlug *string, mcpServerID *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.GetMcpMetadataPayload {
 	v := &mcpmetadata.GetMcpMetadataPayload{}
-	v.ToolsetSlug = types.Slug(toolsetSlug)
+	if toolsetSlug != nil {
+		tmptoolsetSlug := types.Slug(*toolsetSlug)
+		v.ToolsetSlug = &tmptoolsetSlug
+	}
+	v.McpServerID = mcpServerID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1258,13 +1276,17 @@ func NewGetMcpMetadataPayload(toolsetSlug string, apikeyToken *string, sessionTo
 // endpoint payload.
 func NewSetMcpMetadataPayload(body *SetMcpMetadataRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *mcpmetadata.SetMcpMetadataPayload {
 	v := &mcpmetadata.SetMcpMetadataPayload{
-		ToolsetSlug:               types.Slug(*body.ToolsetSlug),
+		McpServerID:               body.McpServerID,
 		LogoAssetID:               body.LogoAssetID,
 		ExternalDocumentationURL:  body.ExternalDocumentationURL,
 		ExternalDocumentationText: body.ExternalDocumentationText,
 		Instructions:              body.Instructions,
 		DefaultEnvironmentID:      body.DefaultEnvironmentID,
 		InstallationOverrideURL:   body.InstallationOverrideURL,
+	}
+	if body.ToolsetSlug != nil {
+		toolsetSlug := types.Slug(*body.ToolsetSlug)
+		v.ToolsetSlug = &toolsetSlug
 	}
 	if body.EnvironmentConfigs != nil {
 		v.EnvironmentConfigs = make([]*types.McpEnvironmentConfigInput, len(body.EnvironmentConfigs))
@@ -1299,9 +1321,6 @@ func NewExportMcpMetadataPayload(body *ExportMcpMetadataRequestBody, apikeyToken
 // ValidateSetMcpMetadataRequestBody runs the validations defined on
 // SetMcpMetadataRequestBody
 func ValidateSetMcpMetadataRequestBody(body *SetMcpMetadataRequestBody) (err error) {
-	if body.ToolsetSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
-	}
 	if body.ToolsetSlug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", *body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
 	}
@@ -1309,6 +1328,9 @@ func ValidateSetMcpMetadataRequestBody(body *SetMcpMetadataRequestBody) (err err
 		if utf8.RuneCountInString(*body.ToolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", *body.ToolsetSlug, utf8.RuneCountInString(*body.ToolsetSlug), 40, false))
 		}
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.DefaultEnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))

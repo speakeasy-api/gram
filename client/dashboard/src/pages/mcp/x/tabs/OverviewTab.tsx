@@ -1,8 +1,13 @@
-import { CodeBlock } from "@/components/code";
+import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
+import {
+  useMcpMetadataMetadataForm,
+  type UseMcpMetadataMetadataFormResult,
+} from "@/components/mcp_install_page/useMcpMetadataForm";
 import { DotCard } from "@/components/ui/dot-card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useMcpEndpointUrl } from "@/hooks/useToolsetUrl";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   formatRemoteMcpUrlForDisplay,
   remoteMcpRouteParam,
@@ -14,6 +19,7 @@ import type {
   ToolsetEntry,
 } from "@gram/client/models/components";
 import {
+  useGetMcpMetadata,
   useGetRemoteMcpServer,
   useListToolsets,
   useRemoteSessionClients,
@@ -46,11 +52,14 @@ export function OverviewTab({
 }) {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      <InstallPagesSection
-        endpoints={endpoints}
-        isLoading={isLoadingEndpoints}
-        onShowEndpoints={onShowEndpoints}
-      />
+      {mcpServer ? (
+        <InstallPagesSection
+          mcpServer={mcpServer}
+          endpoints={endpoints}
+          isLoading={isLoadingEndpoints}
+          onShowEndpoints={onShowEndpoints}
+        />
+      ) : null}
       {showAuthentication && mcpServer && (
         <AuthenticationOverviewSection
           mcpServer={mcpServer}
@@ -58,18 +67,17 @@ export function OverviewTab({
         />
       )}
       {mcpServer && <SourcesSection mcpServer={mcpServer} />}
-
-      {/* TODO(AGE-2239): wire the install-page branding affordance in once
-          mcp_metadata learns about mcp_server_id. */}
     </div>
   );
 }
 
 function InstallPagesSection({
+  mcpServer,
   endpoints,
   isLoading,
   onShowEndpoints,
 }: {
+  mcpServer: McpServer;
   endpoints: McpEndpoint[];
   isLoading: boolean;
   onShowEndpoints: () => void;
@@ -85,6 +93,29 @@ function InstallPagesSection({
       }),
     [endpoints],
   );
+
+  // Metadata lives at the mcp_server level, not the endpoint level — branding
+  // edits made from any row's dialog persist to the same row. The 404 path is
+  // load-bearing because servers without metadata yet return ErrNoRows from
+  // mcp_metadata.GetMetadataByMcpServerID.
+  const metadataResult = useGetMcpMetadata(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    {
+      retry: (_, err) => {
+        if (err instanceof GramError && err.statusCode === 404) {
+          return false;
+        }
+        return true;
+      },
+      throwOnError: false,
+    },
+  );
+  const form = useMcpMetadataMetadataForm(
+    { kind: "mcp_server", mcpServerId: mcpServer.id },
+    metadataResult.data?.metadata,
+  );
+  const formIsLoading = metadataResult.isLoading || form.isLoading;
 
   return (
     <section>
@@ -116,7 +147,12 @@ function InstallPagesSection({
       ) : (
         <Stack gap={3}>
           {sortedEndpoints.map((endpoint) => (
-            <InstallPageRow key={endpoint.id} endpoint={endpoint} />
+            <InstallPageRow
+              key={endpoint.id}
+              endpoint={endpoint}
+              form={form}
+              isLoading={formIsLoading}
+            />
           ))}
         </Stack>
       )}
@@ -124,15 +160,31 @@ function InstallPagesSection({
   );
 }
 
-function InstallPageRow({ endpoint }: { endpoint: McpEndpoint }) {
+function InstallPageRow({
+  endpoint,
+  form,
+  isLoading,
+}: {
+  endpoint: McpEndpoint;
+  form: UseMcpMetadataMetadataFormResult;
+  isLoading: boolean;
+}) {
   const { installPageUrl } = useMcpEndpointUrl(endpoint);
 
-  return installPageUrl ? (
-    <CodeBlock copyable>{installPageUrl}</CodeBlock>
-  ) : (
-    <Type muted small>
-      URL unavailable (custom domain still resolving).
-    </Type>
+  if (!installPageUrl) {
+    return (
+      <Type muted small>
+        URL unavailable (custom domain still resolving).
+      </Type>
+    );
+  }
+
+  return (
+    <InstallPageConfigForm
+      installPageUrl={installPageUrl}
+      form={form}
+      isLoading={isLoading}
+    />
   );
 }
 

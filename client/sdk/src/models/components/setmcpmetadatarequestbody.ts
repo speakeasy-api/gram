@@ -12,7 +12,7 @@ import {
 
 export type SetMcpMetadataRequestBody = {
   /**
-   * The default environment to load variables from
+   * The default environment to load variables from. Not supported when mcp_server_id is provided.
    */
   defaultEnvironmentId?: string | undefined;
   /**
@@ -40,9 +40,13 @@ export type SetMcpMetadataRequestBody = {
    */
   logoAssetId?: string | undefined;
   /**
-   * The slug of the toolset associated with this install page metadata
+   * The ID of the MCP server associated with this install page metadata. Mutually exclusive with toolset_slug.
    */
-  toolsetSlug: string;
+  mcpServerId?: string | undefined;
+  /**
+   * The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
+   */
+  toolsetSlug?: string | undefined;
 };
 
 /** @internal */
@@ -54,7 +58,8 @@ export type SetMcpMetadataRequestBody$Outbound = {
   installation_override_url?: string | undefined;
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
-  toolset_slug: string;
+  mcp_server_id?: string | undefined;
+  toolset_slug?: string | undefined;
 };
 
 /** @internal */
@@ -72,7 +77,8 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodMiniType<
     installationOverrideUrl: z.optional(z.string()),
     instructions: z.optional(z.string()),
     logoAssetId: z.optional(z.string()),
-    toolsetSlug: z.string(),
+    mcpServerId: z.optional(z.string()),
+    toolsetSlug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -82,6 +88,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodMiniType<
       externalDocumentationUrl: "external_documentation_url",
       installationOverrideUrl: "installation_override_url",
       logoAssetId: "logo_asset_id",
+      mcpServerId: "mcp_server_id",
       toolsetSlug: "toolset_slug",
     });
   }),

@@ -39,19 +39,32 @@ func DecodeGetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*mcpmetadata.GetMcpMetadataPayload, error) {
 		var payload *mcpmetadata.GetMcpMetadataPayload
 		var (
-			toolsetSlug      string
+			toolsetSlug      *string
+			mcpServerID      *string
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
 			err              error
 		)
-		toolsetSlug = r.URL.Query().Get("toolset_slug")
-		if toolsetSlug == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "query string"))
+		qp := r.URL.Query()
+		toolsetSlugRaw := qp.Get("toolset_slug")
+		if toolsetSlugRaw != "" {
+			toolsetSlug = &toolsetSlugRaw
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(toolsetSlug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
+		if toolsetSlug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", *toolsetSlug, "^[a-z0-9_-]{1,128}$"))
+		}
+		if toolsetSlug != nil {
+			if utf8.RuneCountInString(*toolsetSlug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", *toolsetSlug, utf8.RuneCountInString(*toolsetSlug), 40, false))
+			}
+		}
+		mcpServerIDRaw := qp.Get("mcp_server_id")
+		if mcpServerIDRaw != "" {
+			mcpServerID = &mcpServerIDRaw
+		}
+		if mcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -68,7 +81,7 @@ func DecodeGetMcpMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetMcpMetadataPayload(toolsetSlug, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewGetMcpMetadataPayload(toolsetSlug, mcpServerID, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -734,6 +747,7 @@ func marshalTypesMcpMetadataToMcpMetadataResponseBody(v *types.McpMetadata) *Mcp
 	res := &McpMetadataResponseBody{
 		ID:                        v.ID,
 		ToolsetID:                 v.ToolsetID,
+		McpServerID:               v.McpServerID,
 		LogoAssetID:               v.LogoAssetID,
 		ExternalDocumentationURL:  v.ExternalDocumentationURL,
 		ExternalDocumentationText: v.ExternalDocumentationText,

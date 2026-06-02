@@ -56,10 +56,10 @@ export type GetMcpMetadataQueryError =
  * getMcpMetadata mcpMetadata
  *
  * @remarks
- * Fetch the metadata that powers the MCP install page.
+ * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
  */
 export function useGetMcpMetadata(
-  request: operations.GetMcpMetadataRequest,
+  request?: operations.GetMcpMetadataRequest | undefined,
   security?: operations.GetMcpMetadataSecurity | undefined,
   options?: QueryHookOptions<GetMcpMetadataQueryData, GetMcpMetadataQueryError>,
 ): UseQueryResult<GetMcpMetadataQueryData, GetMcpMetadataQueryError> {
@@ -79,10 +79,10 @@ export function useGetMcpMetadata(
  * getMcpMetadata mcpMetadata
  *
  * @remarks
- * Fetch the metadata that powers the MCP install page.
+ * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
  */
 export function useGetMcpMetadataSuspense(
-  request: operations.GetMcpMetadataRequest,
+  request?: operations.GetMcpMetadataRequest | undefined,
   security?: operations.GetMcpMetadataSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetMcpMetadataQueryData,
@@ -105,7 +105,8 @@ export function setGetMcpMetadataData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      toolsetSlug: string;
+      toolsetSlug?: string | undefined;
+      mcpServerId?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -122,7 +123,8 @@ export function invalidateGetMcpMetadata(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      toolsetSlug: string;
+      toolsetSlug?: string | undefined;
+      mcpServerId?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

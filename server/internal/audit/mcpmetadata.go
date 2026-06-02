@@ -73,3 +73,60 @@ func (l *Logger) LogMCPMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }
+
+type LogMCPMetadataUpdateForMcpServerEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	McpServerURN  urn.McpServer
+	McpServerName string
+	McpServerSlug string
+
+	MCPMetadataSnapshotBefore *types.McpMetadata
+	MCPMetadataSnapshotAfter  *types.McpMetadata
+}
+
+func (l *Logger) LogMCPMetadataUpdateForMcpServer(ctx context.Context, dbtx repo.DBTX, event LogMCPMetadataUpdateForMcpServerEvent) error {
+	action := ActionMCPMetadataUpdate
+
+	var beforePayload any
+	if event.MCPMetadataSnapshotBefore != nil {
+		beforePayload = event.MCPMetadataSnapshotBefore
+	}
+	beforeSnapshot, err := marshalAuditPayload(beforePayload)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.MCPMetadataSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.McpServerURN.ID.String(),
+		SubjectType:        string(subjectTypeMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
+}
