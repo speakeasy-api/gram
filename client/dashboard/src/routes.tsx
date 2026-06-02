@@ -800,6 +800,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Device Agent",
     url: "device-agent",
     icon: "laptop",
+    stage: "preview",
     component: DeviceAgent,
   },
   access: {

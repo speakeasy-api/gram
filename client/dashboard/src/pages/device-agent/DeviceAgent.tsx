@@ -464,7 +464,9 @@ export default function DeviceAgent() {
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
           <Page.Section>
-            <Page.Section.Title>Device Agent</Page.Section.Title>
+            <Page.Section.Title stage="preview">
+              Device Agent
+            </Page.Section.Title>
             <Page.Section.Description>
               The Speakeasy device agent runs on developer laptops and enforces
               your org's required AI-tool plugins and MCP configuration, then
