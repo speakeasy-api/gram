@@ -192,8 +192,9 @@ type dashboardTriggerConfig struct{}
 func (dashboardTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 
 type dashboardTriggerEvent struct {
-	Text   string `json:"text" cel:"text"`
-	UserID string `json:"user_id,omitempty" cel:"user_id"`
+	Text           string `json:"text" cel:"text"`
+	UserID         string `json:"user_id,omitempty" cel:"user_id"`
+	IdempotencyKey string `json:"idempotency_key,omitempty" cel:"idempotency_key"`
 }
 
 type slackEventRequest struct {
@@ -1008,8 +1009,11 @@ func newDashboardDefinition() Definition {
 			if event.UserID == "" {
 				return nil, fmt.Errorf("dashboard message user id is required")
 			}
+			if event.IdempotencyKey == "" {
+				return nil, fmt.Errorf("dashboard message idempotency key is required")
+			}
 			return &EventEnvelope{
-				EventID:           uuid.NewString(),
+				EventID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte(instance.ID.String()+":"+event.IdempotencyKey)).String(),
 				CorrelationID:     event.UserID,
 				TriggerInstanceID: instance.ID.String(),
 				DefinitionSlug:    instance.DefinitionSlug,

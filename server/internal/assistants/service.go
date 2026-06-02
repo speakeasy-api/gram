@@ -253,7 +253,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 type EnqueueResult struct {
 	AssistantID  uuid.UUID
 	ThreadID     uuid.UUID
-	EventCreated bool
+	ShouldSignal bool
 }
 
 type ProcessThreadEventsResult struct {
@@ -1107,7 +1107,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 			attr.SlogAssistantID(assistantID.String()),
 			attr.SlogTriggerInstanceID(task.TriggerInstanceID),
 		)
-		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, EventCreated: false}, nil
+		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, ShouldSignal: false}, nil
 	case err != nil:
 		return EnqueueResult{}, err
 	}
@@ -1115,7 +1115,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{
 			AssistantID:  assistant.ID,
 			ThreadID:     uuid.Nil,
-			EventCreated: false,
+			ShouldSignal: false,
 		}, nil
 	}
 
@@ -1159,7 +1159,6 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{}, fmt.Errorf("upsert assistant thread: %w", err)
 	}
 
-	var eventCreated bool
 	_, err = queries.InsertAssistantThreadEvent(ctx, assistantrepo.InsertAssistantThreadEventParams{
 		AssistantThreadID:     threadID,
 		AssistantID:           assistant.ID,
@@ -1171,13 +1170,11 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		NormalizedPayloadJson: normalizedPayloadJSON,
 		SourcePayloadJson:     sourcePayloadJSON,
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		eventCreated = false
-	case err != nil:
+	// pgx.ErrNoRows means the event was already enqueued by an earlier attempt
+	// (idempotent retry). We still signal: a turn whose earlier coordinator
+	// signal failed must be picked up when the client retries.
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("insert assistant thread event: %w", err)
-	default:
-		eventCreated = true
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1187,7 +1184,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	return EnqueueResult{
 		AssistantID:  assistant.ID,
 		ThreadID:     threadID,
-		EventCreated: eventCreated,
+		ShouldSignal: true,
 	}, nil
 }
 
