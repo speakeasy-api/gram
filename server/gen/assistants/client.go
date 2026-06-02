@@ -21,16 +21,18 @@ type Client struct {
 	CreateAssistantEndpoint goa.Endpoint
 	UpdateAssistantEndpoint goa.Endpoint
 	DeleteAssistantEndpoint goa.Endpoint
+	SendMessageEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "assistants" service client given the endpoints.
-func NewClient(listAssistants, getAssistant, createAssistant, updateAssistant, deleteAssistant goa.Endpoint) *Client {
+func NewClient(listAssistants, getAssistant, createAssistant, updateAssistant, deleteAssistant, sendMessage goa.Endpoint) *Client {
 	return &Client{
 		ListAssistantsEndpoint:  listAssistants,
 		GetAssistantEndpoint:    getAssistant,
 		CreateAssistantEndpoint: createAssistant,
 		UpdateAssistantEndpoint: updateAssistant,
 		DeleteAssistantEndpoint: deleteAssistant,
+		SendMessageEndpoint:     sendMessage,
 	}
 }
 
@@ -142,4 +144,26 @@ func (c *Client) UpdateAssistant(ctx context.Context, p *UpdateAssistantPayload)
 func (c *Client) DeleteAssistant(ctx context.Context, p *DeleteAssistantPayload) (err error) {
 	_, err = c.DeleteAssistantEndpoint(ctx, p)
 	return
+}
+
+// SendMessage calls the "sendMessage" endpoint of the "assistants" service.
+// SendMessage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SendMessage(ctx context.Context, p *SendMessagePayload) (res *SendMessageResult, err error) {
+	var ires any
+	ires, err = c.SendMessageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SendMessageResult), nil
 }

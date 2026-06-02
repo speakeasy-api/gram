@@ -338,6 +338,8 @@ export * from "./searchusersresult.js";
 export * from "./securityvariable.js";
 export * from "./selector.js";
 export * from "./sendinviterequestbody.js";
+export * from "./sendmessagerequestbody.js";
+export * from "./sendmessageresult.js";
 export * from "./serveimageform.js";
 export * from "./servernameoverride.js";
 export * from "./servervariable.js";

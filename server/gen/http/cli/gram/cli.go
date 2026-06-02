@@ -82,7 +82,7 @@ func UsageCommands() []string {
 		"ai-integrations (get-config|upsert-config|delete-config)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
-		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
+		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|delete-chat|submit-feedback)",
@@ -469,6 +469,11 @@ func ParseEndpoint(
 		assistantsDeleteAssistantIDFlag               = assistantsDeleteAssistantFlags.String("id", "REQUIRED", "")
 		assistantsDeleteAssistantSessionTokenFlag     = assistantsDeleteAssistantFlags.String("session-token", "", "")
 		assistantsDeleteAssistantProjectSlugInputFlag = assistantsDeleteAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsSendMessageFlags                = flag.NewFlagSet("send-message", flag.ExitOnError)
+		assistantsSendMessageBodyFlag             = assistantsSendMessageFlags.String("body", "REQUIRED", "")
+		assistantsSendMessageSessionTokenFlag     = assistantsSendMessageFlags.String("session-token", "", "")
+		assistantsSendMessageProjectSlugInputFlag = assistantsSendMessageFlags.String("project-slug-input", "", "")
 
 		auditlogsFlags = flag.NewFlagSet("auditlogs", flag.ContinueOnError)
 
@@ -2011,6 +2016,7 @@ func ParseEndpoint(
 	assistantsCreateAssistantFlags.Usage = assistantsCreateAssistantUsage
 	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
 	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
+	assistantsSendMessageFlags.Usage = assistantsSendMessageUsage
 
 	auditlogsFlags.Usage = auditlogsUsage
 	auditlogsListFlags.Usage = auditlogsListUsage
@@ -2685,6 +2691,9 @@ func ParseEndpoint(
 
 			case "delete-assistant":
 				epf = assistantsDeleteAssistantFlags
+
+			case "send-message":
+				epf = assistantsSendMessageFlags
 
 			}
 
@@ -3841,6 +3850,9 @@ func ParseEndpoint(
 			case "delete-assistant":
 				endpoint = c.DeleteAssistant()
 				data, err = assistantsc.BuildDeleteAssistantPayload(*assistantsDeleteAssistantIDFlag, *assistantsDeleteAssistantSessionTokenFlag, *assistantsDeleteAssistantProjectSlugInputFlag)
+			case "send-message":
+				endpoint = c.SendMessage()
+				data, err = assistantsc.BuildSendMessagePayload(*assistantsSendMessageBodyFlag, *assistantsSendMessageSessionTokenFlag, *assistantsSendMessageProjectSlugInputFlag)
 			}
 		case "auditlogs":
 			c := auditlogsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6092,6 +6104,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
+	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s assistants COMMAND --help\n", os.Args[0])
@@ -6202,6 +6215,28 @@ func assistantsDeleteAssistantUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants delete-assistant --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsSendMessageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants send-message", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants send-message --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"correlation_id\": \"aa\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // auditlogsUsage displays the usage of the auditlogs command and its

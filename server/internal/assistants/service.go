@@ -287,6 +287,13 @@ type WakeCanceller interface {
 	CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error
 }
 
+// DashboardIngestor ingests a synchronous, app-invoked message against a direct
+// trigger instance, returning the dispatched task (nil when filtered/paused).
+// Implemented by the triggers App's IngestDirect.
+type DashboardIngestor interface {
+	IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []byte, receivedAt time.Time) (*bgtriggers.Task, error)
+}
+
 type ServiceCore struct {
 	logger           *slog.Logger
 	tracer           trace.Tracer
@@ -299,8 +306,9 @@ type ServiceCore struct {
 	serverURL        *url.URL
 	telemetryLogger  *telemetry.Logger
 	contextWindow    *openrouter.ContextWindowResolver
-	wakeCanceller    WakeCanceller
-	chatWriter       *chat.ChatMessageWriter
+	wakeCanceller     WakeCanceller
+	chatWriter        *chat.ChatMessageWriter
+	dashboardIngestor DashboardIngestor
 }
 
 func NewServiceCore(
@@ -328,8 +336,9 @@ func NewServiceCore(
 		serverURL:        serverURL,
 		telemetryLogger:  telemetryLogger,
 		contextWindow:    contextWindow,
-		wakeCanceller:    nil,
-		chatWriter:       nil,
+		wakeCanceller:     nil,
+		chatWriter:        nil,
+		dashboardIngestor: nil,
 	}
 }
 
@@ -337,6 +346,13 @@ func NewServiceCore(
 // assistants must not import triggers.
 func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
 	s.wakeCanceller = c
+}
+
+// SetDashboardIngestor wires the trigger App used to ingest dashboard sidebar
+// messages. Set after construction to match the existing post-construction
+// injection pattern. SendDashboardMessage fails if the ingestor was never set.
+func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
+	s.dashboardIngestor = i
 }
 
 // SetChatMessageWriter wires the chat writer used by self-heal. Set after

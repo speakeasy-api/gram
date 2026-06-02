@@ -27,6 +27,9 @@ type Service interface {
 	UpdateAssistant(context.Context, *UpdateAssistantPayload) (res *types.Assistant, err error)
 	// Delete an assistant.
 	DeleteAssistant(context.Context, *DeleteAssistantPayload) (err error)
+	// Send a message from the dashboard to an assistant as the calling user. The
+	// reply is delivered asynchronously; poll the returned chat to read it.
+	SendMessage(context.Context, *SendMessagePayload) (res *SendMessageResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -49,7 +52,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant"}
+var MethodNames = [6]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -102,6 +105,34 @@ type ListAssistantsPayload struct {
 type ListAssistantsResult struct {
 	// Assistants for the current project.
 	Assistants []*types.Assistant
+}
+
+// SendMessagePayload is the payload type of the assistants service sendMessage
+// method.
+type SendMessagePayload struct {
+	// The assistant to send the message to.
+	AssistantID string
+	// The user's message text.
+	Message string
+	// Conversation key the message is threaded under. Send the user id for one
+	// continuing thread per user, or a fresh value to start a new conversation.
+	CorrelationID string
+	// Stable key the client mints once per message so retries dedupe instead of
+	// enqueuing twice. A new key is generated server-side when omitted.
+	IdempotencyKey   *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// SendMessageResult is the result type of the assistants service sendMessage
+// method.
+type SendMessageResult struct {
+	// The chat to poll for the assistant's reply.
+	ChatID string
+	// The assistant thread the message was enqueued on.
+	ThreadID string
+	// Whether the message was accepted and enqueued for processing.
+	Accepted bool
 }
 
 // UpdateAssistantPayload is the payload type of the assistants service

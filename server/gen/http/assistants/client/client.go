@@ -37,6 +37,10 @@ type Client struct {
 	// deleteAssistant endpoint.
 	DeleteAssistantDoer goahttp.Doer
 
+	// SendMessage Doer is the HTTP client used to make requests to the sendMessage
+	// endpoint.
+	SendMessageDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -62,6 +66,7 @@ func NewClient(
 		CreateAssistantDoer: doer,
 		UpdateAssistantDoer: doer,
 		DeleteAssistantDoer: doer,
+		SendMessageDoer:     doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -185,6 +190,30 @@ func (c *Client) DeleteAssistant() goa.Endpoint {
 		resp, err := c.DeleteAssistantDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistants", "deleteAssistant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SendMessage returns an endpoint that makes HTTP requests to the assistants
+// service sendMessage server.
+func (c *Client) SendMessage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSendMessageRequest(c.encoder)
+		decodeResponse = DecodeSendMessageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSendMessageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SendMessageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistants", "sendMessage", err)
 		}
 		return decodeResponse(resp)
 	}

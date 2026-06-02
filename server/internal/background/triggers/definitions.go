@@ -194,6 +194,7 @@ func (dashboardTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 type dashboardTriggerEvent struct {
 	Text           string `json:"text" cel:"text"`
 	UserID         string `json:"user_id,omitempty" cel:"user_id"`
+	CorrelationID  string `json:"correlation_id,omitempty" cel:"correlation_id"`
 	IdempotencyKey string `json:"idempotency_key,omitempty" cel:"idempotency_key"`
 }
 
@@ -1012,9 +1013,12 @@ func newDashboardDefinition() Definition {
 			if event.IdempotencyKey == "" {
 				return nil, fmt.Errorf("dashboard message idempotency key is required")
 			}
+			if event.CorrelationID == "" {
+				return nil, fmt.Errorf("dashboard message correlation id is required")
+			}
 			return &EventEnvelope{
 				EventID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte(instance.ID.String()+":"+event.IdempotencyKey)).String(),
-				CorrelationID:     event.UserID,
+				CorrelationID:     event.CorrelationID,
 				TriggerInstanceID: instance.ID.String(),
 				DefinitionSlug:    instance.DefinitionSlug,
 				Event:             event,
