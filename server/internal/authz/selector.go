@@ -3,7 +3,6 @@ package authz
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -53,22 +52,23 @@ func (s Selector) StrictMatches(check Selector) bool {
 	return true
 }
 
-// ResourceKindForScope derives the resource kind from a scope's family prefix.
+// ResourceKindForScope derives the selector resource kind from a scope.
 func ResourceKindForScope(scope Scope) string {
-	s := string(scope)
-	switch {
-	case strings.HasPrefix(s, "project:"):
-		return "project"
-	case strings.HasPrefix(s, "remote-mcp:"):
-		return "mcp"
-	case strings.HasPrefix(s, "mcp:"):
-		return "mcp"
-	case strings.HasPrefix(s, "org:"):
-		return "org"
-	case strings.HasPrefix(s, "environment:"):
-		return "environment"
+	switch scope.Parts().Resource {
+	case "project":
+		return ResourceKindProject
+	case "remote-mcp":
+		return ResourceKindMCP
+	case "mcp":
+		return ResourceKindMCP
+	case "org":
+		return ResourceKindOrg
+	case "environment":
+		return ResourceKindEnvironment
+	case "risk_policy":
+		return ResourceKindRiskPolicy
 	default:
-		return "*"
+		return ResourceKindWildcard
 	}
 }
 
@@ -92,8 +92,8 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
-	"mcp": {"tool": true, "disposition": true, "project_id": true},
-	"environment": {
+	ResourceKindMCP: {"tool": true, "disposition": true, "project_id": true},
+	ResourceKindEnvironment: {
 		"project_id": true,
 	},
 }
@@ -113,8 +113,8 @@ func ValidateSelector(scope Scope, sel Selector) error {
 
 	expectedKind := ResourceKindForScope(scope)
 	if scope == ScopeRoot {
-		if kind != "*" {
-			return fmt.Errorf("root scope requires resource_kind=*, got %q", kind)
+		if kind != ResourceKindWildcard {
+			return fmt.Errorf("root scope requires resource_kind=%s, got %q", ResourceKindWildcard, kind)
 		}
 		// root allows no extra keys
 		for k := range sel {

@@ -54,6 +54,37 @@ func (q *Queries) DeletePrincipalGrantsByPrincipal(ctx context.Context, arg Dele
 	return result.RowsAffected(), nil
 }
 
+const deletePrincipalGrantsByResource = `-- name: DeletePrincipalGrantsByResource :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND scope = $2
+  AND selectors @> jsonb_build_object(
+    'resource_kind', $3::text,
+    'resource_id', $4::text
+  )
+`
+
+type DeletePrincipalGrantsByResourceParams struct {
+	OrganizationID string
+	Scope          string
+	ResourceKind   string
+	ResourceID     string
+}
+
+// Removes grant rows for a single resource selector.
+func (q *Queries) DeletePrincipalGrantsByResource(ctx context.Context, arg DeletePrincipalGrantsByResourceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalGrantsByResource,
+		arg.OrganizationID,
+		arg.Scope,
+		arg.ResourceKind,
+		arg.ResourceID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveOrganizationRoleBySlug = `-- name: GetActiveOrganizationRoleBySlug :one
 WITH active_roles AS (
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
@@ -699,6 +730,57 @@ func (q *Queries) ListGlobalRoles(ctx context.Context) ([]GlobalRole, error) {
 	return items, nil
 }
 
+const listMemberRolePrincipalsByUser = `-- name: ListMemberRolePrincipalsByUser :many
+SELECT
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.user_id = $2::text
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY role_slug
+`
+
+type ListMemberRolePrincipalsByUserParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+type ListMemberRolePrincipalsByUserRow struct {
+	RoleSlug     string
+	PrincipalUrn string
+}
+
+func (q *Queries) ListMemberRolePrincipalsByUser(ctx context.Context, arg ListMemberRolePrincipalsByUserParams) ([]ListMemberRolePrincipalsByUserRow, error) {
+	rows, err := q.db.Query(ctx, listMemberRolePrincipalsByUser, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberRolePrincipalsByUserRow
+	for rows.Next() {
+		var i ListMemberRolePrincipalsByUserRow
+		if err := rows.Scan(&i.RoleSlug, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemberRolePrincipalsByWorkosUser = `-- name: ListMemberRolePrincipalsByWorkosUser :many
 SELECT
   COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
@@ -1034,6 +1116,63 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 			&i.Selectors,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrincipalGrantsByResource = `-- name: ListPrincipalGrantsByResource :many
+SELECT principal_urn, scope, effect, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = $2
+  AND selectors @> jsonb_build_object(
+    'resource_kind', $3::text,
+    'resource_id', $4::text
+  )
+ORDER BY principal_urn
+`
+
+type ListPrincipalGrantsByResourceParams struct {
+	OrganizationID string
+	Scope          string
+	ResourceKind   string
+	ResourceID     string
+}
+
+type ListPrincipalGrantsByResourceRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Effect       pgtype.Text
+	Selectors    []byte
+}
+
+// Returns grant rows for a single resource selector.
+func (q *Queries) ListPrincipalGrantsByResource(ctx context.Context, arg ListPrincipalGrantsByResourceParams) ([]ListPrincipalGrantsByResourceRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalGrantsByResource,
+		arg.OrganizationID,
+		arg.Scope,
+		arg.ResourceKind,
+		arg.ResourceID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalGrantsByResourceRow
+	for rows.Next() {
+		var i ListPrincipalGrantsByResourceRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Effect,
+			&i.Selectors,
 		); err != nil {
 			return nil, err
 		}
