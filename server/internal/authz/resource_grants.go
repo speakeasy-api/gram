@@ -84,7 +84,7 @@ func ReplaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, organizationI
 			OrganizationID: organizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(scope),
-			Effect:         effectToPgtype(PolicyEffectAllow),
+			Effect:         PolicyEffectAllow.pgText(),
 			Selectors:      selectorBytes,
 		}); err != nil {
 			return fmt.Errorf("upsert resource grant: %w", err)
@@ -130,7 +130,7 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, organizationID str
 		grants = append(grants, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
-			Effect:       effectFromNullable(row.Effect),
+			Effect:       policyEffectFromText(row.Effect),
 			Selector:     selector,
 		})
 	}

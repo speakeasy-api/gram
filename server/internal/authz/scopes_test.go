@@ -4,7 +4,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,7 +74,7 @@ func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand())
 	require.NotNil(t, grant)
 }
 
@@ -83,7 +82,7 @@ func TestGrantsHasAccess_orgReadDoesNotSatisfyOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgRead, "org_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"}.expand())
 	require.Nil(t, grant)
 }
 
@@ -91,7 +90,7 @@ func TestGrantsHasAccess_buildWriteSatisfiesBuildRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeProjectWrite, "proj_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
 	require.NotNil(t, grant)
 }
 
@@ -99,7 +98,7 @@ func TestGrantsHasAccess_buildReadDoesNotSatisfyBuildWrite(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeProjectRead, "proj_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeProjectWrite, ResourceID: "proj_123"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeProjectWrite, ResourceID: "proj_123"}.expand())
 	require.Nil(t, grant)
 }
 
@@ -107,7 +106,7 @@ func TestGrantsHasAccess_orgAdminDoesNotSatisfyBuildRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "org_123"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeProjectRead, ResourceID: "org_123"}.expand())
 	require.Nil(t, grant)
 }
 
@@ -115,7 +114,7 @@ func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPConnect, "tool_a")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand())
 	require.Nil(t, grant)
 }
 
@@ -123,7 +122,7 @@ func TestGrantsHasAccess_mcpReadSatisfiesMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPRead, "tool_a")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
 	require.NotNil(t, grant)
 }
 
@@ -131,7 +130,7 @@ func TestGrantsHasAccess_mcpWriteSatisfiesMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
 	require.NotNil(t, grant)
 }
 
@@ -139,7 +138,7 @@ func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand())
 	require.NotNil(t, grant)
 }
 
@@ -148,16 +147,16 @@ func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 
 	g := []Grant{NewGrant(ScopeRoot, WildcardResource)}
 
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
 	require.NotNil(t, grant)
 
-	grant, _ = findMatchingGrant(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.expand())
+	grant, _, _ = evaluateGrants(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.expand())
 	require.NotNil(t, grant)
 
-	grant, _ = findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
+	grant, _, _ = evaluateGrants(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
 	require.NotNil(t, grant)
 
-	grant, _ = findMatchingGrant(g, Check{Scope: ScopeEnvironmentRead, ResourceID: "env_a"}.expand())
+	grant, _, _ = evaluateGrants(g, Check{Scope: ScopeEnvironmentRead, ResourceID: "env_a"}.expand())
 	require.NotNil(t, grant)
 }
 
@@ -165,7 +164,7 @@ func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.expand())
+	grant, _, _ := evaluateGrants(g, Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.expand())
 	require.Nil(t, grant)
 }
 
@@ -266,7 +265,7 @@ func TestEvaluateGrants_onlyDenyGrantReturnsDenied(t *testing.T) {
 	require.True(t, denied)
 }
 
-func TestFindMatchingGrant_denyBlocksMatch(t *testing.T) {
+func TestEvaluateGrants_denyBlocksMatch(t *testing.T) {
 	t.Parallel()
 
 	grants := []Grant{
@@ -275,22 +274,22 @@ func TestFindMatchingGrant_denyBlocksMatch(t *testing.T) {
 	}
 	// org:read check expands to include org:admin and org:read.
 	// The deny on org:read should block even though org:admin matches.
-	grant, _ := findMatchingGrant(grants, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand())
+	grant, _, _ := evaluateGrants(grants, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand())
 	require.Nil(t, grant)
 }
 
-func TestFindMatchingGrant_wildcardDenyBlocksAll(t *testing.T) {
+func TestEvaluateGrants_wildcardDenyBlocksAll(t *testing.T) {
 	t.Parallel()
 
 	grants := []Grant{
 		NewGrant(ScopeMCPConnect, WildcardResource),
 		NewDenyGrant(ScopeMCPConnect, WildcardResource),
 	}
-	grant, _ := findMatchingGrant(grants, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
+	grant, _, _ := evaluateGrants(grants, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
 	require.Nil(t, grant)
 }
 
-func TestFindMatchingGrant_denyDoesNotCrossScopes(t *testing.T) {
+func TestEvaluateGrants_denyDoesNotCrossScopes(t *testing.T) {
 	t.Parallel()
 
 	// Deny mcp:write on server_a should NOT block mcp:read on server_a.
@@ -298,7 +297,7 @@ func TestFindMatchingGrant_denyDoesNotCrossScopes(t *testing.T) {
 		NewGrant(ScopeMCPRead, WildcardResource),
 		NewDenyGrant(ScopeMCPWrite, "server_a"),
 	}
-	grant, _ := findMatchingGrant(grants, Check{Scope: ScopeMCPRead, ResourceID: "server_a"}.expand())
+	grant, _, _ := evaluateGrants(grants, Check{Scope: ScopeMCPRead, ResourceID: "server_a"}.expand())
 	require.NotNil(t, grant)
 }
 
@@ -966,10 +965,10 @@ func TestDeny_multipleDenyGrants(t *testing.T) {
 
 // --- Policy effect normalization ---
 
-func TestRoleGrantRowsFromRoleGrants_emptyEffectDefaultsToAllow(t *testing.T) {
+func TestFlattenRoleGrants_emptyEffectDefaultsToAllow(t *testing.T) {
 	t.Parallel()
 
-	rows, err := roleGrantRowsFromRoleGrants([]*RoleGrant{{
+	rows, err := flattenRoleGrants([]*RoleGrant{{
 		Scope:     string(ScopeProjectRead),
 		Selectors: []Selector{NewSelector(ScopeProjectRead, "proj_1")},
 	}})
@@ -977,16 +976,18 @@ func TestRoleGrantRowsFromRoleGrants_emptyEffectDefaultsToAllow(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, PolicyEffectAllow, rows[0].Effect)
 
-	grants := grantsFromRows(urn.NewPrincipal(urn.PrincipalTypeRole, "test"), rows)
+	rp, err := newRolePrincipals("test", "")
+	require.NoError(t, err)
+	grants := rp.toGrants(rows)
 	require.Len(t, grants, 1)
 	require.Equal(t, PolicyEffectAllow, grants[0].Effect)
 }
 
-func TestRoleGrantRowsFromRoleGrants_deduplicatesByScopeEffectAndSelector(t *testing.T) {
+func TestFlattenRoleGrants_deduplicatesByScopeEffectAndSelector(t *testing.T) {
 	t.Parallel()
 
 	selector := NewSelector(ScopeProjectRead, "proj_1")
-	rows, err := roleGrantRowsFromRoleGrants([]*RoleGrant{
+	rows, err := flattenRoleGrants([]*RoleGrant{
 		{
 			Scope:     string(ScopeProjectRead),
 			Effect:    PolicyEffectAllow,
