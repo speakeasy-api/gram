@@ -7,11 +7,14 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -44,7 +47,53 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 		return err
 	}
 
+	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+		return err
+	}
+
 	return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, slug, mcpRouteBase)
+}
+
+// enforceCustomDomainLockdown 403s a public-host MCP request when the owning
+// org's custom domain carries a non-empty IP allowlist. Such orgs require all
+// MCP traffic to flow through their custom domain, where the allowlist is
+// enforced at the ingress/gateway. Requests that arrived via a custom-domain
+// context are allowed through unconditionally — the ingress already enforced
+// the allowlist for that hostname. The lockdown engages as soon as an allowlist
+// is configured, regardless of whether the domain is verified/activated yet.
+//
+// This guard is wired ONLY into the runtime MCP dispatch (ServePublic,
+// ServeMCPEndpoint). The install page (ServeInstallPage / HandleGetServer's
+// inline browser path) and OAuth metadata routes are intentionally left
+// ungated: private-MCP install pages must keep working on the platform host
+// (app.getgram.ai), where the dashboard session cookie lives, even when the
+// org's custom domain has an allowlist. Do not call this from those handlers.
+func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
+	if customdomains.FromContext(ctx) != nil {
+		return nil
+	}
+
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "project not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").Log(ctx, logger)
+	}
+
+	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, project.OrganizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").Log(ctx, logger)
+	}
+
+	if len(domain.IpAllowlist) > 0 {
+		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
+	}
+
+	return nil
 }
 
 // serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,

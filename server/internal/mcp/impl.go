@@ -307,6 +307,11 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	// Check if this is a browser request (HTML Accept header)
 	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
 		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
+			// Intentionally NOT gated by enforceCustomDomainLockdown: the
+			// install page must remain reachable on the platform host even
+			// when the org's custom domain has an IP allowlist (private MCP
+			// install pages rely on the platform-host session cookie). Only
+			// the runtime POST path (ServePublic) is locked down.
 			if err := metadataService.ServeInstallPage(w, r); err != nil {
 				return fmt.Errorf("failed to serve install page: %w", err)
 			}
@@ -403,6 +408,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
+		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+			return err
+		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
 		// Fall through to legacy toolset lookup.
@@ -420,6 +428,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+	}
+
+	if err := s.enforceCustomDomainLockdown(ctx, logger, toolset.ProjectID); err != nil {
+		return err
 	}
 
 	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, "")
