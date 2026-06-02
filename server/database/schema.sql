@@ -573,6 +573,10 @@ CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
 ON trigger_instances (environment_id)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
+ON trigger_instances (project_id, target_ref)
+WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
