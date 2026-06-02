@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
-import { useOrganization, useUser } from "@/contexts/Auth";
+import { useOrganization } from "@/contexts/Auth";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import React from "react";
@@ -203,9 +203,9 @@ const MANAGED_CONFIG_FIELDS = [
   {
     field: "email",
     type: "string",
-    required: "yes",
+    required: "yes*",
     notes:
-      "The user's verified work email. Shown in the agent UI as the enrolled identity.",
+      "Per-user work email, shown in the agent UI as the enrolled identity. Have your MDM substitute it per device (e.g. $EMAIL), or omit it and let the user supply it via speakeasy enroll. *Required unless provided by manual enrollment.",
   },
   {
     field: "org_token",
@@ -298,7 +298,6 @@ function ManualSetup() {
 
 function FleetSetup() {
   const { name: orgName, slug: orgSlug } = useOrganization();
-  const { email } = useUser();
   const [generatedToken, setGeneratedToken] = React.useState<string | null>(
     null,
   );
@@ -309,13 +308,16 @@ function FleetSetup() {
     },
   });
 
-  // The agent's org_token is just an `agent`-scoped API key. Once generated we
-  // splice it into the example below so the whole managed.json is copy-ready;
-  // the raw key is only returned once, so there's nothing to re-fetch later.
+  // org_slug / org_name are org-level constants, safe to prefill. email is
+  // per-user: this fleet-wide file must not pin one identity, so the example
+  // shows an MDM substitution placeholder ($EMAIL) rather than the viewing
+  // admin's address — the MDM swaps it per device, or it's omitted and the user
+  // enrolls manually. org_token is an `agent`-scoped API key; once generated we
+  // splice it in so the whole managed.json is copy-ready (it's returned once).
   const exampleManagedJson = JSON.stringify(
     {
       v: 1,
-      email: email || "jane.doe@acme.corp",
+      email: "$EMAIL",
       org_token: generatedToken ?? "spk_org_REPLACE_ME",
       org_slug: orgSlug || "acme-corp",
       org_name: orgName || "Acme Corporation",
@@ -405,9 +407,13 @@ function FleetSetup() {
         <SubHeading>Example managed.json</SubHeading>
         <CodeBlock language="json">{exampleManagedJson}</CodeBlock>
         <Type small muted className="mt-2">
-          Pre-filled with this org's <code>email</code>, <code>org_slug</code>,
-          and <code>org_name</code>. Generate the <code>org_token</code> below —
-          it's the only value you have to supply.
+          <code>org_slug</code> and <code>org_name</code> are pre-filled for
+          this org. <code>email</code> is per-user — have your MDM substitute
+          its per-user email variable (Kandji / Jamf <code>$EMAIL</code>, or
+          your platform's equivalent) so one profile serves the whole fleet, or
+          omit <code>email</code> and have each user run{" "}
+          <code>speakeasy enroll</code>. Generate the <code>org_token</code>{" "}
+          below.
         </Type>
 
         <div className="mt-4 flex flex-col gap-3">
