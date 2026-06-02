@@ -1,6 +1,8 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { useGramContext } from "@gram/client/react-query";
 import {
+  buildListAPIKeysQuery,
   invalidateListAPIKeys,
   useListAPIKeys,
 } from "@gram/client/react-query/listAPIKeys";
@@ -43,6 +45,7 @@ export function useAgentToken(opts: {
 }): UseAgentToken {
   const { buildCopyText } = opts;
   const queryClient = useQueryClient();
+  const client = useGramContext();
 
   // Gate on the org:admin *scope* (RBAC), matching the API Keys page. When RBAC
   // isn't enabled (local dev / non-enterprise) hasAnyScope returns true.
@@ -77,8 +80,15 @@ export function useAgentToken(opts: {
       // Rotation: now that a fresh key exists, revoke the prior agent key(s).
       // Revoking is a soft-delete; the partial unique index on (org, name) is
       // WHERE deleted IS FALSE, so it also frees their names.
-      const stale = (keysData?.keys ?? []).filter((k) =>
-        k.scopes.includes(AGENT_SCOPE),
+      //
+      // Fetch the authoritative list rather than trusting the component's
+      // cached keysData: that query may not have loaded (or may be mid-refetch)
+      // when this fires, and an empty snapshot would silently skip rotation,
+      // leaving the old key(s) live. Exclude the key we just minted (data.id),
+      // which the fresh list now includes, so we never revoke it.
+      const fresh = await queryClient.fetchQuery(buildListAPIKeysQuery(client));
+      const stale = (fresh.keys ?? []).filter(
+        (k) => k.id !== data.id && k.scopes.includes(AGENT_SCOPE),
       );
       for (const k of stale) {
         revokeKeyMutation.mutate({
