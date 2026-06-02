@@ -348,6 +348,31 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetToolsetUserSessionIssuer"}`)
 	})
 
+	Method("setToolVariationsGroup", func() {
+		Description("Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.")
+
+		Payload(func() {
+			Extend(SetToolVariationsGroupForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.setToolVariationsGroup")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setToolsetToolVariationsGroup")
+		Meta("openapi:extension:x-speakeasy-name-override", "setToolVariationsGroup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetToolsetToolVariationsGroup"}`)
+	})
+
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
@@ -412,6 +437,15 @@ var UpdateOAuthProxyServerForm = Type("UpdateOAuthProxyServerForm", func() {
 var SetUserSessionIssuerForm = Type("SetUserSessionIssuerForm", func() {
 	Attribute("slug", shared.Slug, "The slug of the toolset to link")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer id to link, or null to unlink.", func() {
+		Format(FormatUUID)
+	})
+	security.ProjectPayload()
+	Required("slug")
+})
+
+var SetToolVariationsGroupForm = Type("SetToolVariationsGroupForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset to configure")
+	Attribute("tool_variations_group_id", String, "The tool variations group id to assign, or null to disable filtering.", func() {
 		Format(FormatUUID)
 	})
 	security.ProjectPayload()

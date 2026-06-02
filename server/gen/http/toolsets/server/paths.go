@@ -71,3 +71,8 @@ func UpdateOAuthProxyServerToolsetsPath() string {
 func SetUserSessionIssuerToolsetsPath() string {
 	return "/rpc/toolsets.setUserSessionIssuer"
 }
+
+// SetToolVariationsGroupToolsetsPath returns the URL path to the toolsets service setToolVariationsGroup HTTP endpoint.
+func SetToolVariationsGroupToolsetsPath() string {
+	return "/rpc/toolsets.setToolVariationsGroup"
+}

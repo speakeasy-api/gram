@@ -615,6 +615,7 @@ func DescribeToolset(
 		OauthProxyServer:             oauthProxyServer,
 		UserSessionIssuerID:          userSessionIssuerID,
 		UserSessionIssuerSlug:        userSessionIssuerSlug,
+		ToolVariationsGroupID:        conv.FromNullableUUID(toolset.ToolVariationsGroupID),
 		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
 			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
 		},

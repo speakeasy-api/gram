@@ -137,6 +137,10 @@ export type Toolset = {
    */
   toolUrns: Array<string>;
   /**
+   * The id of the tool variations group enabling MCP tool filtering for this toolset. Set via toolsets.setToolVariationsGroup; null when filtering is disabled.
+   */
+  toolVariationsGroupId?: string | undefined;
+  /**
    * The tools in this toolset
    */
   tools: Array<Tool>;
@@ -194,6 +198,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     slug: z.string(),
     tool_selection_mode: z.string(),
     tool_urns: z.array(z.string()),
+    tool_variations_group_id: z.optional(z.string()),
     tools: z.array(Tool$inboundSchema),
     toolset_version: z.int(),
     updated_at: z.pipe(
@@ -225,6 +230,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "server_variables": "serverVariables",
       "tool_selection_mode": "toolSelectionMode",
       "tool_urns": "toolUrns",
+      "tool_variations_group_id": "toolVariationsGroupId",
       "toolset_version": "toolsetVersion",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",

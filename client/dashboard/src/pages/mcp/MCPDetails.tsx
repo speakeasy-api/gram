@@ -1,6 +1,7 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { DetailHero } from "@/components/detail-hero";
+import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
 import {
   useMcpMetadataMetadataForm,
@@ -1654,6 +1655,15 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       <MCPPublishingSection toolset={toolset} />
+
+      <MCPToolFilteringSection
+        className="mb-8"
+        target={{
+          kind: "toolset",
+          slug: toolset.slug,
+          currentGroupId: toolset.toolVariationsGroupId,
+        }}
+      />
 
       <PageSection
         heading="Actions"

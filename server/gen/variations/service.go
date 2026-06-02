@@ -23,6 +23,14 @@ type Service interface {
 	DeleteGlobal(context.Context, *DeleteGlobalPayload) (res *DeleteGlobalToolVariationResult, err error)
 	// List globally defined tool variations.
 	ListGlobal(context.Context, *ListGlobalPayload) (res *ListVariationsResult, err error)
+	// List the tool variation groups visible to the project. In v1 this returns
+	// the project-default group when it exists, or an empty list otherwise.
+	ListGroups(context.Context, *ListGroupsPayload) (res *ListToolVariationGroupsResult, err error)
+	// Ensure the project-default (global) tool variation group exists, returning
+	// it. Idempotent: returns the existing group unchanged when present, otherwise
+	// creates it. Takes no parameters and only manages the single project-default
+	// group.
+	CreateGlobal(context.Context, *CreateGlobalPayload) (res *ToolVariationGroupResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -45,7 +53,15 @@ const ServiceName = "variations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"upsertGlobal", "deleteGlobal", "listGlobal"}
+var MethodNames = [5]string{"upsertGlobal", "deleteGlobal", "listGlobal", "listGroups", "createGlobal"}
+
+// CreateGlobalPayload is the payload type of the variations service
+// createGlobal method.
+type CreateGlobalPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
 
 // DeleteGlobalPayload is the payload type of the variations service
 // deleteGlobal method.
@@ -72,10 +88,30 @@ type ListGlobalPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListGroupsPayload is the payload type of the variations service listGroups
+// method.
+type ListGroupsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListToolVariationGroupsResult is the result type of the variations service
+// listGroups method.
+type ListToolVariationGroupsResult struct {
+	Groups []*types.ToolVariationGroup
+}
+
 // ListVariationsResult is the result type of the variations service listGlobal
 // method.
 type ListVariationsResult struct {
 	Variations []*types.ToolVariation
+}
+
+// ToolVariationGroupResult is the result type of the variations service
+// createGlobal method.
+type ToolVariationGroupResult struct {
+	Group *types.ToolVariationGroup
 }
 
 // UpsertGlobalPayload is the payload type of the variations service
