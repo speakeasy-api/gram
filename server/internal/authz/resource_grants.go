@@ -13,13 +13,18 @@ import (
 
 // ReplaceGrantsForResource replaces allow grants for one resource-scoped permission.
 func ReplaceGrantsForResource(ctx context.Context, db *pgxpool.Pool, organizationID string, scope Scope, resourceID string, principals []urn.Principal) error {
+	replacement, err := newResourceGrantReplacement(organizationID, scope, resourceID, principals)
+	if err != nil {
+		return err
+	}
+
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin resource grant transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	if err := ReplaceGrantsForResourceTx(ctx, tx, organizationID, scope, resourceID, principals); err != nil {
+	if err := replaceGrantsForResourceTx(ctx, tx, replacement); err != nil {
 		return err
 	}
 
@@ -32,21 +37,39 @@ func ReplaceGrantsForResource(ctx context.Context, db *pgxpool.Pool, organizatio
 
 // ReplaceGrantsForResourceTx replaces allow grants using the caller's transaction.
 func ReplaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceID string, principals []urn.Principal) error {
+	replacement, err := newResourceGrantReplacement(organizationID, scope, resourceID, principals)
+	if err != nil {
+		return err
+	}
+
+	return replaceGrantsForResourceTx(ctx, db, replacement)
+}
+
+type resourceGrantReplacement struct {
+	OrganizationID   string
+	Scope            Scope
+	ResourceID       string
+	ResourceKind     string
+	SelectorBytes    []byte
+	UniquePrincipals []urn.Principal
+}
+
+func newResourceGrantReplacement(organizationID string, scope Scope, resourceID string, principals []urn.Principal) (resourceGrantReplacement, error) {
 	if organizationID == "" {
-		return fmt.Errorf("organization id is required")
+		return resourceGrantReplacement{}, fmt.Errorf("organization id is required")
 	}
 	if scope == "" {
-		return fmt.Errorf("scope is required")
+		return resourceGrantReplacement{}, fmt.Errorf("scope is required")
 	}
 	if resourceID == "" {
-		return fmt.Errorf("resource id is required")
+		return resourceGrantReplacement{}, fmt.Errorf("resource id is required")
 	}
 
 	uniquePrincipals := make([]urn.Principal, 0, len(principals))
 	seen := make(map[string]struct{}, len(principals))
 	for _, principal := range principals {
 		if _, err := principal.Value(); err != nil {
-			return fmt.Errorf("invalid grant principal: %w", err)
+			return resourceGrantReplacement{}, fmt.Errorf("invalid grant principal: %w", err)
 		}
 		if _, ok := seen[principal.String()]; ok {
 			continue
@@ -57,35 +80,46 @@ func ReplaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, organizationI
 
 	resourceKind := ResourceKindForScope(scope)
 	if resourceKind == WildcardResource {
-		return fmt.Errorf("scope %q does not map to a resource kind", scope)
+		return resourceGrantReplacement{}, fmt.Errorf("scope %q does not map to a resource kind", scope)
 	}
 
 	selector := NewSelector(scope, resourceID)
 	if err := ValidateSelector(scope, selector); err != nil {
-		return err
+		return resourceGrantReplacement{}, err
 	}
 	selectorBytes, err := selector.MarshalJSON()
 	if err != nil {
-		return fmt.Errorf("marshal grant selector: %w", err)
+		return resourceGrantReplacement{}, fmt.Errorf("marshal grant selector: %w", err)
 	}
 
+	return resourceGrantReplacement{
+		OrganizationID:   organizationID,
+		Scope:            scope,
+		ResourceID:       resourceID,
+		ResourceKind:     resourceKind,
+		SelectorBytes:    selectorBytes,
+		UniquePrincipals: uniquePrincipals,
+	}, nil
+}
+
+func replaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, replacement resourceGrantReplacement) error {
 	q := repo.New(db)
 	if _, err := q.DeletePrincipalGrantsByResource(ctx, repo.DeletePrincipalGrantsByResourceParams{
-		OrganizationID: organizationID,
-		Scope:          string(scope),
-		ResourceKind:   resourceKind,
-		ResourceID:     resourceID,
+		OrganizationID: replacement.OrganizationID,
+		Scope:          string(replacement.Scope),
+		ResourceKind:   replacement.ResourceKind,
+		ResourceID:     replacement.ResourceID,
 	}); err != nil {
 		return fmt.Errorf("delete resource grants: %w", err)
 	}
 
-	for _, principal := range uniquePrincipals {
+	for _, principal := range replacement.UniquePrincipals {
 		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-			OrganizationID: organizationID,
+			OrganizationID: replacement.OrganizationID,
 			PrincipalUrn:   principal,
-			Scope:          string(scope),
+			Scope:          string(replacement.Scope),
 			Effect:         effectToPgtype(PolicyEffectAllow),
-			Selectors:      selectorBytes,
+			Selectors:      replacement.SelectorBytes,
 		}); err != nil {
 			return fmt.Errorf("upsert resource grant: %w", err)
 		}

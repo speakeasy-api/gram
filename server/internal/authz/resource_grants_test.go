@@ -68,6 +68,74 @@ func TestReplaceGrantsForResource_emptyPrincipalsClearsResourceGrants(t *testing
 	require.Empty(t, grants)
 }
 
+func TestReplaceGrantsForResource_invalidInputDoesNotBeginTransaction(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	testCases := []struct {
+		name           string
+		organizationID string
+		scope          Scope
+		resourceID     string
+		principals     []urn.Principal
+		wantErr        string
+	}{
+		{
+			name:           "missing organization id",
+			organizationID: "",
+			scope:          ScopeRiskPolicyEvaluate,
+			resourceID:     "policy_123",
+			principals:     nil,
+			wantErr:        "organization id is required",
+		},
+		{
+			name:           "missing scope",
+			organizationID: "org_policy_evaluate_invalid_input",
+			scope:          "",
+			resourceID:     "policy_123",
+			principals:     nil,
+			wantErr:        "scope is required",
+		},
+		{
+			name:           "missing resource id",
+			organizationID: "org_policy_evaluate_invalid_input",
+			scope:          ScopeRiskPolicyEvaluate,
+			resourceID:     "",
+			principals:     nil,
+			wantErr:        "resource id is required",
+		},
+		{
+			name:           "invalid principal",
+			organizationID: "org_policy_evaluate_invalid_input",
+			scope:          ScopeRiskPolicyEvaluate,
+			resourceID:     "policy_123",
+			principals:     []urn.Principal{{}},
+			wantErr:        "invalid grant principal",
+		},
+		{
+			name:           "scope without resource kind",
+			organizationID: "org_policy_evaluate_invalid_input",
+			scope:          ScopeRoot,
+			resourceID:     "policy_123",
+			principals:     nil,
+			wantErr:        `scope "root" does not map to a resource kind`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var err error
+			require.NotPanics(t, func() {
+				err = ReplaceGrantsForResource(ctx, nil, tc.organizationID, tc.scope, tc.resourceID, tc.principals)
+			})
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
 func TestReplaceGrantsForResource_invalidPrincipalDoesNotClearExistingGrants(t *testing.T) {
 	t.Parallel()
 
