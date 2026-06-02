@@ -101,10 +101,3 @@ export function useNoToolsetsConfigured(): boolean {
   if (isLoading) return false;
   return !toolsetsData?.toolsets?.length;
 }
-
-/**
- * @deprecated Use useNoToolsetsConfigured() instead to check if toolsets are missing.
- * This was previously checking for the hardcoded observability MCP URL, but AI Insights
- * now dynamically connects to all project toolsets.
- */
-export const devObservabilityMcpMissing = false;
