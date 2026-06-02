@@ -86,10 +86,17 @@ export function useAgentToken(opts: {
       // when this fires, and an empty snapshot would silently skip rotation,
       // leaving the old key(s) live. Exclude the key we just minted (data.id),
       // which the fresh list now includes, so we never revoke it.
-      const fresh = await queryClient.fetchQuery(buildListAPIKeysQuery(client));
-      const stale = (fresh.keys ?? []).filter(
+      let stale = (keysData?.keys ?? []).filter(
         (k) => k.id !== data.id && k.scopes.includes(AGENT_SCOPE),
       );
+      try {
+        const fresh = await queryClient.fetchQuery(buildListAPIKeysQuery(client));
+        stale = (fresh.keys ?? []).filter(
+          (k) => k.id !== data.id && k.scopes.includes(AGENT_SCOPE),
+        );
+      } catch {
+        // Fall back to cached keysData if the refresh fails.
+      }
       for (const k of stale) {
         revokeKeyMutation.mutate({
           security: { sessionHeaderGramSession: "" },

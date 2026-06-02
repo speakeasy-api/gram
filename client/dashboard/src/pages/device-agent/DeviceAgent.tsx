@@ -620,14 +620,13 @@ function FleetIdentity() {
         <SubHeading>File location</SubHeading>
         <Type small muted className="mb-3">
           Deploy the file to the fixed system path for each OS. Create the
-          directory <code>0755</code> and the file <code>0644</code> (or
+          directory <code>0755</code> and the file <code>0640</code> (or
           equivalent ACLs on Windows). The file must be{" "}
           <strong>readable by the user the agent runs as</strong> — the agent
           runs as the logged-in user, not root, so owner-only{" "}
           <code>0600 root:wheel</code> on macOS won't work; use{" "}
-          <code>0644</code> or a read ACL for the user. The agent only reads
-          this file; it never writes it.
-        </Type>
+          <code>0640</code> with an explicit group/read ACL for the agent user.
+          The agent only reads this file; it never writes it.
         <Table headers={["OS", "Path", "Owner"]}>
           {MANAGED_CONFIG_PATHS.map((row) => (
             <tr key={row.os} className="border-t">
