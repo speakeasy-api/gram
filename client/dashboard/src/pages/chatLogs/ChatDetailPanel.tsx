@@ -48,9 +48,9 @@ import {
   type ToolCall,
   type TraceEntryType,
   getEntryTypeCounts,
+  getRiskEntryCount,
   getTraceEntryType,
-  getVisibleMessageCount,
-  isMessageVisible,
+  getVisibleMessages,
   parseToolCalls,
 } from "./traceEntries";
 
@@ -60,6 +60,7 @@ interface ChatDetailPanelProps {
   onDelete: (chatId: string) => void;
   /** When true, messages without risk findings are collapsed to a single line. */
   collapseNonRisk?: boolean;
+  initialRiskOnly?: boolean;
 }
 
 interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
@@ -77,6 +78,7 @@ export function ChatDetailSheet({
   onClose,
   onDelete,
   collapseNonRisk,
+  initialRiskOnly,
 }: ChatDetailSheetProps) {
   return (
     <Sheet
@@ -95,6 +97,7 @@ export function ChatDetailSheet({
             onClose={onClose}
             onDelete={onDelete}
             collapseNonRisk={collapseNonRisk}
+            initialRiskOnly={initialRiskOnly}
           />
         )}
       </SheetContent>
@@ -185,18 +188,23 @@ function ChatMessagesList({
   riskResultsByMessage,
   collapseNonRisk,
   enabledEntryTypes,
+  riskOnly,
 }: {
   messages: ChatMessage[];
   riskResultsByMessage: Map<string, RiskResult[]>;
   collapseNonRisk?: boolean;
   enabledEntryTypes: FilterableTraceEntryType[];
+  riskOnly: boolean;
 }) {
   const visibleMessages = useMemo(
     () =>
-      messages.filter((message) =>
-        isMessageVisible(message, enabledEntryTypes),
-      ),
-    [enabledEntryTypes, messages],
+      getVisibleMessages({
+        messages,
+        enabledEntryTypes,
+        riskOnly,
+        riskResultsByMessage,
+      }),
+    [enabledEntryTypes, messages, riskOnly, riskResultsByMessage],
   );
 
   const groups = useMemo(() => {
@@ -983,6 +991,7 @@ export function ChatDetailPanel({
   onClose,
   onDelete,
   collapseNonRisk,
+  initialRiskOnly = false,
 }: ChatDetailPanelProps) {
   const isSuperAdmin = useIsAdmin();
   const { hasScope } = useRBAC();
@@ -995,6 +1004,7 @@ export function ChatDetailPanel({
   const [enabledEntryTypes, setEnabledEntryTypes] = useState<
     FilterableTraceEntryType[]
   >([...DEFAULT_ENABLED_ENTRY_TYPES]);
+  const [riskOnly, setRiskOnly] = useState(initialRiskOnly);
   const {
     chat,
     messages: chatMessages,
@@ -1024,6 +1034,10 @@ export function ChatDetailPanel({
       },
     });
   }, [chatId, searchLogs]);
+
+  useEffect(() => {
+    setRiskOnly(initialRiskOnly);
+  }, [chatId, initialRiskOnly]);
 
   const logs = useMemo(() => logsData?.logs || [], [logsData?.logs]);
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
@@ -1073,10 +1087,13 @@ export function ChatDetailPanel({
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
   const entryTypeCounts = getEntryTypeCounts(chatMessages);
-  const visibleEntryCount = getVisibleMessageCount(
-    chatMessages,
+  const visibleEntryCount = getVisibleMessages({
+    messages: chatMessages,
     enabledEntryTypes,
-  );
+    riskOnly,
+    riskResultsByMessage,
+  }).length;
+  const riskEntryCount = getRiskEntryCount(chatMessages, riskResultsByMessage);
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -1301,6 +1318,9 @@ export function ChatDetailPanel({
             totalCount={chatMessages.length}
             visibleCount={visibleEntryCount}
             onChange={setEnabledEntryTypes}
+            riskOnly={riskOnly}
+            riskCount={riskEntryCount}
+            onRiskOnlyChange={setRiskOnly}
           />
 
           {/* Chat Messages */}
@@ -1309,6 +1329,7 @@ export function ChatDetailPanel({
             riskResultsByMessage={riskResultsByMessage}
             collapseNonRisk={collapseNonRisk}
             enabledEntryTypes={enabledEntryTypes}
+            riskOnly={riskOnly}
           />
         </TabsContent>
 

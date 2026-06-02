@@ -110,8 +110,10 @@ type DiscoverRemoteSessionIssuerResponseBody struct {
 type CreateRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
@@ -142,8 +144,10 @@ type CreateRemoteSessionIssuerResponseBody struct {
 type UpdateRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
@@ -182,8 +186,10 @@ type ListRemoteSessionIssuersResponseBody struct {
 type GetRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
@@ -1353,8 +1359,10 @@ type DeleteRemoteSessionIssuerGatewayErrorResponseBody struct {
 type RemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
@@ -1675,6 +1683,7 @@ func NewCreateRemoteSessionIssuerRemoteSessionIssuerOK(body *CreateRemoteSession
 	v := &types.RemoteSessionIssuer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		OrganizationID:        *body.OrganizationID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
@@ -1871,6 +1880,7 @@ func NewUpdateRemoteSessionIssuerRemoteSessionIssuerOK(body *UpdateRemoteSession
 	v := &types.RemoteSessionIssuer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		OrganizationID:        *body.OrganizationID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
@@ -2235,6 +2245,7 @@ func NewGetRemoteSessionIssuerRemoteSessionIssuerOK(body *GetRemoteSessionIssuer
 	v := &types.RemoteSessionIssuer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		OrganizationID:        *body.OrganizationID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
@@ -2601,6 +2612,9 @@ func ValidateCreateRemoteSessionIssuerResponseBody(body *CreateRemoteSessionIssu
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -2621,9 +2635,6 @@ func ValidateCreateRemoteSessionIssuerResponseBody(body *CreateRemoteSessionIssu
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2643,6 +2654,9 @@ func ValidateUpdateRemoteSessionIssuerResponseBody(body *UpdateRemoteSessionIssu
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -2663,9 +2677,6 @@ func ValidateUpdateRemoteSessionIssuerResponseBody(body *UpdateRemoteSessionIssu
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2701,6 +2712,9 @@ func ValidateGetRemoteSessionIssuerResponseBody(body *GetRemoteSessionIssuerResp
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -2721,9 +2735,6 @@ func ValidateGetRemoteSessionIssuerResponseBody(body *GetRemoteSessionIssuerResp
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4195,6 +4206,9 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -4215,9 +4229,6 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

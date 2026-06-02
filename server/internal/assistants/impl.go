@@ -225,7 +225,7 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 	if err != nil {
 		return fmt.Errorf("enqueue assistant trigger task: %w", err)
 	}
-	if !result.EventCreated || result.AssistantID == uuid.Nil {
+	if !result.ShouldSignal || result.AssistantID == uuid.Nil {
 		return nil
 	}
 	if err := s.signaler.SignalCoordinator(ctx, result.AssistantID); err != nil {

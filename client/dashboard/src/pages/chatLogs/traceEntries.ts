@@ -124,6 +124,59 @@ export function isMessageVisible(
   return entryType === "system" || enabledEntryTypes.includes(entryType);
 }
 
+export function messageHasRiskResults(
+  message: ChatMessage,
+  riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>,
+) {
+  return (riskResultsByMessage.get(message.id)?.length ?? 0) > 0;
+}
+
+export function isMessageVisibleWithRisk({
+  message,
+  enabledEntryTypes,
+  riskOnly,
+  riskResultsByMessage,
+}: {
+  message: ChatMessage;
+  enabledEntryTypes: FilterableTraceEntryType[];
+  riskOnly: boolean;
+  riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>;
+}) {
+  if (!isMessageVisible(message, enabledEntryTypes)) return false;
+  if (!riskOnly) return true;
+  return messageHasRiskResults(message, riskResultsByMessage);
+}
+
+export function getVisibleMessages({
+  messages,
+  enabledEntryTypes,
+  riskOnly,
+  riskResultsByMessage,
+}: {
+  messages: ChatMessage[];
+  enabledEntryTypes: FilterableTraceEntryType[];
+  riskOnly: boolean;
+  riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>;
+}) {
+  return messages.filter((message) =>
+    isMessageVisibleWithRisk({
+      message,
+      enabledEntryTypes,
+      riskOnly,
+      riskResultsByMessage,
+    }),
+  );
+}
+
+export function getRiskEntryCount(
+  messages: ChatMessage[],
+  riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>,
+) {
+  return messages.filter((message) =>
+    messageHasRiskResults(message, riskResultsByMessage),
+  ).length;
+}
+
 export function getVisibleMessageCount(
   messages: ChatMessage[],
   enabledEntryTypes: FilterableTraceEntryType[],

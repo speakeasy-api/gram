@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -17,10 +18,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
@@ -61,23 +67,33 @@ type oauthAuthorizationServerMetadata struct {
 // HandleGetProtectedResource serves RFC 9728 protected-resource metadata at
 // the canonical RFC path `/.well-known/oauth-protected-resource/mcp/{mcpSlug}`
 // — the only path a spec-compliant client constructs from a resource URL of
-// `<base>/mcp/{slug}`. Dispatches internally:
+// `<base>/mcp/{slug}`.
 //
-//   - If toolset.user_session_issuer_id is set: emit the issuer-gated metadata
-//     shape (resource + authorization_servers point at the same /mcp/{slug}
-//     URL the AS metadata is keyed under).
-//   - Else: delegate to wellknown.ResolveOAuthProtectedResourceFromToolset for
-//     legacy toolsets (oauth_proxy_server_id / external_oauth_server_id).
-//   - Else still: 404.
-//
-// Replaces the prior HandleWellKnownOAuthProtectedResourceMetadata in
-// mcp/impl.go (deleted in this commit; route is now registered to this
-// dispatcher).
+// Resolution mirrors ServePublic: try mcp_endpoints → mcp_servers first and,
+// on 404, fall back to the legacy toolsets.mcp_slug lookup. The resolved
+// path delegates to the shared per-backend dispatch
+// (ServeWellKnownProtectedResourceForServer); the fallback handles
+// toolset-backed servers that have no mcp_servers row yet (pre the
+// toolsets→mcp_servers migration) and preserves loadToolset's
+// custom-domain/platform-URL asymmetry.
 func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+	}
+
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+
+	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+		return s.ServeWellKnownProtectedResourceForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		// Fall through to the legacy toolset-by-slug lookup below.
+	default:
+		return err
 	}
 
 	var customDomainID uuid.NullUUID
@@ -91,8 +107,6 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
 	}
-
-	baseURL := s.BaseURLForRequest(r)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
@@ -102,34 +116,36 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 		return s.ServeGetProtectedResource(w, r, endpoint)
 	}
 
-	// Legacy fallback: delegate to the existing wellknown resolver. A nil
-	// result means the toolset has no OAuth configuration at all — 404.
-	resourceURL, err := url.JoinPath(baseURL, "mcp", mcpSlug)
+	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), "mcp", mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").Log(ctx, s.logger)
 	}
-	legacy, err := wellknown.ResolveOAuthProtectedResourceFromToolset(
-		ctx, s.logger, s.db, &s.toolsetCache, toolset, resourceURL,
-	)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, s.logger)
-	}
-	if legacy == nil {
-		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
-	}
-	return writeOAuthProtectedResourceMetadataResponse(ctx, s.logger, w, legacy)
+	return s.serveLegacyToolsetProtectedResource(ctx, w, logger, toolset, resourceURL)
 }
 
 // HandleGetAuthorizationServer serves RFC 8414 authorization-server metadata
 // at the canonical RFC path
 // `/.well-known/oauth-authorization-server/mcp/{mcpSlug}` — the only path a
 // spec-compliant client constructs from an issuer URL of `<base>/mcp/{slug}`.
-// Same dispatch model as HandleGetProtectedResource.
+// Same resolve-first-then-fallback model as HandleGetProtectedResource.
 func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+	}
+
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+
+	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+		return s.ServeWellKnownAuthorizationServerForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		// Fall through to the legacy toolset-by-slug lookup below.
+	default:
+		return err
 	}
 
 	var customDomainID uuid.NullUUID
@@ -144,8 +160,6 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
 	}
 
-	baseURL := s.BaseURLForRequest(r)
-
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
 		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
@@ -154,22 +168,153 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 		return s.ServeGetAuthorizationServer(w, r, endpoint)
 	}
 
-	// Legacy fallback: delegate to the existing wellknown resolver. A nil
-	// result means the toolset has no OAuth configuration at all — 404.
-	legacy, err := wellknown.ResolveOAuthServerMetadataFromToolset(
-		ctx, s.logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, baseURL, mcpSlug,
-	)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").Log(ctx, s.logger)
+	// The legacy /mcp OAuth machinery is keyed on the toolset's mcp_slug,
+	// which equals the requested slug on this fallback path.
+	return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, mcpSlug)
+}
+
+// ServeWellKnownProtectedResourceForServer serves RFC 9728 protected-resource
+// metadata for an already-resolved (mcp_endpoint, mcp_server) pair. It is the
+// single per-backend dispatch shared by the /mcp (routeBase "mcp") and /x/mcp
+// (routeBase "x/mcp") well-known surfaces:
+//
+//   - Issuer-gated (any backend): emit the Gram-hosted metadata shape rooted
+//     at the resolved endpoint's URL on routeBase's surface.
+//   - Remote-backed, not issuer-gated: 404 — the upstream remote MCP server
+//     publishes its own .well-known and Gram is not its authorization server.
+//   - Toolset-backed, not issuer-gated: reuse the legacy wellknown resolver
+//     (oauth_proxy_server_id / external_oauth_server_id).
+func (s *Service) ServeWellKnownProtectedResourceForServer(
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
+	mcpServer *mcpservers_repo.McpServer,
+	routeBase string,
+) error {
+	ctx := r.Context()
+
+	if mcpServer.UserSessionIssuerID.Valid {
+		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
+		if err != nil {
+			return fmt.Errorf("build resolved mcp endpoint: %w", err)
+		}
+		return s.ServeGetProtectedResource(w, r, endpoint)
 	}
-	if legacy == nil {
+
+	switch {
+	case mcpServer.RemoteMcpServerID.Valid:
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	case mcpServer.ToolsetID.Valid:
+		toolset, err := s.loadToolsetForServer(ctx, logger, mcpServer.ToolsetID.UUID, mcpEndpoint.ProjectID)
+		if err != nil {
+			return err
+		}
+		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build resource URL").Log(ctx, logger)
+		}
+		return s.serveLegacyToolsetProtectedResource(ctx, w, logger, toolset, resourceURL)
+	default:
+		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").Log(ctx, logger)
+	}
+}
+
+// ServeWellKnownAuthorizationServerForServer serves RFC 8414
+// authorization-server metadata for an already-resolved (mcp_endpoint,
+// mcp_server) pair. Shared per-backend dispatch with the same backend
+// semantics as [Service.ServeWellKnownProtectedResourceForServer].
+func (s *Service) ServeWellKnownAuthorizationServerForServer(
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
+	mcpServer *mcpservers_repo.McpServer,
+	routeBase string,
+) error {
+	ctx := r.Context()
+
+	if mcpServer.UserSessionIssuerID.Valid {
+		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
+		if err != nil {
+			return fmt.Errorf("build resolved mcp endpoint: %w", err)
+		}
+		return s.ServeGetAuthorizationServer(w, r, endpoint)
+	}
+
+	switch {
+	case mcpServer.RemoteMcpServerID.Valid:
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	case mcpServer.ToolsetID.Valid:
+		toolset, err := s.loadToolsetForServer(ctx, logger, mcpServer.ToolsetID.UUID, mcpEndpoint.ProjectID)
+		if err != nil {
+			return err
+		}
+		// Today's OAuth machinery is keyed on the toolset's mcp_slug; the
+		// production model assumes mcp_endpoints.slug == toolsets.mcp_slug
+		// for toolset-backed servers until the upcoming OAuth migration.
+		oauthSlug := toolset.McpSlug.String
+		if oauthSlug == "" {
+			return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+		}
+		return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, oauthSlug)
+	default:
+		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").Log(ctx, logger)
+	}
+}
+
+// loadToolsetForServer loads the toolset a toolset-backed mcp_server points
+// at, mapping a missing row to 404. Shared by the toolset-backed branch of
+// both well-known dispatchers.
+func (s *Service) loadToolsetForServer(ctx context.Context, logger *slog.Logger, toolsetID, projectID uuid.UUID) (*toolsets_repo.Toolset, error) {
+	toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, logger)
+	}
+	return &toolset, nil
+}
+
+// serveLegacyToolsetProtectedResource resolves and writes RFC 9728
+// protected-resource metadata for a toolset via the legacy wellknown
+// resolver. A nil result means the toolset carries no OAuth configuration —
+// 404. resourceURL is the runtime URL the caller addressed; it is emitted
+// verbatim as both `resource` and `authorization_servers`.
+func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, toolset *toolsets_repo.Toolset, resourceURL string) error {
+	metadata, err := wellknown.ResolveOAuthProtectedResourceFromToolset(ctx, logger, s.db, &s.toolsetCache, toolset, resourceURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, logger)
+	}
+	if metadata == nil {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	}
+	return writeOAuthProtectedResourceMetadataResponse(ctx, logger, w, metadata)
+}
+
+// serveLegacyToolsetAuthorizationServer resolves and writes RFC 8414
+// authorization-server metadata for a toolset via the legacy wellknown
+// resolver, dispatching the proxy variant through a reverse proxy. A nil
+// result means the toolset carries no OAuth configuration — 404. oauthSlug
+// keys the emitted issuer / endpoint URLs onto the legacy /oauth/{slug}
+// surface.
+func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug string) error {
+	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.BaseURLForRequest(r), oauthSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").Log(ctx, logger)
+	}
+	if result == nil {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	}
 
-	if legacy.Kind == wellknown.OAuthServerMetadataResultKindProxy {
-		target, parseErr := url.Parse(legacy.ProxyURL)
+	if result.Kind == wellknown.OAuthServerMetadataResultKindProxy {
+		target, parseErr := url.Parse(result.ProxyURL)
 		if parseErr != nil {
-			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse well-known URL").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse well-known URL").Log(ctx, logger)
 		}
 		proxy := &httputil.ReverseProxy{
 			Director: nil,
@@ -187,7 +332,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 		return nil
 	}
 
-	return writeOAuthServerMetadataResponse(ctx, s.logger, w, legacy)
+	return writeOAuthServerMetadataResponse(ctx, logger, w, result)
 }
 
 // ServeGetProtectedResource is the post-resolution entry point for the

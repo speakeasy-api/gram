@@ -26,6 +26,9 @@ type PluginServerInfo struct {
 	MCPURL string
 	// IsPublic indicates whether the toolset is publicly accessible (no Gram API key needed).
 	IsPublic bool
+	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
+	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
+	IsOAuth bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
 }
@@ -409,9 +412,9 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			EnvHTTPHeaders:    nil,
 		}
 
-		if s.IsPublic {
-			// User provides each variable in their shell env; Codex
-			// substitutes the value into the named header at runtime.
+		if s.IsOAuth {
+			// OAuth servers handle identity at the HTTP layer — no auth credential needed.
+		} else if s.IsPublic {
 			if len(s.EnvConfigs) > 0 {
 				entry.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
 				for _, ec := range s.EnvConfigs {
@@ -419,12 +422,8 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 				}
 			}
 		} else if cfg.APIKey != "" {
-			// Private server: bake the Gram-issued key directly into the
-			// published config. Repo is private, so this matches the Cursor/Claude pattern.
 			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			// Private server, no key available: ask Codex to read GRAM_API_KEY
-			// from the user's environment at startup.
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
@@ -1285,10 +1284,10 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Determine if any private server needs a Gram API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && cfg.APIKey == "" {
+		if !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
 			needsGramKeyPrompt = true
 		}
-		// Public servers may need user-provided env vars.
+		// Public non-OAuth servers may need user-provided env vars.
 		for _, ec := range s.EnvConfigs {
 			userConfig[ec.VariableName] = userConfigEntry{
 				Description: ec.DisplayName,
@@ -1324,19 +1323,19 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	mcpServers := make(map[string]claudeMCPServer)
 	for _, s := range p.Servers {
-		headers := make(map[string]string)
+		var headers map[string]string
 
-		if s.IsPublic {
-			// Public servers use env config variables for auth.
+		if s.IsOAuth {
+			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
+		} else if s.IsPublic {
+			headers = make(map[string]string)
 			for _, ec := range s.EnvConfigs {
 				headers[ec.DisplayName] = "${user_config." + ec.VariableName + "}"
 			}
 		} else if cfg.APIKey != "" {
-			// Private server with injected key.
-			headers["Authorization"] = "Bearer " + cfg.APIKey
+			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			// Private server without key — prompt user.
-			headers["Authorization"] = "Bearer ${user_config.GRAM_API_KEY}"
+			headers = map[string]string{"Authorization": "Bearer ${user_config.GRAM_API_KEY}"}
 		}
 
 		mcpServers[s.DisplayName] = claudeMCPServer{
@@ -1375,16 +1374,19 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 
 	mcpServers := make(map[string]cursorMCPServer)
 	for _, s := range p.Servers {
-		headers := make(map[string]string)
+		var headers map[string]string
 
-		if s.IsPublic {
+		if s.IsOAuth {
+			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
+		} else if s.IsPublic {
+			headers = make(map[string]string)
 			for _, ec := range s.EnvConfigs {
 				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
 			}
 		} else if cfg.APIKey != "" {
-			headers["Authorization"] = "Bearer " + cfg.APIKey
+			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			headers["Authorization"] = "Bearer ${env:GRAM_API_KEY}"
+			headers = map[string]string{"Authorization": "Bearer ${env:GRAM_API_KEY}"}
 		}
 
 		mcpServers[s.DisplayName] = cursorMCPServer{

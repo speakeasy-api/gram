@@ -51,6 +51,60 @@ func (q *Queries) GetHeaderDisplayNames(ctx context.Context, toolsetID uuid.Null
 	return header_display_names, err
 }
 
+const getHeaderDisplayNamesByMcpServerID = `-- name: GetHeaderDisplayNamesByMcpServerID :one
+SELECT header_display_names
+FROM mcp_metadata
+WHERE mcp_server_id = $1
+`
+
+func (q *Queries) GetHeaderDisplayNamesByMcpServerID(ctx context.Context, mcpServerID uuid.NullUUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getHeaderDisplayNamesByMcpServerID, mcpServerID)
+	var header_display_names []byte
+	err := row.Scan(&header_display_names)
+	return header_display_names, err
+}
+
+const getMetadataByMcpServerID = `-- name: GetMetadataByMcpServerID :one
+SELECT id,
+       toolset_id,
+       mcp_server_id,
+       project_id,
+       external_documentation_url,
+       external_documentation_text,
+       logo_id,
+       instructions,
+       header_display_names,
+       default_environment_id,
+       installation_override_url,
+       created_at,
+       updated_at
+FROM mcp_metadata
+WHERE mcp_server_id = $1
+ORDER BY updated_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetMetadataByMcpServerID(ctx context.Context, mcpServerID uuid.NullUUID) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, getMetadataByMcpServerID, mcpServerID)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getMetadataForToolset = `-- name: GetMetadataForToolset :one
 SELECT id,
        toolset_id,
@@ -236,6 +290,82 @@ type UpsertMetadataParams struct {
 func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
 	row := q.db.QueryRow(ctx, upsertMetadata,
 		arg.ToolsetID,
+		arg.ProjectID,
+		arg.ExternalDocumentationUrl,
+		arg.ExternalDocumentationText,
+		arg.LogoID,
+		arg.Instructions,
+		arg.DefaultEnvironmentID,
+		arg.InstallationOverrideUrl,
+	)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertMetadataByMcpServerID = `-- name: UpsertMetadataByMcpServerID :one
+INSERT INTO mcp_metadata (
+    mcp_server_id,
+    project_id,
+    external_documentation_url,
+    external_documentation_text,
+    logo_id,
+    instructions,
+    default_environment_id,
+    installation_override_url
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (mcp_server_id) WHERE mcp_server_id IS NOT NULL
+DO UPDATE SET project_id = EXCLUDED.project_id,
+              external_documentation_url = EXCLUDED.external_documentation_url,
+              external_documentation_text = EXCLUDED.external_documentation_text,
+              logo_id = EXCLUDED.logo_id,
+              instructions = EXCLUDED.instructions,
+              default_environment_id = EXCLUDED.default_environment_id,
+              installation_override_url = EXCLUDED.installation_override_url,
+              updated_at = clock_timestamp()
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at
+`
+
+type UpsertMetadataByMcpServerIDParams struct {
+	McpServerID               uuid.NullUUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+}
+
+func (q *Queries) UpsertMetadataByMcpServerID(ctx context.Context, arg UpsertMetadataByMcpServerIDParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, upsertMetadataByMcpServerID,
+		arg.McpServerID,
 		arg.ProjectID,
 		arg.ExternalDocumentationUrl,
 		arg.ExternalDocumentationText,

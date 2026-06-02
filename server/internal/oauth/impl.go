@@ -579,6 +579,31 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeBadRequest, err, "failed to decode OAuth request info from state").Log(ctx, s.logger)
 	}
 
+	// Backwards-compat shim for remote_session_clients whose upstream
+	// registration still points at /oauth/callback. BuildAuthorizationUrl
+	// tagged the envelope with remote_sessions=true; forward into
+	// /mcp/remote_login_callback with the inner state_id so the
+	// remotesessions flow can finish the token exchange. Once
+	// oauth_proxy_servers are dropped and traffic to /oauth/callback drains
+	// to only these forwarded responses, this shim becomes the only purpose
+	// of /oauth/callback.
+	if oauthReqInfo["remote_sessions"] == "true" {
+		fwd := url.Values{}
+		fwd.Set("state", oauthReqInfo["state_id"])
+		if code := r.URL.Query().Get("code"); code != "" {
+			fwd.Set("code", code)
+		}
+		if errCode := r.URL.Query().Get("error"); errCode != "" {
+			fwd.Set("error", errCode)
+		}
+		if desc := r.URL.Query().Get("error_description"); desc != "" {
+			fwd.Set("error_description", desc)
+		}
+		target := strings.TrimRight(s.serverURL.String(), "/") + "/mcp/remote_login_callback?" + fwd.Encode()
+		http.Redirect(w, r, target, http.StatusFound)
+		return nil
+	}
+
 	mcpSlug := oauthReqInfo["mcp_slug"]
 	projectIDStr := oauthReqInfo["project_id"]
 	if mcpSlug == "" || projectIDStr == "" {

@@ -1,4 +1,4 @@
-h1:n8EdPqd7f6swOdnXNterrqtPc4G8CJKVKr4umhjDVfU=
+h1:Yt8QrOWtqTNjPBVIah921ZzpxojZ8TXCJYTfloaDRHc=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -198,3 +198,6 @@ h1:n8EdPqd7f6swOdnXNterrqtPc4G8CJKVKr4umhjDVfU=
 20260528192406_age-2484-remote-session-issuers-organization-id.sql h1:ptd3XyEBDWDB1mrd4Xsg3u2dj/W79WcRch4X8myUYbw=
 20260529114006_add-ip-allowlist-to-custom-domains.sql h1:9li8X25rRb2c1wPhfA/k4FuS65biWbmttXGP0uuOpBQ=
 20260529185739_plugin-assignments-org-principal-index.sql h1:zxjbc2mIBYmXegrSPPDfoMFQn7fagQs8Sd8Ld2JH4+o=
+20260601092138_risk-policies-add-audience-type.sql h1:M1gvNAwdWQAX6bIyEhF7VnLvIltOPdob+093qPfiM+A=
+20260601212536_plugin-github-connections-add-published-fingerprint.sql h1:eYANo4SQbbKipX/n3geIZ4qZ2yT8RV3lw/PAn0YoPA8=
+20260602103955_age-2631-project-managed-assistants.sql h1:WTzRGPg815dtWcPpBbkJlWNyu2PRdArmtjbX0UDKySI=

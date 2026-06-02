@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -151,7 +152,7 @@ type searchToolsArguments struct {
 func handleSearchToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
-	reqID msgID,
+	reqID mcpjsonrpc.ID,
 	argsRaw json.RawMessage,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
@@ -299,7 +300,7 @@ type describeToolsArguments struct {
 func handleDescribeToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
-	reqID msgID,
+	reqID mcpjsonrpc.ID,
 	argsRaw json.RawMessage,
 	toolset *types.Toolset,
 ) (json.RawMessage, error) {

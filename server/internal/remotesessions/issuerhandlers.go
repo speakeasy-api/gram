@@ -130,6 +130,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 
 	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:                              payload.Slug,
 		Issuer:                            payload.Issuer,
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
@@ -206,9 +207,13 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 
 	txRepo := repo.New(dbtx)
 
+	// Keep the pre-update lookup strictly project-scoped: organization-level
+	// issuers are edited via the organizationRemoteSessionIssuers service, and
+	// the project-scoped UpdateRemoteSessionIssuer below cannot modify them.
 	existing, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:        issuerID,
-		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ID:             issuerID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID: conv.ToPGTextEmpty(""),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -283,9 +288,10 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 	}
 
 	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, repo.ListRemoteSessionIssuersByProjectIDParams{
-		ProjectID:  uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		Cursor:     cursor,
-		LimitValue: limit,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		Cursor:         cursor,
+		LimitValue:     limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session issuers").Log(ctx, s.logger)
@@ -335,8 +341,9 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 			return nil, err
 		}
 		issuer, err = repo.New(s.db).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-			ID:        issuerID,
-			ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+			ID:             issuerID,
+			ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+			OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {

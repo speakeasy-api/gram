@@ -79,12 +79,11 @@ function CopyButton({
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't trigger row selection
-      // Copy with the label prefix
-      navigator.clipboard.writeText(`${label}: ${value}`);
+      navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     },
-    [value, label],
+    [value],
   );
 
   return (
@@ -194,7 +193,7 @@ export function ChatLogsTable({
                 "group w-full px-5 py-4 text-left transition-all duration-150",
                 "hover:bg-muted/50",
                 "focus-visible:bg-muted/50 focus:outline-none",
-                isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
+                isSelected && "bg-primary/3 hover:bg-primary/5",
               )}
             >
               <div className="flex items-center gap-5">
