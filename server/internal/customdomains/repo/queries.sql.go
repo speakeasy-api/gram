@@ -18,13 +18,15 @@ INSERT INTO custom_domains (
     domain,
     ingress_name,
     cert_secret_name,
-    provisioner_kind
+    provisioner_kind,
+    ip_allowlist
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6
 )
 RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
 `
@@ -35,6 +37,7 @@ type CreateCustomDomainParams struct {
 	IngressName     pgtype.Text
 	CertSecretName  pgtype.Text
 	ProvisionerKind string
+	IpAllowlist     []string
 }
 
 func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomainParams) (CustomDomain, error) {
@@ -44,6 +47,7 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 		arg.IngressName,
 		arg.CertSecretName,
 		arg.ProvisionerKind,
+		arg.IpAllowlist,
 	)
 	var i CustomDomain
 	err := row.Scan(
@@ -231,6 +235,42 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 		arg.ProvisionerKind,
 		arg.ID,
 	)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateCustomDomainIPAllowlist = `-- name: UpdateCustomDomainIPAllowlist :one
+UPDATE custom_domains
+SET
+    ip_allowlist = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND deleted IS FALSE
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateCustomDomainIPAllowlistParams struct {
+	IpAllowlist    []string
+	OrganizationID string
+}
+
+func (q *Queries) UpdateCustomDomainIPAllowlist(ctx context.Context, arg UpdateCustomDomainIPAllowlistParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, updateCustomDomainIPAllowlist, arg.IpAllowlist, arg.OrganizationID)
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,

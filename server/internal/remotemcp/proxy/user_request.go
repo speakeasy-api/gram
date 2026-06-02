@@ -69,6 +69,15 @@ func (r *UserRequest) ParseJSONRPCMessages(maxBytes int64) error {
 		return nil
 	}
 
+	// MCP Streamable HTTP § Sending Messages to the Server disallows
+	// batched (array) request bodies. Peek the first non-whitespace byte
+	// and surface [ErrBatchRequest] ahead of the JSON-RPC decoder so the
+	// proxy can emit a clean rejection envelope instead of a generic
+	// decode error string.
+	if firstNonWhitespaceByte(body) == '[' {
+		return ErrBatchRequest
+	}
+
 	msg, err := jsonrpc.DecodeMessage(body)
 	if err != nil {
 		return fmt.Errorf("decode jsonrpc message: %w", err)
@@ -76,6 +85,21 @@ func (r *UserRequest) ParseJSONRPCMessages(maxBytes int64) error {
 	r.JSONRPCMessages = []jsonrpc.Message{msg}
 
 	return nil
+}
+
+// firstNonWhitespaceByte returns the first byte of body that is not JSON
+// whitespace (space, tab, LF, or CR per RFC 8259 § 2). Returns 0 if body
+// is empty or contains only whitespace.
+func firstNonWhitespaceByte(body []byte) byte {
+	for _, b := range body {
+		switch b {
+		case ' ', '\t', '\n', '\r':
+			continue
+		default:
+			return b
+		}
+	}
+	return 0
 }
 
 // refreshBody re-marshals JSONRPCMessages back to wire bytes and replaces

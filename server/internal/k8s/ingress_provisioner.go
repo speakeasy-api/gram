@@ -21,8 +21,8 @@ type IngressProvisioner struct {
 
 func (p *IngressProvisioner) Kind() ProvisionerKind { return ProvisionerKindIngress }
 
-func (p *IngressProvisioner) Setup(ctx context.Context, domain string) (SetupResult, error) {
-	k8sName, secretName, ingress, err := p.buildIngress(domain)
+func (p *IngressProvisioner) Setup(ctx context.Context, domain string, ipAllowlist []string) (SetupResult, error) {
+	k8sName, secretName, ingress, err := p.buildIngress(domain, ipAllowlist)
 	if err != nil {
 		return SetupResult{}, fmt.Errorf("build ingress: %w", err)
 	}
@@ -70,7 +70,7 @@ func (p *IngressProvisioner) Delete(ctx context.Context, resourceName, secretNam
 	return nil
 }
 
-func (p *IngressProvisioner) buildIngress(domain string) (string, string, *networkingv1.Ingress, error) {
+func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (string, string, *networkingv1.Ingress, error) {
 	nginxIngressClassName := "nginx"
 	pathTypePrefix := networkingv1.PathTypePrefix
 	pathTypeImplementationSpecific := networkingv1.PathTypeImplementationSpecific
@@ -80,15 +80,23 @@ func (p *IngressProvisioner) buildIngress(domain string) (string, string, *netwo
 	}
 	secretName := strings.ReplaceAll(domain, ".", "-") + "-tls"
 
+	annotations := map[string]string{
+		"cert-manager.io/cluster-issuer":              "gram-letsencrypt",
+		"nginx.ingress.kubernetes.io/proxy-body-size": "15m",
+		"nginx.ingress.kubernetes.io/use-regex":       "true",
+	}
+	// A non-empty allowlist restricts inbound traffic to the given IPv4 sources.
+	// An empty list omits the annotation entirely, which removes any prior
+	// restriction since Update replaces the whole object.
+	if len(ipAllowlist) > 0 {
+		annotations["nginx.ingress.kubernetes.io/whitelist-source-range"] = strings.Join(ipAllowlist, ",")
+	}
+
 	ingress := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      k8sName,
-			Namespace: p.namespace,
-			Annotations: map[string]string{
-				"cert-manager.io/cluster-issuer":              "gram-letsencrypt",
-				"nginx.ingress.kubernetes.io/proxy-body-size": "15m",
-				"nginx.ingress.kubernetes.io/use-regex":       "true",
-			},
+			Name:        k8sName,
+			Namespace:   p.namespace,
+			Annotations: annotations,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "custom-domain-chart",
 				"custom-domain":                domain,

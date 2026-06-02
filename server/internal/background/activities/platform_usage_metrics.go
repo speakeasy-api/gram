@@ -2,19 +2,13 @@ package activities
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sourcegraph/conc/pool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 type CollectPlatformUsageMetrics struct {
@@ -95,101 +89,5 @@ func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsa
 	f.billingTracker.TrackPlatformUsage(ctx, events)
 
 	f.logger.InfoContext(ctx, "Platform usage metrics firing completed successfully")
-	return nil
-}
-
-type FreeTierReportingUsageMetrics struct {
-	logger            *slog.Logger
-	billingRepository billing.Repository
-	orgRepo           *orgRepo.Queries
-	repo              *repo.Queries
-	posthogClient     *posthog.Posthog
-}
-
-func NewFreeTierReportingMetrics(logger *slog.Logger, db *pgxpool.Pool, billingRepository billing.Repository, posthogClient *posthog.Posthog) *FreeTierReportingUsageMetrics {
-	return &FreeTierReportingUsageMetrics{
-		logger:            logger.With(attr.SlogComponent("free_tier_reporting_usage_metrics")),
-		billingRepository: billingRepository,
-		orgRepo:           orgRepo.New(db),
-		repo:              repo.New(db),
-		posthogClient:     posthogClient,
-	}
-}
-
-func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string) error {
-	f.logger.InfoContext(ctx, "Starting free tier reporting usage metrics")
-
-	// Get user emails for all org IDs
-	userEmails, err := f.repo.GetUserEmailsByOrgIDs(ctx, orgIDs)
-	if err != nil {
-		f.logger.ErrorContext(ctx, "failed to get user emails for orgs", attr.SlogError(err))
-		return fmt.Errorf("failed to get user emails: %w", err)
-	}
-
-	// Create a map for quick lookup of email by org ID
-	emailByOrgID := make(map[string]string)
-	for _, userEmail := range userEmails {
-		emailByOrgID[userEmail.OrganizationID] = userEmail.Email
-	}
-
-	workers := pool.New().WithErrors().WithMaxGoroutines(25)
-
-	for _, orgID := range orgIDs {
-		workers.Go(func() error {
-			org, err := mv.DescribeOrganization(ctx, f.logger, f.orgRepo, f.billingRepository, orgID)
-			if err != nil {
-				return fmt.Errorf("failed to describe organization %s: %w", orgID, err)
-			}
-
-			// get latest period usage that was stored
-			usage, err := f.billingRepository.GetStoredPeriodUsage(ctx, orgID)
-			if err != nil {
-				f.logger.ErrorContext(ctx, "failed to get period usage for org", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-				return nil
-			}
-
-			f.logger.InfoContext(ctx, "billing usage report",
-				attr.SlogOrganizationID(org.ID),
-				attr.SlogOrganizationSlug(org.Slug),
-				attr.SlogStatsToolCallCount(usage.ToolCalls),
-				attr.SlogStatsMCPServerCount(usage.Servers),
-			)
-
-			anyOverage := usage.ToolCalls > usage.IncludedToolCalls || usage.Servers > usage.IncludedServers || usage.Credits > usage.IncludedCredits
-
-			// An org is over the free tier limits if it exceeds the included limits and does not have an active subscription (to pay for the overage)
-			if org.GramAccountType == "free" && anyOverage && !usage.HasActiveSubscription {
-				eventData := map[string]any{
-					"org_id":        org.ID,
-					"org_name":      org.Name,
-					"org_slug":      org.Slug,
-					"tool_calls":    usage.ToolCalls,
-					"servers":       usage.Servers,
-					"is_gram":       true,
-					"is_legacy_org": org.CreatedAt.Time.Before(time.Date(2025, 9, 5, 0, 0, 0, 0, time.UTC)), // This is when free tier limit enforcement started
-					// format start_time as ISO8601 - overrides time.Now() set in posthog.go for Loops compat
-					"start_time": time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00"),
-				}
-
-				// Add email if available
-				if email, ok := emailByOrgID[orgID]; ok {
-					eventData["email"] = email
-				}
-
-				err = f.posthogClient.CaptureEvent(ctx, "billing_usage_report", org.ID, eventData)
-				if err != nil {
-					return fmt.Errorf("failed to capture posthog event for org %s: %w", orgID, err)
-				}
-			}
-
-			return nil
-		})
-	}
-
-	if err := workers.Wait(); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to report free tier usage").Log(ctx, f.logger)
-	}
-
-	f.logger.InfoContext(ctx, "free tier reporting usage metrics completed successfully")
 	return nil
 }

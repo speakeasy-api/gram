@@ -4,6 +4,7 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { Agent } from "./agent.js";
 import { AiIntegrations } from "./aiintegrations.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
@@ -27,6 +28,7 @@ import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
+import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { Organizations } from "./organizations.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
@@ -55,6 +57,11 @@ export class Gram extends ClientSDK {
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));
+  }
+
+  private _agent?: Agent;
+  get agent(): Agent {
+    return (this._agent ??= new Agent(this._options));
   }
 
   private _aiIntegrations?: AiIntegrations;
@@ -165,6 +172,12 @@ export class Gram extends ClientSDK {
   private _mcpServers?: McpServers;
   get mcpServers(): McpServers {
     return (this._mcpServers ??= new McpServers(this._options));
+  }
+
+  private _organizationRemoteSessionIssuers?: OrganizationRemoteSessionIssuers;
+  get organizationRemoteSessionIssuers(): OrganizationRemoteSessionIssuers {
+    return (this._organizationRemoteSessionIssuers ??=
+      new OrganizationRemoteSessionIssuers(this._options));
   }
 
   private _organizations?: Organizations;

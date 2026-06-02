@@ -314,6 +314,7 @@ export default function RiskEvents() {
             onClose={() => setSelectedChatId(null)}
             onDelete={() => setSelectedChatId(null)}
             collapseNonRisk
+            initialRiskOnly
           />
         }
         scrollRef={containerRef}

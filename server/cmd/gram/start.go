@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
+	"github.com/speakeasy-api/gram/server/internal/agent"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistantmemories"
@@ -132,6 +133,12 @@ func newStartCommand() *cli.Command {
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
+		},
+		&cli.BoolFlag{
+			Name:    "enable-gateway-ip-allowlist",
+			Usage:   "Enable Envoy Gateway SecurityPolicy reconcile for custom domain IP allow listing. Requires the SecurityPolicy CRD to be installed.",
+			EnvVars: []string{"GRAM_ENABLE_GATEWAY_IP_ALLOWLIST"},
+			Value:   false,
 		},
 		&cli.StringFlag{
 			Name:     "ssl-key-file",
@@ -592,7 +599,7 @@ func newStartCommand() *cli.Command {
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.Bool("enable-gateway-ip-allowlist"))
 			if err != nil {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
@@ -970,6 +977,7 @@ func newStartCommand() *cli.Command {
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, productFeatures, auditLogger, c.String("jwt-signing-key"), accessStore))
+			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, serverURL.String()))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
 				logger,

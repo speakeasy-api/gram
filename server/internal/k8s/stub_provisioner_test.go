@@ -13,7 +13,7 @@ func TestStubProvisioner_KindMatchesRequest(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	clients, err := k8s.InitializeK8sClient(ctx, testenv.NewLogger(t), "local")
+	clients, err := k8s.InitializeK8sClient(ctx, testenv.NewLogger(t), "local", false)
 	require.NoError(t, err)
 
 	require.Equal(t, k8s.ProvisionerKindIngress, clients.Provisioner(k8s.ProvisionerKindIngress).Kind())
@@ -26,7 +26,7 @@ func TestStubProvisioner_IsNoOp(t *testing.T) {
 
 	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
 
-	result, err := p.Setup(ctx, "test.example.com")
+	result, err := p.Setup(ctx, "test.example.com", nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, result.ResourceName)
 	require.Empty(t, result.SecretName, "stub never sets SecretName")
@@ -41,7 +41,7 @@ func TestStubProvisioner_RecordsCalls(t *testing.T) {
 
 	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
 
-	result, err := p.Setup(ctx, "my.example.com")
+	result, err := p.Setup(ctx, "my.example.com", []string{"1.2.3.4"})
 	require.NoError(t, err)
 	require.NoError(t, p.Get(ctx, result.ResourceName))
 	require.NoError(t, p.Delete(ctx, result.ResourceName, "cert-secret"))
@@ -51,6 +51,7 @@ func TestStubProvisioner_RecordsCalls(t *testing.T) {
 
 	require.Equal(t, "Setup", calls[0].Method)
 	require.Equal(t, "my.example.com", calls[0].Domain)
+	require.Equal(t, []string{"1.2.3.4"}, calls[0].IPAllowlist)
 
 	require.Equal(t, "Get", calls[1].Method)
 	require.Equal(t, result.ResourceName, calls[1].ResourceName)
@@ -66,7 +67,7 @@ func TestStubProvisioner_ResourceNameHasNoDots(t *testing.T) {
 
 	p := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
 
-	result, err := p.Setup(ctx, "my-domain.example.com")
+	result, err := p.Setup(ctx, "my-domain.example.com", nil)
 	require.NoError(t, err)
 	require.NotContains(t, result.ResourceName, ".", "k8s resource name must not contain dots")
 }

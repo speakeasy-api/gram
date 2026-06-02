@@ -329,6 +329,7 @@ func attachCustomDomainToToolset(
 		Domain:         domainName,
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 

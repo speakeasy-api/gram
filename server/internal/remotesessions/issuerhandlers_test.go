@@ -62,6 +62,12 @@ func TestCreateRemoteSessionIssuer(t *testing.T) {
 	require.Equal(t, "https://idp.example.com/authorize", *result.AuthorizationEndpoint)
 	require.False(t, result.Oidc)
 
+	// The project's organization id is populated from the auth context.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotEmpty(t, result.ProjectID)
+	require.Equal(t, authCtx.ActiveOrganizationID, result.OrganizationID)
+
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)

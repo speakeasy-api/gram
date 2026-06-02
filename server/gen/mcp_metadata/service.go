@@ -17,9 +17,11 @@ import (
 
 // Manages metadata for the MCP install page shown to users.
 type Service interface {
-	// Fetch the metadata that powers the MCP install page.
+	// Fetch the metadata that powers the MCP install page. Exactly one of
+	// toolset_slug or mcp_server_id must be provided.
 	GetMcpMetadata(context.Context, *GetMcpMetadataPayload) (res *GetMcpMetadataResult, err error)
-	// Create or update the metadata that powers the MCP install page.
+	// Create or update the metadata that powers the MCP install page. Exactly one
+	// of toolset_slug or mcp_server_id must be provided.
 	SetMcpMetadata(context.Context, *SetMcpMetadataPayload) (res *types.McpMetadata, err error)
 	// Export MCP server details as JSON for documentation and integration purposes.
 	ExportMcpMetadata(context.Context, *ExportMcpMetadataPayload) (res *types.McpExport, err error)
@@ -60,8 +62,12 @@ type ExportMcpMetadataPayload struct {
 // GetMcpMetadataPayload is the payload type of the mcpMetadata service
 // getMcpMetadata method.
 type GetMcpMetadataPayload struct {
-	// The slug of the toolset associated with this install page metadata
-	ToolsetSlug      types.Slug
+	// The slug of the toolset associated with this install page metadata. Mutually
+	// exclusive with mcp_server_id.
+	ToolsetSlug *types.Slug
+	// The ID of the MCP server associated with this install page metadata.
+	// Mutually exclusive with toolset_slug.
+	McpServerID      *string
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
@@ -77,8 +83,12 @@ type GetMcpMetadataResult struct {
 // SetMcpMetadataPayload is the payload type of the mcpMetadata service
 // setMcpMetadata method.
 type SetMcpMetadataPayload struct {
-	// The slug of the toolset associated with this install page metadata
-	ToolsetSlug types.Slug
+	// The slug of the toolset associated with this install page metadata. Mutually
+	// exclusive with mcp_server_id.
+	ToolsetSlug *types.Slug
+	// The ID of the MCP server associated with this install page metadata.
+	// Mutually exclusive with toolset_slug.
+	McpServerID *string
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string
 	// A link to external documentation for the MCP install page
@@ -87,7 +97,8 @@ type SetMcpMetadataPayload struct {
 	ExternalDocumentationText *string
 	// Server instructions returned in the MCP initialize response
 	Instructions *string
-	// The default environment to load variables from
+	// The default environment to load variables from. Not supported when
+	// mcp_server_id is provided.
 	DefaultEnvironmentID *string
 	// URL to redirect to instead of showing the default installation page
 	InstallationOverrideURL *string

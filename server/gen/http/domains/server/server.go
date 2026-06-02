@@ -21,6 +21,7 @@ type Server struct {
 	Mounts           []*MountPoint
 	GetDomain        http.Handler
 	CreateDomain     http.Handler
+	UpdateDomain     http.Handler
 	DeleteDomain     http.Handler
 	ListMcpEndpoints http.Handler
 }
@@ -54,11 +55,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetDomain", "GET", "/rpc/domain.get"},
 			{"CreateDomain", "POST", "/rpc/domain.register"},
+			{"UpdateDomain", "POST", "/rpc/domain.update"},
 			{"DeleteDomain", "DELETE", "/rpc/domain.delete"},
 			{"ListMcpEndpoints", "GET", "/rpc/domain.listMcpEndpoints"},
 		},
 		GetDomain:        NewGetDomainHandler(e.GetDomain, mux, decoder, encoder, errhandler, formatter),
 		CreateDomain:     NewCreateDomainHandler(e.CreateDomain, mux, decoder, encoder, errhandler, formatter),
+		UpdateDomain:     NewUpdateDomainHandler(e.UpdateDomain, mux, decoder, encoder, errhandler, formatter),
 		DeleteDomain:     NewDeleteDomainHandler(e.DeleteDomain, mux, decoder, encoder, errhandler, formatter),
 		ListMcpEndpoints: NewListMcpEndpointsHandler(e.ListMcpEndpoints, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -71,6 +74,7 @@ func (s *Server) Service() string { return "domains" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetDomain = m(s.GetDomain)
 	s.CreateDomain = m(s.CreateDomain)
+	s.UpdateDomain = m(s.UpdateDomain)
 	s.DeleteDomain = m(s.DeleteDomain)
 	s.ListMcpEndpoints = m(s.ListMcpEndpoints)
 }
@@ -82,6 +86,7 @@ func (s *Server) MethodNames() []string { return domains.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetDomainHandler(mux, h.GetDomain)
 	MountCreateDomainHandler(mux, h.CreateDomain)
+	MountUpdateDomainHandler(mux, h.UpdateDomain)
 	MountDeleteDomainHandler(mux, h.DeleteDomain)
 	MountListMcpEndpointsHandler(mux, h.ListMcpEndpoints)
 }
@@ -174,6 +179,59 @@ func NewCreateDomainHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createDomain")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "domains")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateDomainHandler configures the mux to serve the "domains" service
+// "updateDomain" endpoint.
+func MountUpdateDomainHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/domain.update", f)
+}
+
+// NewUpdateDomainHandler creates a HTTP handler which loads the HTTP request
+// and calls the "domains" service "updateDomain" endpoint.
+func NewUpdateDomainHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateDomainRequest(mux, decoder)
+		encodeResponse = EncodeUpdateDomainResponse(encoder)
+		encodeError    = EncodeUpdateDomainError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateDomain")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "domains")
 		payload, err := decodeRequest(r)
 		if err != nil {

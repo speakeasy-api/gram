@@ -15,9 +15,11 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	orgissuerssrv "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/server"
 	clientssrv "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/server"
 	issuerssrv "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/server"
 	sessionssrv "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/server"
+	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
@@ -45,12 +47,14 @@ type Service struct {
 }
 
 var (
-	_ issuersgen.Service  = (*Service)(nil)
-	_ issuersgen.Auther   = (*Service)(nil)
-	_ clientsgen.Service  = (*Service)(nil)
-	_ clientsgen.Auther   = (*Service)(nil)
-	_ sessionsgen.Service = (*Service)(nil)
-	_ sessionsgen.Auther  = (*Service)(nil)
+	_ issuersgen.Service    = (*Service)(nil)
+	_ issuersgen.Auther     = (*Service)(nil)
+	_ orgissuersgen.Service = (*Service)(nil)
+	_ orgissuersgen.Auther  = (*Service)(nil)
+	_ clientsgen.Service    = (*Service)(nil)
+	_ clientsgen.Auther     = (*Service)(nil)
+	_ sessionsgen.Service   = (*Service)(nil)
+	_ sessionsgen.Auther    = (*Service)(nil)
 )
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger) *Service {
@@ -80,6 +84,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		issuerEndpoints.Use(m)
 	}
 	issuerssrv.Mount(mux, issuerssrv.New(issuerEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	orgIssuerEndpoints := orgissuersgen.NewEndpoints(service)
+	for _, m := range mw {
+		orgIssuerEndpoints.Use(m)
+	}
+	orgissuerssrv.Mount(mux, orgissuerssrv.New(orgIssuerEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
 	clientEndpoints := clientsgen.NewEndpoints(service)
 	for _, m := range mw {

@@ -74,6 +74,15 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		return nil, oops.C(oops.CodeUnauthorized).Log(ctx, s.logger)
 	}
 
+	// Extract user identity from the caller's auth context. When the dashboard
+	// user creates a chat session, their UserID and SessionID are carried into
+	// the JWT so the MCP gateway can enforce RBAC on tool calls.
+	var sessionID *string
+	if authCtx.SessionID != nil {
+		sid := *authCtx.SessionID
+		sessionID = &sid
+	}
+
 	claims := chatsessions.ChatSessionClaims{
 		OrgID:            authCtx.ActiveOrganizationID,
 		ProjectID:        authCtx.ProjectID.String(),
@@ -81,6 +90,9 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		ProjectSlug:      *authCtx.ProjectSlug,
 		ExternalUserID:   p.UserIdentifier,
 		APIKeyID:         authCtx.APIKeyID,
+		UserID:           authCtx.UserID,
+		SessionID:        sessionID,
+		AccountType:      authCtx.AccountType,
 		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
 	}
 

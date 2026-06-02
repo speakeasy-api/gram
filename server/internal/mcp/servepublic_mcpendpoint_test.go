@@ -36,7 +36,9 @@ import (
 // createToolsetMcpEndpoint writes the mcp_servers row pointing at a
 // toolset and the mcp_endpoints row exposing it under slug. visibility
 // must be "public", "private", or "disabled". customDomainID may be
-// invalid (Valid=false) for a platform-scoped endpoint.
+// invalid (Valid=false) for a platform-scoped endpoint. issuerID, when
+// non-Nil, sets the mcp_servers.user_session_issuer_id FK to gate the
+// endpoint.
 func createToolsetMcpEndpoint(
 	t *testing.T,
 	ctx context.Context,
@@ -45,19 +47,27 @@ func createToolsetMcpEndpoint(
 	toolsetID uuid.UUID,
 	slug, visibility string,
 	customDomainID uuid.NullUUID,
+	issuerID uuid.UUID,
 ) mcpserversrepo.McpServer {
 	t.Helper()
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
+
+	var issuer uuid.NullUUID
+	if issuerID != uuid.Nil {
+		issuer = uuid.NullUUID{UUID: issuerID, Valid: true}
+	}
+
 	mcpServer, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                id,
-		ProjectID:         projectID,
-		Name:              conv.ToPGText("test mcp server"),
-		Slug:              conv.ToPGText("test-mcp-server-" + uuid.NewString()[:8]),
-		EnvironmentID:     uuid.NullUUID{},
-		RemoteMcpServerID: uuid.NullUUID{},
-		ToolsetID:         uuid.NullUUID{UUID: toolsetID, Valid: true},
-		Visibility:        visibility,
+		ID:                  id,
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("test mcp server"),
+		Slug:                conv.ToPGText("test-mcp-server-" + uuid.NewString()[:8]),
+		EnvironmentID:       uuid.NullUUID{},
+		UserSessionIssuerID: issuer,
+		RemoteMcpServerID:   uuid.NullUUID{},
+		ToolsetID:           uuid.NullUUID{UUID: toolsetID, Valid: true},
+		Visibility:          visibility,
 	})
 	require.NoError(t, err)
 
@@ -161,7 +171,7 @@ func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "toolset-slug-"+uuid.NewString()[:8])
 
 	endpointSlug := "endpoint-" + uuid.NewString()
-	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{})
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
 
 	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
@@ -316,7 +326,7 @@ func TestServePublic_McpEndpoint_DisabledMcpServer_FallsBackToLegacyToolset(t *t
 	disabledToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "disabled-"+uuid.NewString()[:8])
 	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, sharedSlug)
 
-	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, disabledToolset.ID, sharedSlug, "disabled", uuid.NullUUID{})
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, disabledToolset.ID, sharedSlug, "disabled", uuid.NullUUID{}, uuid.Nil)
 
 	w, err := servePublicHTTP(t, ctx, ti, sharedSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err, "disabled mcp_server must fall through to the legacy toolset lookup")
@@ -345,6 +355,7 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 		Domain:         "custom.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 	_, err = customdomainsrepo.New(ti.conn).UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{
@@ -358,7 +369,7 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "custom-only-"+uuid.NewString()[:8])
 	endpointSlug := "endpoint-" + uuid.NewString()
-	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{UUID: customDomain.ID, Valid: true})
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{UUID: customDomain.ID, Valid: true}, uuid.Nil)
 
 	// Request arrives on the platform domain (no customdomains.Context).
 	// The custom-domain mcp_endpoint must not resolve, and the legacy

@@ -39,12 +39,13 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useToolset } from "@/hooks/toolTypes";
+import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isNotFoundError } from "@/lib/route-errors";
-import { Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
+import { Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import {
   useAttachServer,
@@ -55,13 +56,11 @@ import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
-import { Confirm } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllListToolsets,
   invalidateAllToolset,
-  invalidateTemplate,
   buildCollectionsListServersQuery,
   useAddOAuthProxyServerMutation,
   useExportMcpMetadataMutation,
@@ -640,7 +639,7 @@ const STATUS_OPTIONS: {
     value: "private",
     label: "Private",
     description:
-      "Only users with a Gram API Key from this project can read the tools hosted by this server.",
+      "Only users with a platform API Key from this project can read the tools hosted by this server.",
     dotClass: "bg-blue-400",
     hoverDotClass: "group-hover:bg-blue-400",
   },
@@ -874,7 +873,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
  * Overview Tab - Hosted URL and Installation instructions
  */
 function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
     retry: (_, err) => {
@@ -886,7 +885,10 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
     throwOnError: false,
   });
 
-  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
+  const form = useMcpMetadataMetadataForm(
+    { kind: "toolset", toolsetSlug: toolset.slug },
+    result.data?.metadata,
+  );
   const isLoading = result.isLoading || form.isLoading;
 
   return (
@@ -910,7 +912,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         )}
         <Stack className="mt-2" gap={1}>
           <InstallPageConfigForm
-            toolset={toolset}
+            installPageUrl={installPageUrl}
             form={form}
             isLoading={isLoading}
           />
@@ -1149,48 +1151,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recalculate only when the set of group keys changes
   }, [groupKeysJoined]);
 
-  const handleToolUpdate = async (
-    tool: Tool,
-    updates: {
-      name?: string;
-      description?: string;
-      title?: string;
-      readOnlyHint?: boolean;
-      destructiveHint?: boolean;
-      idempotentHint?: boolean;
-      openWorldHint?: boolean;
-      tags?: string[] | undefined;
-    },
-  ) => {
-    if (tool.type === "prompt") {
-      await client.templates.update({
-        updatePromptTemplateForm: {
-          ...tool,
-          ...updates,
-        },
-      });
-      invalidateTemplate(queryClient, [{ name: tool.name }]);
-    } else {
-      await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: {
-          ...tool.variation,
-          confirm: tool.variation?.confirm as Confirm,
-          ...updates,
-          srcToolName: tool.canonicalName,
-          srcToolUrn: tool.toolUrn,
-        },
-      });
-    }
-
-    telemetry.capture("toolset_event", {
-      action: "tool_variation_updated",
-      tool_name: tool.name,
-      overridden_fields: Object.keys(updates).join(", "),
-    });
-
-    toast.success("Tool updated");
-    refetch();
-  };
+  const { updateTool, isUpdating } = useToolUpdate({
+    telemetryEvent: "toolset_event",
+    onSuccess: refetch,
+  });
 
   // For external MCP proxy servers, show the server info instead of tools list
   if (isExternalMcpProxy && fullToolset) {
@@ -1277,7 +1241,8 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         <ToolList
           tools={toolsToDisplay}
           toolset={fullToolset}
-          onToolUpdate={canWrite ? handleToolUpdate : undefined}
+          onToolUpdate={canWrite ? updateTool : undefined}
+          isToolUpdating={isUpdating}
           onToolsRemove={canWrite ? handleToolsRemove : undefined}
           onTestInPlayground={handleTestInPlayground}
           readOnly={!canWrite}
@@ -2070,8 +2035,8 @@ export function MCPJson({
               }
             >
               {requiresGramKey
-                ? "Requires a Gram API key."
-                : "No Gram API key required."}
+                ? "Requires a platform API key."
+                : "No platform API key required."}
             </span>
           </Type>
           <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
@@ -2081,10 +2046,10 @@ export function MCPJson({
               <Grid.Item key="managed">
                 <Type className="font-medium">Managed Authentication</Type>
                 <Type muted small className="mb-2! max-w-3xl">
-                  Manage API authentication with Gram environments.
+                  Manage API authentication with platform environments.
                   <br />
-                  Users need a single Gram API Key rather than bringing their
-                  own keys.
+                  Users need a single platform API Key rather than bringing
+                  their own keys.
                 </Type>
                 <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
               </Grid.Item>,
@@ -2127,7 +2092,7 @@ export function OAuthDetailsModal({
             {toolset.externalOauthServer
               ? "External OAuth Configuration"
               : isGramOAuth
-                ? "Gram OAuth Configuration"
+                ? "Platform OAuth Configuration"
                 : "OAuth Proxy Configuration"}
           </Dialog.Title>
         </Dialog.Header>
@@ -2136,12 +2101,12 @@ export function OAuthDetailsModal({
             {toolset.oauthProxyServer && isGramOAuth && (
               <>
                 <div>
-                  <Type className="font-medium">Gram OAuth is Active</Type>
+                  <Type className="font-medium">Platform OAuth is Active</Type>
                 </div>
                 <Stack gap={2} className="">
                   <Type className="mb-2">
-                    Gram users with access to your organization can use this MCP
-                    server.
+                    Platform users with access to your organization can use this
+                    MCP server.
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
@@ -2386,7 +2351,7 @@ export function GramOAuthProxyModal({
   const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
     onSuccess: () => {
       invalidateAllToolset(queryClient);
-      toast.success("Gram OAuth configured successfully");
+      toast.success("Platform OAuth configured successfully");
       telemetry.capture("mcp_event", {
         action: "gram_oauth_proxy_configured",
         slug: toolset.slug,
@@ -2394,11 +2359,11 @@ export function GramOAuthProxyModal({
       onClose();
     },
     onError: (error) => {
-      console.error("Failed to configure Gram OAuth:", error);
+      console.error("Failed to configure Platform OAuth:", error);
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to configure Gram OAuth",
+          : "Failed to configure Platform OAuth",
       );
     },
   });
@@ -2421,16 +2386,18 @@ export function GramOAuthProxyModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-h-[90vh] max-w-2xl overflow-hidden">
         <Dialog.Header>
-          <Dialog.Title>Gram OAuth</Dialog.Title>
+          <Dialog.Title>Platform OAuth</Dialog.Title>
         </Dialog.Header>
 
         <div className="max-h-[60vh] space-y-4 overflow-auto">
           <div>
-            <Type className="mb-2 font-medium">Gram OAuth Configuration</Type>
+            <Type className="mb-2 font-medium">
+              Platform OAuth Configuration
+            </Type>
             <Type small className="mb-4">
-              Configure Gram OAuth to let users with access to your organization
-              use this MCP server. Users will authenticate using their Gram
-              credentials.
+              Configure Platform OAuth to let users with access to your
+              organization use this MCP server. Users will authenticate using
+              their platform credentials.
             </Type>
           </div>
         </div>
@@ -2442,7 +2409,7 @@ export function GramOAuthProxyModal({
           >
             {addOAuthProxyMutation.isPending
               ? "Enabling..."
-              : "Enable Gram OAuth"}
+              : "Enable Platform OAuth"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

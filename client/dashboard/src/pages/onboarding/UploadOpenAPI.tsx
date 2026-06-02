@@ -85,7 +85,7 @@ export default function UploadOpenAPI() {
                   <UploadAssetStep.Indicator />
                   <UploadAssetStep.Header
                     title="Generate Tools"
-                    description="Gram will generate tools for your API."
+                    description="The platform will generate tools for your API."
                   />
                   <UploadAssetStep.Content>
                     <DeployStep />
@@ -261,11 +261,12 @@ export function UploadOpenAPIContent({
     },
     {
       heading: "Generate Tools",
-      description: "Gram will generate tools for your API.",
+      description: "The platform will generate tools for your API.",
       display: (
         <>
           <Type>
-            Gram is generating tools for your API. This may take a few seconds.
+            The platform is generating tools for your API. This may take a few
+            seconds.
           </Type>
           <Spinner />
         </>

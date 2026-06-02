@@ -94,11 +94,19 @@ export const ToolCollectionBadge = ({
   variant = "neutral",
   className,
   warnOnTooManyTools = false,
+  emptyLabel,
 }: {
   toolNames: string[] | undefined;
   variant?: React.ComponentProps<typeof Badge>["variant"];
   className?: string;
   warnOnTooManyTools?: boolean;
+  /**
+   * What to render when there are no tools.
+   * - undefined (default): the "No Tools" badge.
+   * - null: render nothing.
+   * - ReactNode: render this instead.
+   */
+  emptyLabel?: React.ReactNode | null;
 }) => {
   let tooltipContent: React.ReactNode = (
     <div className="max-h-[300px] overflow-y-auto">
@@ -123,6 +131,8 @@ export const ToolCollectionBadge = ({
   }
 
   if (!toolNames || toolNames.length === 0) {
+    if (emptyLabel === null) return null;
+    if (emptyLabel !== undefined) return <>{emptyLabel}</>;
     return (
       <Badge variant={variant} className={className}>
         No Tools

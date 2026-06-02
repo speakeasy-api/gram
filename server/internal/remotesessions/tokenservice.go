@@ -127,10 +127,7 @@ func (m *ChallengeManager) ResolveOneAccessToken(
 	projectID, userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (string, error) {
-	clients, err := remotesessions_repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		ProjectID:           conv.ToNullUUID(projectID),
-		UserSessionIssuerID: userSessionIssuerID,
-	})
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
 	if err != nil {
 		return "", fmt.Errorf("list remote_session_clients: %w", err)
 	}

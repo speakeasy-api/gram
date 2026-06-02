@@ -4,11 +4,41 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "custom-server", MCPURL: "https://mcp.acme.com/mcp/my-slug"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["custom-server"]
+	require.Equal(t, "https://mcp.acme.com/mcp/my-slug", server.URL, "custom domain URL must be preserved verbatim in generated config")
+}
 
 func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 	t.Parallel()
@@ -110,8 +140,136 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
-	gramServer := mcpConfig.MCPServers["gram-server"]
-	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", gramServer.Headers["Authorization"])
+	server := mcpConfig.MCPServers["gram-server"]
+	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", server.Headers["Authorization"])
+}
+
+func TestGenerateClaudeOAuthServerEmitsStdioEntry(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://mcp.example.com/oauth-tool", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.Headers, "OAuth server must not emit any auth headers")
+
+	// plugin.json must not include a GRAM_API_KEY userConfig entry for OAuth-only plugins.
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY", "OAuth-only plugin must not prompt for GRAM_API_KEY")
+}
+
+func TestGenerateCursorOAuthServerEmitsURLWithNoHeaders(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://mcp.example.com/oauth-tool", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig cursorMCPConfig
+	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.Headers, "OAuth server must not emit any auth headers")
+}
+
+func TestGenerateCodexOAuthServerEmitsURLWithNoCredentials(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://mcp.example.com/oauth-tool", IsOAuth: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig codexMCPConfig
+	err = json.Unmarshal(files["test-codex/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+
+	server := mcpConfig.MCPServers["oauth-server"]
+	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
+	require.Empty(t, server.BearerTokenEnvVar, "OAuth server must not set bearer_token_env_var")
+	require.Empty(t, server.HTTPHeaders, "OAuth server must not emit http_headers")
+}
+
+func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "oauth-server", MCPURL: "https://mcp.example.com/oauth-tool", IsOAuth: true},
+				{DisplayName: "private-server", MCPURL: "https://app.getgram.ai/mcp/private"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var mcpConfig claudeMCPConfig
+	err = json.Unmarshal(files["test/.mcp.json"], &mcpConfig)
+	require.NoError(t, err)
+	require.Len(t, mcpConfig.MCPServers, 2, "both servers should appear in .mcp.json")
+
+	// OAuth server emits URL with no auth headers.
+	oauthServer := mcpConfig.MCPServers["oauth-server"]
+	require.Empty(t, oauthServer.Headers, "OAuth server must not emit auth headers")
+	require.Equal(t, "https://mcp.example.com/oauth-tool", oauthServer.URL)
+
+	// Private HTTP server retains its Authorization header.
+	privateServer := mcpConfig.MCPServers["private-server"]
+	require.Contains(t, privateServer.Headers, "Authorization")
+
+	// plugin.json must still prompt for GRAM_API_KEY because the private HTTP server needs it.
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.Contains(t, pluginMeta.UserConfig, "GRAM_API_KEY")
 }
 
 func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
@@ -597,6 +755,39 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t 
 	}
 }
 
+func TestGenerateCodexObservabilityPluginRoutesTelemetryEventsThroughBackgroundWrapper(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	hooksJSON := files[CodexObservabilitySlug(cfg)+"/hooks/hooks.json"]
+	require.NotNil(t, hooksJSON, "codex observability hooks/hooks.json missing")
+	require.NotContains(t, string(hooksJSON), `"async"`, "Codex skips hooks with async=true/false until async hooks are supported")
+
+	var parsed codexHooksConfig
+	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
+
+	for _, event := range []string{"SessionStart", "PostToolUse", "Stop"} {
+		require.Contains(t, parsed.Hooks, event)
+		require.Len(t, parsed.Hooks[event], 1)
+		require.Len(t, parsed.Hooks[event][0].Hooks, 1)
+		require.Contains(t, parsed.Hooks[event][0].Hooks[0].Command, "hooks/hook_async.sh", "event %q should be fire-and-forget", event)
+	}
+
+	for _, event := range []string{"PreToolUse", "PermissionRequest", "UserPromptSubmit"} {
+		require.Contains(t, parsed.Hooks, event)
+		require.Len(t, parsed.Hooks[event], 1)
+		require.Len(t, parsed.Hooks[event][0].Hooks, 1)
+		require.Contains(t, parsed.Hooks[event][0].Hooks[0].Command, "hooks/hook.sh", "event %q must stay blocking", event)
+		require.NotContains(t, parsed.Hooks[event][0].Hooks[0].Command, "hook_async.sh")
+	}
+}
+
 func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -610,6 +801,73 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
 	require.Contains(t, script, "hooks.codex", "hook.sh must POST to the codex endpoint")
 	require.Contains(t, script, cfg.HooksAPIKey, "hook.sh must embed the API key")
+	require.Contains(t, script, "auth.json", "hook.sh must derive Codex user email from local auth claims")
+	require.Contains(t, script, `hook_event_name") == "SessionStart"`, "hook.sh must only inspect local Codex auth on SessionStart")
+	require.Contains(t, script, `"user_email"`, "hook.sh must enrich the payload with user_email")
+	require.NotContains(t, script, "GRAM_USER_EMAIL", "hook.sh must not rely on a manually configured user email")
+
+	asyncScript := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook_async.sh"])
+	require.Contains(t, asyncScript, "mktemp", "hook_async.sh must copy stdin before returning")
+	require.Contains(t, asyncScript, `bash "$script_dir/hook.sh" < "$tmp"`, "hook_async.sh must delegate to hook.sh")
+	require.Contains(t, asyncScript, ") >/dev/null 2>&1 &", "hook_async.sh must run the sender in the background")
+}
+
+// An upgraded install already carries [hooks.state] entries whose trusted_hash
+// was computed against the previous hook command. When the command changes
+// (e.g. SessionStart moving from hook.sh to hook_async.sh) the installer must
+// rewrite those hashes in place, otherwise Codex flags the hooks as modified
+// and silently stops running telemetry until the user re-approves them.
+func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
+	t.Parallel()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run the generated install script")
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	require.NoError(t, err)
+	require.NotEmpty(t, approvals)
+	target := approvals[0]
+
+	const staleHash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	require.NotEqual(t, staleHash, target.TrustedHash, "fixture hash must differ from the computed one")
+
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
+	existing := "features.hooks = true\n\n" +
+		"[hooks.state.\"" + target.StateKey + "\"]\n" +
+		"enabled = true\n" +
+		"trusted_hash = \"" + staleHash + "\"\n"
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte(existing), 0o644))
+
+	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	// Exclude any installed `codex` binary so only the config.toml patch runs.
+	cmd.Env = []string{
+		"HOME=" + home,
+		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "install script failed: %s", out)
+
+	patched, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	patchedStr := string(patched)
+
+	require.NotContains(t, patchedStr, staleHash, "stale trusted_hash must be replaced")
+	require.Contains(t, patchedStr, target.TrustedHash, "trusted_hash must be refreshed to the current command's hash")
+	require.Equal(t, 1, strings.Count(patchedStr, "[hooks.state.\""+target.StateKey+"\"]"), "refresh must not duplicate the entry")
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
@@ -633,6 +891,7 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	t.Parallel()
 	files := map[string][]byte{
 		"hook.sh":                    []byte("#!/usr/bin/env bash\necho hi\n"),
+		"hook_async.sh":              []byte("#!/usr/bin/env bash\necho hi\n"),
 		".claude-plugin/plugin.json": []byte("{}"),
 		"README.md":                  []byte("# readme\n"),
 	}
@@ -649,6 +908,7 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	}
 
 	require.Equal(t, uint32(0o755), modes["hook.sh"], "hook.sh must be executable so ./hook.sh works after unzip")
+	require.Equal(t, uint32(0o755), modes["hook_async.sh"], "hook_async.sh must be executable so ./hook_async.sh works after unzip")
 	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
 }

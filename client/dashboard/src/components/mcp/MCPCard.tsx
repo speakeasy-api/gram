@@ -58,6 +58,16 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
     ? `Installed from ${toolset.origin.registrySpecifier}`
     : undefined;
 
+  // External MCP "proxy" servers can't enumerate their tools until a user
+  // authenticates against them, so hide the misleading "No Tools" badge and
+  // surface the visible (non-proxy) tools only.
+  const visibleToolNames = toolset.tools
+    .filter((t) => !(t.type === "externalmcp" && t.name.endsWith(":proxy")))
+    .map((t) => t.name);
+  const isExternalMcpProxy = toolset.tools.some(
+    (t) => t.type === "externalmcp" && t.name.endsWith(":proxy"),
+  );
+
   return (
     <DotCard
       className="cursor-pointer"
@@ -117,7 +127,10 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
               <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
             </Button>
           )}
-          <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+          <ToolCollectionBadge
+            toolNames={visibleToolNames}
+            emptyLabel={isExternalMcpProxy ? null : undefined}
+          />
         </div>
       </div>
 

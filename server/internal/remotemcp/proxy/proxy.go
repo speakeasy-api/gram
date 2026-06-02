@@ -344,6 +344,19 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	userReq := &UserRequest{UserHTTPRequest: r, JSONRPCMessages: nil, body: nil, dirty: false}
 	if parseErr := userReq.ParseJSONRPCMessages(p.MaxBufferedBodyBytes); parseErr != nil {
+		// Batch (array) bodies are rejected ahead of the decoder so the
+		// user sees a spec-shaped JSON-RPC error envelope instead of a
+		// generic decode error. No id can be extracted from a batch
+		// body, so writeRejection takes the invalid-id branch (HTTP 400
+		// + envelope without the "id" field) per MCP Streamable HTTP.
+		if errors.Is(parseErr, ErrBatchRequest) {
+			responseBytes = p.writeRejection(ctx, w, span, jsonrpc.ID{}, &RejectError{
+				Code:    RejectCodeInvalidRequest,
+				Message: ErrBatchRequest.Error(),
+				Data:    nil,
+			})
+			return nil
+		}
 		return oops.E(oops.CodeBadRequest, parseErr, "invalid jsonrpc request").Log(ctx, p.Logger)
 	}
 
