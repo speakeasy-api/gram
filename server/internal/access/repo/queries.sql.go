@@ -13,6 +13,81 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const createOrganizationRole = `-- name: CreateOrganizationRole :one
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+RETURNING
+    id,
+    ('role:organization:' || id::text)::text AS role_urn,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    0::bigint AS member_count
+`
+
+type CreateOrganizationRoleParams struct {
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+type CreateOrganizationRoleRow struct {
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
+// Creates an org-scoped role. Duplicate slugs are surfaced as unique-constraint errors.
+func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganizationRoleParams) (CreateOrganizationRoleRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationRole,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	var i CreateOrganizationRoleRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
+}
+
 const deletePrincipalGrant = `-- name: DeletePrincipalGrant :execrows
 DELETE FROM principal_grants
 WHERE id = $1

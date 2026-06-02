@@ -12,7 +12,9 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
@@ -160,7 +162,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	now := time.Now().UTC()
-	createdRow, err := repo.New(tx).UpsertOrganizationRole(ctx, repo.UpsertOrganizationRoleParams{
+	createdRow, err := repo.New(tx).CreateOrganizationRole(ctx, repo.CreateOrganizationRoleParams{
 		OrganizationID:    gramOrgID,
 		WorkosSlug:        roleSlug,
 		WorkosName:        payload.Name,
@@ -169,10 +171,15 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
 		WorkosLastEventID: conv.ToPGTextEmpty(""),
 	})
-	if err != nil {
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation:
+		return roleCreateResult{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).Log(ctx, r.logger)
+	case err != nil:
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").Log(ctx, r.logger)
+		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "create local role record").Log(ctx, r.logger)
 	}
+
 	createdRole := localRole{
 		ID:           createdRow.ID.String(),
 		PrincipalURN: createdRow.RoleUrn,

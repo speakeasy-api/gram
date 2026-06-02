@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -130,7 +131,7 @@ func TestService_CreateRole_WorkOSConflictFailure(t *testing.T) {
 	require.Equal(t, "Custom Builder", role.Name)
 }
 
-func TestService_CreateRole_WorkOSConflictUsesLocalRole(t *testing.T) {
+func TestService_CreateRole_RejectsActiveLocalSlugCollision(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -139,24 +140,22 @@ func TestService_CreateRole_WorkOSConflictUsesLocalRole(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_1", "Custom Builder", "org-custom-builder", "Can build selected resources"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID), authz.ScopeRiskPolicyEvaluate, "policy-1")
-	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
-		Name:        "Custom Builder",
-		Slug:        "org-custom-builder",
-		Description: "Can build selected resources",
-	}).Return((*thirdpartyworkos.Role)(nil), &thirdpartyworkos.APIError{Method: "POST", Path: "/authorization/organizations/org_workos_test/roles", StatusCode: 409, Body: "role already exists"}).Once()
 
-	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 	})
-	require.NoError(t, err)
-	require.Equal(t, roleID, role.ID)
-	require.Equal(t, "Custom Builder", role.Name)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), `role "Custom Builder" already exists`)
+	ti.roles.AssertNotCalled(t, "CreateRole", mock.Anything, mock.Anything, mock.Anything)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
+	require.Len(t, grants, 1)
 	scopes := make([]string, 0, len(grants))
 	for _, grant := range grants {
 		scopes = append(scopes, grant.Scope)
