@@ -69,9 +69,12 @@ func TestService_UpdateRole(t *testing.T) {
 		ID:          roleID,
 		Name:        &name,
 		Description: &description,
-		Grants: []*gen.RoleGrant{
+		AddGrants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectWrite), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}, {ResourceKind: "project", ResourceID: "project-2"}}},
 			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
+		},
+		RemoveGrants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-old"}}},
 		},
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
@@ -84,7 +87,7 @@ func TestService_UpdateRole(t *testing.T) {
 	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
 	require.NotEmpty(t, role.UpdatedAt)
 	require.NotEqual(t, mockRoleTimestamp, role.UpdatedAt)
-	require.Len(t, role.Grants, 2)
+	require.Len(t, role.Grants, 3)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
 	require.Len(t, grants, 4)
@@ -158,8 +161,8 @@ func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
 	require.Contains(t, err.Error(), "system role properties cannot be updated")
 
 	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:     roleID,
-		Grants: []*gen.RoleGrant{{Scope: string(authz.ScopeProjectRead)}},
+		ID:        roleID,
+		AddGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeProjectRead)}},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "system role properties cannot be updated")
@@ -280,9 +283,13 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 		ID:          roleID,
 		Name:        &name,
 		Description: &description,
-		Grants: []*gen.RoleGrant{{
+		AddGrants: []*gen.RoleGrant{{
 			Scope:     string(authz.ScopeProjectWrite),
 			Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}},
+		}},
+		RemoveGrants: []*gen.RoleGrant{{
+			Scope:     string(authz.ScopeProjectRead),
+			Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-old"}},
 		}},
 	})
 	require.NoError(t, err)

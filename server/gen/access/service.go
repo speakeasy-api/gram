@@ -691,8 +691,10 @@ type UpdateRolePayload struct {
 	Name *string
 	// Updated description.
 	Description *string
-	// Updated scope grants.
-	Grants []*RoleGrant
+	// Scope grants to add.
+	AddGrants []*RoleGrant
+	// Scope grants to remove.
+	RemoveGrants []*RoleGrant
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string

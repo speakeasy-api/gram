@@ -360,11 +360,15 @@ func TestEngineFilter_withDimensions(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{Scope: ScopeMCPConnect, Selector: Selector{
-			"resource_kind": "mcp",
-			"resource_id":   "toolsetA",
-			"tool":          "tool_1",
-		}},
+		{
+			Scope:  ScopeMCPConnect,
+			Effect: PolicyEffectAllow,
+			Selector: Selector{
+				"resource_kind": "mcp",
+				"resource_id":   "toolsetA",
+				"tool":          "tool_1",
+			},
+		},
 	})
 
 	// Only tool_1 matches the grant — one resource ID returned.
@@ -383,11 +387,15 @@ func TestEngineFilter_withDisposition(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{Scope: ScopeMCPConnect, Selector: Selector{
-			"resource_kind": "mcp",
-			"resource_id":   "toolsetA",
-			"disposition":   "read_only",
-		}},
+		{
+			Scope:  ScopeMCPConnect,
+			Effect: PolicyEffectAllow,
+			Selector: Selector{
+				"resource_kind": "mcp",
+				"resource_id":   "toolsetA",
+				"disposition":   "read_only",
+			},
+		},
 	})
 
 	// read_only disposition matches, destructive does not.
@@ -425,11 +433,15 @@ func TestEngineFilter_projectScopedGrantMatchesServersInProject(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{Scope: ScopeMCPConnect, Selector: Selector{
-			"resource_kind": "mcp",
-			"resource_id":   "*",
-			"project_id":    "proj_A",
-		}},
+		{
+			Scope:  ScopeMCPConnect,
+			Effect: PolicyEffectAllow,
+			Selector: Selector{
+				"resource_kind": "mcp",
+				"resource_id":   "*",
+				"project_id":    "proj_A",
+			},
+		},
 	})
 
 	// Server in proj_A matches; server in proj_B does not.
@@ -448,11 +460,15 @@ func TestEngineRequire_projectScopedGrantAllowsToolsInProject(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{Scope: ScopeMCPConnect, Selector: Selector{
-			"resource_kind": "mcp",
-			"resource_id":   "*",
-			"project_id":    "proj_A",
-		}},
+		{
+			Scope:  ScopeMCPConnect,
+			Effect: PolicyEffectAllow,
+			Selector: Selector{
+				"resource_kind": "mcp",
+				"resource_id":   "*",
+				"project_id":    "proj_A",
+			},
+		},
 	})
 
 	// Tool call on server in proj_A should pass.
@@ -479,11 +495,15 @@ func TestEngineRequire_projectScopedMCPReadGrant(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{Scope: ScopeMCPRead, Selector: Selector{
-			"resource_kind": "mcp",
-			"resource_id":   "*",
-			"project_id":    "proj_A",
-		}},
+		{
+			Scope:  ScopeMCPRead,
+			Effect: PolicyEffectAllow,
+			Selector: Selector{
+				"resource_kind": "mcp",
+				"resource_id":   "*",
+				"project_id":    "proj_A",
+			},
+		},
 	})
 
 	// mcp:read check for server in proj_A passes.
@@ -505,11 +525,15 @@ func TestEngineFilter_projectAndServerGrantsCombine(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		// Project-scoped grant for proj_A
-		{Scope: ScopeMCPConnect, Selector: Selector{
-			"resource_kind": "mcp",
-			"resource_id":   "*",
-			"project_id":    "proj_A",
-		}},
+		{
+			Scope:  ScopeMCPConnect,
+			Effect: PolicyEffectAllow,
+			Selector: Selector{
+				"resource_kind": "mcp",
+				"resource_id":   "*",
+				"project_id":    "proj_A",
+			},
+		},
 		// Server-specific grant for serverZ (in proj_B)
 		NewGrant(ScopeMCPConnect, "serverZ"),
 	})
@@ -927,9 +951,9 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	require.False(t, enforce)
 }
 
-// TestSyncGrants_denyEffectSurvivesDBRoundTrip verifies that deny grants
-// written via SyncGrants are read back with the correct effect by GrantsForRole.
-func TestSyncGrants_denyEffectSurvivesDBRoundTrip(t *testing.T) {
+// TestReplaceRoleGrants_denyEffectSurvivesDBRoundTrip verifies that deny grants
+// written via ReplaceRoleGrants are read back with the correct effect by GrantsForRole.
+func TestReplaceRoleGrants_denyEffectSurvivesDBRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	conn := newTestDB(t)
@@ -945,7 +969,7 @@ func TestSyncGrants_denyEffectSurvivesDBRoundTrip(t *testing.T) {
 		{Scope: string(ScopeMCPConnect), Effect: PolicyEffectDeny, Selectors: []Selector{NewSelector(ScopeMCPConnect, "server_blocked")}}, // deny specific
 	}
 
-	err := SyncGrants(ctx, testenv.NewLogger(t), conn, orgID, roleSlug, rolePrincipalURN, grants)
+	err := ReplaceRoleGrants(ctx, testenv.NewLogger(t), conn, orgID, roleSlug, rolePrincipalURN, grants)
 	require.NoError(t, err)
 
 	scoped, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, orgID, roleSlug, rolePrincipalURN)
@@ -965,7 +989,7 @@ func TestSyncGrants_denyEffectSurvivesDBRoundTrip(t *testing.T) {
 	}
 
 	require.NotNil(t, allowGrant, "expected allow grant for mcp:connect")
-	require.Nil(t, allowGrant.Selectors, "wildcard allow should have nil selectors")
+	require.Equal(t, []Selector{NewSelector(ScopeMCPConnect, WildcardResource)}, allowGrant.Selectors)
 
 	require.NotNil(t, denyGrant, "expected deny grant for mcp:connect")
 	require.Len(t, denyGrant.Selectors, 1)

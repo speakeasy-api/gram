@@ -79,6 +79,50 @@ func TestSelector_ResourceID_absent(t *testing.T) {
 	require.Equal(t, "*", Selector(nil).ResourceID())
 }
 
+func TestSelector_IsRestricted(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		selector   Selector
+		restricted bool
+	}{
+		{
+			name:       "pure wildcard",
+			selector:   Selector{"resource_kind": "*", "resource_id": "*"},
+			restricted: false,
+		},
+		{
+			name:       "scope wildcard is still scoped",
+			selector:   Selector{"resource_kind": "mcp", "resource_id": "*"},
+			restricted: true,
+		},
+		{
+			name:       "extra dimension is scoped",
+			selector:   Selector{"resource_kind": "*", "resource_id": "*", "tool": "dangerous"},
+			restricted: true,
+		},
+		{
+			name:       "missing kind fails closed",
+			selector:   Selector{"resource_id": "*"},
+			restricted: true,
+		},
+		{
+			name:       "nil fails closed",
+			selector:   nil,
+			restricted: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.restricted, tt.selector.IsRestricted())
+		})
+	}
+}
+
 func TestSelector_MarshalJSON_nil(t *testing.T) {
 	t.Parallel()
 
@@ -250,13 +294,6 @@ func TestValidateSelector_riskPolicyAllowsOnlyResourceKeys(t *testing.T) {
 
 	withExtraKey := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "tool": "search"}
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, withExtraKey), "not allowed")
-}
-
-func TestScopeIsInternal(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, ScopeRiskPolicyEvaluate.IsInternal())
-	require.False(t, ScopeProjectRead.IsInternal())
 }
 
 func TestMCPCheck_injectsProjectID(t *testing.T) {

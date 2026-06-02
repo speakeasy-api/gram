@@ -92,25 +92,3 @@ func CalculateSubScopes(scope Scope) []string {
 	}
 	return out
 }
-
-// IsInternal reports whether a scope is used as an internal relation
-// rather than a user-facing RBAC capability.
-func (s Scope) IsInternal() bool {
-	switch s {
-	case ScopeRiskPolicyEvaluate:
-		return true
-	default:
-		return false
-	}
-}
-
-func replaceableRoleGrantScopes() []string {
-	out := make([]string, 0, len(scopeExpansions))
-	for scope := range scopeExpansions {
-		if !scope.IsInternal() {
-			out = append(out, string(scope))
-		}
-	}
-	slices.Sort(out)
-	return out
-}

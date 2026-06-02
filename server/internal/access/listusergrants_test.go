@@ -24,6 +24,7 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeMCPConnect),
 	string(authz.ScopeEnvironmentRead),
 	string(authz.ScopeEnvironmentWrite),
+	string(authz.ScopeRiskPolicyEvaluate),
 }
 
 func TestService_ListGrants(t *testing.T) {
@@ -45,7 +46,7 @@ func TestService_ListGrants(t *testing.T) {
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Grants, 2)
+	require.Len(t, result.Grants, 3)
 	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
 	for _, grant := range result.Grants {
 		byScope[grant.Scope] = grant
@@ -54,6 +55,8 @@ func TestService_ListGrants(t *testing.T) {
 	require.Equal(t, "project_123", byScope["project:read"].Selectors[0].ResourceID)
 	require.Len(t, byScope["mcp:connect"].Selectors, 1)
 	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
+	require.Len(t, byScope["risk_policy:evaluate"].Selectors, 1)
+	require.Equal(t, "policy_123", byScope["risk_policy:evaluate"].Selectors[0].ResourceID)
 }
 
 func TestService_ListGrants_RoleGrants(t *testing.T) {

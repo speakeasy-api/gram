@@ -20,27 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const WildcardResource = "*"
-
-// allScopeGrants returns wildcard grants for every defined scope. Used to give
-// superadmins (e.g. during org impersonation) unrestricted access.
-func allScopeGrants() []Grant {
-	scopes := []Scope{
-		ScopeOrgRead, ScopeOrgAdmin,
-		ScopeProjectRead, ScopeProjectWrite,
-		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
-		ScopeEnvironmentRead, ScopeEnvironmentWrite,
-	}
-	grants := make([]Grant, 0, len(scopes))
-	for _, s := range scopes {
-		grants = append(grants, NewGrant(s, WildcardResource))
-	}
-	return grants
-}
-
 const (
 	SystemRoleAdmin  = "admin"
 	SystemRoleMember = "member"
+	WildcardResource = "*"
 )
 
 // PolicyEffect determines whether a grant allows or denies the matched scope.
@@ -51,9 +34,56 @@ const (
 	PolicyEffectDeny  PolicyEffect = "deny"
 )
 
+var allScopes = []Scope{
+	ScopeOrgRead,
+	ScopeOrgAdmin,
+	ScopeProjectRead,
+	ScopeProjectWrite,
+	ScopeMCPRead,
+	ScopeMCPWrite,
+	ScopeMCPConnect,
+	ScopeEnvironmentRead,
+	ScopeEnvironmentWrite,
+	ScopeRiskPolicyEvaluate,
+}
+
+var adminScopes = []Scope{
+	ScopeOrgRead,
+	ScopeOrgAdmin,
+	ScopeProjectRead,
+	ScopeProjectWrite,
+	ScopeMCPRead,
+	ScopeMCPWrite,
+	ScopeMCPConnect,
+	ScopeEnvironmentRead,
+	ScopeEnvironmentWrite,
+}
+
+var memberScopes = []Scope{
+	ScopeOrgRead,
+	ScopeProjectRead,
+	ScopeMCPRead,
+	ScopeMCPConnect,
+	ScopeEnvironmentRead,
+}
+
 type RoleGrant struct {
 	Scope     string
 	Effect    PolicyEffect
+	Selectors []Selector
+}
+
+type Grant struct {
+	PrincipalUrn string
+	Scope        Scope
+	Effect       PolicyEffect
+	Selector     Selector
+}
+
+type ScopedGrant struct {
+	Scope     string
+	Effect    PolicyEffect
+	SubScopes []string
 	Selectors []Selector
 }
 
@@ -61,24 +91,8 @@ type RoleGrant struct {
 // roles. These are seeded when RBAC is enabled and replace any existing grants
 // for these roles (idempotent, won't clobber custom roles).
 var SystemRoleGrants = map[string][]*RoleGrant{
-	SystemRoleAdmin: {
-		{Scope: string(ScopeOrgAdmin)},
-		{Scope: string(ScopeOrgRead)},
-		{Scope: string(ScopeProjectRead)},
-		{Scope: string(ScopeProjectWrite)},
-		{Scope: string(ScopeMCPRead)},
-		{Scope: string(ScopeMCPWrite)},
-		{Scope: string(ScopeMCPConnect)},
-		{Scope: string(ScopeEnvironmentRead)},
-		{Scope: string(ScopeEnvironmentWrite)},
-	},
-	SystemRoleMember: {
-		{Scope: string(ScopeOrgRead)},
-		{Scope: string(ScopeProjectRead)},
-		{Scope: string(ScopeMCPRead)},
-		{Scope: string(ScopeMCPConnect)},
-		{Scope: string(ScopeEnvironmentRead)},
-	},
+	SystemRoleAdmin:  roleGrantsForScopes(adminScopes),
+	SystemRoleMember: roleGrantsForScopes(memberScopes),
 }
 
 // SeedSystemRoleGrants upserts the fixed grant sets for all system roles.
@@ -117,28 +131,14 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 				return fmt.Errorf("seed %s role: %w", roleSlug, err)
 			}
 		}
-		if err := SyncGrants(ctx, logger, db, organizationID, roleSlug, "", grants); err != nil {
+		if err := ReplaceRoleGrants(ctx, logger, db, organizationID, roleSlug, "", grants); err != nil {
 			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
 		}
 	}
 	return nil
 }
 
-type Grant struct {
-	PrincipalUrn string
-	Scope        Scope
-	Effect       PolicyEffect
-	Selector     Selector
-}
-
-type ScopedGrant struct {
-	Scope     string
-	Effect    PolicyEffect
-	SubScopes []string
-	Selectors []Selector
-}
-
-func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string, grants []*RoleGrant) error {
+func ReplaceRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string, grants []*RoleGrant) error {
 	if orgID == "" {
 		return fmt.Errorf("organization id is required")
 	}
@@ -149,7 +149,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	if _, err := SyncGrantsTx(ctx, tx, orgID, roleSlug, rolePrincipalURN, grants); err != nil {
+	if _, err := ReplaceRoleGrantsTx(ctx, tx, orgID, roleSlug, rolePrincipalURN, grants); err != nil {
 		return err
 	}
 
@@ -160,76 +160,111 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 	return nil
 }
 
-func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug string, rolePrincipalURN string, grants []*RoleGrant) ([]*ScopedGrant, error) {
+func ReplaceRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug string, rolePrincipalURN string, grants []*RoleGrant) ([]*ScopedGrant, error) {
 	if orgID == "" {
 		return nil, fmt.Errorf("organization id is required")
 	}
 
-	if rolePrincipalURN == "" {
-		role, err := repo.New(dbtx).GetActiveOrganizationRoleBySlug(ctx, repo.GetActiveOrganizationRoleBySlugParams{
-			OrganizationID: orgID,
-			WorkosSlug:     roleSlug,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("resolve role principal for %q: %w", roleSlug, err)
-		}
-		rolePrincipalURN = role.RoleUrn
-	}
-
-	principalURN, err := urn.ParsePrincipal(rolePrincipalURN)
+	roleIdentity, err := resolveRoleGrantIdentity(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
 	if err != nil {
-		return nil, fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
+		return nil, err
 	}
 
 	q := repo.New(dbtx)
 	// During the role-principal migration, replace grants for both the new
 	// role:<kind>:<uuid> principal and the legacy role:<slug> principal. New
 	// writes below only insert the canonical URN form.
-	if err := deleteReplaceableRoleGrants(ctx, q, orgID, roleSlug, rolePrincipalURN); err != nil {
+	if err := deleteRoleGrantPrincipals(ctx, q, orgID, roleIdentity); err != nil {
 		return nil, err
 	}
 
-	grantRows := make([]Grant, 0, len(grants))
-	seenGrants := make(map[string]struct{}, len(grants))
+	rows, err := roleGrantRowsFromRoleGrants(grants)
+	if err != nil {
+		return nil, err
+	}
+	if err := upsertRoleGrantRows(ctx, q, orgID, roleIdentity, rows); err != nil {
+		return nil, err
+	}
+
+	return GrantsToScopedGrants(grantsFromRows(roleIdentity.WritePrincipal, rows)), nil
+}
+
+// PatchRoleGrantsTx applies exact grant additions and removals for a role
+// principal without treating omitted grants as deletes.
+func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug string, rolePrincipalURN string, addGrants []*RoleGrant, removeGrants []*RoleGrant) ([]*ScopedGrant, error) {
+	if orgID == "" {
+		return nil, fmt.Errorf("organization id is required")
+	}
+
+	roleIdentity, err := resolveRoleGrantIdentity(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
+	if err != nil {
+		return nil, err
+	}
+
+	q := repo.New(dbtx)
+	removeRows, err := roleGrantRowsFromRoleGrants(removeGrants)
+	if err != nil {
+		return nil, err
+	}
+	if err := deleteRoleGrantRows(ctx, q, orgID, roleIdentity, removeRows); err != nil {
+		return nil, err
+	}
+
+	addRows, err := roleGrantRowsFromRoleGrants(addGrants)
+	if err != nil {
+		return nil, err
+	}
+	if err := upsertRoleGrantRows(ctx, q, orgID, roleIdentity, addRows); err != nil {
+		return nil, err
+	}
+
+	principalURNs, err := parsePrincipalURNs(roleIdentity.MatchPrincipals)
+	if err != nil {
+		return nil, fmt.Errorf("build role principals: %w", err)
+	}
+	rows, err := q.GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
+		OrganizationID: orgID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list grants for role: %w", err)
+	}
+
+	return scopedGrantsFromGrantRows(rows)
+}
+
+type roleGrantRow struct {
+	Scope       Scope
+	Effect      PolicyEffect
+	Selector    Selector
+	SelectorRaw []byte
+}
+
+type roleGrantKey struct {
+	scope    Scope
+	effect   PolicyEffect
+	selector string
+}
+
+func roleGrantRowsFromRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
+	rows := make([]roleGrantRow, 0, len(grants))
+	seenGrants := make(map[roleGrantKey]struct{}, len(grants))
 	for _, grant := range grants {
 		if grant == nil {
 			continue
 		}
 
 		scope := Scope(grant.Scope)
-		effect := effectOrDefault(grant.Effect)
+		effect := conv.Default(grant.Effect, PolicyEffectAllow)
 
-		// nil selectors = unrestricted (wildcard) access for this scope.
-		// Empty non-nil slice ([]Selector{}) = no grant rows (no access).
-		if grant.Selectors == nil {
-			sel := NewSelector(scope, WildcardResource)
-			selBytes, err := sel.MarshalJSON()
-			if err != nil {
-				return nil, fmt.Errorf("marshal wildcard selector for %q: %w", grant.Scope, err)
-			}
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-				OrganizationID: orgID,
-				PrincipalUrn:   principalURN,
-				Scope:          grant.Scope,
-				Effect:         effectToPgtype(effect),
-				Selectors:      selBytes,
-			}); err != nil {
-				return nil, fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
-			}
-			grantKey := grant.Scope + "\x00" + string(selBytes)
-			if _, ok := seenGrants[grantKey]; !ok {
-				seenGrants[grantKey] = struct{}{}
-				grantRows = append(grantRows, Grant{
-					PrincipalUrn: principalURN.String(),
-					Scope:        scope,
-					Effect:       effect,
-					Selector:     sel,
-				})
-			}
-			continue
+		selectors := grant.Selectors
+		// nil selectors = unrestricted wildcard access.
+		// empty non-nil selectors = no rows.
+		if selectors == nil {
+			selectors = []Selector{NewSelector(scope, WildcardResource)}
 		}
 
-		for _, sel := range grant.Selectors {
+		for _, sel := range selectors {
 			if err := ValidateSelector(scope, sel); err != nil {
 				return nil, fmt.Errorf("invalid selector for scope %q: %w", grant.Scope, err)
 			}
@@ -238,115 +273,72 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 			if err != nil {
 				return nil, fmt.Errorf("marshal selector for scope %q: %w", grant.Scope, err)
 			}
-			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			grantKey := roleGrantKey{scope: scope, effect: effect, selector: string(selBytes)}
+			if _, ok := seenGrants[grantKey]; ok {
+				continue
+			}
+			seenGrants[grantKey] = struct{}{}
+			rows = append(rows, roleGrantRow{
+				Scope:       scope,
+				Effect:      effect,
+				Selector:    sel,
+				SelectorRaw: selBytes,
+			})
+		}
+	}
+
+	return rows, nil
+}
+
+func upsertRoleGrantRows(ctx context.Context, q *repo.Queries, orgID string, roleIdentity roleGrantIdentity, rows []roleGrantRow) error {
+	for _, row := range rows {
+		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			OrganizationID: orgID,
+			PrincipalUrn:   roleIdentity.WritePrincipal,
+			Scope:          string(row.Scope),
+			Effect:         effectToPgtype(row.Effect),
+			Selectors:      row.SelectorRaw,
+		}); err != nil {
+			return fmt.Errorf("upsert grant %q for role %q: %w", row.Scope, roleIdentity.Slug, err)
+		}
+	}
+
+	return nil
+}
+
+func deleteRoleGrantRows(ctx context.Context, q *repo.Queries, orgID string, roleIdentity roleGrantIdentity, rows []roleGrantRow) error {
+	for _, principal := range roleIdentity.MatchPrincipals {
+		for _, row := range rows {
+			if _, err := q.DeletePrincipalGrantByIdentity(ctx, repo.DeletePrincipalGrantByIdentityParams{
 				OrganizationID: orgID,
-				PrincipalUrn:   principalURN,
-				Scope:          grant.Scope,
-				Effect:         effectToPgtype(effect),
-				Selectors:      selBytes,
+				PrincipalUrn:   principal,
+				Scope:          string(row.Scope),
+				Effect:         string(row.Effect),
+				Selectors:      row.SelectorRaw,
 			}); err != nil {
-				return nil, fmt.Errorf("upsert grant %q for role %q: %w", grant.Scope, roleSlug, err)
-			}
-			grantKey := grant.Scope + "\x00" + string(selBytes)
-			if _, ok := seenGrants[grantKey]; !ok {
-				seenGrants[grantKey] = struct{}{}
-				grantRows = append(grantRows, Grant{
-					PrincipalUrn: principalURN.String(),
-					Scope:        scope,
-					Effect:       effect,
-					Selector:     sel,
-				})
+				return fmt.Errorf("delete grant %q for role %q: %w", row.Scope, roleIdentity.Slug, err)
 			}
 		}
-	}
-
-	return GrantsToScopedGrants(grantRows), nil
-}
-
-func deleteReplaceableRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rolePrincipalURN string) error {
-	principalURN, err := urn.ParsePrincipal(rolePrincipalURN)
-	if err != nil {
-		return fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
-	}
-
-	scopes := replaceableRoleGrantScopes()
-	if _, err := q.DeletePrincipalGrantsByScope(ctx, repo.DeletePrincipalGrantsByScopeParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   principalURN,
-		Scopes:         scopes,
-	}); err != nil {
-		return fmt.Errorf("delete grants by scope for role %q: %w", roleSlug, err)
-	}
-
-	legacyPrincipalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-	if legacyPrincipalURN.String() == principalURN.String() {
-		return nil
-	}
-	if _, err := q.DeletePrincipalGrantsByScope(ctx, repo.DeletePrincipalGrantsByScopeParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   legacyPrincipalURN,
-		Scopes:         scopes,
-	}); err != nil {
-		return fmt.Errorf("delete legacy grants by scope for role %q: %w", roleSlug, err)
 	}
 
 	return nil
 }
 
-func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rolePrincipalURN string) error {
-	principalURN, err := urn.ParsePrincipal(rolePrincipalURN)
-	if err != nil {
-		return fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
+func grantsFromRows(principalURN urn.Principal, rows []roleGrantRow) []Grant {
+	grants := make([]Grant, 0, len(rows))
+	for _, row := range rows {
+		grants = append(grants, Grant{
+			PrincipalUrn: principalURN.String(),
+			Scope:        row.Scope,
+			Effect:       row.Effect,
+			Selector:     row.Selector,
+		})
 	}
 
-	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   principalURN,
-	}); err != nil {
-		return fmt.Errorf("delete grants for role %q: %w", roleSlug, err)
-	}
-
-	legacyPrincipalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-	if legacyPrincipalURN.String() == principalURN.String() {
-		return nil
-	}
-	// Legacy grants were keyed by role slug (role:<slug>). Keep deleting that
-	// principal alongside the canonical role URN until the backfill is complete.
-	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   legacyPrincipalURN,
-	}); err != nil {
-		return fmt.Errorf("delete legacy grants for role %q: %w", roleSlug, err)
-	}
-
-	return nil
-}
-
-func RolePrincipals(roleSlug, rolePrincipalURN string) ([]urn.Principal, error) {
-	// TODO(AGE-1954): drop legacy role:<slug> principals after the role-principal backfill is complete.
-	// Keep the legacy role:<slug> principal until the role-principal backfill
-	// has moved existing grants to role:<kind>:<uuid>.
-	principals := make([]urn.Principal, 0, 2)
-	if rolePrincipalURN != "" {
-		principal, err := urn.ParsePrincipal(rolePrincipalURN)
-		if err != nil {
-			return nil, fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
-		}
-		principals = append(principals, principal)
-	}
-
-	legacyPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
-	if rolePrincipalURN == "" || legacyPrincipal.String() != rolePrincipalURN {
-		principals = append(principals, legacyPrincipal)
-	}
-
-	return principals, nil
+	return grants
 }
 
 func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string) ([]*ScopedGrant, error) {
-	// TODO(AGE-1954): remove dual-read after legacy role:<slug> grants are backfilled.
-	// During the role-principal migration, reads include both the canonical
-	// role:<kind>:<uuid> principal and the legacy role:<slug> principal.
 	principals, err := RolePrincipals(roleSlug, rolePrincipalURN)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
@@ -376,9 +368,6 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
 		scope := Scope(row.Scope)
-		if scope.IsInternal() {
-			continue
-		}
 		selectors, err := SelectorFromRow(row.Selectors)
 		if err != nil {
 			return nil, err
@@ -392,12 +381,6 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 	}
 
 	return GrantsToScopedGrants(grantRows), nil
-}
-
-// effectOrDefault returns the effect, defaulting to allow for backward
-// compatibility with existing grants that have no explicit effect.
-func effectOrDefault(e PolicyEffect) PolicyEffect {
-	return conv.Default(e, PolicyEffectAllow)
 }
 
 // effectToPgtype converts a PolicyEffect to pgtype.Text for DB storage.
@@ -432,33 +415,43 @@ type scopeAgg struct {
 }
 
 // GrantsToScopedGrants groups raw grants by scope+effect, collapsing wildcards.
-// TODO: simplify — this method is getting complex; consider breaking into
-// smaller steps (grouping, wildcard collapsing, output building).
 func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
-	byKey := make(map[scopeEffectKey]*scopeAgg)
-	for _, row := range rows {
-		effect := effectOrDefault(row.Effect)
-		key := scopeEffectKey{scope: string(row.Scope), effect: effect}
-		agg, ok := byKey[key]
-		if !ok {
-			agg = &scopeAgg{unrestricted: false, selectors: nil}
-			byKey[key] = agg
-		}
-		resourceID := row.Selector.ResourceID()
-		if resourceID == WildcardResource && len(row.Selector) <= 2 {
-			// Pure wildcard: {"resource_kind":"*","resource_id":"*"} or similar.
-			agg.unrestricted = true
-			agg.selectors = nil
-			continue
-		}
-		if !agg.unrestricted {
-			agg.selectors = append(agg.selectors, row.Selector)
-		}
-	}
+	grouped := groupGrantsByScopeEffect(rows)
+	collapsed := collapseUnrestrictedSelectors(grouped)
+	keys := sortedScopeEffectKeys(collapsed)
+	return buildScopedGrants(keys, collapsed)
+}
 
-	keys := make([]scopeEffectKey, 0, len(byKey))
-	for k := range byKey {
-		keys = append(keys, k)
+func groupGrantsByScopeEffect(rows []Grant) map[scopeEffectKey][]Selector {
+	grouped := make(map[scopeEffectKey][]Selector)
+	for _, row := range rows {
+		key := scopeEffectKey{scope: string(row.Scope), effect: row.Effect}
+		grouped[key] = append(grouped[key], row.Selector)
+	}
+	return grouped
+}
+
+func collapseUnrestrictedSelectors(grouped map[scopeEffectKey][]Selector) map[scopeEffectKey]scopeAgg {
+	collapsed := make(map[scopeEffectKey]scopeAgg, len(grouped))
+	for key, selectors := range grouped {
+		agg := scopeAgg{unrestricted: false, selectors: nil}
+		for _, selector := range selectors {
+			if !selector.IsRestricted() {
+				agg.unrestricted = true
+				agg.selectors = nil
+				break
+			}
+			agg.selectors = append(agg.selectors, selector)
+		}
+		collapsed[key] = agg
+	}
+	return collapsed
+}
+
+func sortedScopeEffectKeys(grouped map[scopeEffectKey]scopeAgg) []scopeEffectKey {
+	keys := make([]scopeEffectKey, 0, len(grouped))
+	for key := range grouped {
+		keys = append(keys, key)
 	}
 	slices.SortFunc(keys, func(a, b scopeEffectKey) int {
 		if c := cmp.Compare(a.scope, b.scope); c != 0 {
@@ -466,10 +459,13 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 		}
 		return cmp.Compare(string(a.effect), string(b.effect))
 	})
+	return keys
+}
 
-	grants := make([]*ScopedGrant, 0, len(byKey))
+func buildScopedGrants(keys []scopeEffectKey, grouped map[scopeEffectKey]scopeAgg) []*ScopedGrant {
+	grants := make([]*ScopedGrant, 0, len(keys))
 	for _, key := range keys {
-		agg := byKey[key]
+		agg := grouped[key]
 		subScopes := CalculateSubScopes(Scope(key.scope))
 
 		grant := &ScopedGrant{Scope: key.scope, Effect: key.effect, SubScopes: subScopes, Selectors: nil}
@@ -490,42 +486,49 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 // Returns the first matching allow grant+check pair if permitted, nil otherwise.
 // Also returns whether a deny was matched (for logging).
 func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowCheck *Check, denied bool) {
-	var firstAllow *Grant
-	var firstAllowCheck *Check
-
 	for i := range grants {
 		grant := &grants[i]
-		effect := effectOrDefault(grant.Effect)
+		if grant.Effect != PolicyEffectDeny {
+			continue
+		}
+
 		for j := range checks {
 			check := &checks[j]
-			checkSel := check.selector()
 			if grant.Scope != check.Scope {
 				continue
 			}
 
-			if effect == PolicyEffectDeny {
-				// Deny only matches the original scope, not expanded parents.
-				// Uses StrictMatches: every dimension in the deny selector must
-				// be present in the check. This prevents a tool-scoped deny
-				// from blocking a dimensionless server-level connect probe.
-				if !check.expanded && grant.Selector.StrictMatches(checkSel) {
-					return nil, nil, true
-				}
-				continue
-			}
-
-			// Allow: permissive matching (skip missing dimensions).
-			if !grant.Selector.Matches(checkSel) {
-				continue
-			}
-			if firstAllow == nil {
-				firstAllow = grant
-				firstAllowCheck = check
+			// Deny only matches the original scope, not expanded parents.
+			// Uses StrictMatches: every dimension in the deny selector must
+			// be present in the check. This prevents a tool-scoped deny
+			// from blocking a dimensionless server-level connect probe.
+			if !check.expanded && grant.Selector.StrictMatches(check.selector()) {
+				return nil, nil, true
 			}
 		}
 	}
 
-	return firstAllow, firstAllowCheck, false
+	for i := range grants {
+		grant := &grants[i]
+		if grant.Effect != PolicyEffectAllow {
+			continue
+		}
+
+		for j := range checks {
+			check := &checks[j]
+			if grant.Scope != check.Scope {
+				continue
+			}
+
+			// Allow: permissive matching (skip missing dimensions).
+			if !grant.Selector.Matches(check.selector()) {
+				continue
+			}
+			return grant, check, false
+		}
+	}
+
+	return nil, nil, false
 }
 
 // findMatchingGrant compares a list of grants against a list of checks and returns
@@ -533,4 +536,26 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 func findMatchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	allow, check, _ := evaluateGrants(grants, checks)
 	return allow, check
+}
+
+// allScopeGrants returns wildcard grants for every defined scope. Used to give
+// superadmins (e.g. during org impersonation) unrestricted access.
+func allScopeGrants() []Grant {
+	grants := make([]Grant, 0, len(allScopes))
+	for _, s := range allScopes {
+		grants = append(grants, NewGrant(s, WildcardResource))
+	}
+	return grants
+}
+
+func roleGrantsForScopes(scopes []Scope) []*RoleGrant {
+	grants := make([]*RoleGrant, 0, len(scopes))
+	for _, scope := range scopes {
+		grants = append(grants, &RoleGrant{
+			Scope:     string(scope),
+			Effect:    PolicyEffectAllow,
+			Selectors: nil,
+		})
+	}
+	return grants
 }

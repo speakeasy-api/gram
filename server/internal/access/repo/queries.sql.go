@@ -33,6 +33,38 @@ func (q *Queries) DeletePrincipalGrant(ctx context.Context, arg DeletePrincipalG
 	return result.RowsAffected(), nil
 }
 
+const deletePrincipalGrantByIdentity = `-- name: DeletePrincipalGrantByIdentity :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND COALESCE(effect, 'allow') = COALESCE($4::text, 'allow')
+  AND selectors = $5
+`
+
+type DeletePrincipalGrantByIdentityParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Effect         string
+	Selectors      []byte
+}
+
+// Removes a specific grant row by principal, scope, effect, and selector.
+func (q *Queries) DeletePrincipalGrantByIdentity(ctx context.Context, arg DeletePrincipalGrantByIdentityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalGrantByIdentity,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deletePrincipalGrantsByPrincipal = `-- name: DeletePrincipalGrantsByPrincipal :execrows
 DELETE FROM principal_grants
 WHERE organization_id = $1
@@ -79,28 +111,6 @@ func (q *Queries) DeletePrincipalGrantsByResource(ctx context.Context, arg Delet
 		arg.ResourceKind,
 		arg.ResourceID,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deletePrincipalGrantsByScope = `-- name: DeletePrincipalGrantsByScope :execrows
-DELETE FROM principal_grants
-WHERE organization_id = $1
-  AND principal_urn = $2
-  AND scope = ANY($3::text[])
-`
-
-type DeletePrincipalGrantsByScopeParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scopes         []string
-}
-
-// Removes grants for a specific principal and scope set within an org.
-func (q *Queries) DeletePrincipalGrantsByScope(ctx context.Context, arg DeletePrincipalGrantsByScopeParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deletePrincipalGrantsByScope, arg.OrganizationID, arg.PrincipalUrn, arg.Scopes)
 	if err != nil {
 		return 0, err
 	}

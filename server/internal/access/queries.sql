@@ -44,6 +44,15 @@ DELETE FROM principal_grants
 WHERE id = @id
   AND organization_id = @organization_id;
 
+-- name: DeletePrincipalGrantByIdentity :execrows
+-- Removes a specific grant row by principal, scope, effect, and selector.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
+  AND selectors = @selectors;
+
 -- name: DeletePrincipalGrantsByResource :execrows
 -- Removes grant rows for a single resource selector.
 DELETE FROM principal_grants
@@ -60,13 +69,6 @@ WHERE organization_id = @organization_id
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn;
-
--- name: DeletePrincipalGrantsByScope :execrows
--- Removes grants for a specific principal and scope set within an org.
-DELETE FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_urn = @principal_urn
-  AND scope = ANY(@scopes::text[]);
 
 -- name: HasActiveOrganizationUser :one
 -- Returns whether a Gram user is an active member of the organization.

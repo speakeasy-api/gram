@@ -42,7 +42,7 @@ func TestService_GetRole(t *testing.T) {
 	require.Equal(t, 2, role.MemberCount)
 	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
 	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
-	require.Len(t, role.Grants, 2)
+	require.Len(t, role.Grants, 3)
 
 	grantsByScope := make(map[string]*gen.RoleGrant, len(role.Grants))
 	for _, grant := range role.Grants {
@@ -51,7 +51,10 @@ func TestService_GetRole(t *testing.T) {
 	sels := grantsByScope[string(authz.ScopeProjectRead)].Selectors
 	require.Len(t, sels, 1)
 	require.Equal(t, "project-1", sels[0].ResourceID)
-	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Selectors)
+	mcpSelectors := grantsByScope[string(authz.ScopeMCPConnect)].Selectors
+	require.Len(t, mcpSelectors, 1)
+	require.Equal(t, authz.WildcardResource, mcpSelectors[0].ResourceID)
+	require.Equal(t, "policy-1", grantsByScope[string(authz.ScopeRiskPolicyEvaluate)].Selectors[0].ResourceID)
 }
 
 func TestService_GetRole_NotFound(t *testing.T) {

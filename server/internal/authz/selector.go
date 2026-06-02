@@ -204,6 +204,14 @@ func (s Selector) ResourceID() string {
 	return WildcardResource
 }
 
+// IsRestricted reports whether the selector constrains at least one resource
+// dimension.
+func (s Selector) IsRestricted() bool {
+	return len(s) != 2 ||
+		s["resource_kind"] != WildcardResource ||
+		s["resource_id"] != WildcardResource
+}
+
 // SelectorFromRow parses the selectors JSONB column into a Selector.
 func SelectorFromRow(selectors []byte) (Selector, error) {
 	var sel Selector

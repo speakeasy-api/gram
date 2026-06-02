@@ -247,6 +247,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
 		{Slug: string(authz.ScopeEnvironmentRead), Description: "View environments and their entries within the project.", ResourceType: "environment"},
 		{Slug: string(authz.ScopeEnvironmentWrite), Description: "Add, edit, clone, and remove environments within the project.", ResourceType: "environment"},
+		{Slug: string(authz.ScopeRiskPolicyEvaluate), Description: "Evaluate risk policies.", ResourceType: "risk_policy"},
 	}}, nil
 }
 
@@ -485,6 +486,7 @@ func allScopesGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 	}
 }
 
@@ -492,9 +494,6 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
-		if authz.Scope(g.Scope).IsInternal() {
-			continue
-		}
 		var selectors []*gen.Selector
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))

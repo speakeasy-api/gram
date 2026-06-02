@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,6 +14,37 @@ func TestScopeParts(t *testing.T) {
 	require.Equal(t, ScopeParts{Resource: "project", Action: "read"}, ScopeProjectRead.Parts())
 	require.Equal(t, ScopeParts{Resource: "risk_policy", Action: "evaluate"}, ScopeRiskPolicyEvaluate.Parts())
 	require.Equal(t, ScopeParts{Resource: "root", Action: ""}, ScopeRoot.Parts())
+}
+
+func TestAllScopesCoversDefinedGrantableScopes(t *testing.T) {
+	t.Parallel()
+
+	seen := make(map[Scope]struct{}, len(allScopes))
+	for _, scope := range allScopes {
+		require.NotEqual(t, ScopeRoot, scope)
+		require.Contains(t, scopeExpansions, scope)
+		require.NotContains(t, seen, scope)
+		seen[scope] = struct{}{}
+	}
+
+	for scope := range scopeExpansions {
+		if scope == ScopeRoot {
+			continue
+		}
+		require.Contains(t, seen, scope)
+	}
+}
+
+func TestSystemRoleAdminExcludesRiskPolicyEvaluate(t *testing.T) {
+	t.Parallel()
+
+	adminGrants := SystemRoleGrants[SystemRoleAdmin]
+	adminScopes := make([]string, 0, len(adminGrants))
+	for _, grant := range adminGrants {
+		adminScopes = append(adminScopes, grant.Scope)
+	}
+
+	require.NotContains(t, adminScopes, string(ScopeRiskPolicyEvaluate))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {
@@ -153,6 +185,24 @@ func TestEvaluateGrants_denyBlocksAllow(t *testing.T) {
 	require.True(t, denied)
 }
 
+func TestEvaluateGrants_denyScannedBeforeAllow(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrantWithSelector(ScopeMCPConnect, Selector{
+			"resource_kind": "mcp",
+			"resource_id":   "srv",
+			"tool":          "dangerous",
+		}),
+	}
+	checks := MCPToolCallCheck("srv", MCPToolCallDimensions{Tool: "dangerous"}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.Nil(t, allow)
+	require.True(t, denied)
+}
+
 func TestEvaluateGrants_denyWinsRegardlessOfOrder(t *testing.T) {
 	t.Parallel()
 
@@ -282,11 +332,11 @@ func TestGrantsToScopedGrants_separatesAllowAndDeny(t *testing.T) {
 	require.Len(t, denyGrant.Selectors, 1)
 }
 
-func TestGrantsToScopedGrants_wildcardDenyCollapsesToNilSelectors(t *testing.T) {
+func TestGrantsToScopedGrants_unrestrictedDenyCollapsesToNilSelectors(t *testing.T) {
 	t.Parallel()
 
 	rows := []Grant{
-		NewDenyGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrantWithSelector(ScopeMCPConnect, Selector{"resource_kind": "*", "resource_id": "*"}),
 		NewDenyGrant(ScopeMCPConnect, "server_a"), // should be collapsed by wildcard
 	}
 
@@ -300,6 +350,71 @@ func TestGrantsToScopedGrants_wildcardDenyCollapsesToNilSelectors(t *testing.T) 
 	}
 	require.NotNil(t, denyGrant, "expected a deny grant")
 	require.Nil(t, denyGrant.Selectors, "wildcard deny should have nil selectors (unrestricted)")
+}
+
+func TestGrantsToScopedGrants_scopeWildcardStaysExplicit(t *testing.T) {
+	t.Parallel()
+
+	rows := []Grant{
+		NewDenyGrant(ScopeMCPConnect, WildcardResource),
+	}
+
+	scoped := GrantsToScopedGrants(rows)
+
+	require.Len(t, scoped, 1)
+	require.Equal(t, []*ScopedGrant{
+		{
+			Scope:     string(ScopeMCPConnect),
+			Effect:    PolicyEffectDeny,
+			SubScopes: []string{},
+			Selectors: []Selector{
+				NewSelector(ScopeMCPConnect, WildcardResource),
+			},
+		},
+	}, scoped)
+}
+
+func TestGroupGrantsByScopeEffect(t *testing.T) {
+	t.Parallel()
+
+	projectSelector := NewSelector(ScopeProjectRead, "proj_a")
+	denySelector := NewSelector(ScopeProjectRead, "proj_b")
+	mcpSelector := NewSelector(ScopeMCPConnect, "srv")
+	grouped := groupGrantsByScopeEffect([]Grant{
+		NewGrantWithSelector(ScopeProjectRead, projectSelector),
+		NewDenyGrantWithSelector(ScopeProjectRead, denySelector),
+		NewGrantWithSelector(ScopeMCPConnect, mcpSelector),
+	})
+
+	require.Equal(t, map[scopeEffectKey][]Selector{
+		{scope: string(ScopeProjectRead), effect: PolicyEffectAllow}: {projectSelector},
+		{scope: string(ScopeProjectRead), effect: PolicyEffectDeny}:  {denySelector},
+		{scope: string(ScopeMCPConnect), effect: PolicyEffectAllow}:  {mcpSelector},
+	}, grouped)
+}
+
+func TestCollapseUnrestrictedSelectors(t *testing.T) {
+	t.Parallel()
+
+	key := scopeEffectKey{scope: string(ScopeMCPConnect), effect: PolicyEffectAllow}
+	scopedWildcard := NewSelector(ScopeMCPConnect, WildcardResource)
+	collapsed := collapseUnrestrictedSelectors(map[scopeEffectKey][]Selector{
+		key: {
+			scopedWildcard,
+			{"resource_kind": "*", "resource_id": "*"},
+		},
+	})
+
+	require.Equal(t, map[scopeEffectKey]scopeAgg{
+		key: {unrestricted: true, selectors: nil},
+	}, collapsed)
+
+	scopedOnly := collapseUnrestrictedSelectors(map[scopeEffectKey][]Selector{
+		key: {scopedWildcard},
+	})
+	require.Equal(t, map[scopeEffectKey]scopeAgg{
+		key: {unrestricted: false, selectors: []Selector{scopedWildcard}},
+	}, scopedOnly)
 }
 
 // --- Deny scope isolation tests ---
@@ -849,19 +964,61 @@ func TestDeny_multipleDenyGrants(t *testing.T) {
 	require.False(t, denied)
 }
 
-// --- Default effect (backward compatibility) ---
+// --- Policy effect normalization ---
 
-func TestDeny_emptyEffectDefaultsToAllow(t *testing.T) {
+func TestRoleGrantRowsFromRoleGrants_emptyEffectDefaultsToAllow(t *testing.T) {
 	t.Parallel()
 
-	// Grant with empty Effect should behave as allow (backward compat).
+	rows, err := roleGrantRowsFromRoleGrants([]*RoleGrant{{
+		Scope:     string(ScopeProjectRead),
+		Selectors: []Selector{NewSelector(ScopeProjectRead, "proj_1")},
+	}})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, PolicyEffectAllow, rows[0].Effect)
+
+	grants := grantsFromRows(urn.NewPrincipal(urn.PrincipalTypeRole, "test"), rows)
+	require.Len(t, grants, 1)
+	require.Equal(t, PolicyEffectAllow, grants[0].Effect)
+}
+
+func TestRoleGrantRowsFromRoleGrants_deduplicatesByScopeEffectAndSelector(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeProjectRead, "proj_1")
+	rows, err := roleGrantRowsFromRoleGrants([]*RoleGrant{
+		{
+			Scope:     string(ScopeProjectRead),
+			Effect:    PolicyEffectAllow,
+			Selectors: []Selector{selector},
+		},
+		{
+			Scope:     string(ScopeProjectRead),
+			Effect:    PolicyEffectAllow,
+			Selectors: []Selector{selector},
+		},
+		{
+			Scope:     string(ScopeProjectRead),
+			Effect:    PolicyEffectDeny,
+			Selectors: []Selector{selector},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.ElementsMatch(t, []PolicyEffect{PolicyEffectAllow, PolicyEffectDeny}, []PolicyEffect{rows[0].Effect, rows[1].Effect})
+}
+
+func TestEvaluateGrants_emptyEffectFailsClosed(t *testing.T) {
+	t.Parallel()
+
 	grants := []Grant{{
-		Scope:    ScopeProjectRead,
-		Effect:   "",
-		Selector: NewSelector(ScopeProjectRead, "proj_1"),
+		PrincipalUrn: "",
+		Scope:        ScopeProjectRead,
+		Effect:       "",
+		Selector:     NewSelector(ScopeProjectRead, "proj_1"),
 	}}
 	allow, _, denied := evaluateGrants(grants, Check{Scope: ScopeProjectRead, ResourceID: "proj_1"}.expand())
-	require.NotNil(t, allow)
+	require.Nil(t, allow)
 	require.False(t, denied)
 }
 
