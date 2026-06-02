@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useUser } from "@/contexts/Auth";
-import { Icon } from "@speakeasy-api/moonshine";
+import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import React from "react";
 
 // Public, unauthenticated bucket the release pipeline publishes to. The
@@ -295,7 +296,47 @@ function ManualSetup() {
   );
 }
 
-function FleetSetup({ exampleManagedJson }: { exampleManagedJson: string }) {
+function FleetSetup() {
+  const { name: orgName, slug: orgSlug } = useOrganization();
+  const { email } = useUser();
+  const [generatedToken, setGeneratedToken] = React.useState<string | null>(
+    null,
+  );
+
+  const createKeyMutation = useCreateAPIKeyMutation({
+    onSuccess: (data) => {
+      if (data.key) setGeneratedToken(data.key);
+    },
+  });
+
+  // The agent's org_token is just an `agent`-scoped API key. Once generated we
+  // splice it into the example below so the whole managed.json is copy-ready;
+  // the raw key is only returned once, so there's nothing to re-fetch later.
+  const exampleManagedJson = JSON.stringify(
+    {
+      v: 1,
+      email: email || "jane.doe@acme.corp",
+      org_token: generatedToken ?? "spk_org_REPLACE_ME",
+      org_slug: orgSlug || "acme-corp",
+      org_name: orgName || "Acme Corporation",
+      auto_update: "notify",
+    },
+    null,
+    2,
+  );
+
+  const handleGenerate = () => {
+    createKeyMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        createKeyForm: {
+          name: `device-agent ${new Date().toISOString().slice(0, 10)}`,
+          scopes: ["agent"],
+        },
+      },
+    });
+  };
+
   return (
     <div className="flex flex-col gap-8">
       <Type muted>
@@ -365,21 +406,58 @@ function FleetSetup({ exampleManagedJson }: { exampleManagedJson: string }) {
         <CodeBlock language="json">{exampleManagedJson}</CodeBlock>
         <Type small muted className="mt-2">
           Pre-filled with this org's <code>email</code>, <code>org_slug</code>,
-          and <code>org_name</code>. Replace <code>org_token</code> with the
-          token from your Speakeasy representative — that's the only value you
-          have to supply.
+          and <code>org_name</code>. Generate the <code>org_token</code> below —
+          it's the only value you have to supply.
         </Type>
-      </div>
 
-      <Alert variant="warning">
-        <Icon name="triangle-alert" className="h-4 w-4" />
-        <AlertTitle>Where the org token comes from</AlertTitle>
-        <AlertDescription>
-          Self-service <code>org_token</code> issuance is part of the Speakeasy
-          control plane, which is still in progress. For now, contact your
-          Speakeasy representative to obtain a token for your organization.
-        </AlertDescription>
-      </Alert>
+        <div className="mt-4 flex flex-col gap-3">
+          <RequireScope
+            scope="org:admin"
+            level="component"
+            reason="Generating an agent token requires the org:admin role."
+          >
+            <Button
+              onClick={handleGenerate}
+              disabled={createKeyMutation.isPending}
+            >
+              <Button.LeftIcon>
+                <Icon name="key-round" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>
+                {createKeyMutation.isPending
+                  ? "Generating…"
+                  : generatedToken
+                    ? "Generate a new token"
+                    : "Generate agent token"}
+              </Button.Text>
+            </Button>
+          </RequireScope>
+
+          {generatedToken && (
+            <Alert variant="warning">
+              <Icon name="triangle-alert" className="h-4 w-4" />
+              <AlertTitle>Copy your managed.json now</AlertTitle>
+              <AlertDescription>
+                The new <code>org_token</code> is spliced into the example above
+                and is shown only once — copy the file now, you won't be able to
+                retrieve this token again. Manage or revoke agent tokens anytime
+                under Settings → API Keys.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {createKeyMutation.isError && (
+            <Alert variant="destructive">
+              <Icon name="triangle-alert" className="h-4 w-4" />
+              <AlertTitle>Couldn't generate a token</AlertTitle>
+              <AlertDescription>
+                Something went wrong creating the agent token. Try again, or
+                create one under Settings → API Keys with the Agent scope.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      </div>
 
       <div>
         <SubHeading>How the agent applies it</SubHeading>
@@ -440,22 +518,6 @@ function FleetSetup({ exampleManagedJson }: { exampleManagedJson: string }) {
 }
 
 export default function DeviceAgent() {
-  const { name: orgName, slug: orgSlug } = useOrganization();
-  const { email } = useUser();
-
-  const exampleManagedJson = JSON.stringify(
-    {
-      v: 1,
-      email: email || "jane.doe@acme.corp",
-      org_token: "spk_org_REPLACE_ME",
-      org_slug: orgSlug || "acme-corp",
-      org_name: orgName || "Acme Corporation",
-      auto_update: "notify",
-    },
-    null,
-    2,
-  );
-
   return (
     <Page>
       <Page.Header>
@@ -513,7 +575,7 @@ export default function DeviceAgent() {
                   />
                 </TabsList>
                 <TabsContent value="fleet" className="pt-2">
-                  <FleetSetup exampleManagedJson={exampleManagedJson} />
+                  <FleetSetup />
                 </TabsContent>
                 <TabsContent value="manual" className="pt-2">
                   <ManualSetup />
