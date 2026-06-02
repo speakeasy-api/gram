@@ -30,6 +30,9 @@ type Service interface {
 	GetProjectMetricsSummary(context.Context, *GetProjectMetricsSummaryPayload) (res *GetMetricsSummaryResult, err error)
 	// Get aggregated metrics summary grouped by user
 	GetUserMetricsSummary(context.Context, *GetUserMetricsSummaryPayload) (res *GetUserMetricsSummaryResult, err error)
+	// Get an employee's MCP data flow graph across origins, clients, servers, and
+	// tools
+	GetEmployeeDataFlowGraph(context.Context, *GetEmployeeDataFlowGraphPayload) (res *GetEmployeeDataFlowGraphResult, err error)
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
 	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
@@ -69,7 +72,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
+var MethodNames = [14]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -124,6 +127,37 @@ type ChatSummary struct {
 	TotalTokens int64
 }
 
+// A weighted edge in the employee data flow graph
+type EmployeeDataFlowEdge struct {
+	// Stable edge ID
+	ID string
+	// Source node ID
+	Source string
+	// Target node ID
+	Target string
+	// Total calls represented by this edge
+	CallCount int64
+	// Successful calls represented by this edge
+	SuccessCount int64
+	// Failed or blocked calls represented by this edge
+	FailureCount int64
+}
+
+// A node in the employee data flow graph
+type EmployeeDataFlowNode struct {
+	// Stable node ID
+	ID string
+	// Graph tier. Origin nodes identify the hostname or client context that
+	// started the call, not the MCP server URL.
+	Tier string
+	// Display label
+	Label string
+	// Total calls involving this node
+	TotalCalls int64
+	// Server classification, present for MCP server nodes
+	ServerClass *string
+}
+
 // A single filter option (API key or user)
 type FilterOption struct {
 	// Unique identifier for the option
@@ -132,6 +166,31 @@ type FilterOption struct {
 	Label string
 	// Number of events for this option
 	Count int64
+}
+
+// GetEmployeeDataFlowGraphPayload is the payload type of the telemetry service
+// getEmployeeDataFlowGraph method.
+type GetEmployeeDataFlowGraphPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// User ID to get the graph for (mutually exclusive with external_user_id)
+	UserID *string
+	// External user ID to get the graph for (mutually exclusive with user_id)
+	ExternalUserID *string
+}
+
+// GetEmployeeDataFlowGraphResult is the result type of the telemetry service
+// getEmployeeDataFlowGraph method.
+type GetEmployeeDataFlowGraphResult struct {
+	// Graph nodes grouped by tier
+	Nodes []*EmployeeDataFlowNode
+	// Weighted graph edges between adjacent populated tiers
+	Edges []*EmployeeDataFlowEdge
 }
 
 // GetHooksSummaryPayload is the payload type of the telemetry service

@@ -104,6 +104,7 @@ export * from "./generateWorkOSAdminPortalLink.js";
 export * from "./getAssistantMemory.js";
 export * from "./getCreditUsage.js";
 export * from "./getDomain.js";
+export * from "./getEmployeeDataFlowGraph.js";
 export * from "./getHooksSummary.js";
 export * from "./getMcpEndpoint.js";
 export * from "./getMcpMetadata.js";

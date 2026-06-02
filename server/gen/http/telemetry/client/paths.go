@@ -42,6 +42,11 @@ func GetUserMetricsSummaryTelemetryPath() string {
 	return "/rpc/telemetry.getUserMetricsSummary"
 }
 
+// GetEmployeeDataFlowGraphTelemetryPath returns the URL path to the telemetry service getEmployeeDataFlowGraph HTTP endpoint.
+func GetEmployeeDataFlowGraphTelemetryPath() string {
+	return "/rpc/telemetry.getEmployeeDataFlowGraph"
+}
+
 // GetObservabilityOverviewTelemetryPath returns the URL path to the telemetry service getObservabilityOverview HTTP endpoint.
 func GetObservabilityOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getObservabilityOverview"
