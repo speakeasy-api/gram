@@ -99,6 +99,17 @@ type Assistant struct {
 	Deleted         bool
 }
 
+type AssistantDashboardMessage struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+	UserID    string
+	Role      string
+	Content   string
+	Seq       int64
+	CreatedAt pgtype.Timestamptz
+}
+
 type AssistantMemory struct {
 	ID             uuid.UUID
 	AssistantID    uuid.NullUUID
