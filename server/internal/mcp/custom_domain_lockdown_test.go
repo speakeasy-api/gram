@@ -88,7 +88,7 @@ func TestServePublic_Lockdown_McpEndpoint_AllowlistBlocksPlatform(t *testing.T) 
 
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "lockdown-ep-ts-"+uuid.New().String()[:8])
 	platformSlug := "platform-ep-" + uuid.NewString()
-	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, platformSlug, "public", uuid.NullUUID{})
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, platformSlug, "public", uuid.NullUUID{}, uuid.Nil)
 
 	// Platform endpoint resolves, but the lockdown denies it.
 	_, err = servePublicHTTP(t, ctx, ti, platformSlug, makeInitializeBody(), "", nil)
