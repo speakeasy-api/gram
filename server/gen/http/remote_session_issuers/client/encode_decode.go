@@ -1485,6 +1485,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 	res := &types.RemoteSessionIssuer{
 		ID:                    *v.ID,
 		ProjectID:             *v.ProjectID,
+		OrganizationID:        *v.OrganizationID,
 		Slug:                  *v.Slug,
 		Issuer:                *v.Issuer,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,

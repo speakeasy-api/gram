@@ -333,6 +333,14 @@ run();
 * [list](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 * [update](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 
+### [OrganizationRemoteSessionIssuers](docs/sdks/organizationremotesessionissuers/README.md)
+
+* [create](docs/sdks/organizationremotesessionissuers/README.md#create) - createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+* [delete](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+* [get](docs/sdks/organizationremotesessionissuers/README.md#get) - getOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+* [list](docs/sdks/organizationremotesessionissuers/README.md#list) - listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
+* [update](docs/sdks/organizationremotesessionissuers/README.md#update) - updateOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+
 ### [Organizations](docs/sdks/organizations/README.md)
 
 * [createPortalSession](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
@@ -727,6 +735,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersGet`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+- [`organizationRemoteSessionIssuersCreate`](docs/sdks/organizationremotesessionissuers/README.md#create) - createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersDelete`](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGet`](docs/sdks/organizationremotesessionissuers/README.md#get) - getOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersList`](docs/sdks/organizationremotesessionissuers/README.md#list) - listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersUpdate`](docs/sdks/organizationremotesessionissuers/README.md#update) - updateOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`organizationsCreatePortalSession`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
 - [`organizationsDisableWebhooks`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
 - [`organizationsEnableWebhooks`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
@@ -950,6 +963,7 @@ To learn about this feature and how to get started, check
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
+- [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#create) - createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`useCreatePortalSessionMutation`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
@@ -974,6 +988,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 - [`useDeleteMcpServerMutation`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
+- [`useDeleteOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`useDeleteOtelForwardingConfigMutation`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
@@ -1068,6 +1083,8 @@ To learn about this feature and how to get started, check
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
+- [`useOrganizationRemoteSessionIssuer`](docs/sdks/organizationremotesessionissuers/README.md#get) - getOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionIssuers`](docs/sdks/organizationremotesessionissuers/README.md#list) - listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
 - [`useOtelForwardingConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -1164,6 +1181,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`useUpdateMemberRolesMutation`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
+- [`useUpdateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#update) - updateOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`useUpdatePluginServerMutation`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
