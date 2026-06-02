@@ -108,13 +108,28 @@ func TestSelector_IsRestricted(t *testing.T) {
 			restricted: false,
 		},
 		{
-			name:       "short wildcard without resource id is unrestricted",
+			name:       "missing resource id is restricted",
 			selector:   Selector{"resource_kind": "*"},
-			restricted: false,
+			restricted: true,
+		},
+		{
+			name:       "unknown one-key selector is restricted",
+			selector:   Selector{"unknown": "*"},
+			restricted: true,
+		},
+		{
+			name:       "missing resource kind with extra key is restricted",
+			selector:   Selector{"resource_id": "*", "unknown": "*"},
+			restricted: true,
 		},
 		{
 			name:       "nil is unrestricted wildcard",
 			selector:   nil,
+			restricted: false,
+		},
+		{
+			name:       "empty is unrestricted wildcard",
+			selector:   Selector{},
 			restricted: false,
 		},
 	}

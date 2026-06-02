@@ -218,16 +218,23 @@ func (s Selector) ResourceID() string {
 // dimension. A short wildcard selector is treated as unrestricted for backward
 // compatibility with pre-resource-kind rows that only carried resource_id.
 func (s Selector) IsRestricted() bool {
-	if len(s) > 2 {
+	if len(s) == 0 {
+		return false
+	}
+	if len(s) == 1 {
+		id, ok := s[SelectorKeyResourceID]
+		return !ok || id != WildcardResource
+	}
+	if len(s) != 2 {
 		return true
 	}
-	if kind, ok := s[SelectorKeyResourceKind]; ok && kind != WildcardResource {
+
+	kind, hasKind := s[SelectorKeyResourceKind]
+	id, hasID := s[SelectorKeyResourceID]
+	if !hasKind || !hasID {
 		return true
 	}
-	if id, ok := s[SelectorKeyResourceID]; ok && id != WildcardResource {
-		return true
-	}
-	return false
+	return kind != WildcardResource || id != WildcardResource
 }
 
 // SelectorFromRow parses the selectors JSONB column into a Selector.
