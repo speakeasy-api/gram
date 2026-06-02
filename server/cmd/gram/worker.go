@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -51,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -332,6 +334,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, pulseMCPFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, svixFlags...)
+	flags = append(flags, pluginsFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -419,6 +422,29 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			auditLogger := newAuditLogger()
+
+			var ghClient *ghclient.Client
+			if appID, key := c.Int64("plugins-github-app-id"), c.String("plugins-github-private-key"); appID != 0 && key != "" {
+				ghClient, err = ghclient.NewClient(appID, []byte(key), guardianPolicy.Client())
+				if err != nil {
+					return fmt.Errorf("create github app client: %w", err)
+				}
+			}
+			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
+				Client:         ghClient,
+				Org:            c.String("plugins-github-org"),
+				InstallationID: c.Int64("plugins-github-installation-id"),
+			})
+			if err != nil {
+				return fmt.Errorf("plugins github config: %w", err)
+			}
+			var pluginPublisher *plugins.Service
+			if pluginsGitHub != nil {
+				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"))
+			} else {
+				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
+			}
 
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
@@ -751,6 +777,7 @@ func newWorkerCommand() *cli.Command {
 				WorkOSClient:                   backgroundWorkOSClient,
 				SvixClient:                     svixClient,
 				ProductFeatures:                productFeatures,
+				PluginPublisher:                pluginPublisher,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())
