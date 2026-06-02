@@ -56,23 +56,21 @@ func (s Selector) StrictMatches(check Selector) bool {
 func ResourceKindForScope(scope Scope) string {
 	switch scope.Parts().Resource {
 	case "project":
-		return "project"
+		return ResourceKindProject
 	case "remote-mcp":
-		return "mcp"
+		return ResourceKindMCP
 	case "mcp":
-		return "mcp"
+		return ResourceKindMCP
 	case "org":
-		return "org"
+		return ResourceKindOrg
 	case "environment":
-		return "environment"
+		return ResourceKindEnvironment
 	case "risk_policy":
 		return ResourceKindRiskPolicy
 	default:
-		return "*"
+		return ResourceKindWildcard
 	}
 }
-
-const ResourceKindRiskPolicy = "risk_policy"
 
 // Disposition values matching MCP tool annotation hint names (snake_case, no _hint suffix).
 const (
@@ -94,8 +92,8 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
-	"mcp": {"tool": true, "disposition": true, "project_id": true},
-	"environment": {
+	ResourceKindMCP: {"tool": true, "disposition": true, "project_id": true},
+	ResourceKindEnvironment: {
 		"project_id": true,
 	},
 }
@@ -115,8 +113,8 @@ func ValidateSelector(scope Scope, sel Selector) error {
 
 	expectedKind := ResourceKindForScope(scope)
 	if scope == ScopeRoot {
-		if kind != "*" {
-			return fmt.Errorf("root scope requires resource_kind=*, got %q", kind)
+		if kind != ResourceKindWildcard {
+			return fmt.Errorf("root scope requires resource_kind=%s, got %q", ResourceKindWildcard, kind)
 		}
 		// root allows no extra keys
 		for k := range sel {

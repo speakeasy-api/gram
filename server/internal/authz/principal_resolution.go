@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -24,8 +25,7 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		return nil, ErrPrincipalNotFound
 	}
 
-	q := repo.New(db)
-	isMember, err := q.HasActiveOrganizationUser(ctx, repo.HasActiveOrganizationUserParams{
+	isMember, err := orgrepo.New(db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
 		UserID:         userID,
 		OrganizationID: organizationID,
 	})
@@ -39,6 +39,7 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, userID)}
 	seen := map[string]struct{}{principals[0].String(): {}}
 
+	q := repo.New(db)
 	roleRows, err := q.ListMemberRolePrincipalsByUser(ctx, repo.ListMemberRolePrincipalsByUserParams{
 		OrganizationID: organizationID,
 		UserID:         userID,
