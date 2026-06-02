@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -62,7 +63,25 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 
 // SeedSystemRoleGrants bootstraps the fixed grant sets for system roles once.
 func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
-	q := repo.New(db)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin system role seed transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if err := seedSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit system role seed transaction: %w", err)
+	}
+
+	return nil
+}
+
+func seedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	q := repo.New(dbtx)
 	for roleSlug, grants := range SystemRoleGrants {
 		existingRole, err := q.GetGlobalRoleBySlug(ctx, roleSlug)
 		seedRole := false
@@ -98,7 +117,7 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 			}
 		}
 
-		rp, err := loadRolePrincipals(ctx, db, organizationID, roleSlug, "")
+		rp, err := loadRolePrincipals(ctx, dbtx, organizationID, roleSlug, "")
 		if err != nil {
 			return fmt.Errorf("resolve %s role principal: %w", roleSlug, err)
 		}

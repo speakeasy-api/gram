@@ -3,6 +3,7 @@ package authz
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -90,6 +91,19 @@ func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 		scopes = append(scopes, row.Scope)
 	}
 	require.Contains(t, scopes, string(ScopeRiskPolicyEvaluate))
+}
+
+func TestSeedSystemRoleGrantsRollsBackOnGrantFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+
+	err := SeedSystemRoleGrants(ctx, conn, "org_missing")
+	require.Error(t, err)
+
+	_, err = accessrepo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
