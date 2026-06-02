@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 
-# SessionStart-specific hook: enriches the payload with the active MCP
-# server list and forwards it to Gram. Runs async, so we fire-and-forget —
-# SessionStart has no allow/deny decision to honor.
+# MCP inventory hook: enriches the payload with the active MCP server list
+# and forwards it to Gram. Registered against both SessionStart and
+# ConfigChange so the server re-syncs its cached inventory whenever Claude
+# (re)loads the session or a settings file changes mid-session. Neither
+# event has an allow/deny decision to honor, so we always exit 0 and
+# fire-and-forget.
 #
 # Two execution environments are supported:
 #   - cowork: detected by the presence of cmux's per-run local_<rid>.json

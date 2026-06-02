@@ -11,6 +11,7 @@ import { ClosedEnum } from "../../types/enums.js";
  */
 export const HookEventName = {
   SessionStart: "SessionStart",
+  ConfigChange: "ConfigChange",
   PreToolUse: "PreToolUse",
   PostToolUse: "PostToolUse",
   PostToolUseFailure: "PostToolUseFailure",

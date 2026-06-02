@@ -7,7 +7,10 @@
 set -e
 
 generate() {
-  speakeasy run --skip-versioning --skip-upload-spec --minimal
+  # Speakeasy's TypeScript target compiles the generated SDK by invoking pnpm
+  # directly in client/sdk. Without CI=true, pnpm prompts to purge node_modules
+  # and aborts when there's no TTY. See ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY.
+  CI=true speakeasy run --skip-versioning --skip-upload-spec --minimal
 }
 
 check_inputs() {

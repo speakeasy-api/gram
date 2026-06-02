@@ -77,11 +77,13 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // deny/allow decision. Stop must also be blocking: when async=true,
 // Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
 // — an apparent bug on the client side. Marking it synchronous is the
-// only reliable way to get Stop events to fire. All other events return
-// true for fire-and-forget telemetry so Claude is not held up.
+// only reliable way to get Stop events to fire. ConfigChange is synchronous
+// because Claude Code does not support async hooks for it (per
+// https://code.claude.com/docs/en/hooks). All other events return true for
+// fire-and-forget telemetry so Claude is not held up.
 func claudeHookAsyncFlag(event string) *bool {
 	switch event {
-	case "UserPromptSubmit", "PreToolUse", "Stop":
+	case "UserPromptSubmit", "PreToolUse", "Stop", "ConfigChange":
 		f := false
 		return &f
 	default:
@@ -101,6 +103,7 @@ var ClaudeObservabilityHookEvents = []string{
 	"PostToolUse",
 	"PostToolUseFailure",
 	"SessionStart",
+	"ConfigChange",
 	"SessionEnd",
 	"UserPromptSubmit",
 	"Stop",
@@ -489,16 +492,19 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	// flat layout (hooks.json + hook.sh at root) Claude registers the plugin
 	// silently but never wires the hooks up.
 	//
-	// SessionStart is routed to a separate script (session_start.sh) that
-	// enriches the payload with an MCP server inventory before forwarding to
-	// Gram. The inventory is sourced from cmux's per-run local_<rid>.json in
-	// cowork environments, falling back to `claude mcp list` output when run
-	// under stock Claude Code. All other events use the standard hook.sh.
+	// SessionStart and ConfigChange are routed to a separate script
+	// (mcp_inventory.sh) that enriches the payload with an MCP server
+	// inventory before forwarding to Gram, so the server can re-sync its
+	// cached inventory whenever Claude (re)loads the session or a settings
+	// file changes mid-session. The inventory is sourced from cmux's per-run
+	// local_<rid>.json in cowork environments, falling back to
+	// `claude mcp list` output when run under stock Claude Code. All other
+	// events use the standard hook.sh.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
 		script := "hook.sh"
-		if event == "SessionStart" {
-			script = "session_start.sh"
+		if event == "SessionStart" || event == "ConfigChange" {
+			script = "mcp_inventory.sh"
 		}
 		hookEvents[event] = []claudeHookMatcher{
 			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event)}}},
@@ -511,7 +517,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
-	files[path.Join(subdir, "hooks/session_start.sh")] = renderClaudeSessionStartScript(cfg)
+	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
 
 	return nil
 }
@@ -881,9 +887,10 @@ exit 0
 `)
 }
 
-// renderClaudeSessionStartScript produces the SessionStart-specific Claude
-// hook script. It enriches the payload with an MCP server inventory before
-// forwarding to Gram, picking the source by what the sandbox can see:
+// renderClaudeMCPInventoryScript produces the Claude hook script registered
+// against SessionStart and ConfigChange. It enriches the payload with an MCP
+// server inventory before forwarding to Gram, picking the source by what the
+// sandbox can see:
 //
 //   - cowork: when cmux's per-run config file (local_<rid>.json) is reachable
 //     via CLAUDE_PROJECT_DIR/.., we ship its remoteMcpServersConfig array
@@ -892,13 +899,15 @@ exit 0
 //   - Claude Code (default): shell out to `claude mcp list` and ship its raw
 //     output as `additional_data.mcp_inventory_claude_code`.
 //
-// The script is fire-and-forget (async=true in hooks.json): SessionStart has
-// no allow/deny decision to honor, so we always exit 0 and discard the
-// response body to keep latency invisible to Claude.
+// The script is fire-and-forget: neither SessionStart nor ConfigChange has
+// an allow/deny decision to honor, so we always exit 0 and discard the
+// response body to keep latency invisible to Claude. (SessionStart runs
+// async; ConfigChange runs synchronously because Claude Code does not
+// support async hooks for it.)
 //
 // Auth headers match renderHookScript so server-side attribution works:
 // Gram-Key always, Gram-Project when ProjectSlug is set.
-func renderClaudeSessionStartScript(cfg GenerateConfig) []byte {
+func renderClaudeMCPInventoryScript(cfg GenerateConfig) []byte {
 	keyPrefix := cfg.HooksAPIKey
 	if len(keyPrefix) > 12 {
 		keyPrefix = keyPrefix[:12]
@@ -913,9 +922,12 @@ func renderClaudeSessionStartScript(cfg GenerateConfig) []byte {
 # Generated by Gram. Do not edit — overwritten on every publish.
 # Key prefix: %s (correlate with the dashboard's API Keys page).
 #
-# SessionStart-specific hook: enriches the payload with the active MCP
-# server list and forwards it to Gram. Runs async, so we fire-and-forget —
-# SessionStart has no allow/deny decision to honor.
+# MCP inventory hook: enriches the payload with the active MCP server list
+# and forwards it to Gram. Registered against both SessionStart and
+# ConfigChange so the server re-syncs its cached inventory whenever Claude
+# (re)loads the session or a settings file changes mid-session. Neither
+# event has an allow/deny decision to honor, so we always exit 0 and
+# fire-and-forget.
 #
 # Two execution environments are supported:
 #   - cowork: detected by the presence of cmux's per-run local_<rid>.json
