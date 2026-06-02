@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.66.0
+
+### Minor Changes
+
+- 0653bf4: Add `agent.getPlugins` management API method consumed by the Speakeasy device agent. The endpoint accepts an `email` query parameter, resolves plugin assignments for that email plus the `*` wildcard within the caller's org, and returns the published plugins as Claude Code marketplace + plugin references (drops directly into Claude Code's `extraKnownMarketplaces` and `enabledPlugins` settings). Authenticates with an org-scoped API key carrying the new `agent` scope.
+
+  Adds `agent` as a selectable scope on the existing API Keys page so admins can mint these tokens from the same place every other scope is minted.
+
+  Adds `email` as a first-class principal URN type (`urn.PrincipalTypeEmail`) so admins can assign plugins by email address. Existing `user:` and `role:` URNs are unchanged; the wildcard `*` is now exported as `urn.PrincipalWildcard`.
+
+- 598d0d8: Re-target AI Insights sidebar at project toolsets instead of hardcoded Speakeasy MCP. The sidebar now connects to all toolsets configured in the current project.
+
+### Patch Changes
+
+- 91e166d: Add an employee data-flow graph endpoint and dashboard visualization for workforce observability.
+- 9fde650: External MCP proxy servers (whose tools cannot be enumerated until a user authenticates) now appear in the "Specific MCP Servers" picker when creating an access role, and no longer display a misleading "No Tools" badge on the MCP list and table views.
+
 ## 0.65.1
 
 ### Patch Changes
