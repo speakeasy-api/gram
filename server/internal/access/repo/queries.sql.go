@@ -424,32 +424,6 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	return items, nil
 }
 
-const hasActiveOrganizationUser = `-- name: HasActiveOrganizationUser :one
-SELECT EXISTS(
-  SELECT 1
-  FROM users
-  JOIN organization_user_relationships
-    ON organization_user_relationships.user_id = users.id
-  WHERE users.id = $1
-    AND users.deleted_at IS NULL
-    AND organization_user_relationships.organization_id = $2
-    AND organization_user_relationships.deleted_at IS NULL
-) AS exists
-`
-
-type HasActiveOrganizationUserParams struct {
-	UserID         string
-	OrganizationID string
-}
-
-// Returns whether a Gram user is an active member of the organization.
-func (q *Queries) HasActiveOrganizationUser(ctx context.Context, arg HasActiveOrganizationUserParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasActiveOrganizationUser, arg.UserID, arg.OrganizationID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
