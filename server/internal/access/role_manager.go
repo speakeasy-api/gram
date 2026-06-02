@@ -185,8 +185,8 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
-	if _, err := authz.ReplaceRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, roleGrantPayloads(payload.Grants)); err != nil {
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "replace grants for created role").Log(ctx, r.logger)
+	if _, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, roleGrantPayloads(payload.Grants), nil); err != nil {
+		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "add grants for created role").Log(ctx, r.logger)
 	}
 
 	workosSyncs := []workosSync{func(ctx context.Context) {

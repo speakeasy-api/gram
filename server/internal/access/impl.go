@@ -547,7 +547,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
 
-	if err := authz.SeedSystemRoleGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID); err != nil {
+	if err := authz.SeedSystemRoleGrants(ctx, s.db, ac.ActiveOrganizationID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "seed system role grants").Log(ctx, logger)
 	}
 

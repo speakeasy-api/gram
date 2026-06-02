@@ -43,7 +43,7 @@ func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	organizationID := "org_seed_system_roles"
 	seedOrganization(t, ctx, conn, organizationID)
 
-	err := SeedSystemRoleGrants(ctx, testenv.NewLogger(t), conn, organizationID)
+	err := SeedSystemRoleGrants(ctx, conn, organizationID)
 	require.NoError(t, err)
 
 	adminRole, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
@@ -53,6 +53,43 @@ func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	grants, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, SystemRoleAdmin, "role:global:"+adminRole.ID.String())
 	require.NoError(t, err)
 	require.NotEmpty(t, grants)
+
+	q := accessrepo.New(conn)
+	adminPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+adminRole.ID.String())
+	adminRows, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   adminPrincipal.String(),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, adminRows)
+	_, err = q.DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{
+		ID:             adminRows[0].ID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	seedGrant(t, ctx, conn, organizationID, adminPrincipal, ScopeRiskPolicyEvaluate, "policy-1")
+	rowsBeforeReseed, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   adminPrincipal.String(),
+	})
+	require.NoError(t, err)
+
+	err = SeedSystemRoleGrants(ctx, conn, organizationID)
+	require.NoError(t, err)
+
+	rows, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   adminPrincipal.String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, len(rowsBeforeReseed))
+
+	scopes := make([]string, 0, len(rows))
+	for _, row := range rows {
+		scopes = append(scopes, row.Scope)
+	}
+	require.Contains(t, scopes, string(ScopeRiskPolicyEvaluate))
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {

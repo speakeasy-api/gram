@@ -15,7 +15,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -94,10 +93,11 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 	SystemRoleMember: roleGrantsForScopes(memberScopes),
 }
 
-// SeedSystemRoleGrants upserts the fixed grant sets for all system roles.
-func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
+// SeedSystemRoleGrants bootstraps the fixed grant sets for system roles once.
+func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
+	q := repo.New(db)
 	for roleSlug, grants := range SystemRoleGrants {
-		existingRole, err := repo.New(db).GetGlobalRoleBySlug(ctx, roleSlug)
+		existingRole, err := q.GetGlobalRoleBySlug(ctx, roleSlug)
 		seedRole := false
 		switch {
 		case err == nil:
@@ -119,7 +119,7 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 				description = "Member role"
 			}
 			now := time.Now().UTC()
-			if err := repo.New(db).UpsertGlobalRole(ctx, repo.UpsertGlobalRoleParams{
+			if err := q.UpsertGlobalRole(ctx, repo.UpsertGlobalRoleParams{
 				WorkosSlug:        roleSlug,
 				WorkosName:        name,
 				WorkosDescription: conv.ToPGTextEmpty(description),
@@ -130,59 +130,35 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 				return fmt.Errorf("seed %s role: %w", roleSlug, err)
 			}
 		}
-		if err := ReplaceRoleGrants(ctx, logger, db, organizationID, roleSlug, "", grants); err != nil {
+
+		rp, err := loadRolePrincipals(ctx, db, organizationID, roleSlug, "")
+		if err != nil {
+			return fmt.Errorf("resolve %s role principal: %w", roleSlug, err)
+		}
+		principalURNs, err := principalURNStrings(rp.MatchPrincipals)
+		if err != nil {
+			return fmt.Errorf("build %s role principals: %w", roleSlug, err)
+		}
+		existingGrants, err := q.GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
+			OrganizationID: organizationID,
+			PrincipalUrns:  principalURNs,
+		})
+		if err != nil {
+			return fmt.Errorf("list %s grants: %w", roleSlug, err)
+		}
+		if len(existingGrants) > 0 {
+			continue
+		}
+
+		rows, err := flattenRoleGrants(grants)
+		if err != nil {
+			return fmt.Errorf("build %s grants: %w", roleSlug, err)
+		}
+		if err := rp.insertGrantsIfAbsent(ctx, q, organizationID, rows); err != nil {
 			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
 		}
 	}
 	return nil
-}
-
-func ReplaceRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string, grants []*RoleGrant) error {
-	if orgID == "" {
-		return fmt.Errorf("organization id is required")
-	}
-
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin grant sync transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	if _, err := ReplaceRoleGrantsTx(ctx, tx, orgID, roleSlug, rolePrincipalURN, grants); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit grant sync transaction: %w", err)
-	}
-
-	return nil
-}
-
-func ReplaceRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug string, rolePrincipalURN string, grants []*RoleGrant) ([]*ScopedGrant, error) {
-	if orgID == "" {
-		return nil, fmt.Errorf("organization id is required")
-	}
-
-	rp, err := loadRolePrincipals(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
-	if err != nil {
-		return nil, err
-	}
-
-	q := repo.New(dbtx)
-	if err := rp.deleteAllGrants(ctx, q, orgID); err != nil {
-		return nil, err
-	}
-
-	rows, err := flattenRoleGrants(grants)
-	if err != nil {
-		return nil, err
-	}
-	if err := rp.upsertGrants(ctx, q, orgID, rows); err != nil {
-		return nil, err
-	}
-
-	return GrantsToScopedGrants(rp.toGrants(rows)), nil
 }
 
 // PatchRoleGrantsTx applies exact grant additions and removals for a role

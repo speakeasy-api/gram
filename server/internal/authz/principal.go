@@ -155,6 +155,22 @@ func (rp rolePrincipals) upsertGrants(ctx context.Context, q *repo.Queries, orgI
 	return nil
 }
 
+func (rp rolePrincipals) insertGrantsIfAbsent(ctx context.Context, q *repo.Queries, orgID string, rows []roleGrantRow) error {
+	for _, row := range rows {
+		if _, err := q.InsertPrincipalGrantIfAbsent(ctx, repo.InsertPrincipalGrantIfAbsentParams{
+			OrganizationID: orgID,
+			PrincipalUrn:   rp.WritePrincipal,
+			Scope:          string(row.Scope),
+			Effect:         row.Effect.pgText(),
+			Selectors:      row.SelectorRaw,
+		}); err != nil {
+			return fmt.Errorf("insert grant %q for role %q: %w", row.Scope, rp.Slug, err)
+		}
+	}
+
+	return nil
+}
+
 func (rp rolePrincipals) deleteGrants(ctx context.Context, q *repo.Queries, orgID string, rows []roleGrantRow) error {
 	for _, principal := range rp.MatchPrincipals {
 		for _, row := range rows {
