@@ -185,6 +185,49 @@ FROM assistants
 WHERE id = @assistant_id
   AND deleted IS FALSE;
 
+-- name: GetManagedAssistantByProject :one
+-- Resolves a project's platform-managed assistant (powers the AI Insights
+-- sidebar) through the project_managed_assistants mapping. Returns no rows
+-- when the feature isn't toggled on for the project.
+SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.status, a.created_at, a.updated_at, a.deleted_at
+FROM project_managed_assistants pma
+JOIN assistants a ON a.id = pma.assistant_id
+WHERE pma.project_id = @project_id
+  AND a.deleted IS FALSE;
+
+-- name: GetProjectName :one
+-- Display name of a project, used to compose the managed assistant's name so
+-- it's distinguishable from other projects' managed assistants in the same org.
+SELECT name
+FROM projects
+WHERE id = @project_id
+  AND deleted IS FALSE;
+
+-- name: CreateProjectManagedAssistant :exec
+-- Marks an assistant as the project's managed assistant. PRIMARY KEY(project_id)
+-- enforces 0-or-1, so a concurrent enable raises a unique violation the caller
+-- recovers from by re-reading.
+INSERT INTO project_managed_assistants (project_id, assistant_id)
+VALUES (@project_id, @assistant_id);
+
+-- name: DeleteProjectManagedAssistant :exec
+-- Toggles the managed assistant off for a project (the assistant row itself is
+-- soft-deleted separately). Returns silently if no mapping exists.
+DELETE FROM project_managed_assistants
+WHERE project_id = @project_id;
+
+-- name: ListProjectMCPToolsetSlugs :many
+-- Slugs of every MCP-reachable toolset in a project, used to attach all of a
+-- project's toolsets to its managed assistant at provisioning time. Toolsets
+-- without an mcp_slug can't be addressed by the runtime, so they're excluded
+-- (mirrors the guard in EnableMCPForToolsets).
+SELECT slug
+FROM toolsets
+WHERE project_id = @project_id
+  AND mcp_slug IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY created_at;
+
 -- name: UpdateAssistant :one
 UPDATE assistants
 SET

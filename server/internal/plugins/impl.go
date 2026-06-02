@@ -1346,11 +1346,16 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		}
 
 		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
+			mcpBase := s.serverURL
+			if cd := conv.FromPGText[string](r.ToolsetCustomDomain); cd != nil {
+				mcpBase = fmt.Sprintf("https://%s", *cd)
+			}
 			serverInfo := PluginServerInfo{
 				DisplayName: r.ServerDisplayName,
 				Policy:      r.ServerPolicy,
-				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
+				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, *mcpSlug),
 				IsPublic:    r.ToolsetIsPublic,
+				IsOAuth:     r.ToolsetIsOauth,
 				EnvConfigs:  nil,
 			}
 

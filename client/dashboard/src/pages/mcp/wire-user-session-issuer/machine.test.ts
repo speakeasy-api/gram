@@ -69,6 +69,7 @@ function remoteSessionIssuer(id = "rsi-1"): RemoteSessionIssuer {
   return {
     id,
     projectId: "project-1",
+    organizationId: "org-1",
     slug: defaults.remoteSessionIssuerSlug,
     issuer: "https://idp.example.com",
     oidc: false,

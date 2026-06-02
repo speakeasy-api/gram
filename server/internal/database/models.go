@@ -995,14 +995,15 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	InstallationID   int64
-	RepoOwner        string
-	RepoName         string
-	MarketplaceToken pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	InstallationID       int64
+	RepoOwner            string
+	RepoName             string
+	MarketplaceToken     pgtype.Text
+	PublishedFingerprint pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type PluginServer struct {
@@ -1061,6 +1062,13 @@ type ProjectAllowedOrigin struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type ProjectManagedAssistant struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
 
 type ProjectMarketplaceSetting struct {

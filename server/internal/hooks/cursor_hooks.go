@@ -23,9 +23,15 @@ import (
 
 // Cursor is the endpoint for Cursor hook events
 func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
+	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
+	logHookEventName := payload.HookEventName
+	if ok {
+		logHookEventName = string(hookEvent)
+	}
+
 	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
-		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogHookEvent(logHookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
 		attr.SlogGenAIConversationID(conv.PtrValOr(payload.ConversationID, "")),
 		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
@@ -67,8 +73,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	// the trace renders as "blocked" in dashboards.
 	var blockReason string
 
-	switch payload.HookEventName {
-	case "beforeMCPExecution":
+	switch hookEvent {
+	case HookEventBeforeMCPExecution:
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
@@ -117,7 +123,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case "preToolUse":
+	case HookEventPreToolUse:
 		// preToolUse fires for ALL Cursor tool calls including MCP ones, while
 		// beforeMCPExecution also fires for MCP-routed calls and already runs
 		// the scan there. Skip the scan here for MCP tools to avoid scanning
@@ -138,7 +144,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case "beforeSubmitPrompt":
+	case HookEventBeforeSubmitPrompt:
 		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
@@ -191,47 +197,55 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 }
 
 func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) {
-	if isCursorConversationEvent(payload.HookEventName) {
+	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
+	if !ok {
+		return
+	}
+
+	if isCursorConversationEvent(hookEvent) {
 		// Conversation events: PG only (user prompts and agent responses)
 		var err error
-		switch payload.HookEventName {
-		case "beforeSubmitPrompt":
+		switch hookEvent {
+		case HookEventBeforeSubmitPrompt:
 			err = s.persistCursorUserPrompt(ctx, payload, metadata)
-		case "afterAgentResponse":
+		case HookEventAfterAgentResponse:
 			err = s.persistCursorAgentResponse(ctx, payload, metadata)
 			// afterAgentResponse also carries token usage — record a metrics entry in ClickHouse
 			s.writeCursorMetricsToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
+		default:
+			return
 		}
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
-		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason); err != nil {
+		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason, hookEvent); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
 		}
 	}
 }
 
 // persistCursorToolCallEvent writes tool call events to both ClickHouse and PostgreSQL
-func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) error {
+func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string, hookEvent HookEvent) error {
 	// Write to ClickHouse for telemetry
 	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, blockReason)
 
 	// Write to PostgreSQL for chat history
-	switch payload.HookEventName {
-	case "preToolUse", "beforeMCPExecution":
+	switch hookEvent {
+	case HookEventPreToolUse, HookEventBeforeMCPExecution:
 		return s.writeCursorToolCallRequestToPG(ctx, payload, metadata)
-	case "postToolUse", "postToolUseFailure", "afterMCPExecution":
-		return s.writeCursorToolCallResultToPG(ctx, payload, metadata)
+	case HookEventPostToolUse, HookEventPostToolUseFailure, HookEventAfterMCPExecution:
+		return s.writeCursorToolCallResultToPG(ctx, payload, metadata, hookEvent)
+	default:
+		return nil
 	}
-	return nil
 }
 
 // isCursorConversationEvent returns true if the event is a conversation capture event (not a tool call).
-func isCursorConversationEvent(eventName string) bool {
-	switch eventName {
-	case "beforeSubmitPrompt", "afterAgentResponse":
+func isCursorConversationEvent(hookEvent HookEvent) bool {
+	switch hookEvent {
+	case HookEventBeforeSubmitPrompt, HookEventAfterAgentResponse:
 		return true
 	default:
 		return false
@@ -375,34 +389,19 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		userEmail = *payload.UserEmail
 	}
 
-	// Normalize to PascalCase to match Claude convention for consistent ClickHouse queries
-	hookEvent := payload.HookEventName
-	switch hookEvent {
-	case "preToolUse":
-		hookEvent = "PreToolUse"
-	case "postToolUse":
-		hookEvent = "PostToolUse"
-	case "postToolUseFailure":
-		hookEvent = "PostToolUseFailure"
-	case "beforeSubmitPrompt":
-		hookEvent = "BeforeSubmitPrompt"
-	case "afterAgentResponse":
-		hookEvent = "AfterAgentResponse"
-	case "beforeMCPExecution":
-		hookEvent = "BeforeMCPExecution"
-	case "afterMCPExecution":
-		hookEvent = "AfterMCPExecution"
-	case "stop":
-		hookEvent = "Stop"
+	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
+	hookEventName := payload.HookEventName
+	if ok {
+		hookEventName = string(hookEvent)
 	}
 
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
 		attr.ToolNameKey:       toolName,
-		attr.HookEventKey:      hookEvent,
+		attr.HookEventKey:      hookEventName,
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
-		attr.LogBodyKey:        fmt.Sprintf("Hook: %s", hookEvent),
+		attr.LogBodyKey:        fmt.Sprintf("Hook: %s", hookEventName),
 		attr.UserEmailKey:      userEmail,
 		attr.ProjectIDKey:      projectID,
 		attr.OrganizationIDKey: orgID,
@@ -432,7 +431,7 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	// beforeMCPExecution / afterMCPExecution: derive tool_source from the MCP
 	// server URL (or command for stdio servers), which the generic
 	// preToolUse/postToolUse events do not expose.
-	if payload.HookEventName == "beforeMCPExecution" || payload.HookEventName == "afterMCPExecution" {
+	if hookEvent == HookEventBeforeMCPExecution || hookEvent == HookEventAfterMCPExecution {
 		if source := cursorMCPToolSource(payload); source != "" {
 			attrs[attr.ToolCallSourceKey] = source
 		}
@@ -458,7 +457,7 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	}
 
 	// Store prompt text as log body for beforeSubmitPrompt events only
-	if payload.HookEventName == "beforeSubmitPrompt" && payload.Prompt != nil && *payload.Prompt != "" {
+	if hookEvent == HookEventBeforeSubmitPrompt && payload.Prompt != nil && *payload.Prompt != "" {
 		attrs[attr.LogBodyKey] = *payload.Prompt
 	}
 
@@ -618,7 +617,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 }
 
 // writeCursorToolCallResultToPG writes a Cursor tool call result (postToolUse/postToolUseFailure) to PostgreSQL.
-func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) error {
+func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, hookEvent HookEvent) error {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
 		return nil
 	}
@@ -631,12 +630,18 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	var content string
-	switch {
-	case payload.HookEventName == "postToolUse" && payload.ToolResponse != nil:
+	switch hookEvent {
+	case HookEventPostToolUse:
+		if payload.ToolResponse == nil {
+			return nil
+		}
 		content = marshalToJSON(payload.ToolResponse)
-	case payload.HookEventName == "postToolUseFailure" && payload.Error != nil:
+	case HookEventPostToolUseFailure:
+		if payload.Error == nil {
+			return nil
+		}
 		content = marshalToJSON(payload.Error)
-	case payload.HookEventName == "afterMCPExecution":
+	case HookEventAfterMCPExecution:
 		// afterMCPExecution delivers the response as an already-stringified JSON
 		// payload; fall back to ToolResponse if a client sends the structured form.
 		if payload.ResultJSON != nil && *payload.ResultJSON != "" {

@@ -299,6 +299,21 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").Log(ctx, logger)
 	}
 
+	if err = txRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(
+		ctx,
+		repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+			UserSessionIssuerID: deleted.ID,
+			ProjectID:           *authCtx.ProjectID,
+		},
+	); err != nil {
+		return oops.E(
+			oops.CodeUnexpected,
+			err,
+			"failed to delete remote session client attachments for user session issuer %s",
+			deleted.ID,
+		).Log(ctx, logger)
+	}
+
 	if _, err := txRepo.SoftDeleteUserSessionsByIssuerID(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").Log(ctx, logger)
 	}

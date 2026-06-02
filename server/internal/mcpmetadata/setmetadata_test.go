@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -68,7 +71,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.NoError(t, err)
 
 		payload := &gen.SetMcpMetadataPayload{
-			ToolsetSlug:              types.Slug(toolset.Slug),
+			ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 			LogoAssetID:              nil,
 			ExternalDocumentationURL: new("https://docs.example.com"),
 			SessionToken:             nil,
@@ -80,7 +83,8 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.NotNil(t, result)
 
 		require.NotEmpty(t, result.ID)
-		require.Equal(t, toolset.ID.String(), result.ToolsetID)
+		require.NotNil(t, result.ToolsetID)
+		require.Equal(t, toolset.ID.String(), *result.ToolsetID)
 		require.NotNil(t, result.ExternalDocumentationURL)
 		require.Equal(t, "https://docs.example.com", *result.ExternalDocumentationURL)
 		require.Nil(t, result.LogoAssetID)
@@ -109,7 +113,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.NoError(t, err)
 
 		firstPayload := &gen.SetMcpMetadataPayload{
-			ToolsetSlug:              types.Slug(toolset.Slug),
+			ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 			LogoAssetID:              nil,
 			ExternalDocumentationURL: new("https://docs.example.com/v1"),
 			SessionToken:             nil,
@@ -121,7 +125,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.NotNil(t, firstResult)
 
 		secondPayload := &gen.SetMcpMetadataPayload{
-			ToolsetSlug:              types.Slug(toolset.Slug),
+			ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 			LogoAssetID:              nil,
 			ExternalDocumentationURL: new("https://docs.example.com/v2"),
 			SessionToken:             nil,
@@ -133,7 +137,8 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.NotNil(t, secondResult)
 
 		require.Equal(t, firstResult.ID, secondResult.ID)
-		require.Equal(t, toolset.ID.String(), secondResult.ToolsetID)
+		require.NotNil(t, secondResult.ToolsetID)
+		require.Equal(t, toolset.ID.String(), *secondResult.ToolsetID)
 		require.NotNil(t, secondResult.ExternalDocumentationURL)
 		require.Equal(t, "https://docs.example.com/v2", *secondResult.ExternalDocumentationURL)
 	})
@@ -175,7 +180,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		logoAssetID := asset.ID.String()
 
 		payload := &gen.SetMcpMetadataPayload{
-			ToolsetSlug:              types.Slug(toolset.Slug),
+			ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 			LogoAssetID:              &logoAssetID,
 			ExternalDocumentationURL: nil,
 			SessionToken:             nil,
@@ -187,7 +192,8 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.NotNil(t, result)
 
 		require.NotEmpty(t, result.ID)
-		require.Equal(t, toolset.ID.String(), result.ToolsetID)
+		require.NotNil(t, result.ToolsetID)
+		require.Equal(t, toolset.ID.String(), *result.ToolsetID)
 		require.NotNil(t, result.LogoAssetID)
 		require.Equal(t, logoAssetID, *result.LogoAssetID)
 		require.Nil(t, result.ExternalDocumentationURL)
@@ -218,7 +224,7 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		instructions := "You have tools for searching the Test Hub. Use them wisely."
 
 		payload := &gen.SetMcpMetadataPayload{
-			ToolsetSlug:              types.Slug(toolset.Slug),
+			ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 			LogoAssetID:              nil,
 			ExternalDocumentationURL: nil,
 			Instructions:             &instructions,
@@ -231,7 +237,8 @@ func TestService_SetMcpMetadata(t *testing.T) {
 		require.NotNil(t, result)
 
 		require.NotEmpty(t, result.ID)
-		require.Equal(t, toolset.ID.String(), result.ToolsetID)
+		require.NotNil(t, result.ToolsetID)
+		require.Equal(t, toolset.ID.String(), *result.ToolsetID)
 		require.NotNil(t, result.Instructions)
 		require.Equal(t, instructions, *result.Instructions)
 		require.Nil(t, result.LogoAssetID)
@@ -260,7 +267,7 @@ func TestService_SetMcpMetadata_DefaultEnvironmentID_Valid(t *testing.T) {
 
 	envID := env.ID.String()
 	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
-		ToolsetSlug:          types.Slug(toolset.Slug),
+		ToolsetSlug:          conv.PtrEmpty(types.Slug(toolset.Slug)),
 		DefaultEnvironmentID: &envID,
 		SessionToken:         nil,
 		ProjectSlugInput:     nil,
@@ -302,7 +309,7 @@ func TestService_SetMcpMetadata_DefaultEnvironmentID_WrongProject(t *testing.T) 
 
 	envID := env.ID.String()
 	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
-		ToolsetSlug:          types.Slug(toolset.Slug),
+		ToolsetSlug:          conv.PtrEmpty(types.Slug(toolset.Slug)),
 		DefaultEnvironmentID: &envID,
 		SessionToken:         nil,
 		ProjectSlugInput:     nil,
@@ -324,7 +331,7 @@ func TestService_SetMcpMetadata_AuditLogCountOnCreate(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
-		ToolsetSlug:              types.Slug(toolset.Slug),
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 		ExternalDocumentationURL: new("https://docs.example.com/create"),
 		SessionToken:             nil,
 		ProjectSlugInput:         nil,
@@ -360,7 +367,7 @@ func TestService_SetMcpMetadata_AuditLogSnapshotsOnUpdate(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti, "test-mcp-audit-update")
 
 	firstResult, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
-		ToolsetSlug:              types.Slug(toolset.Slug),
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 		ExternalDocumentationURL: new("https://docs.example.com/before"),
 		SessionToken:             nil,
 		ProjectSlugInput:         nil,
@@ -373,7 +380,7 @@ func TestService_SetMcpMetadata_AuditLogSnapshotsOnUpdate(t *testing.T) {
 
 	instructions := "Updated MCP installation instructions"
 	secondResult, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
-		ToolsetSlug:              types.Slug(toolset.Slug),
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 		ExternalDocumentationURL: new("https://docs.example.com/after"),
 		Instructions:             &instructions,
 		SessionToken:             nil,
@@ -419,7 +426,7 @@ func TestService_SetMcpMetadata_NoAuditLogOnFailure(t *testing.T) {
 
 	invalidLogoID := "not-a-uuid"
 	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
-		ToolsetSlug:      types.Slug(toolset.Slug),
+		ToolsetSlug:      conv.PtrEmpty(types.Slug(toolset.Slug)),
 		LogoAssetID:      &invalidLogoID,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -433,4 +440,177 @@ func TestService_SetMcpMetadata_NoAuditLogOnFailure(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestService_SetMcpMetadata_ByMcpServerID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{})
+
+	docURL := "https://docs.example.com/remote-mcp"
+	instructions := "Authenticate with your remote MCP credentials."
+	serverID := server.ID.String()
+
+	result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID:              &serverID,
+		ExternalDocumentationURL: &docURL,
+		Instructions:             &instructions,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.ToolsetID)
+	require.NotNil(t, result.McpServerID)
+	require.Equal(t, serverID, *result.McpServerID)
+	require.NotNil(t, result.Instructions)
+	require.Equal(t, instructions, *result.Instructions)
+}
+
+func TestService_SetMcpMetadata_McpServer_EmitsAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name: "Audit Log Server",
+	})
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+
+	serverID := server.ID.String()
+	docURL := "https://docs.example.com/remote-mcp-audit"
+
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID:              &serverID,
+		ExternalDocumentationURL: &docURL,
+	})
+	require.NoError(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount, "expected an mcp_metadata:update audit event")
+
+	// Both backends share the action constant; verify the latest entry
+	// carries the mcp_server subject so /auditlogs filtering can still
+	// distinguish the two backends downstream.
+	latest, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, "mcp_server", latest.SubjectType, "latest entry should carry the mcp_server subject")
+}
+
+func TestService_SetMcpMetadata_RejectsDefaultEnvironmentIDForMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{})
+
+	// Make an environment in the same project so the rejection has to come
+	// from the explicit guard rather than from the existence check.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	env, err := environments_repo.New(ti.conn).CreateEnvironment(ctx, environments_repo.CreateEnvironmentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           "Test Env",
+		Slug:           "test-env",
+		Description:    pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	serverID := server.ID.String()
+	envID := env.ID.String()
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID:          &serverID,
+		DefaultEnvironmentID: &envID,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestService_SetMcpMetadata_RejectsBothBackends(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createTestToolset(t, ctx, ti, "xor-both-toolset-set")
+	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{})
+
+	serverID := server.ID.String()
+	_, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug: conv.PtrEmpty(types.Slug(toolset.Slug)),
+		McpServerID: &serverID,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestService_SetMcpMetadata_RejectsCrossProjectMcpServerID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+
+	// IDOR guard: a UUID that doesn't exist in the caller's project must look
+	// like a foreign-project id to the lookup; verify the BadRequest path.
+	foreignID, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	idStr := foreignID.String()
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID: &idStr,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestService_SetMcpMetadata_RejectsForeignProjectMcpServer is the real-world
+// IDOR scenario: a caller knows the UUID of an mcp_server that exists, but
+// lives in a different project. The lookup must reject it as not-found rather
+// than treating it as the caller's own.
+func TestService_SetMcpMetadata_RejectsForeignProjectMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	otherProject, err := projects_repo.New(ti.conn).CreateProject(ctx, projects_repo.CreateProjectParams{
+		Name:           "Foreign Project",
+		Slug:           "foreign-project-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	// Create a toolset + mcp_server entirely owned by the foreign project so
+	// the row genuinely exists in the DB; the IDOR check has to keep the
+	// caller out by project scoping, not by row existence.
+	foreignToolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              otherProject.ID,
+		Name:                   "Foreign Toolset",
+		Slug:                   "foreign-toolset-" + uuid.NewString()[:8],
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+
+	foreignServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+	foreignServer, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:                  foreignServerID,
+		ProjectID:           otherProject.ID,
+		Name:                conv.ToPGText("Foreign MCP Server"),
+		Slug:                conv.ToPGText("foreign-mcp-server-" + uuid.NewString()[:8]),
+		EnvironmentID:       uuid.NullUUID{},
+		UserSessionIssuerID: uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{},
+		ToolsetID:           uuid.NullUUID{UUID: foreignToolset.ID, Valid: true},
+		Visibility:          mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+
+	idStr := foreignServer.ID.String()
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID: &idStr,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

@@ -147,7 +147,7 @@ func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) erro
 }
 
 const getGitHubConnection = `-- name: GetGitHubConnection :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
 FROM plugin_github_connections
 WHERE project_id = $1
 `
@@ -162,6 +162,7 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.PublishedFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -169,7 +170,7 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 }
 
 const getGitHubConnectionByMarketplaceToken = `-- name: GetGitHubConnectionByMarketplaceToken :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
 FROM plugin_github_connections
 WHERE marketplace_token = $1
 `
@@ -186,6 +187,7 @@ func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, mar
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.PublishedFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -385,27 +387,32 @@ SELECT
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
   t.mcp_slug AS toolset_mcp_slug,
-  t.mcp_is_public AS toolset_is_public
+  t.mcp_is_public AS toolset_is_public,
+  (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth,
+  cd.domain AS toolset_custom_domain
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
+LEFT JOIN custom_domains cd ON cd.id = t.custom_domain_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC
 `
 
 type ListPluginsWithServersForProjectRow struct {
-	PluginID          uuid.UUID
-	PluginName        string
-	PluginSlug        string
-	PluginDescription pgtype.Text
-	ServerID          uuid.UUID
-	ServerDisplayName string
-	ServerPolicy      string
-	ServerSortOrder   int32
-	ToolsetID         uuid.UUID
-	ToolsetMcpSlug    pgtype.Text
-	ToolsetIsPublic   bool
+	PluginID            uuid.UUID
+	PluginName          string
+	PluginSlug          string
+	PluginDescription   pgtype.Text
+	ServerID            uuid.UUID
+	ServerDisplayName   string
+	ServerPolicy        string
+	ServerSortOrder     int32
+	ToolsetID           uuid.UUID
+	ToolsetMcpSlug      pgtype.Text
+	ToolsetIsPublic     bool
+	ToolsetIsOauth      bool
+	ToolsetCustomDomain pgtype.Text
 }
 
 // Used during plugin generation: returns all active plugin servers joined with
@@ -431,6 +438,8 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 			&i.ToolsetID,
 			&i.ToolsetMcpSlug,
 			&i.ToolsetIsPublic,
+			&i.ToolsetIsOauth,
+			&i.ToolsetCustomDomain,
 		); err != nil {
 			return nil, err
 		}
@@ -588,7 +597,7 @@ ON CONFLICT (project_id) DO UPDATE
       repo_name = EXCLUDED.repo_name,
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       updated_at = clock_timestamp()
-RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, created_at, updated_at
+RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, created_at, updated_at
 `
 
 type UpsertGitHubConnectionParams struct {
@@ -620,6 +629,7 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.PublishedFingerprint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

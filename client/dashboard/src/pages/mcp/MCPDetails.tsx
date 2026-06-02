@@ -873,7 +873,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
  * Overview Tab - Hosted URL and Installation instructions
  */
 function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
     retry: (_, err) => {
@@ -885,7 +885,10 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
     throwOnError: false,
   });
 
-  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
+  const form = useMcpMetadataMetadataForm(
+    { kind: "toolset", toolsetSlug: toolset.slug },
+    result.data?.metadata,
+  );
   const isLoading = result.isLoading || form.isLoading;
 
   return (
@@ -909,7 +912,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         )}
         <Stack className="mt-2" gap={1}>
           <InstallPageConfigForm
-            toolset={toolset}
+            installPageUrl={installPageUrl}
             form={form}
             isLoading={isLoading}
           />
