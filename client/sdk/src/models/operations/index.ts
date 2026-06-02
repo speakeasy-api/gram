@@ -95,6 +95,7 @@ export * from "./fetchopenapiv3fromurl.js";
 export * from "./generatetitle.js";
 export * from "./generateworkosadminportallink.js";
 export * from "./getactivedeployment.js";
+export * from "./getagentplugins.js";
 export * from "./getaiintegrationconfig.js";
 export * from "./getassistant.js";
 export * from "./getassistantmemory.js";

@@ -158,6 +158,10 @@ run();
 * [updateMemberRoles](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
 
+### [Agent](docs/sdks/agent/README.md)
+
+* [getPlugins](docs/sdks/agent/README.md#getplugins) - getPlugins agent
+
 ### [AiIntegrations](docs/sdks/aiintegrations/README.md)
 
 * [deleteConfig](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
@@ -629,6 +633,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessUpdateMemberRoles`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`accessUpdateShadowMCPAccessRule`](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
+- [`agentGetPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
 - [`aiIntegrationsDeleteConfig`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
 - [`aiIntegrationsGetConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
 - [`aiIntegrationsUpsertConfig`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertConfig aiIntegrations
@@ -927,6 +932,7 @@ To learn about this feature and how to get started, check
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
+- [`useAgentPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
 - [`useAiIntegrationConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
 - [`useApproveShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
 - [`useAssistantMemoriesDeleteMutation`](docs/sdks/assistantmemories/README.md#delete) - deleteAssistantMemory assistantMemories

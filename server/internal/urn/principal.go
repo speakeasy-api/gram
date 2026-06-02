@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"net/mail"
 	"strings"
 )
 
@@ -11,18 +12,25 @@ import (
 type PrincipalType string
 
 const (
-	PrincipalTypeUser PrincipalType = "user"
-	PrincipalTypeRole PrincipalType = "role"
+	PrincipalTypeUser  PrincipalType = "user"
+	PrincipalTypeRole  PrincipalType = "role"
+	PrincipalTypeEmail PrincipalType = "email"
 )
 
+// PrincipalWildcard is the URN that matches any principal in the org. It is
+// not a typed `type:id` Principal — assignment tables store this literal
+// alongside the typed URNs, so consumers special-case it.
+const PrincipalWildcard = "*"
+
 var principalTypes = map[PrincipalType]struct{}{
-	PrincipalTypeUser: {},
-	PrincipalTypeRole: {},
+	PrincipalTypeUser:  {},
+	PrincipalTypeRole:  {},
+	PrincipalTypeEmail: {},
 }
 
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.
-// Format: "type:id" where type is one of "user" or "role" and id is the
-// principal identifier (e.g. "user:user_01abc", "role:admin").
+// Format: "type:id" where type is "user", "role", or "email" and id is the
+// principal identifier (e.g. "user:user_01abc", "role:admin", "email:dev@acme.corp").
 type Principal struct {
 	Type PrincipalType
 	ID   string
@@ -162,10 +170,12 @@ func (u *Principal) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// validate checks that the principal has a known type and a non-empty ID.
-// The ID segment is intentionally permissive (any non-empty string up to
-// maxSegmentLength) because user IDs come from external systems (WorkOS) and
-// do not follow the slug pattern.
+// validate checks that the principal has a known type and a well-formed ID.
+// For user and role principals the ID is intentionally permissive (any
+// non-empty string up to maxSegmentLength) because IDs come from external
+// systems (WorkOS) and do not follow the slug pattern. For email principals
+// the ID must be a bare, lowercase RFC 5321 address so two assignments to the
+// same person collapse to one row.
 func (u *Principal) validate() error {
 	if u.checked {
 		return u.err
@@ -191,6 +201,22 @@ func (u *Principal) validate() error {
 	if len(u.ID) > maxSegmentLength {
 		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxSegmentLength, len(u.ID))
 		return u.err
+	}
+
+	if u.Type == PrincipalTypeEmail {
+		if u.ID != strings.ToLower(u.ID) {
+			u.err = fmt.Errorf("%w: email principal id must be lowercase", ErrInvalid)
+			return u.err
+		}
+		addr, err := mail.ParseAddress(u.ID)
+		if err != nil {
+			u.err = fmt.Errorf("%w: invalid email principal id: %w", ErrInvalid, err)
+			return u.err
+		}
+		if addr.Address != u.ID || addr.Name != "" {
+			u.err = fmt.Errorf("%w: email principal id must be the bare address", ErrInvalid)
+			return u.err
+		}
 	}
 
 	return nil

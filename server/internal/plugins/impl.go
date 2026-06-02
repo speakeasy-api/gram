@@ -48,8 +48,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
-
 // GitHub usernames: 1-39 chars, starts with alphanumeric, alphanumeric or hyphen.
 // Strict enough to prevent path traversal in API URL construction.
 var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
@@ -740,10 +738,34 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	for _, urn := range payload.PrincipalUrns {
-		if !validPrincipalURN.MatchString(urn) {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid principal URN: %s", urn)
+	// Normalize and validate every principal URN through urn.ParsePrincipal so
+	// the typed wrapper is the single source of truth on what a principal is.
+	// The wildcard is a literal token (not a typed URN), so it takes a
+	// fast-path. Email IDs are lowercased here so the device-agent endpoint
+	// can match a lowercased lookup deterministically.
+	urns := make([]string, 0, len(payload.PrincipalUrns))
+	seenURNs := make(map[string]struct{}, len(payload.PrincipalUrns))
+	for _, raw := range payload.PrincipalUrns {
+		var principalURN string
+		if raw == urn.PrincipalWildcard {
+			principalURN = raw
+		} else {
+			normalized := raw
+			if addr, ok := strings.CutPrefix(raw, string(urn.PrincipalTypeEmail)+":"); ok {
+				normalized = string(urn.PrincipalTypeEmail) + ":" + strings.ToLower(strings.TrimSpace(addr))
+			}
+			parsed, err := urn.ParsePrincipal(normalized)
+			if err != nil {
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
+			}
+			principalURN = parsed.String()
 		}
+
+		if _, ok := seenURNs[principalURN]; ok {
+			continue
+		}
+		seenURNs[principalURN] = struct{}{}
+		urns = append(urns, principalURN)
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -758,12 +780,12 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "remove existing assignments").Log(ctx, s.logger)
 	}
 
-	assignments := make([]*gen.PluginAssignment, 0, len(payload.PrincipalUrns))
-	for _, urn := range payload.PrincipalUrns {
+	assignments := make([]*gen.PluginAssignment, 0, len(urns))
+	for _, u := range urns {
 		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       pluginID,
 			OrganizationID: ac.ActiveOrganizationID,
-			PrincipalUrn:   urn,
+			PrincipalUrn:   u,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").Log(ctx, s.logger)
@@ -780,7 +802,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		PluginID:         plugin.ID,
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
-		PrincipalURNs:    payload.PrincipalUrns,
+		PrincipalURNs:    urns,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin assignments set").Log(ctx, s.logger)
 	}

@@ -3006,6 +3006,97 @@ paths:
             x-speakeasy-name-override: updateRole
             x-speakeasy-react-hook:
                 name: UpdateRole
+    /rpc/agent.getPlugins:
+        get:
+            description: 'Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool''s own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool''s syncer decides how to render it into that tool''s native configuration.'
+            operationId: getAgentPlugins
+            parameters:
+                - allowEmptyValue: true
+                  description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+                  example: dev@acme.corp
+                  in: query
+                  name: email
+                  required: true
+                  schema:
+                    description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+                    example: dev@acme.corp
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetPluginsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: getPlugins agent
+            tags:
+                - agent
+            x-speakeasy-name-override: getPlugins
+            x-speakeasy-react-hook:
+                name: AgentPlugins
     /rpc/aiIntegrations.deleteConfig:
         post:
             description: Delete the org-wide AI integration config for a provider.
@@ -30683,6 +30774,30 @@ components:
                 - assistant_count
                 - created_at
                 - updated_at
+        AgentMarketplace:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Stable identifier for the marketplace, used as its key when the agent registers it with a managed tool. Matches the name written into the published marketplace.json, derived from the organization name (for example, `<org-slug>-gram`), so plugin references resolve deterministically across polls.
+                url:
+                    type: string
+                    description: Git URL for the marketplace, served by the marketplace proxy.
+            required:
+                - name
+                - url
+        AgentPlugin:
+            type: object
+            properties:
+                marketplace_name:
+                    type: string
+                    description: Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.
+                slug:
+                    type: string
+                    description: Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.
+            required:
+                - slug
+                - marketplace_name
         AllowedOrigin:
             type: object
             properties:
@@ -34584,6 +34699,26 @@ components:
                 - top_tools_by_count
                 - top_tools_by_failure_rate
                 - interval_seconds
+        GetPluginsResult:
+            type: object
+            properties:
+                etag:
+                    type: string
+                    description: Opaque revision identifier covering the marketplace + plugin set. The agent stores this to detect changes between polls.
+                marketplaces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentMarketplace'
+                    description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+                plugins:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentPlugin'
+                    description: Plugins the agent should enable. Each entry references one of the marketplaces above by name.
+            required:
+                - etag
+                - marketplaces
+                - plugins
         GetProductFeaturesResponseBody:
             type: object
             properties:
@@ -42920,6 +43055,8 @@ tags:
       description: Manage roles, team member access control, and authorization challenge events.
     - name: admin
       description: Operations supporting admin tasks, protected by Google workspace auth.
+    - name: agent
+      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
     - name: aiIntegrations
       description: Manage organization-level AI provider integrations.
     - name: assets

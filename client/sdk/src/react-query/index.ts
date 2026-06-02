@@ -9,6 +9,7 @@ export * from "./activeDeployment.js";
 export * from "./addExternalOAuthServer.js";
 export * from "./addOAuthProxyServer.js";
 export * from "./addPluginServer.js";
+export * from "./agentPlugins.js";
 export * from "./aiIntegrationConfig.js";
 export * from "./approveShadowMCPApprovalRequest.js";
 export * from "./assistantMemoriesDelete.js";
