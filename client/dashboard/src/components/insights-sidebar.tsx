@@ -273,7 +273,6 @@ export function InsightsProvider({
   // found for lookup: __LOCALID_…` during render.
   const [sessionKey, setSessionKey] = useState(0);
   const { theme } = useMoonshineConfig();
-  const noToolsetsConfigured = useNoToolsetsConfigured();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
   const mcpConfig = override?.mcpConfig ?? defaultMcpConfig;
@@ -282,6 +281,7 @@ export function InsightsProvider({
   const suggestions = override?.suggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
   const hideTrigger = override?.hideTrigger ?? false;
+  const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
 
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
