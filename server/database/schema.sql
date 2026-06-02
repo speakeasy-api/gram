@@ -1135,6 +1135,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
+-- project_managed_assistants maps a project to its single platform-managed
+-- assistant (the one powering the AI Insights sidebar). Kept in its own table
+-- rather than a flag on assistants/projects so the relation has an explicit
+-- lifecycle: the row exists only while the feature is toggled on for the
+-- project, and cascades away when either the project or the assistant is
+-- removed. project_id is the primary key, enforcing 0-or-1 managed assistant
+-- per project.
+CREATE TABLE IF NOT EXISTS project_managed_assistants (
+  project_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT project_managed_assistants_pkey PRIMARY KEY (project_id),
+  CONSTRAINT project_managed_assistants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT project_managed_assistants_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS project_managed_assistants_assistant_id_idx ON project_managed_assistants (assistant_id);
+
 CREATE TABLE IF NOT EXISTS assistant_toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   assistant_id uuid NOT NULL,
@@ -2646,6 +2667,13 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- existing connections (and any future connection without the marketplace
   -- surface enabled) are unconstrained.
   marketplace_token TEXT,
+  -- Stable content hash of the plugin packages last published to this repo,
+  -- independent of per-publish values (manifest version, injected API keys).
+  -- The automated generator rollout compares the current fingerprint against
+  -- this value and skips republishing when nothing has changed. Nullable so
+  -- connections published before fingerprinting existed re-publish once to
+  -- backfill it.
+  published_fingerprint TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2709,6 +2737,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
   action TEXT NOT NULL DEFAULT 'flag',
+  audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
   version BIGINT NOT NULL,
@@ -2719,12 +2748,17 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policies_audience_type_check CHECK (audience_type IN ('everyone', 'targeted')),
   CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policies_project_id_audience_type_idx
+ON risk_policies (project_id, audience_type)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (

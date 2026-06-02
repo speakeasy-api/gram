@@ -310,33 +310,12 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		attr.AccessMemberID(ac.UserID),
 	)
 
-	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
 	switch {
-	case errors.Is(err, errConnectedUserNotFound):
+	case errors.Is(err, authz.ErrPrincipalNotFound):
 		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").Log(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
-	}
-
-	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)}
-	rolePrincipals, err := s.roleMgr.MemberRolePrincipals(ctx, ac.ActiveOrganizationID, connectedUser.WorkosID.String)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list member roles").Log(ctx, logger)
-	}
-	roleSlugs := make([]string, 0, len(rolePrincipals))
-	for _, role := range rolePrincipals {
-		// Effective-grant responses must include grants stored under either the
-		// canonical role URN or the legacy role slug during the migration.
-		rolePrincipalURNs, err := authz.RolePrincipals(role.RoleSlug, role.PrincipalUrn)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
-		}
-		principals = append(principals, rolePrincipalURNs...)
-		roleSlugs = append(roleSlugs, role.RoleSlug)
-	}
-	if len(roleSlugs) == 1 {
-		logger = logger.With(attr.SlogAccessRoleSlug(roleSlugs[0]))
-		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(roleSlugs[0]))
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").Log(ctx, logger)
 	}
 
 	grants, err := authz.LoadGrants(ctx, s.db, ac.ActiveOrganizationID, principals)

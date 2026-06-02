@@ -35,11 +35,15 @@ export type RemoteSessionIssuer = {
    */
   oidc: boolean;
   /**
+   * The owning organization id. Empty for legacy rows not yet backfilled.
+   */
+  organizationId: string;
+  /**
    * When true, the MCP client registers and transacts directly with this issuer.
    */
   passthrough: boolean;
   /**
-   * The owning project id.
+   * The owning project id. Empty for organization-level issuers.
    */
   projectId: string;
   /**
@@ -76,6 +80,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     issuer: z.string(),
     jwks_uri: z.optional(z.string()),
     oidc: z.boolean(),
+    organization_id: z.string(),
     passthrough: z.boolean(),
     project_id: z.string(),
     registration_endpoint: z.optional(z.string()),
@@ -95,6 +100,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "grant_types_supported": "grantTypesSupported",
       "jwks_uri": "jwksUri",
+      "organization_id": "organizationId",
       "project_id": "projectId",
       "registration_endpoint": "registrationEndpoint",
       "response_types_supported": "responseTypesSupported",

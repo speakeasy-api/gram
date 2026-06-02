@@ -17,6 +17,18 @@ FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = ANY(@principal_urns::text[]);
 
+-- name: ListPrincipalGrantsByResource :many
+-- Returns grant rows for a single resource selector.
+SELECT principal_urn, scope, effect, selectors
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND selectors @> jsonb_build_object(
+    'resource_kind', sqlc.arg(resource_kind)::text,
+    'resource_id', sqlc.arg(resource_id)::text
+  )
+ORDER BY principal_urn;
+
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
 -- the updated_at is refreshed. Uses COALESCE to match the functional unique index.
@@ -31,6 +43,16 @@ RETURNING id, organization_id, principal_urn, principal_type, scope, effect, sel
 DELETE FROM principal_grants
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: DeletePrincipalGrantsByResource :execrows
+-- Removes grant rows for a single resource selector.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND selectors @> jsonb_build_object(
+    'resource_kind', sqlc.arg(resource_kind)::text,
+    'resource_id', sqlc.arg(resource_id)::text
+  );
 
 -- name: DeletePrincipalGrantsByPrincipal :execrows
 -- Removes all grants for a specific principal within an org.
@@ -431,6 +453,26 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE ora.organization_id = @organization_id
   AND ora.workos_user_id = @workos_user_id
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY role_slug;
+
+-- name: ListMemberRolePrincipalsByUser :many
+SELECT
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.user_id = sqlc.arg(user_id)::text
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
   AND ora.deleted_at IS NULL
 ORDER BY role_slug;

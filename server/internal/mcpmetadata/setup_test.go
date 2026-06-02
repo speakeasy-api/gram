@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -17,7 +19,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -98,4 +105,84 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 		serverURL:      serverURL,
 		toolsetRepo:    toolsets_repo.New(conn),
 	}
+}
+
+// mcpServerFixtureOptions tunes the fixture pair created by
+// createMcpServerWithEndpoint. ToolsetID is non-Nil for toolset-backed
+// mcp_servers (the dual-source bridge path); RemoteMcpServerID is non-Nil for
+// Remote-MCP-backed installs.
+type mcpServerFixtureOptions struct {
+	name              string
+	visibility        string
+	endpointSlug      string
+	toolsetID         uuid.NullUUID
+	remoteMcpServerID uuid.NullUUID
+	customDomainID    uuid.NullUUID
+}
+
+func createMcpServerWithEndpoint(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	opts mcpServerFixtureOptions,
+) (mcpservers_repo.McpServer, mcpendpoints_repo.McpEndpoint) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	if opts.name == "" {
+		opts.name = "Test MCP Server"
+	}
+	if opts.visibility == "" {
+		opts.visibility = mcpservers.VisibilityPrivate
+	}
+	if opts.endpointSlug == "" {
+		opts.endpointSlug = "test-endpoint-" + uuid.NewString()[:8]
+	}
+
+	// mcp_servers carries an XOR check on (toolset_id, remote_mcp_server_id);
+	// when neither is supplied by the caller, default to a fresh toolset so
+	// fixtures focused on the metadata flow don't need to spell out a backend.
+	if !opts.toolsetID.Valid && !opts.remoteMcpServerID.Valid {
+		toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			Name:                   "Fixture Toolset",
+			Slug:                   "fixture-toolset-" + uuid.NewString()[:8],
+			Description:            conv.ToPGText("Fixture toolset for mcp_server backend"),
+			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+			McpSlug:                pgtype.Text{String: "", Valid: false},
+			McpEnabled:             false,
+		})
+		require.NoError(t, err)
+		opts.toolsetID = uuid.NullUUID{UUID: toolset.ID, Valid: true}
+	}
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	server, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:                  id,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                conv.ToPGText(opts.name),
+		Slug:                conv.ToPGText("mcp-server-" + uuid.NewString()[:8]),
+		EnvironmentID:       uuid.NullUUID{},
+		UserSessionIssuerID: uuid.NullUUID{},
+		RemoteMcpServerID:   opts.remoteMcpServerID,
+		ToolsetID:           opts.toolsetID,
+		Visibility:          opts.visibility,
+	})
+	require.NoError(t, err)
+
+	endpoint, err := mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: opts.customDomainID,
+		McpServerID:    server.ID,
+		Slug:           opts.endpointSlug,
+	})
+	require.NoError(t, err)
+
+	return server, endpoint
 }

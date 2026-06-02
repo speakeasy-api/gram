@@ -36,7 +36,7 @@ func TestIngressProvisioner_Setup_CreateNew(t *testing.T) {
 	p, cs := newIngressProvisioner(t)
 	domain := "test.example.com"
 
-	result, err := p.Setup(ctx, domain)
+	result, err := p.Setup(ctx, domain, nil)
 	require.NoError(t, err)
 
 	expectedName, err := SanitizeDomainForK8sName(domain)
@@ -55,16 +55,49 @@ func TestIngressProvisioner_Setup_CreateNew(t *testing.T) {
 	require.Equal(t, expectedSecret, ingress.Spec.TLS[0].SecretName)
 }
 
+func TestIngressProvisioner_Setup_WithAllowlist_SetsAnnotation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	p, cs := newIngressProvisioner(t)
+	domain := "allow.example.com"
+
+	result, err := p.Setup(ctx, domain, []string{"1.2.3.4", "10.0.0.0/8"})
+	require.NoError(t, err)
+
+	ingress, err := cs.NetworkingV1().Ingresses(ingressTestNamespace).Get(ctx, result.ResourceName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "1.2.3.4,10.0.0.0/8", ingress.Annotations["nginx.ingress.kubernetes.io/whitelist-source-range"])
+}
+
+func TestIngressProvisioner_Setup_EmptyAllowlist_RemovesAnnotation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	p, cs := newIngressProvisioner(t)
+	domain := "clear.example.com"
+
+	// Provision with a restriction, then re-apply with an empty allowlist.
+	_, err := p.Setup(ctx, domain, []string{"1.2.3.4"})
+	require.NoError(t, err)
+
+	result, err := p.Setup(ctx, domain, nil)
+	require.NoError(t, err)
+
+	ingress, err := cs.NetworkingV1().Ingresses(ingressTestNamespace).Get(ctx, result.ResourceName, metav1.GetOptions{})
+	require.NoError(t, err)
+	_, ok := ingress.Annotations["nginx.ingress.kubernetes.io/whitelist-source-range"]
+	require.False(t, ok, "whitelist annotation must be removed when allowlist is empty")
+}
+
 func TestIngressProvisioner_Setup_UpdateExisting(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	p, cs := newIngressProvisioner(t)
 	domain := "update.example.com"
 
-	_, err := p.Setup(ctx, domain)
+	_, err := p.Setup(ctx, domain, nil)
 	require.NoError(t, err)
 
-	_, err = p.Setup(ctx, domain)
+	_, err = p.Setup(ctx, domain, nil)
 	require.NoError(t, err)
 
 	expectedName, err := SanitizeDomainForK8sName(domain)
@@ -82,7 +115,7 @@ func TestIngressProvisioner_Get_Found(t *testing.T) {
 	p, _ := newIngressProvisioner(t)
 	domain := "get.example.com"
 
-	result, err := p.Setup(ctx, domain)
+	result, err := p.Setup(ctx, domain, nil)
 	require.NoError(t, err)
 
 	require.NoError(t, p.Get(ctx, result.ResourceName))
@@ -103,7 +136,7 @@ func TestIngressProvisioner_Delete(t *testing.T) {
 	p, cs := newIngressProvisioner(t)
 	domain := "delete.example.com"
 
-	result, err := p.Setup(ctx, domain)
+	result, err := p.Setup(ctx, domain, nil)
 	require.NoError(t, err)
 
 	_, err = cs.CoreV1().Secrets(ingressTestNamespace).Create(ctx, &corev1.Secret{

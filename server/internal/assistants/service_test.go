@@ -1386,6 +1386,6 @@ func TestServiceCoreEnqueueTriggerTaskSkipsMissingAssistant(t *testing.T) {
 		EventJSON:         []byte(`{}`),
 	})
 	require.NoError(t, err)
-	require.False(t, result.EventCreated)
+	require.False(t, result.ShouldSignal)
 	require.Equal(t, uuid.Nil, result.AssistantID)
 }

@@ -401,7 +401,7 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_RemoteBackend(t *testing.
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "not found")
+	require.Contains(t, err.Error(), "no OAuth configuration found")
 	require.Empty(t, w.Body.String())
 }
 
@@ -418,7 +418,7 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithoutOAut
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "not found")
+	require.Contains(t, err.Error(), "no OAuth configuration found")
 	require.Empty(t, w.Body.String())
 }
 

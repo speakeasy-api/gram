@@ -7,13 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -130,39 +129,11 @@ func (s *Service) serveResolvedMCPEndpoint(
 // Returns CodeNotFound when no row matches. Callers that want to fall
 // back to a legacy lookup (e.g. /mcp's existing toolsets path) should
 // check for oops.CodeNotFound and proceed accordingly.
+//
+// Thin wrapper around mcpendpoints.BySlugAndCustomDomain; kept as a method
+// for the existing /mcp and /x/mcp call sites.
 func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, error) {
-	var customDomainID uuid.NullUUID
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
-	}
-
-	endpoint, err := mcpendpointsrepo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
-		Slug:           slug,
-		CustomDomainID: customDomainID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
-	case err != nil:
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").Log(ctx, logger)
-	}
-
-	mcpServer, err := mcpserversrepo.New(s.db).GetMCPServerByID(ctx, mcpserversrepo.GetMCPServerByIDParams{
-		ID:        endpoint.McpServerID,
-		ProjectID: endpoint.ProjectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, logger)
-	}
-
-	if mcpServer.Visibility == mcpservers.VisibilityDisabled {
-		return nil, nil, oops.C(oops.CodeNotFound)
-	}
-
-	return &endpoint, &mcpServer, nil
+	return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
 }
 
 // LoadResolvedMcpEndpointBySlug resolves a slug all the way to a

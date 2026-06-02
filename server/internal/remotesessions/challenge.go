@@ -160,6 +160,11 @@ type Client struct {
 	IssuerScopesSupported []string
 	Audience              string
 	Passthrough           bool
+	// LegacyCallbackUrl flips BuildAuthorizationUrl onto the
+	// /oauth/callback redirect_uri (with a JSON state carrying
+	// remote_sessions=true) so a client registered against the old
+	// oauth_proxy_servers URL keeps working without re-registration.
+	LegacyCallbackUrl bool
 }
 
 func (c Client) resolveScopes() []string {
@@ -177,10 +182,7 @@ func (m *ChallengeManager) ListClients(
 	projectID uuid.UUID,
 	userSessionIssuerID uuid.UUID,
 ) ([]Client, error) {
-	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           conv.ToNullUUID(projectID),
-	})
+	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -198,6 +200,7 @@ func (m *ChallengeManager) ListClients(
 			IssuerScopesSupported: r.ScopesSupported,
 			Audience:              conv.FromPGTextOrEmpty[string](r.ClientAudience),
 			Passthrough:           r.Passthrough,
+			LegacyCallbackUrl:     r.LegacyCallbackUrl,
 		})
 	}
 	return out, nil
@@ -256,6 +259,24 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	}
 	codeChallenge := s256Challenge(verifier)
 	redirectURI := m.callbackURL(parent.RouteBase)
+	stateParam := stateID
+	if client.LegacyCallbackUrl {
+		// Upstream was registered against the legacy oauth_proxy_servers
+		// callback. Keep that exact redirect_uri so the upstream's
+		// strict-match check still passes, and wrap the state in a JSON
+		// envelope tagged remote_sessions=true so /oauth/callback can tell
+		// this response apart from a true proxy callback and forward to
+		// /mcp/remote_login_callback.
+		redirectURI = m.legacyCallbackURL()
+		envelope, eerr := json.Marshal(map[string]string{
+			"remote_sessions": "true",
+			"state_id":        stateID,
+		})
+		if eerr != nil {
+			return "", fmt.Errorf("marshal legacy state envelope: %w", eerr)
+		}
+		stateParam = string(envelope)
+	}
 
 	// Parse the upstream authorize URL before the cache write so a malformed
 	// endpoint can't leave an orphaned RemoteLoginState in Redis (its key is
@@ -289,7 +310,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	q.Set("response_type", "code")
 	q.Set("client_id", client.ExternalClientID)
 	q.Set("redirect_uri", redirectURI)
-	q.Set("state", stateID)
+	q.Set("state", stateParam)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
 	if scopes := client.resolveScopes(); len(scopes) > 0 {
@@ -455,6 +476,14 @@ func (m *ChallengeManager) callbackURL(routeBase string) string {
 		routeBase = "mcp"
 	}
 	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
+}
+
+// legacyCallbackURL is the oauth_proxy_servers-era redirect_uri. Used only
+// for clients flagged LegacyCallbackUrl whose upstream registration still
+// points at this path; /oauth/callback then forwards them into
+// /mcp/remote_login_callback by reading the JSON state envelope.
+func (m *ChallengeManager) legacyCallbackURL() string {
+	return strings.TrimRight(m.serverURL.String(), "/") + "/oauth/callback"
 }
 
 // tokenResponse is the slice of the upstream /token reply we care about.

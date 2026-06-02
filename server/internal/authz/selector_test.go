@@ -143,6 +143,12 @@ func TestResourceKindForScope_rootScope(t *testing.T) {
 	require.Equal(t, "*", ResourceKindForScope(ScopeRoot))
 }
 
+func TestResourceKindForScope_riskPolicyScope(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyEvaluate))
+}
+
 func TestNewSelector_includesResourceKind(t *testing.T) {
 	t.Parallel()
 
@@ -234,6 +240,23 @@ func TestValidateSelector_mcpProjectIDAllowed(t *testing.T) {
 	require.NoError(t, ValidateSelector(ScopeMCPConnect, sel))
 	require.NoError(t, ValidateSelector(ScopeMCPRead, sel))
 	require.NoError(t, ValidateSelector(ScopeMCPWrite, sel))
+}
+
+func TestValidateSelector_riskPolicyAllowsOnlyResourceKeys(t *testing.T) {
+	t.Parallel()
+
+	valid := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123"}
+	require.NoError(t, ValidateSelector(ScopeRiskPolicyEvaluate, valid))
+
+	withExtraKey := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "tool": "search"}
+	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, withExtraKey), "not allowed")
+}
+
+func TestIsInternalScope(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsInternalScope(ScopeRiskPolicyEvaluate))
+	require.False(t, IsInternalScope(ScopeProjectRead))
 }
 
 func TestMCPCheck_injectsProjectID(t *testing.T) {

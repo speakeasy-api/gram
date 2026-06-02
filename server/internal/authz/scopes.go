@@ -3,23 +3,39 @@ package authz
 import (
 	"cmp"
 	"slices"
+	"strings"
 )
 
 // Scope identifies an authorization capability granted on a resource.
 type Scope string
 
+type ScopeParts struct {
+	Resource string
+	Action   string
+}
+
 const (
-	ScopeRoot             Scope = "root"
-	ScopeOrgRead          Scope = "org:read"
-	ScopeOrgAdmin         Scope = "org:admin"
-	ScopeProjectRead      Scope = "project:read"
-	ScopeProjectWrite     Scope = "project:write"
-	ScopeMCPRead          Scope = "mcp:read"
-	ScopeMCPWrite         Scope = "mcp:write"
-	ScopeMCPConnect       Scope = "mcp:connect"
-	ScopeEnvironmentRead  Scope = "environment:read"
-	ScopeEnvironmentWrite Scope = "environment:write"
+	ScopeRoot               Scope = "root"
+	ScopeOrgRead            Scope = "org:read"
+	ScopeOrgAdmin           Scope = "org:admin"
+	ScopeProjectRead        Scope = "project:read"
+	ScopeProjectWrite       Scope = "project:write"
+	ScopeMCPRead            Scope = "mcp:read"
+	ScopeMCPWrite           Scope = "mcp:write"
+	ScopeMCPConnect         Scope = "mcp:connect"
+	ScopeEnvironmentRead    Scope = "environment:read"
+	ScopeEnvironmentWrite   Scope = "environment:write"
+	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 )
+
+func (s Scope) Parts() ScopeParts {
+	resource, action, ok := strings.Cut(string(s), ":")
+	if !ok {
+		return ScopeParts{Resource: string(s), Action: ""}
+	}
+
+	return ScopeParts{Resource: resource, Action: action}
+}
 
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
 // Scopes with no higher-privilege implication (admin tiers) map to nil. Expansion is
@@ -37,16 +53,31 @@ const (
 // (a generic project-viewer must not gain access to environment values, which include
 // secrets).
 var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:             nil,
-	ScopeOrgRead:          {ScopeOrgAdmin},
-	ScopeOrgAdmin:         nil,
-	ScopeProjectRead:      {ScopeProjectWrite},
-	ScopeProjectWrite:     nil,
-	ScopeMCPRead:          {ScopeMCPWrite},
-	ScopeMCPWrite:         nil,
-	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:  {ScopeEnvironmentWrite},
-	ScopeEnvironmentWrite: nil,
+	ScopeRoot:               nil,
+	ScopeOrgRead:            {ScopeOrgAdmin},
+	ScopeOrgAdmin:           nil,
+	ScopeProjectRead:        {ScopeProjectWrite},
+	ScopeProjectWrite:       nil,
+	ScopeMCPRead:            {ScopeMCPWrite},
+	ScopeMCPWrite:           nil,
+	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
+	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
+	ScopeEnvironmentWrite:   nil,
+	ScopeRiskPolicyEvaluate: nil,
+}
+
+var internalScopes = map[Scope]bool{
+	ScopeRoot:               false,
+	ScopeOrgRead:            false,
+	ScopeOrgAdmin:           false,
+	ScopeProjectRead:        false,
+	ScopeProjectWrite:       false,
+	ScopeMCPRead:            false,
+	ScopeMCPWrite:           false,
+	ScopeMCPConnect:         false,
+	ScopeEnvironmentRead:    false,
+	ScopeEnvironmentWrite:   false,
+	ScopeRiskPolicyEvaluate: true,
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
@@ -74,4 +105,10 @@ func CalculateSubScopes(scope Scope) []string {
 		out[i] = string(s)
 	}
 	return out
+}
+
+// IsInternalScope reports whether a scope is used as an internal relation
+// rather than a user-facing RBAC capability.
+func IsInternalScope(scope Scope) bool {
+	return internalScopes[scope]
 }

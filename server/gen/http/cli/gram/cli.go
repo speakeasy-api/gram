@@ -16,6 +16,7 @@ import (
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
+	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	assistantmemoriesc "github.com/speakeasy-api/gram/server/gen/http/assistant_memories/client"
@@ -40,6 +41,7 @@ import (
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
+	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
@@ -76,6 +78,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-approval-requests|create-shadow-mcp-approval-request|approve-shadow-mcp-approval-request|deny-shadow-mcp-approval-request|list-shadow-mcp-access-rules|create-shadow-mcp-access-rule|update-shadow-mcp-access-rule|delete-shadow-mcp-access-rule|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
+		"agent get-plugins",
 		"ai-integrations (get-config|upsert-config|delete-config)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
@@ -107,6 +110,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server)",
 		"remote-session-clients (create-remote-session-client|clone-client-fromoauth-proxy-provider|update-remote-session-client|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
+		"organization-remote-session-issuers (create-organization-remote-session-issuer|update-organization-remote-session-issuer|list-organization-remote-session-issuers|get-organization-remote-session-issuer|delete-organization-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|suggest-custom-detection-rule|test-detection-rule)",
@@ -131,7 +135,7 @@ func UsageExamples() string {
 		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "admin login --return-to \"abc123\" --prompt \"abc123\"" + "\n" +
-		os.Args[0] + " " + "ai-integrations get-config --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "agent get-plugins --email \"dev@acme.corp\" --apikey-token \"abc123\"" + "\n" +
 		""
 }
 
@@ -317,6 +321,12 @@ func ParseEndpoint(
 		adminListOrganizationsCursorFlag            = adminListOrganizationsFlags.String("cursor", "", "")
 		adminListOrganizationsLimitFlag             = adminListOrganizationsFlags.String("limit", "", "")
 		adminListOrganizationsAdminSessionTokenFlag = adminListOrganizationsFlags.String("admin-session-token", "", "")
+
+		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
+
+		agentGetPluginsFlags           = flag.NewFlagSet("get-plugins", flag.ExitOnError)
+		agentGetPluginsEmailFlag       = agentGetPluginsFlags.String("email", "REQUIRED", "")
+		agentGetPluginsApikeyTokenFlag = agentGetPluginsFlags.String("apikey-token", "", "")
 
 		aiIntegrationsFlags = flag.NewFlagSet("ai-integrations", flag.ContinueOnError)
 
@@ -887,7 +897,8 @@ func ParseEndpoint(
 		mcpMetadataFlags = flag.NewFlagSet("mcp-metadata", flag.ContinueOnError)
 
 		mcpMetadataGetMcpMetadataFlags                = flag.NewFlagSet("get-mcp-metadata", flag.ExitOnError)
-		mcpMetadataGetMcpMetadataToolsetSlugFlag      = mcpMetadataGetMcpMetadataFlags.String("toolset-slug", "REQUIRED", "")
+		mcpMetadataGetMcpMetadataToolsetSlugFlag      = mcpMetadataGetMcpMetadataFlags.String("toolset-slug", "", "")
+		mcpMetadataGetMcpMetadataMcpServerIDFlag      = mcpMetadataGetMcpMetadataFlags.String("mcp-server-id", "", "")
 		mcpMetadataGetMcpMetadataApikeyTokenFlag      = mcpMetadataGetMcpMetadataFlags.String("apikey-token", "", "")
 		mcpMetadataGetMcpMetadataSessionTokenFlag     = mcpMetadataGetMcpMetadataFlags.String("session-token", "", "")
 		mcpMetadataGetMcpMetadataProjectSlugInputFlag = mcpMetadataGetMcpMetadataFlags.String("project-slug-input", "", "")
@@ -1271,6 +1282,34 @@ func ParseEndpoint(
 		remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("session-token", "", "")
 		remoteSessionIssuersDeleteRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("apikey-token", "", "")
 		remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("project-slug-input", "", "")
+
+		organizationRemoteSessionIssuersFlags = flag.NewFlagSet("organization-remote-session-issuers", flag.ContinueOnError)
+
+		organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags            = flag.NewFlagSet("create-organization-remote-session-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerBodyFlag         = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerSessionTokenFlag = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags            = flag.NewFlagSet("update-organization-remote-session-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerBodyFlag         = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerSessionTokenFlag = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags            = flag.NewFlagSet("list-organization-remote-session-issuers", flag.ExitOnError)
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersCursorFlag       = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.String("cursor", "", "")
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersLimitFlag        = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.String("limit", "", "")
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersSessionTokenFlag = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersApikeyTokenFlag  = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags            = flag.NewFlagSet("get-organization-remote-session-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerIDFlag           = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags.String("id", "REQUIRED", "")
+		organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerSessionTokenFlag = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags            = flag.NewFlagSet("delete-organization-remote-session-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerIDFlag           = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags.String("id", "REQUIRED", "")
+		organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerSessionTokenFlag = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags.String("apikey-token", "", "")
 
 		remoteSessionsFlags = flag.NewFlagSet("remote-sessions", flag.ContinueOnError)
 
@@ -1939,6 +1978,9 @@ func ParseEndpoint(
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
 
+	agentFlags.Usage = agentUsage
+	agentGetPluginsFlags.Usage = agentGetPluginsUsage
+
 	aiIntegrationsFlags.Usage = aiIntegrationsUsage
 	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
 	aiIntegrationsUpsertConfigFlags.Usage = aiIntegrationsUpsertConfigUsage
@@ -2167,6 +2209,13 @@ func ParseEndpoint(
 	remoteSessionIssuersGetRemoteSessionIssuerFlags.Usage = remoteSessionIssuersGetRemoteSessionIssuerUsage
 	remoteSessionIssuersDeleteRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDeleteRemoteSessionIssuerUsage
 
+	organizationRemoteSessionIssuersFlags.Usage = organizationRemoteSessionIssuersUsage
+	organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags.Usage = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerUsage
+	organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags.Usage = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerUsage
+	organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags.Usage = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersUsage
+	organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags.Usage = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerUsage
+	organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags.Usage = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerUsage
+
 	remoteSessionsFlags.Usage = remoteSessionsUsage
 	remoteSessionsListRemoteSessionsFlags.Usage = remoteSessionsListRemoteSessionsUsage
 	remoteSessionsRevokeRemoteSessionFlags.Usage = remoteSessionsRevokeRemoteSessionUsage
@@ -2318,6 +2367,8 @@ func ParseEndpoint(
 			svcf = accessFlags
 		case "admin":
 			svcf = adminFlags
+		case "agent":
+			svcf = agentFlags
 		case "ai-integrations":
 			svcf = aiIntegrationsFlags
 		case "assets":
@@ -2380,6 +2431,8 @@ func ParseEndpoint(
 			svcf = remoteSessionClientsFlags
 		case "remote-session-issuers":
 			svcf = remoteSessionIssuersFlags
+		case "organization-remote-session-issuers":
+			svcf = organizationRemoteSessionIssuersFlags
 		case "remote-sessions":
 			svcf = remoteSessionsFlags
 		case "resources":
@@ -2540,6 +2593,13 @@ func ParseEndpoint(
 
 			case "list-organizations":
 				epf = adminListOrganizationsFlags
+
+			}
+
+		case "agent":
+			switch epn {
+			case "get-plugins":
+				epf = agentGetPluginsFlags
 
 			}
 
@@ -3165,6 +3225,25 @@ func ParseEndpoint(
 
 			}
 
+		case "organization-remote-session-issuers":
+			switch epn {
+			case "create-organization-remote-session-issuer":
+				epf = organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerFlags
+
+			case "update-organization-remote-session-issuer":
+				epf = organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerFlags
+
+			case "list-organization-remote-session-issuers":
+				epf = organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersFlags
+
+			case "get-organization-remote-session-issuer":
+				epf = organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerFlags
+
+			case "delete-organization-remote-session-issuer":
+				epf = organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerFlags
+
+			}
+
 		case "remote-sessions":
 			switch epn {
 			case "list-remote-sessions":
@@ -3659,6 +3738,13 @@ func ParseEndpoint(
 				endpoint = c.ListOrganizations()
 				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsIncludeDisabledFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsAdminSessionTokenFlag)
 			}
+		case "agent":
+			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-plugins":
+				endpoint = c.GetPlugins()
+				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsEmailFlag, *agentGetPluginsApikeyTokenFlag)
+			}
 		case "ai-integrations":
 			c := aiintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -4044,7 +4130,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-mcp-metadata":
 				endpoint = c.GetMcpMetadata()
-				data, err = mcpmetadatac.BuildGetMcpMetadataPayload(*mcpMetadataGetMcpMetadataToolsetSlugFlag, *mcpMetadataGetMcpMetadataApikeyTokenFlag, *mcpMetadataGetMcpMetadataSessionTokenFlag, *mcpMetadataGetMcpMetadataProjectSlugInputFlag)
+				data, err = mcpmetadatac.BuildGetMcpMetadataPayload(*mcpMetadataGetMcpMetadataToolsetSlugFlag, *mcpMetadataGetMcpMetadataMcpServerIDFlag, *mcpMetadataGetMcpMetadataApikeyTokenFlag, *mcpMetadataGetMcpMetadataSessionTokenFlag, *mcpMetadataGetMcpMetadataProjectSlugInputFlag)
 			case "set-mcp-metadata":
 				endpoint = c.SetMcpMetadata()
 				data, err = mcpmetadatac.BuildSetMcpMetadataPayload(*mcpMetadataSetMcpMetadataBodyFlag, *mcpMetadataSetMcpMetadataApikeyTokenFlag, *mcpMetadataSetMcpMetadataSessionTokenFlag, *mcpMetadataSetMcpMetadataProjectSlugInputFlag)
@@ -4292,6 +4378,25 @@ func ParseEndpoint(
 			case "delete-remote-session-issuer":
 				endpoint = c.DeleteRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildDeleteRemoteSessionIssuerPayload(*remoteSessionIssuersDeleteRemoteSessionIssuerIDFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInputFlag)
+			}
+		case "organization-remote-session-issuers":
+			c := organizationremotesessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-organization-remote-session-issuer":
+				endpoint = c.CreateOrganizationRemoteSessionIssuer()
+				data, err = organizationremotesessionissuersc.BuildCreateOrganizationRemoteSessionIssuerPayload(*organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerBodyFlag, *organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerSessionTokenFlag, *organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerApikeyTokenFlag)
+			case "update-organization-remote-session-issuer":
+				endpoint = c.UpdateOrganizationRemoteSessionIssuer()
+				data, err = organizationremotesessionissuersc.BuildUpdateOrganizationRemoteSessionIssuerPayload(*organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerBodyFlag, *organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerSessionTokenFlag, *organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerApikeyTokenFlag)
+			case "list-organization-remote-session-issuers":
+				endpoint = c.ListOrganizationRemoteSessionIssuers()
+				data, err = organizationremotesessionissuersc.BuildListOrganizationRemoteSessionIssuersPayload(*organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersCursorFlag, *organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersLimitFlag, *organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersSessionTokenFlag, *organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersApikeyTokenFlag)
+			case "get-organization-remote-session-issuer":
+				endpoint = c.GetOrganizationRemoteSessionIssuer()
+				data, err = organizationremotesessionissuersc.BuildGetOrganizationRemoteSessionIssuerPayload(*organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerIDFlag, *organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerSessionTokenFlag, *organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerApikeyTokenFlag)
+			case "delete-organization-remote-session-issuer":
+				endpoint = c.DeleteOrganizationRemoteSessionIssuer()
+				data, err = organizationremotesessionissuersc.BuildDeleteOrganizationRemoteSessionIssuerPayload(*organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerIDFlag, *organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerSessionTokenFlag, *organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerApikeyTokenFlag)
 			}
 		case "remote-sessions":
 			c := remotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5461,6 +5566,36 @@ func adminListOrganizationsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --include-disabled false --cursor \"abc123\" --limit 1 --admin-session-token \"abc123\"")
+}
+
+// agentUsage displays the usage of the agent command and its subcommands.
+func agentUsage() {
+	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agent COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s agent COMMAND --help\n", os.Args[0])
+}
+func agentGetPluginsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent get-plugins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -email STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --email \"dev@acme.corp\" --apikey-token \"abc123\"")
 }
 
 // aiIntegrationsUsage displays the usage of the ai-integrations command and
@@ -7963,8 +8098,8 @@ func mcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr, `Manages metadata for the MCP install page shown to users.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-metadata COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-mcp-metadata: Fetch the metadata that powers the MCP install page.`)
-	fmt.Fprintln(os.Stderr, `    set-mcp-metadata: Create or update the metadata that powers the MCP install page.`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-metadata: Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.`)
+	fmt.Fprintln(os.Stderr, `    set-mcp-metadata: Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.`)
 	fmt.Fprintln(os.Stderr, `    export-mcp-metadata: Export MCP server details as JSON for documentation and integration purposes.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -7974,6 +8109,7 @@ func mcpMetadataGetMcpMetadataUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] mcp-metadata get-mcp-metadata", os.Args[0])
 	fmt.Fprint(os.Stderr, " -toolset-slug STRING")
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -7981,17 +8117,18 @@ func mcpMetadataGetMcpMetadataUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Fetch the metadata that powers the MCP install page.`)
+	fmt.Fprintln(os.Stderr, `Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -toolset-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata get-mcp-metadata --toolset-slug \"aaa\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata get-mcp-metadata --toolset-slug \"aaa\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpMetadataSetMcpMetadataUsage() {
@@ -8005,7 +8142,7 @@ func mcpMetadataSetMcpMetadataUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or update the metadata that powers the MCP install page.`)
+	fmt.Fprintln(os.Stderr, `Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -8015,7 +8152,7 @@ func mcpMetadataSetMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_text\": \"abc123\",\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"toolset_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata set-mcp-metadata --body '{\n      \"default_environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"environment_configs\": [\n         {\n            \"header_display_name\": \"abc123\",\n            \"provided_by\": \"abc123\",\n            \"variable_name\": \"abc123\"\n         }\n      ],\n      \"external_documentation_text\": \"abc123\",\n      \"external_documentation_url\": \"abc123\",\n      \"installation_override_url\": \"https://example.com/foo\",\n      \"instructions\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpMetadataExportMcpMetadataUsage() {
@@ -9703,6 +9840,133 @@ func remoteSessionIssuersDeleteRemoteSessionIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers delete-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// organizationRemoteSessionIssuersUsage displays the usage of the
+// organization-remote-session-issuers command and its subcommands.
+func organizationRemoteSessionIssuersUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organization-remote-session-issuers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-organization-remote-session-issuer: Create a new organization-level remote_session_issuer.`)
+	fmt.Fprintln(os.Stderr, `    update-organization-remote-session-issuer: Update fields on an existing organization-level remote_session_issuer.`)
+	fmt.Fprintln(os.Stderr, `    list-organization-remote-session-issuers: List organization-level remote_session_issuers in the caller's organization.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-remote-session-issuer: Get an organization-level remote_session_issuer by id.`)
+	fmt.Fprintln(os.Stderr, `    delete-organization-remote-session-issuer: Soft-delete an organization-level remote_session_issuer. Blocked if any remote_session_clients still reference it.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s organization-remote-session-issuers COMMAND --help\n", os.Args[0])
+}
+func organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers create-organization-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new organization-level remote_session_issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-organization-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers update-organization-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update fields on an existing organization-level remote_session_issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-organization-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers list-organization-remote-session-issuers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List organization-level remote_session_issuers in the caller's organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers list-organization-remote-session-issuers --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersGetOrganizationRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers get-organization-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an organization-level remote_session_issuer by id.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers get-organization-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersDeleteOrganizationRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers delete-organization-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete an organization-level remote_session_issuer. Blocked if any remote_session_clients still reference it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers delete-organization-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // remoteSessionsUsage displays the usage of the remote-sessions command and

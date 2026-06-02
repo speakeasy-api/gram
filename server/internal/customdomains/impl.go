@@ -44,6 +44,7 @@ type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
 	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
 	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
+	ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -162,12 +163,35 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").Log(ctx, s.logger)
 	}
 
-	domain, err := repo.New(s.db).UpdateCustomDomainIPAllowlist(ctx, repo.UpdateCustomDomainIPAllowlistParams{
+	repository := repo.New(s.db)
+
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+	}
+
+	// Reconcile the live k8s resource BEFORE persisting so a reconcile failure
+	// leaves no partial state: the request errors and the stored allowlist is
+	// unchanged, so a retry is safe. The allowlist is threaded through the
+	// workflow rather than read from the DB, which is why it can run first.
+	// Only meaningful once provisioned; otherwise the registration workflow
+	// picks up the persisted allowlist when it runs Setup.
+	if domain.Activated && domain.IngressName.Valid {
+		run, err := s.temporalClient.ExecuteCustomDomainUpdate(ctx, authCtx.ActiveOrganizationID, domain.Domain, k8s.ProvisionerKind(domain.ProvisionerKind), ipAllowlist)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to start custom domain update workflow").Log(ctx, s.logger)
+		}
+		if err := run.Get(ctx, nil); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "custom domain update workflow failed").Log(ctx, s.logger)
+		}
+	}
+
+	domain, err = repository.UpdateCustomDomainIPAllowlist(ctx, repo.UpdateCustomDomainIPAllowlistParams{
 		IpAllowlist:    ipAllowlist,
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update custom domain ip allowlist").Log(ctx, s.logger)
 	}
 
 	isUpdating := false

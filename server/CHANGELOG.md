@@ -1,5 +1,21 @@
 # server
 
+## 0.62.2
+
+### Patch Changes
+
+- 50cfe28: Remote OAuth client lookups no longer surface clients whose bound user session issuer lives in a different project or has been soft-deleted. The legacy `user_session_issuer_id` fallback path now scopes both the client and its user session issuer to the request's project and excludes soft-deleted clients, remote issuers, and user session issuers — matching the join-table read path. In practice this is a no-op for existing data (no production rows are in that state); it closes the gap going forward.
+- 9b8f59a: resolve /mcp well-known OAuth metadata via mcp_endpoints with toolset fallback
+- 585578b: Retry chat completions when the upstream model returns an empty response, and report the upstream details when it still fails, reducing transient playground and chat errors.
+
+## 0.62.1
+
+### Patch Changes
+
+- d7c9904: New assistants default to 5 concurrent warm runtimes (was 1) and a 60-second warm TTL (was 300s) so they handle bursts without queueing while letting idle runtimes reclaim resources faster. Existing assistants keep their saved values.
+- e8f7b31: Route telemetry-only Codex observability hooks through a shell background wrapper instead of Codex's unsupported async hook flag.
+- ce35930: Removed the FreeTierReportingUsageMetrics activity from the CollectPlatformUsageMetricsWorkflow workflow since it is no longer a requirement to report on free tier usage.
+
 ## 0.62.0
 
 ### Minor Changes
