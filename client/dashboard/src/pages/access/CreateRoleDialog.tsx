@@ -417,14 +417,18 @@ export function CreateRoleDialog({
   const isMutating = createRole.isPending || updateRole.isPending;
   const visibleScopeSlugs = useMemo(
     () =>
-      new Set(scopeGroups.flatMap((group) => group.scopes.map((s) => s.slug))),
+      new Set<Scope>(
+        scopeGroups.flatMap((group) =>
+          group.scopes.map((s) => s.slug as Scope),
+        ),
+      ),
     [scopeGroups],
   );
   const visibleGrants = useMemo(
     () =>
       Object.fromEntries(
         Object.entries(grants).filter(([scope]) =>
-          visibleScopeSlugs.has(scope),
+          visibleScopeSlugs.has(scope as Scope),
         ),
       ),
     [grants, visibleScopeSlugs],
