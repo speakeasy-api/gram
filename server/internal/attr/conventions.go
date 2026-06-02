@@ -167,8 +167,12 @@ const (
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
+	McpRequestedTagsKey            = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey            = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey            = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey                 = attribute.Key("gram.mcp_server.id")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
+	ToolVariationsGroupIDKey       = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
@@ -1251,6 +1255,22 @@ func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey),
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }
+
+func MCPRequestedTags(v []string) attribute.KeyValue { return McpRequestedTagsKey.StringSlice(v) }
+func SlogMCPRequestedTags(v []string) slog.Attr {
+	return slog.Any(string(McpRequestedTagsKey), v)
+}
+
+func MCPToolsReturned(v int) attribute.KeyValue { return McpToolsReturnedKey.Int(v) }
+func SlogMCPToolsReturned(v int) slog.Attr      { return slog.Int(string(McpToolsReturnedKey), v) }
+
+func MCPToolsFiltered(v int) attribute.KeyValue { return McpToolsFilteredKey.Int(v) }
+func SlogMCPToolsFiltered(v int) slog.Attr      { return slog.Int(string(McpToolsFilteredKey), v) }
+
+func ToolVariationsGroupID(v string) attribute.KeyValue { return ToolVariationsGroupIDKey.String(v) }
+func SlogToolVariationsGroupID(v string) slog.Attr {
+	return slog.String(string(ToolVariationsGroupIDKey), v)
+}
 
 func MimeType(v string) attribute.KeyValue { return MimeTypeKey.String(v) }
 func SlogMimeType(v string) slog.Attr      { return slog.String(string(MimeTypeKey), v) }

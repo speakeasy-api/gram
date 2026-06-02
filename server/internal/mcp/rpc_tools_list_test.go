@@ -64,8 +64,10 @@ func toolNames(resp toolsListResponse) []string {
 }
 
 // addHTTPTools creates a deployment + HTTP tool definitions + a single
-// toolset_version linking all named tools to the toolset.
-func addHTTPTools(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, projectID uuid.UUID, orgID string, toolNames ...string) {
+// toolset_version linking all named tools to the toolset. It returns the
+// created tool URNs keyed by name so callers can attach variations to specific
+// tools; callers that don't need the URNs may ignore the return.
+func addHTTPTools(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, projectID uuid.UUID, orgID string, toolNames ...string) map[string]urn.Tool {
 	t.Helper()
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
@@ -82,10 +84,12 @@ func addHTTPTools(t *testing.T, ctx context.Context, ti *testInstance, toolsetID
 	})
 	require.NoError(t, err)
 
+	urnsByName := make(map[string]urn.Tool, len(toolNames))
 	toolURNs := make([]urn.Tool, len(toolNames))
 	for i, toolName := range toolNames {
 		toolURN := urn.NewTool(urn.ToolKindHTTP, toolName, uuid.New().String()[:8])
 		toolURNs[i] = toolURN
+		urnsByName[toolName] = toolURN
 		err = tools_repo.New(ti.conn).CreateHTTPToolDefinition(ctx, tools_repo.CreateHTTPToolDefinitionParams{
 			ProjectID:       projectID,
 			DeploymentID:    deploymentID,
@@ -120,6 +124,74 @@ func addHTTPTools(t *testing.T, ctx context.Context, ti *testInstance, toolsetID
 		PredecessorID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
+
+	return urnsByName
+}
+
+// addHTTPToolsWithSourceTags creates HTTP tools carrying source-defined tags
+// (unlike addHTTPTools, which leaves source tags empty) and registers them as a
+// single toolset version. It is used to exercise ?tags= filtering driven by
+// source tags rather than tool variations. The map key is the tool name and the
+// value is its source tags; the returned map associates each name with its URN.
+func addHTTPToolsWithSourceTags(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, projectID uuid.UUID, orgID string, toolTags map[string][]string) map[string]urn.Tool {
+	t.Helper()
+
+	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
+	require.NoError(t, err)
+
+	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	})
+	require.NoError(t, err)
+
+	urnsByName := make(map[string]urn.Tool, len(toolTags))
+	toolURNs := make([]urn.Tool, 0, len(toolTags))
+	for toolName, tags := range toolTags {
+		toolURN := urn.NewTool(urn.ToolKindHTTP, toolName, uuid.New().String()[:8])
+		toolURNs = append(toolURNs, toolURN)
+		urnsByName[toolName] = toolURN
+		err = tools_repo.New(ti.conn).CreateHTTPToolDefinition(ctx, tools_repo.CreateHTTPToolDefinitionParams{
+			ProjectID:       projectID,
+			DeploymentID:    deploymentID,
+			ToolUrn:         toolURN,
+			Name:            toolName,
+			UntruncatedName: pgtype.Text{},
+			Summary:         toolName + " summary",
+			Description:     toolName + " description",
+			Tags:            tags,
+			HttpMethod:      "GET",
+			Path:            "/test",
+			SchemaVersion:   "3.0.0",
+			Schema:          []byte(`{}`),
+			ServerEnvVar:    "TEST_SERVER_URL",
+			Security:        []byte(`[]`),
+			HeaderSettings:  []byte(`{}`),
+			QuerySettings:   []byte(`{}`),
+			PathSettings:    []byte(`{}`),
+			ReadOnlyHint:    pgtype.Bool{},
+			DestructiveHint: pgtype.Bool{},
+			IdempotentHint:  pgtype.Bool{},
+			OpenWorldHint:   pgtype.Bool{},
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolsetID,
+		Version:       1,
+		ToolUrns:      toolURNs,
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+
+	return urnsByName
 }
 
 // ---------------------------------------------------------------------------
@@ -418,4 +490,83 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *tes
 		Disposition: "destructive",
 	}))
 	require.NoError(t, err)
+}
+
+func TestServePublic_ToolsList_NoTagsFilter_ReturnsAllWithVariationNames(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupTagFilterToolset(t, ctx, ti)
+
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	// Variation-renamed names are exposed on the wire; the untagged tool keeps
+	// its original name.
+	require.ElementsMatch(t, []string{"alpha_renamed", "beta_renamed", "tool_gamma"}, names)
+}
+
+func TestServePublic_ToolsList_TagsFilter_SingleTag(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupTagFilterToolset(t, ctx, ti)
+
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=alpha", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	// Only the alpha-tagged tool; beta and the variation-less gamma are excluded.
+	require.Equal(t, []string{"alpha_renamed"}, names)
+}
+
+func TestServePublic_ToolsList_TagsFilter_Union(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupTagFilterToolset(t, ctx, ti)
+
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=alpha,beta", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	require.ElementsMatch(t, []string{"alpha_renamed", "beta_renamed"}, names)
+}
+
+func TestServePublic_ToolsList_TagsFilter_SharedTagMatchesBoth(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupTagFilterToolset(t, ctx, ti)
+
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=shared", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	require.ElementsMatch(t, []string{"alpha_renamed", "beta_renamed"}, names)
+}
+
+func TestServePublic_ToolsList_TagsFilter_NonexistentReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupTagFilterToolset(t, ctx, ti)
+
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=does-not-exist", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	// An all-nonexistent filter must be a successful empty list, not a
+	// JSON-RPC error (which would also be HTTP 200 with no tools).
+	var rpcResp struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rpcResp))
+	require.Nil(t, rpcResp.Error, "expected empty tools list, got JSON-RPC error: %s", w.Body.String())
+
+	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	require.Empty(t, names)
 }

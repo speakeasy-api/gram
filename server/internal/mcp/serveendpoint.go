@@ -156,7 +156,16 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, logger)
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamToken); err != nil {
+		// The mcp_servers row's variation group, when set, overrides the
+		// toolset's own column. Pass it through so ServeToolsetResolved resolves
+		// the effective group (mcp_server, then toolset, then project default).
+		var mcpServerVariationsGroupID *uuid.UUID
+		if mcpServer.ToolVariationsGroupID.Valid {
+			id := mcpServer.ToolVariationsGroupID.UUID
+			mcpServerVariationsGroupID = &id
+		}
+
+		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamToken, mcpServerVariationsGroupID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
