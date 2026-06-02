@@ -32,39 +32,6 @@ const (
 	PolicyEffectDeny  PolicyEffect = "deny"
 )
 
-var allScopes = []Scope{
-	ScopeOrgRead,
-	ScopeOrgAdmin,
-	ScopeProjectRead,
-	ScopeProjectWrite,
-	ScopeMCPRead,
-	ScopeMCPWrite,
-	ScopeMCPConnect,
-	ScopeEnvironmentRead,
-	ScopeEnvironmentWrite,
-	ScopeRiskPolicyEvaluate,
-}
-
-var adminScopes = []Scope{
-	ScopeOrgRead,
-	ScopeOrgAdmin,
-	ScopeProjectRead,
-	ScopeProjectWrite,
-	ScopeMCPRead,
-	ScopeMCPWrite,
-	ScopeMCPConnect,
-	ScopeEnvironmentRead,
-	ScopeEnvironmentWrite,
-}
-
-var memberScopes = []Scope{
-	ScopeOrgRead,
-	ScopeProjectRead,
-	ScopeMCPRead,
-	ScopeMCPConnect,
-	ScopeEnvironmentRead,
-}
-
 type RoleGrant struct {
 	Scope     string
 	Effect    PolicyEffect

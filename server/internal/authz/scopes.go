@@ -28,6 +28,39 @@ const (
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 )
 
+var allScopes = []Scope{
+	ScopeOrgRead,
+	ScopeOrgAdmin,
+	ScopeProjectRead,
+	ScopeProjectWrite,
+	ScopeMCPRead,
+	ScopeMCPWrite,
+	ScopeMCPConnect,
+	ScopeEnvironmentRead,
+	ScopeEnvironmentWrite,
+	ScopeRiskPolicyEvaluate,
+}
+
+var adminScopes = []Scope{
+	ScopeOrgRead,
+	ScopeOrgAdmin,
+	ScopeProjectRead,
+	ScopeProjectWrite,
+	ScopeMCPRead,
+	ScopeMCPWrite,
+	ScopeMCPConnect,
+	ScopeEnvironmentRead,
+	ScopeEnvironmentWrite,
+}
+
+var memberScopes = []Scope{
+	ScopeOrgRead,
+	ScopeProjectRead,
+	ScopeMCPRead,
+	ScopeMCPConnect,
+	ScopeEnvironmentRead,
+}
+
 func (s Scope) Parts() ScopeParts {
 	resource, action, ok := strings.Cut(string(s), ":")
 	if !ok {
