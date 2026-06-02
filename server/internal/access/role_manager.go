@@ -173,6 +173,8 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	})
 	var pgErr *pgconn.PgError
 	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return roleCreateResult{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).Log(ctx, r.logger)
 	case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation:
 		return roleCreateResult{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).Log(ctx, r.logger)
 	case err != nil:

@@ -163,6 +163,61 @@ func TestService_CreateRole_RejectsActiveLocalSlugCollision(t *testing.T) {
 	require.Contains(t, scopes, string(authz.ScopeRiskPolicyEvaluate))
 }
 
+func TestService_CreateRole_ReactivatesDeletedLocalSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_1", "Custom Builder", "org-custom-builder", "Old description"))
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID), authz.ScopeRiskPolicyEvaluate, "policy-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
+
+	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "org-custom-builder").Return(nil).Once()
+	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
+	require.NoError(t, err)
+
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
+		Name:        "Custom Builder",
+		Slug:        "org-custom-builder",
+		Description: "New description",
+	}).Return(&thirdpartyworkos.Role{
+		ID:          "role_2",
+		Name:        "Custom Builder",
+		Slug:        "org-custom-builder",
+		Description: "New description",
+		CreatedAt:   mockRoleTimestamp,
+		UpdatedAt:   mockRoleTimestamp,
+	}, nil).Once()
+
+	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name:        "Custom Builder",
+		Description: "New description",
+		Grants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, roleID, role.ID)
+	require.Equal(t, "New description", role.Description)
+
+	row, err := accessrepo.New(ti.conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		WorkosSlug:     "org-custom-builder",
+	})
+	require.NoError(t, err)
+	require.False(t, row.Deleted)
+	require.False(t, row.WorkosDeleted)
+
+	legacyGrants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
+	require.Empty(t, legacyGrants)
+
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
+	require.Len(t, grants, 1)
+	require.Equal(t, string(authz.ScopeProjectRead), grants[0].Scope)
+}
+
 func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 	t.Parallel()
 

@@ -31,6 +31,14 @@ INSERT INTO organization_roles (
     $6,
     $7
 )
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_created_at = EXCLUDED.workos_created_at,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_roles.deleted_at IS NOT NULL
 RETURNING
     id,
     ('role:organization:' || id::text)::text AS role_urn,
@@ -63,7 +71,7 @@ type CreateOrganizationRoleRow struct {
 	MemberCount       int64
 }
 
-// Creates an org-scoped role. Duplicate slugs are surfaced as unique-constraint errors.
+// Creates an org-scoped role, reactivating a soft-deleted row for the same slug.
 func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganizationRoleParams) (CreateOrganizationRoleRow, error) {
 	row := q.db.QueryRow(ctx, createOrganizationRole,
 		arg.OrganizationID,
