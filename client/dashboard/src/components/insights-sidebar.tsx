@@ -1,4 +1,4 @@
-import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
+import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import { useAssistantRuntime } from "@assistant-ui/react";
 import type { ElementsConfig } from "@gram-ai/elements";
@@ -273,6 +273,7 @@ export function InsightsProvider({
   // found for lookup: __LOCALID_…` during render.
   const [sessionKey, setSessionKey] = useState(0);
   const { theme } = useMoonshineConfig();
+  const noToolsetsConfigured = useNoToolsetsConfigured();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
   const mcpConfig = override?.mcpConfig ?? defaultMcpConfig;
@@ -468,16 +469,13 @@ When the user asks about "current period", "selected period", "this timeframe", 
             </button>
           </div>
 
-          {/* Dev notice when MCP is not configured */}
-          {devObservabilityMcpMissing && !("mcp" in mcpConfig) && (
+          {/* Notice when no toolsets are configured */}
+          {noToolsetsConfigured && (
             <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
               <Terminal className="mt-0.5 size-3.5 shrink-0" />
               <span>
-                AI tools are unavailable. Run{" "}
-                <code className="bg-muted text-foreground rounded px-1 py-0.5 font-mono">
-                  mise seed
-                </code>{" "}
-                to enable the observability MCP server.
+                AI tools are unavailable. Create an MCP server to enable AI
+                Insights.
               </span>
             </div>
           )}
