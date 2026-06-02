@@ -236,6 +236,9 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
 	}
+	if definition.Kind == KindDirect {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %q triggers are system-managed and cannot be created directly", ErrBadRequest, params.DefinitionSlug)
+	}
 
 	configJSON, err := marshalConfigJSON(params.Config)
 	if err != nil {
@@ -307,6 +310,9 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	definition, config, err := a.validateInstance(ctx, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), params.DefinitionSlug, params.Config)
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
+	}
+	if definition.Kind == KindDirect {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %q triggers are system-managed and cannot be updated directly", ErrBadRequest, params.DefinitionSlug)
 	}
 
 	configJSON, err := marshalConfigJSON(params.Config)

@@ -73,6 +73,11 @@ func (s *ServiceCore) EnableManagedAssistant(
 	existing, err := s.GetManagedAssistant(ctx, projectID)
 	switch {
 	case err == nil:
+		// Repair managed assistants provisioned before dashboard ingress existed:
+		// the trigger is provisioned lazily here so re-running enable is enough.
+		if err := s.ensureDashboardTrigger(ctx, s.db, organizationID, projectID, existing.ID, existing.Name); err != nil {
+			return assistantRecord{}, err
+		}
 		return existing, nil
 	case errors.Is(err, pgx.ErrNoRows):
 		// fall through to create
@@ -175,6 +180,42 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 	return nil
 }
 
+// ensureDashboardTrigger provisions the direct-ingress trigger instance that
+// routes dashboard sidebar messages to the managed assistant, creating one only
+// when absent. Idempotent so the enable fast path can heal a managed assistant
+// that predates dashboard ingress without depending on a fresh create.
+func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo.DBTX, organizationID string, projectID, assistantID uuid.UUID, name string) error {
+	queries := triggerrepo.New(db)
+	existing, err := queries.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
+		ProjectID:      projectID,
+		DefinitionSlug: sourceKindDashboard,
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("list dashboard trigger instances: %w", err)
+	}
+	if len(existing) > 0 {
+		return nil
+	}
+
+	if _, err := queries.CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		DefinitionSlug: sourceKindDashboard,
+		Name:           name,
+		EnvironmentID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+		TargetDisplay:  name,
+		ConfigJson:     []byte("{}"),
+		Status:         StatusActive,
+	}); err != nil {
+		return fmt.Errorf("create dashboard trigger instance: %w", err)
+	}
+	return nil
+}
+
 // createManagedAssistant inserts the assistant, records the managed mapping, and
 // attaches all of the project's MCP-reachable toolsets in a single transaction.
 func (s *ServiceCore) createManagedAssistant(
@@ -233,22 +274,8 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, fmt.Errorf("insert managed assistant mapping: %w", err)
 	}
 
-	// Dashboard sidebar messages reach the assistant through the trigger
-	// dispatch path, so the managed assistant gets a direct-ingress trigger
-	// instance. It's hidden from the user's trigger list (KindDirect).
-	if _, err := triggerrepo.New(tx).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		DefinitionSlug: sourceKindDashboard,
-		Name:           name,
-		EnvironmentID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		TargetKind:     bgtriggers.TargetKindAssistant,
-		TargetRef:      record.ID.String(),
-		TargetDisplay:  name,
-		ConfigJson:     []byte("{}"),
-		Status:         StatusActive,
-	}); err != nil {
-		return assistantRecord{}, fmt.Errorf("create dashboard trigger instance: %w", err)
+	if err := s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
+		return assistantRecord{}, err
 	}
 
 	if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {

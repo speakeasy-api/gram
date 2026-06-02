@@ -66,6 +66,53 @@ func TestManagedAssistantDashboardTriggerLifecycle(t *testing.T) {
 	require.Empty(t, instances, "disable tears the dashboard trigger instance down")
 }
 
+// Managed assistants provisioned before dashboard ingress existed have no
+// dashboard trigger. The enable fast path is idempotent, so re-enabling heals a
+// missing trigger rather than returning early without one.
+func TestEnableManagedAssistantHealsMissingDashboardTrigger(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_dashboard_trigger_heal")
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	core := newProvisioningCore(t, conn)
+	projectID := newProvisioningProject(t, conn, "dash-heal")
+
+	managed, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	require.NoError(t, err)
+
+	target := triggerrepo.ListActiveTriggerInstancesByTargetParams{
+		ProjectID:      projectID,
+		DefinitionSlug: sourceKindDashboard,
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      managed.ID.String(),
+	}
+
+	instances, err := triggerrepo.New(conn).ListActiveTriggerInstancesByTarget(ctx, target)
+	require.NoError(t, err)
+	require.Len(t, instances, 1)
+
+	// Simulate the pre-ingress state by tearing the trigger down out of band.
+	_, err = triggerrepo.New(conn).DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
+		ID:        instances[0].ID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	instances, err = triggerrepo.New(conn).ListActiveTriggerInstancesByTarget(ctx, target)
+	require.NoError(t, err)
+	require.Empty(t, instances)
+
+	healed, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
+	require.NoError(t, err)
+	require.Equal(t, managed.ID, healed.ID, "re-enable returns the existing managed assistant")
+
+	instances, err = triggerrepo.New(conn).ListActiveTriggerInstancesByTarget(ctx, target)
+	require.NoError(t, err)
+	require.Len(t, instances, 1, "re-enable re-provisions the dashboard trigger")
+}
+
 func mustDefinitionKind(t *testing.T, slug string) bgtriggers.Kind {
 	t.Helper()
 	def, ok := bgtriggers.GetDefinition(slug)
