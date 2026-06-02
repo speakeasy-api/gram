@@ -62,3 +62,21 @@ func TestAppDispatchRejectsUnconfiguredDispatcher(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, `trigger dispatcher for target kind "assistant" is not configured`)
 }
+
+func TestAppCreateRejectsDirectIngressDefinition(t *testing.T) {
+	t.Parallel()
+
+	// Direct-ingress definitions (e.g. dashboard) are system-managed; the public
+	// create path must refuse them. The guard fires before any DB access.
+	app := &App{}
+
+	_, err := app.Create(t.Context(), CreateParams{
+		DefinitionSlug: "dashboard",
+		Name:           "x",
+		TargetKind:     TargetKindAssistant,
+		TargetRef:      "assistant-ref",
+	})
+
+	require.ErrorIs(t, err, ErrBadRequest)
+	require.ErrorContains(t, err, "system-managed")
+}

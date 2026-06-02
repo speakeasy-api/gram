@@ -37,6 +37,7 @@ type Kind string
 const (
 	KindWebhook  Kind = "webhook"
 	KindSchedule Kind = "schedule"
+	KindDirect   Kind = "direct"
 )
 
 type EnvRequirement struct {
@@ -58,6 +59,7 @@ type Definition struct {
 	AuthenticateWebhook  func(body []byte, headers http.Header, env map[string]string, config Config) error
 	HandleWebhook        func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error)
 	BuildScheduledEvent  func(instance triggerrepo.TriggerInstance, config Config, firedAt time.Time) (*EventEnvelope, error)
+	BuildDirectEvent     func(instance triggerrepo.TriggerInstance, config Config, payload []byte, receivedAt time.Time) (*EventEnvelope, error)
 	ExtractSchedule      func(config Config) (string, error)
 }
 
@@ -184,6 +186,16 @@ type wakeTriggerConfig struct {
 }
 
 func (c wakeTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
+
+type dashboardTriggerConfig struct{}
+
+func (dashboardTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
+
+type dashboardTriggerEvent struct {
+	Text           string `json:"text" cel:"text"`
+	UserID         string `json:"user_id,omitempty" cel:"user_id"`
+	IdempotencyKey string `json:"idempotency_key,omitempty" cel:"idempotency_key"`
+}
 
 type slackEventRequest struct {
 	Type      string          `json:"type"`
@@ -629,14 +641,20 @@ var supportedSlackEventTypes = []string{
 }
 
 var registry = map[string]Definition{
-	"slack": newSlackDefinition(),
-	"cron":  newCronDefinition(),
-	"wake":  newWakeDefinition(),
+	"slack":     newSlackDefinition(),
+	"cron":      newCronDefinition(),
+	"wake":      newWakeDefinition(),
+	"dashboard": newDashboardDefinition(),
 }
 
 func List() []Definition {
 	definitions := make([]Definition, 0, len(registry))
 	for _, definition := range registry {
+		// Direct-ingress definitions (e.g. dashboard) are system-managed, not
+		// user-creatable trigger types — keep them out of the public catalog.
+		if definition.Kind == KindDirect {
+			continue
+		}
 		definitions = append(definitions, definition)
 	}
 	slices.SortFunc(definitions, func(a, b Definition) int {
@@ -772,9 +790,7 @@ func newSlackDefinition() Definition {
 			// originating message and CEL filters / correlation work.
 			channelID := event.Channel
 			timestamp := event.Ts
-			var (
-				itemType, itemChannel, itemTs string
-			)
+			var itemType, itemChannel, itemTs string
 			if event.Item != nil {
 				itemType = event.Item.Type
 				itemChannel = event.Item.Channel
@@ -828,6 +844,7 @@ func newSlackDefinition() Definition {
 			}, nil
 		},
 		BuildScheduledEvent: nil,
+		BuildDirectEvent:    nil,
 		ExtractSchedule:     nil,
 	}
 }
@@ -885,6 +902,7 @@ func newCronDefinition() Definition {
 				ReceivedAt:        firedAt.UTC(),
 			}, nil
 		},
+		BuildDirectEvent: nil,
 		ExtractSchedule: func(config Config) (string, error) {
 			cfg, ok := config.(cronTriggerConfig)
 			if !ok {
@@ -951,6 +969,7 @@ func newWakeDefinition() Definition {
 				ReceivedAt:        firedAt.UTC(),
 			}, nil
 		},
+		BuildDirectEvent: nil,
 		ExtractSchedule: func(config Config) (string, error) {
 			cfg, ok := config.(wakeTriggerConfig)
 			if !ok {
@@ -958,6 +977,52 @@ func newWakeDefinition() Definition {
 			}
 			return cfg.FireAt.UTC().Format(time.RFC3339Nano), nil
 		},
+	}
+}
+
+func newDashboardDefinition() Definition {
+	schema := buildInputSchema[dashboardTriggerConfig]()
+	compiled := mustCompileSchema(schema)
+	return Definition{
+		Slug:                 "dashboard",
+		Title:                "Dashboard",
+		Description:          "Direct messages from the Gram dashboard assistant sidebar.",
+		Kind:                 KindDirect,
+		ConfigSchema:         schema,
+		CompiledConfigSchema: compiled,
+		EnvRequirements:      []EnvRequirement{},
+		EventType:            reflect.TypeFor[dashboardTriggerEvent](),
+		DecodeConfig: func(raw map[string]any) (Config, error) {
+			return decodeConfig[dashboardTriggerConfig](raw, compiled)
+		},
+		AuthenticateWebhook: nil,
+		HandleWebhook:       nil,
+		BuildScheduledEvent: nil,
+		BuildDirectEvent: func(instance triggerrepo.TriggerInstance, _ Config, payload []byte, receivedAt time.Time) (*EventEnvelope, error) {
+			var event dashboardTriggerEvent
+			if err := json.Unmarshal(payload, &event); err != nil {
+				return nil, fmt.Errorf("decode dashboard message: %w", err)
+			}
+			if event.Text == "" {
+				return nil, fmt.Errorf("dashboard message text is required")
+			}
+			if event.UserID == "" {
+				return nil, fmt.Errorf("dashboard message user id is required")
+			}
+			if event.IdempotencyKey == "" {
+				return nil, fmt.Errorf("dashboard message idempotency key is required")
+			}
+			return &EventEnvelope{
+				EventID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte(instance.ID.String()+":"+event.IdempotencyKey)).String(),
+				CorrelationID:     event.UserID,
+				TriggerInstanceID: instance.ID.String(),
+				DefinitionSlug:    instance.DefinitionSlug,
+				Event:             event,
+				RawPayload:        payload,
+				ReceivedAt:        receivedAt.UTC(),
+			}, nil
+		},
+		ExtractSchedule: nil,
 	}
 }
 
