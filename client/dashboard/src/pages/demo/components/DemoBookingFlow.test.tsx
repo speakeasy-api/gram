@@ -1,7 +1,15 @@
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
-const { captureMock } = vi.hoisted(() => ({ captureMock: vi.fn() }));
+type MockSession = { user: { email: string; displayName?: string } } | null;
+const { captureMock, sessionHolder } = vi.hoisted(() => ({
+  captureMock: vi.fn(),
+  sessionHolder: {
+    current: {
+      user: { email: "jane@acme.com", displayName: "Jane Smith" },
+    } as MockSession,
+  },
+}));
 
 // moonshine's bundle can't resolve lucide dynamic icons in tests — render Button
 // as a plain <button>.
@@ -31,9 +39,7 @@ vi.mock("@calcom/embed-react", () => ({
 }));
 
 vi.mock("@/contexts/Auth", () => ({
-  useSessionData: () => ({
-    session: { user: { email: "jane@acme.com", displayName: "Jane Smith" } },
-  }),
+  useSessionData: () => ({ session: sessionHolder.current }),
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
@@ -44,6 +50,9 @@ import { DemoBookingFlow } from "./DemoBookingFlow";
 
 beforeEach(() => {
   captureMock.mockClear();
+  sessionHolder.current = {
+    user: { email: "jane@acme.com", displayName: "Jane Smith" },
+  };
 });
 
 afterEach(cleanup);
@@ -130,5 +139,53 @@ describe("DemoBookingFlow", () => {
     fireEvent.click(screen.getByRole("button", { name: /Back/i }));
     expect(screen.getByText("Talk to our experts")).toBeTruthy();
     expect(screen.queryByTestId("cal-embed")).toBeNull();
+  });
+
+  it("backfills empty fields when the session arrives after mount", () => {
+    sessionHolder.current = null; // session still loading at mount
+    const { rerender } = render(<DemoBookingFlow />);
+    expect(
+      (screen.getByLabelText(/Work email/i) as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      (screen.getByLabelText(/First name/i) as HTMLInputElement).value,
+    ).toBe("");
+
+    sessionHolder.current = {
+      user: { email: "jane@acme.com", displayName: "Jane Smith" },
+    };
+    rerender(<DemoBookingFlow />);
+
+    expect(
+      (screen.getByLabelText(/Work email/i) as HTMLInputElement).value,
+    ).toBe("jane@acme.com");
+    expect(
+      (screen.getByLabelText(/First name/i) as HTMLInputElement).value,
+    ).toBe("Jane");
+    expect(
+      (screen.getByLabelText(/Last name/i) as HTMLInputElement).value,
+    ).toBe("Smith");
+  });
+
+  it("does not overwrite fields the user already edited when the session arrives", () => {
+    sessionHolder.current = null;
+    const { rerender } = render(<DemoBookingFlow />);
+    fireEvent.change(screen.getByLabelText(/First name/i), {
+      target: { value: "Custom" },
+    });
+
+    sessionHolder.current = {
+      user: { email: "jane@acme.com", displayName: "Jane Smith" },
+    };
+    rerender(<DemoBookingFlow />);
+
+    // user's edit is preserved...
+    expect(
+      (screen.getByLabelText(/First name/i) as HTMLInputElement).value,
+    ).toBe("Custom");
+    // ...while still-empty fields are backfilled
+    expect(
+      (screen.getByLabelText(/Work email/i) as HTMLInputElement).value,
+    ).toBe("jane@acme.com");
   });
 });

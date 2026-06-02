@@ -43,7 +43,7 @@ export function validateDemoForm(data: DemoFormData): DemoFormErrors {
   if (!data.lastName.trim()) errors.lastName = "Last name is required";
   if (!data.email.trim()) {
     errors.email = "Work email is required";
-  } else if (!EMAIL_RE.test(data.email)) {
+  } else if (!EMAIL_RE.test(data.email.trim())) {
     errors.email = "Enter a valid email address";
   }
   if (!data.referralSource.trim())

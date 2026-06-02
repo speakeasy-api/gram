@@ -71,6 +71,11 @@ describe("validateDemoForm", () => {
       validateDemoForm({ ...validData, email: "not-an-email" }).email,
     ).toBeTruthy();
   });
+  it("accepts an email with surrounding whitespace (validated trimmed, like buildCalLink)", () => {
+    expect(
+      validateDemoForm({ ...validData, email: "  jane@acme.com  " }).email,
+    ).toBeUndefined();
+  });
 });
 
 describe("buildCalLink", () => {

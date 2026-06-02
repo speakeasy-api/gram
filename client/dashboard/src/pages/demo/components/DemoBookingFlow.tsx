@@ -46,6 +46,24 @@ export function DemoBookingFlow() {
   });
   const [errors, setErrors] = useState<DemoFormErrors>({});
 
+  // The useState initializer above captures the session synchronously when it's
+  // already loaded (the gate that renders this only mounts after auth resolves).
+  // When this component is reused somewhere the session is still loading at
+  // mount, backfill any still-empty fields once it arrives — without clobbering
+  // anything the user has already typed (prev value wins).
+  const sessionEmail = session?.user.email;
+  const sessionDisplayName = session?.user.displayName;
+  useEffect(() => {
+    if (!sessionEmail && !sessionDisplayName) return;
+    const { firstName, lastName } = splitDisplayName(sessionDisplayName);
+    setFormData((prev) => ({
+      ...prev,
+      firstName: prev.firstName || firstName,
+      lastName: prev.lastName || lastName,
+      email: prev.email || sessionEmail || "",
+    }));
+  }, [sessionEmail, sessionDisplayName]);
+
   useEffect(() => {
     if (step !== "booking") return;
     const handler = (e: MessageEvent) => {
