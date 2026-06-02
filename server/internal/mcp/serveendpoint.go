@@ -60,6 +60,13 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 // context are allowed through unconditionally — the ingress already enforced
 // the allowlist for that hostname. The lockdown engages as soon as an allowlist
 // is configured, regardless of whether the domain is verified/activated yet.
+//
+// This guard is wired ONLY into the runtime MCP dispatch (ServePublic,
+// ServeMCPEndpoint). The install page (ServeInstallPage / HandleGetServer's
+// inline browser path) and OAuth metadata routes are intentionally left
+// ungated: private-MCP install pages must keep working on the platform host
+// (app.getgram.ai), where the dashboard session cookie lives, even when the
+// org's custom domain has an allowlist. Do not call this from those handlers.
 func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
 	if customdomains.FromContext(ctx) != nil {
 		return nil

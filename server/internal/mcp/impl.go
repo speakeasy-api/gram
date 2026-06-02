@@ -307,6 +307,11 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	// Check if this is a browser request (HTML Accept header)
 	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
 		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
+			// Intentionally NOT gated by enforceCustomDomainLockdown: the
+			// install page must remain reachable on the platform host even
+			// when the org's custom domain has an IP allowlist (private MCP
+			// install pages rely on the platform-host session cookie). Only
+			// the runtime POST path (ServePublic) is locked down.
 			if err := metadataService.ServeInstallPage(w, r); err != nil {
 				return fmt.Errorf("failed to serve install page: %w", err)
 			}
