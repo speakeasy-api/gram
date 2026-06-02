@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 var (
@@ -112,12 +114,13 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 // mcp_servers (the dual-source bridge path); RemoteMcpServerID is non-Nil for
 // Remote-MCP-backed installs.
 type mcpServerFixtureOptions struct {
-	name              string
-	visibility        string
-	endpointSlug      string
-	toolsetID         uuid.NullUUID
-	remoteMcpServerID uuid.NullUUID
-	customDomainID    uuid.NullUUID
+	name                string
+	visibility          string
+	endpointSlug        string
+	toolsetID           uuid.NullUUID
+	remoteMcpServerID   uuid.NullUUID
+	customDomainID      uuid.NullUUID
+	userSessionIssuerID uuid.NullUUID
 }
 
 func createMcpServerWithEndpoint(
@@ -169,7 +172,7 @@ func createMcpServerWithEndpoint(
 		Name:                conv.ToPGText(opts.name),
 		Slug:                conv.ToPGText("mcp-server-" + uuid.NewString()[:8]),
 		EnvironmentID:       uuid.NullUUID{},
-		UserSessionIssuerID: uuid.NullUUID{},
+		UserSessionIssuerID: opts.userSessionIssuerID,
 		RemoteMcpServerID:   opts.remoteMcpServerID,
 		ToolsetID:           opts.toolsetID,
 		Visibility:          opts.visibility,
@@ -185,4 +188,27 @@ func createMcpServerWithEndpoint(
 	require.NoError(t, err)
 
 	return server, endpoint
+}
+
+// createUserSessionIssuer inserts a bare user_session_issuer row in the
+// project. The install-page security mode only reads UserSessionIssuerID.Valid
+// off the toolset/mcp_server, so no remote_session_issuer/client wiring is
+// needed here.
+func createUserSessionIssuer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) usersessions_repo.UserSessionIssuer {
+	t.Helper()
+
+	usi, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{
+			Microseconds: int64(time.Hour / time.Microsecond),
+			Days:         0,
+			Months:       0,
+			Valid:        true,
+		},
+	})
+	require.NoError(t, err)
+
+	return usi
 }

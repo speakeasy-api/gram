@@ -173,8 +173,10 @@ type Service struct {
 	installPageScriptData []byte
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -570,7 +572,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	}
 
 	// Collect security inputs
-	securityMode := s.resolveSecurityMode(&toolset)
+	securityMode := s.resolveSecurityMode(&toolset, nil)
 	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, variableProvidedBy)
 
 	// Build tools list
@@ -1124,7 +1126,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 		}
 	}
 
-	securityMode := s.resolveSecurityMode(toolset)
+	securityMode := s.resolveSecurityMode(toolset, ic.mcpServer)
 	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails, headerDisplayNames, variableProvidedBy)
 
 	tools := []toolInfo{}
@@ -1527,12 +1529,21 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	return &toolset, nil
 }
 
-// resolveSecurityMode determines the security mode based on toolset configuration.
-// OAuth wins regardless of public/private: when an OAuth proxy or external OAuth
-// server is attached, identity auth is delegated to the OAuth flow and the
-// install instructions must not ask the user for an Authorization/GRAM_KEY header.
-func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset) securityMode {
-	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
+// resolveSecurityMode determines the security mode based on toolset and
+// mcp_server configuration. OAuth wins regardless of public/private: when an
+// OAuth proxy, external OAuth server, or user_session_issuer is attached,
+// identity auth is delegated to the OAuth flow and the install instructions
+// must not ask the user for an Authorization/GRAM_KEY header. The
+// user_session_issuer can sit on the toolset (legacy toolset routing) or on
+// the bridging mcp_server (Remote-MCP path), mirroring the public serve path
+// which gates OAuth on UserSessionIssuerID.Valid from both sources. server is
+// nil when the install is not mcp_server-backed.
+func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
+	oauthRequired := toolset.OauthProxyServerID.Valid ||
+		toolset.ExternalOauthServerID.Valid ||
+		toolset.UserSessionIssuerID.Valid ||
+		(server != nil && server.UserSessionIssuerID.Valid)
+	if oauthRequired {
 		return securityModeOAuth
 	}
 
