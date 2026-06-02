@@ -721,12 +721,68 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
+	evidence := shadowmcp.AccessEvidence{
+		FullURL:        "",
+		URLHost:        "",
+		ServerIdentity: mcpServerIdentityFromToolName(rawToolName),
+	}
+	provenancePresent, provenanceDetail, provenanceDenied := s.validateGramToolsetProvenance(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
+	provenanceValid := provenancePresent && !provenanceDenied
+	provenanceInvalid := provenancePresent && provenanceDenied
+
 	// Look up the cached `claude mcp list` snapshot captured at SessionStart.
 	// If it's missing we can't enforce the policy — deny with a retry-or-
 	// restart message so the user knows the guard is fail-closed rather
 	// than silently allowing.
 	entries, cacheErr := s.getCachedMCPList(ctx, sessionID)
 	if cacheErr != nil {
+		if provenanceValid {
+			s.logger.InfoContext(ctx, "claude tool call allowed via gram toolset provenance",
+				attr.SlogEvent("claude_hook_toolset_provenance_allow"),
+				attr.SlogHookSource("claude"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogOrganizationID(metadata.GramOrgID),
+				attr.SlogProjectID(metadata.ProjectID),
+				attr.SlogGenAIConversationID(sessionID),
+				attr.SlogToolName(rawToolName),
+				attr.SlogRiskPolicyID(policy.ID),
+			)
+			if output != nil {
+				output.PermissionDecision = &allow
+			}
+			return result, nil
+		}
+		if provenanceInvalid {
+			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, provenanceDetail)
+			userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+				OrganizationID:  metadata.GramOrgID,
+				ProjectID:       metadata.ProjectID,
+				RequesterUserID: metadata.UserID,
+				UserMessage:     policy.UserMessage,
+				AuditReason:     auditReason,
+				Evidence:        evidence,
+				ToolName:        mcpToolName,
+				ToolInput:       payload.ToolInput,
+				RiskPolicyID:    policy.ID,
+			})
+			s.logger.With(
+				attr.SlogHookSource("claude"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogOrganizationID(metadata.GramOrgID),
+				attr.SlogProjectID(metadata.ProjectID),
+				attr.SlogGenAIConversationID(sessionID),
+				attr.SlogToolName(rawToolName),
+			).InfoContext(ctx, "denying claude tool call: invalid gram toolset provenance",
+				attr.SlogEvent("claude_hook_denied_invalid_toolset_provenance"),
+				attr.SlogHookBlockReason(provenanceDetail),
+				attr.SlogRiskPolicyID(policy.ID),
+				attr.SlogRiskPolicyName(policy.Name),
+				attr.SlogError(cacheErr),
+			)
+			s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, nil, serverPrefix, provenanceDetail)
+			return constructBlockResponse(payload.HookEventName, userReason), nil
+		}
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
 		s.logger.With(
@@ -749,7 +805,25 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	matched := matchCachedMCPEntry(entries, serverPrefix)
 	var detail string
 	switch {
+	case provenanceInvalid:
+		detail = provenanceDetail
 	case matched == nil:
+		if provenanceValid {
+			s.logger.InfoContext(ctx, "claude tool call allowed via gram toolset provenance",
+				attr.SlogEvent("claude_hook_toolset_provenance_allow"),
+				attr.SlogHookSource("claude"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogOrganizationID(metadata.GramOrgID),
+				attr.SlogProjectID(metadata.ProjectID),
+				attr.SlogGenAIConversationID(sessionID),
+				attr.SlogToolName(rawToolName),
+				attr.SlogRiskPolicyID(policy.ID),
+			)
+			if output != nil {
+				output.PermissionDecision = &allow
+			}
+			return result, nil
+		}
 		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
 	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
 		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
@@ -764,11 +838,6 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		// fail closed with a clear reason than silently allow.
 		detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
 	}
-	evidence := shadowmcp.AccessEvidence{
-		FullURL:        "",
-		URLHost:        "",
-		ServerIdentity: mcpServerIdentityFromToolName(rawToolName),
-	}
 	if matched != nil {
 		evidence.FullURL = matched.URL
 		evidence.ServerIdentity = serverPrefix
@@ -778,7 +847,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	}
 	// Access Rules can explicitly allow a shadow MCP server by URL, command,
 	// or server identity. Deny rules win inside EvaluateAccessRules.
-	if detail != "" && matched != nil {
+	if detail != "" && matched != nil && !provenanceInvalid {
 		if s.shadowMCPClient == nil {
 			detail = "Shadow MCP validation is unavailable"
 		} else {
@@ -795,11 +864,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 				}),
 			)
 			if decision.Allows() {
-				matchedURL, matchedCommand := "", ""
-				if matched != nil {
-					matchedURL = matched.URL
-					matchedCommand = matched.Command
-				}
+				matchedURL, matchedCommand := matched.URL, matched.Command
 				s.logger.InfoContext(ctx, "shadow-mcp call allowed via approval",
 					attr.SlogEvent("claude_hook_allowlist_allow"),
 					attr.SlogToolName(rawToolName),

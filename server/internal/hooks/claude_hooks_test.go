@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // stubBlockingShadowMCPScanner is a RiskScanner that always reports a
@@ -108,6 +109,69 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 		"deny reason should tell the user to retry or restart so they aren't stuck guessing")
 }
 
+func TestClaude_PreToolUse_AllowsValidGramToolsetProvenanceWithoutMCPList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolsetID := createHookToolsetWithHTTPTool(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "do_thing")
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_valid_toolset_provenance"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput: map[string]any{
+			shadowmcp.XGramToolsetIDField: toolsetID.String(),
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision)
+}
+
+func TestClaude_PreToolUse_DeniesInvalidGramToolsetProvenanceWithoutMCPList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_invalid_toolset_provenance"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput: map[string]any{
+			shadowmcp.XGramToolsetIDField: "not-a-uuid",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "not a UUID")
+}
+
 // Gram-hosted MCP servers (URL host == app.getgram.ai) are the only ones
 // the shadow-MCP guard permits — even a server present in the cache is
 // rejected when its URL points elsewhere.
@@ -134,6 +198,44 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+}
+
+func TestClaude_PreToolUse_DeniesMatchedNonGramServerWithValidProvenance(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolsetID := createHookToolsetWithHTTPTool(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "send_message")
+	sessionID := uuid.NewString()
+	toolName := "mcp__plugin_slack_slack__send_message"
+	toolUseID := "toolu_non_gram_with_valid_provenance"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "plugin", PluginName: "slack", Name: "slack", URL: "https://mcp.slack.com/mcp"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput: map[string]any{
+			shadowmcp.XGramToolsetIDField: toolsetID.String(),
+		},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)

@@ -48,6 +48,22 @@ func (s *Service) enforceShadowMCPToolAccess(
 	return detail, true
 }
 
+func (s *Service) validateGramToolsetProvenance(ctx context.Context, toolInput any, toolName string, organizationID string) (present bool, detail string, denied bool) {
+	inputMap, ok := toolInput.(map[string]any)
+	if !ok {
+		return false, "", false
+	}
+	if _, ok := inputMap[shadowmcp.XGramToolsetIDField]; !ok {
+		return false, "", false
+	}
+	if s.shadowMCPClient == nil {
+		return true, "Shadow MCP validation is unavailable", true
+	}
+
+	detail, denied = s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)
+	return true, detail, denied
+}
+
 func codexShadowMCPEvidence(payload *gen.CodexPayload) shadowmcp.AccessEvidence {
 	return shadowmcp.AccessEvidence{
 		FullURL:        "",
