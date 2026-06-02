@@ -102,8 +102,10 @@ func TestSeedSystemRoleGrantsRollsBackOnGrantFailure(t *testing.T) {
 	err := SeedSystemRoleGrants(ctx, conn, "org_missing")
 	require.Error(t, err)
 
-	_, err = accessrepo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	for _, slug := range []string{SystemRoleAdmin, SystemRoleMember} {
+		_, err = accessrepo.New(conn).GetGlobalRoleBySlug(ctx, slug)
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+	}
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {

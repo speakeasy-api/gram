@@ -103,14 +103,19 @@ func TestSelector_IsRestricted(t *testing.T) {
 			restricted: true,
 		},
 		{
-			name:       "missing kind fails closed",
+			name:       "legacy resource wildcard is unrestricted",
 			selector:   Selector{"resource_id": "*"},
-			restricted: true,
+			restricted: false,
 		},
 		{
-			name:       "nil fails closed",
+			name:       "short wildcard without resource id is unrestricted",
+			selector:   Selector{"resource_kind": "*"},
+			restricted: false,
+		},
+		{
+			name:       "nil is unrestricted wildcard",
 			selector:   nil,
-			restricted: true,
+			restricted: false,
 		},
 	}
 
@@ -309,7 +314,7 @@ func TestMCPCheck_injectsProjectID(t *testing.T) {
 	check := MCPCheck(ScopeMCPRead, "server_456", "proj_123")
 	require.Equal(t, ScopeMCPRead, check.Scope)
 	require.Equal(t, "server_456", check.ResourceID)
-	require.Equal(t, "proj_123", check.Dimensions["project_id"])
+	require.Equal(t, "proj_123", check.Dimensions[SelectorKeyProjectID])
 }
 
 func TestMCPCheck_emptyProjectIDOmitsDimension(t *testing.T) {

@@ -44,15 +44,20 @@ func TestService_patchRoleGrants_preservesUnmentionedGrants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 
-	got := make([]string, 0, len(rows))
+	type grantResourceKey struct {
+		scope      string
+		resourceID string
+	}
+
+	got := make([]grantResourceKey, 0, len(rows))
 	for _, row := range rows {
 		selectors, err := authz.SelectorFromRow(row.Selectors)
 		require.NoError(t, err)
-		got = append(got, row.Scope+"|"+selectors.ResourceID())
+		got = append(got, grantResourceKey{scope: row.Scope, resourceID: selectors.ResourceID()})
 	}
-	require.ElementsMatch(t, []string{
-		string(authz.ScopeProjectWrite) + "|" + authz.WildcardResource,
-		string(authz.ScopeRiskPolicyEvaluate) + "|policy-canonical",
+	require.ElementsMatch(t, []grantResourceKey{
+		{scope: string(authz.ScopeProjectWrite), resourceID: authz.WildcardResource},
+		{scope: string(authz.ScopeRiskPolicyEvaluate), resourceID: "policy-canonical"},
 	}, got)
 
 	legacyRows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{

@@ -975,12 +975,6 @@ func TestFlattenRoleGrants_emptyEffectDefaultsToAllow(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, PolicyEffectAllow, rows[0].Effect)
-
-	rp, err := newRolePrincipals("test", "")
-	require.NoError(t, err)
-	grants := rp.toGrants(rows)
-	require.Len(t, grants, 1)
-	require.Equal(t, PolicyEffectAllow, grants[0].Effect)
 }
 
 func TestFlattenRoleGrants_deduplicatesByScopeEffectAndSelector(t *testing.T) {

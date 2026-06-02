@@ -364,9 +364,9 @@ func TestEngineFilter_withDimensions(t *testing.T) {
 			Scope:  ScopeMCPConnect,
 			Effect: PolicyEffectAllow,
 			Selector: Selector{
-				"resource_kind": "mcp",
-				"resource_id":   "toolsetA",
-				"tool":          "tool_1",
+				SelectorKeyResourceKind: ResourceKindMCP,
+				SelectorKeyResourceID:   "toolsetA",
+				SelectorKeyTool:         "tool_1",
 			},
 		},
 	})
@@ -391,9 +391,9 @@ func TestEngineFilter_withDisposition(t *testing.T) {
 			Scope:  ScopeMCPConnect,
 			Effect: PolicyEffectAllow,
 			Selector: Selector{
-				"resource_kind": "mcp",
-				"resource_id":   "toolsetA",
-				"disposition":   "read_only",
+				SelectorKeyResourceKind: ResourceKindMCP,
+				SelectorKeyResourceID:   "toolsetA",
+				SelectorKeyDisposition:  DispositionReadOnly,
 			},
 		},
 	})
@@ -437,9 +437,9 @@ func TestEngineFilter_projectScopedGrantMatchesServersInProject(t *testing.T) {
 			Scope:  ScopeMCPConnect,
 			Effect: PolicyEffectAllow,
 			Selector: Selector{
-				"resource_kind": "mcp",
-				"resource_id":   "*",
-				"project_id":    "proj_A",
+				SelectorKeyResourceKind: ResourceKindMCP,
+				SelectorKeyResourceID:   WildcardResource,
+				SelectorKeyProjectID:    "proj_A",
 			},
 		},
 	})
@@ -464,9 +464,9 @@ func TestEngineRequire_projectScopedGrantAllowsToolsInProject(t *testing.T) {
 			Scope:  ScopeMCPConnect,
 			Effect: PolicyEffectAllow,
 			Selector: Selector{
-				"resource_kind": "mcp",
-				"resource_id":   "*",
-				"project_id":    "proj_A",
+				SelectorKeyResourceKind: ResourceKindMCP,
+				SelectorKeyResourceID:   WildcardResource,
+				SelectorKeyProjectID:    "proj_A",
 			},
 		},
 	})
@@ -499,9 +499,9 @@ func TestEngineRequire_projectScopedMCPReadGrant(t *testing.T) {
 			Scope:  ScopeMCPRead,
 			Effect: PolicyEffectAllow,
 			Selector: Selector{
-				"resource_kind": "mcp",
-				"resource_id":   "*",
-				"project_id":    "proj_A",
+				SelectorKeyResourceKind: ResourceKindMCP,
+				SelectorKeyResourceID:   WildcardResource,
+				SelectorKeyProjectID:    "proj_A",
 			},
 		},
 	})
@@ -529,9 +529,9 @@ func TestEngineFilter_projectAndServerGrantsCombine(t *testing.T) {
 			Scope:  ScopeMCPConnect,
 			Effect: PolicyEffectAllow,
 			Selector: Selector{
-				"resource_kind": "mcp",
-				"resource_id":   "*",
-				"project_id":    "proj_A",
+				SelectorKeyResourceKind: ResourceKindMCP,
+				SelectorKeyResourceID:   WildcardResource,
+				SelectorKeyProjectID:    "proj_A",
 			},
 		},
 		// Server-specific grant for serverZ (in proj_B)

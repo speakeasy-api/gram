@@ -190,20 +190,6 @@ func (rp rolePrincipals) deleteGrants(ctx context.Context, q *repo.Queries, orgI
 	return nil
 }
 
-func (rp rolePrincipals) toGrants(rows []roleGrantRow) []Grant {
-	grants := make([]Grant, 0, len(rows))
-	for _, row := range rows {
-		grants = append(grants, Grant{
-			PrincipalUrn: rp.WritePrincipal.String(),
-			Scope:        row.Scope,
-			Effect:       row.Effect,
-			Selector:     row.Selector,
-		})
-	}
-
-	return grants
-}
-
 func principalURNStrings(principals []urn.Principal) ([]string, error) {
 	if len(principals) == 0 {
 		return nil, fmt.Errorf("no principals provided")

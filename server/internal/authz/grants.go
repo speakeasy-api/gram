@@ -335,6 +335,8 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 	return buildScopedGrants(keys, collapsed)
 }
 
+// groupGrantsByScopeEffect preserves selector rows while splitting allow and
+// deny grants into independent output buckets for the same scope.
 func groupGrantsByScopeEffect(rows []Grant) map[scopeEffectKey][]Selector {
 	grouped := make(map[scopeEffectKey][]Selector)
 	for _, row := range rows {
@@ -344,6 +346,9 @@ func groupGrantsByScopeEffect(rows []Grant) map[scopeEffectKey][]Selector {
 	return grouped
 }
 
+// collapseUnrestrictedSelectors turns any unrestricted selector in a bucket
+// into the API's nil-selector representation and drops narrower selectors that
+// are redundant under that wildcard.
 func collapseUnrestrictedSelectors(grouped map[scopeEffectKey][]Selector) map[scopeEffectKey]scopeAgg {
 	collapsed := make(map[scopeEffectKey]scopeAgg, len(grouped))
 	for key, selectors := range grouped {
@@ -361,6 +366,8 @@ func collapseUnrestrictedSelectors(grouped map[scopeEffectKey][]Selector) map[sc
 	return collapsed
 }
 
+// sortedScopeEffectKeys gives GrantsToScopedGrants stable output across map
+// iteration order.
 func sortedScopeEffectKeys(grouped map[scopeEffectKey]scopeAgg) []scopeEffectKey {
 	keys := make([]scopeEffectKey, 0, len(grouped))
 	for key := range grouped {
@@ -375,6 +382,8 @@ func sortedScopeEffectKeys(grouped map[scopeEffectKey]scopeAgg) []scopeEffectKey
 	return keys
 }
 
+// buildScopedGrants converts grouped selectors into the API shape and attaches
+// the transitive sub-scopes for each scope.
 func buildScopedGrants(keys []scopeEffectKey, grouped map[scopeEffectKey]scopeAgg) []*ScopedGrant {
 	grants := make([]*ScopedGrant, 0, len(keys))
 	for _, key := range keys {
