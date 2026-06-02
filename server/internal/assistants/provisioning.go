@@ -194,16 +194,7 @@ func dashboardTriggerTarget(projectID, assistantID uuid.UUID) triggerrepo.ListAc
 // when absent. Idempotent so the enable fast path can heal a managed assistant
 // that predates dashboard ingress without depending on a fresh create.
 func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo.DBTX, organizationID string, projectID, assistantID uuid.UUID, name string) error {
-	queries := triggerrepo.New(db)
-	existing, err := queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
-	if err != nil {
-		return fmt.Errorf("list dashboard trigger instances: %w", err)
-	}
-	if len(existing) > 0 {
-		return nil
-	}
-
-	if _, err := queries.CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+	_, err := triggerrepo.New(db).CreateDashboardTriggerInstance(ctx, triggerrepo.CreateDashboardTriggerInstanceParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
 		DefinitionSlug: sourceKindDashboard,
@@ -214,7 +205,10 @@ func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo
 		TargetDisplay:  name,
 		ConfigJson:     []byte("{}"),
 		Status:         StatusActive,
-	}); err != nil {
+	})
+	// ON CONFLICT DO NOTHING returns no rows when an active trigger already
+	// exists for this project and target — the idempotent success path.
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("create dashboard trigger instance: %w", err)
 	}
 	return nil

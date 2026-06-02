@@ -96,8 +96,13 @@ export function useObservabilityMcpConfig({
  * Whether the project has no toolsets configured yet.
  * Used to show a setup prompt in the AI Insights sidebar.
  */
-export function useNoToolsetsConfigured(): boolean {
-  const { data: toolsetsData, isLoading } = useListToolsets();
-  if (isLoading) return false;
+export function useNoToolsetsConfigured(projectSlug?: string): boolean {
+  const { data: toolsetsData, isLoading } = useListToolsets(
+    projectSlug ? { gramProject: projectSlug } : undefined,
+    undefined,
+    { enabled: Boolean(projectSlug) },
+  );
+
+  if (!projectSlug || isLoading) return false;
   return !toolsetsData?.toolsets?.length;
 }
