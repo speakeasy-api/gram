@@ -3,22 +3,17 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AgentMarketplace = {
   /**
-   * Whether Claude Code should auto-update the marketplace.
-   */
-  autoUpdate: boolean;
-  /**
-   * Stable identifier used as the key in Claude Code's `extraKnownMarketplaces` map. Matches the name written into the published marketplace.json, derived from the organization name (for example, `<org-slug>-gram`) so plugin references resolve deterministically across polls.
+   * Stable identifier for the marketplace, used as its key when the agent registers it with a managed tool. Matches the name written into the published marketplace.json, derived from the organization name (for example, `<org-slug>-gram`), so plugin references resolve deterministically across polls.
    */
   name: string;
   /**
-   * Git URL for the marketplace, served by Gram's marketplace proxy.
+   * Git URL for the marketplace, served by the marketplace proxy.
    */
   url: string;
 };
@@ -27,18 +22,10 @@ export type AgentMarketplace = {
 export const AgentMarketplace$inboundSchema: z.ZodMiniType<
   AgentMarketplace,
   unknown
-> = z.pipe(
-  z.object({
-    auto_update: z.boolean(),
-    name: z.string(),
-    url: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      "auto_update": "autoUpdate",
-    });
-  }),
-);
+> = z.object({
+  name: z.string(),
+  url: z.string(),
+});
 
 export function agentMarketplaceFromJSON(
   jsonString: string,

@@ -18,11 +18,11 @@ export type GetPluginsResult = {
    */
   etag: string;
   /**
-   * Marketplaces the agent should register in Claude Code's `extraKnownMarketplaces`. Sorted by name.
+   * Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
    */
   marketplaces: Array<AgentMarketplace>;
   /**
-   * Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry references one of the marketplaces above by name.
+   * Plugins the agent should enable. Each entry references one of the marketplaces above by name.
    */
   plugins: Array<AgentPlugin>;
 };

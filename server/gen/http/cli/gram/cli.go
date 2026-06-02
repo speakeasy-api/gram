@@ -5479,7 +5479,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agent COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the set of plugins assigned to the enrolled user and return them as Claude Code marketplace + plugin references. The agent merges these into the local Claude Code settings so Claude Code's own plugin manager fetches and installs the bundles.`)
+	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s agent COMMAND --help\n", os.Args[0])
@@ -5493,7 +5493,7 @@ func agentGetPluginsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Resolve the set of plugins assigned to the enrolled user and return them as Claude Code marketplace + plugin references. The agent merges these into the local Claude Code settings so Claude Code's own plugin manager fetches and installs the bundles.`)
+	fmt.Fprintln(os.Stderr, `Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -email STRING: `)

@@ -225,9 +225,8 @@ func EncodeGetPluginsError(encoder func(context.Context, http.ResponseWriter) go
 // *agent.AgentMarketplace.
 func marshalAgentAgentMarketplaceToAgentMarketplaceResponseBody(v *agent.AgentMarketplace) *AgentMarketplaceResponseBody {
 	res := &AgentMarketplaceResponseBody{
-		Name:       v.Name,
-		URL:        v.URL,
-		AutoUpdate: v.AutoUpdate,
+		Name: v.Name,
+		URL:  v.URL,
 	}
 
 	return res

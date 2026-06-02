@@ -73,9 +73,9 @@ trackedFiles:
   docs/models/components/addpluginserverform.md:
     last_write_checksum: sha1:a2726c1edb39bdb417e5a9e65fc695f7a5abb9f2
   docs/models/components/agentmarketplace.md:
-    last_write_checksum: sha1:61c849f2ff41a9b9bbbbd91d91d4c786897b6e75
+    last_write_checksum: sha1:4ab7d959193ab0afa325c5d83b24753a12b0dbc7
   docs/models/components/agentplugin.md:
-    last_write_checksum: sha1:2bdcfd57ad5c50bf44d45ed8d8e35139ad516fa5
+    last_write_checksum: sha1:47a23e63a23265078a632129a0fec6982cfa3aec
   docs/models/components/aiintegrationconfig.md:
     last_write_checksum: sha1:6fd07c709c59d79aacdf82600a23adf69dbb6158
   docs/models/components/allowedorigin.md:
@@ -369,7 +369,7 @@ trackedFiles:
   docs/models/components/getobservabilityoverviewresult.md:
     last_write_checksum: sha1:0a0b5e2c3e4fb403705fe952952431992e172785
   docs/models/components/getpluginsresult.md:
-    last_write_checksum: sha1:2b5aa44cc176a8967da28cf19f29f5211e4a70db
+    last_write_checksum: sha1:3a3a8f8d2c90f10a3a41bba699f319bb1a56fd90
   docs/models/components/getproductfeaturesresponsebody.md:
     last_write_checksum: sha1:d92e84a1b65e679d39db2987deb0af2af2235a68
   docs/models/components/getprojectmetricssummarypayload.md:
@@ -2931,7 +2931,7 @@ trackedFiles:
   docs/sdks/access/README.md:
     last_write_checksum: sha1:58516f2d2eedd6c55d7baf3bb58d30d40a3644b8
   docs/sdks/agent/README.md:
-    last_write_checksum: sha1:e3d861e9a2b686ab9f5a5d1243a525ac5cd1e831
+    last_write_checksum: sha1:65f2ab006cf3f967dbd3ad771bde54e6b43f412a
   docs/sdks/aiintegrations/README.md:
     last_write_checksum: sha1:6ef8202846ce72d507a3589e4f983caef978b809
   docs/sdks/approvals/README.md:
@@ -3101,7 +3101,7 @@ trackedFiles:
   src/funcs/accessUpdateShadowMCPAccessRule.ts:
     last_write_checksum: sha1:0784a48e88a5db5f2840126aaa1471e2f962e4d3
   src/funcs/agentGetPlugins.ts:
-    last_write_checksum: sha1:793033d33eb1bd54a5894c944cd5b21c50bfdd6d
+    last_write_checksum: sha1:a11c40c6917c62fbf6570a25161ab2b216d8d5c8
   src/funcs/aiIntegrationsDeleteConfig.ts:
     last_write_checksum: sha1:1ea838e6b36b309892cef9c5190d33b87af9304c
   src/funcs/aiIntegrationsGetConfig.ts:
@@ -3687,9 +3687,9 @@ trackedFiles:
   src/models/components/addpluginserverform.ts:
     last_write_checksum: sha1:6af5998e0f14002028123f6a8c26896c1d1f4ed8
   src/models/components/agentmarketplace.ts:
-    last_write_checksum: sha1:e6cd5624ac512cf1a4f1aeeb1c50be6c682983a0
+    last_write_checksum: sha1:7ece1220e48985adec826c5e3dd0b0dbaff12a0c
   src/models/components/agentplugin.ts:
-    last_write_checksum: sha1:c8625465af268540573e3063b01e82cbe07f9424
+    last_write_checksum: sha1:15434de35272d44a41b4379c86047304528a27c0
   src/models/components/aiintegrationconfig.ts:
     last_write_checksum: sha1:cfbccc1b3a3aa4738c2f052324df032d1b1882f6
   src/models/components/allowedorigin.ts:
@@ -3924,7 +3924,7 @@ trackedFiles:
   src/models/components/getobservabilityoverviewresult.ts:
     last_write_checksum: sha1:0dbfa9a9afa50661ca0f7406e2ddc5e59aab954e
   src/models/components/getpluginsresult.ts:
-    last_write_checksum: sha1:a64a2d0fbcfdd8b6bf35fa6492d9b53d917744cf
+    last_write_checksum: sha1:671459cf68e9cb135cd5438c651bb35b0843b5de
   src/models/components/getproductfeaturesresponsebody.ts:
     last_write_checksum: sha1:9f758037adb46a3b2a03a7171c9c7a443d588caa
   src/models/components/getprojectmetricssummarypayload.ts:
@@ -5139,7 +5139,7 @@ trackedFiles:
   src/react-query/agentPlugins.core.ts:
     last_write_checksum: sha1:350356a0aa02a4a714ac30c61506c79a7158af14
   src/react-query/agentPlugins.ts:
-    last_write_checksum: sha1:d1a91ce3d480233d7aa60ad9b3be6c6f54bab650
+    last_write_checksum: sha1:fab08bfdc5eb50def41cf165ae054ed2757d8908
   src/react-query/aiIntegrationConfig.core.ts:
     last_write_checksum: sha1:8e5a3952bc3754bbe88360fe8e27fa8c48a0a484
   src/react-query/aiIntegrationConfig.ts:
@@ -5953,7 +5953,7 @@ trackedFiles:
   src/sdk/access.ts:
     last_write_checksum: sha1:7baf17cc4c215913f513d4dd60d2283e01a24ac1
   src/sdk/agent.ts:
-    last_write_checksum: sha1:3234df5ce753187a8a87266b6f8067b2cfd78b41
+    last_write_checksum: sha1:80c605718b2797a5298185fd2710d19aaeb095e4
   src/sdk/aiintegrations.ts:
     last_write_checksum: sha1:3e48a983553920eb58c08bb83e89f01b28d95e1a
   src/sdk/approvals.ts:

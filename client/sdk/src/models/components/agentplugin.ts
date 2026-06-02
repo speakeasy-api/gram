@@ -14,7 +14,7 @@ export type AgentPlugin = {
    */
   marketplaceName: string;
   /**
-   * Plugin slug. Combined with marketplace_name this is what goes into Claude Code's `enabledPlugins` entries.
+   * Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.
    */
   slug: string;
 };

@@ -2253,7 +2253,7 @@ paths:
         name: UpdateRole
   /rpc/agent.getPlugins:
     get:
-      description: Resolve the set of plugins assigned to the enrolled user and return them as Claude Code marketplace + plugin references. The agent merges these into the local Claude Code settings so Claude Code's own plugin manager fetches and installs the bundles.
+      description: 'Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool''s own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool''s syncer decides how to render it into that tool''s native configuration.'
       operationId: getAgentPlugins
       parameters:
         - allowEmptyValue: true
@@ -29799,19 +29799,15 @@ components:
     AgentMarketplace:
       type: object
       properties:
-        auto_update:
-          type: boolean
-          description: Whether Claude Code should auto-update the marketplace.
         name:
           type: string
-          description: Stable identifier used as the key in Claude Code's `extraKnownMarketplaces` map. Matches the name written into the published marketplace.json, derived from the organization name (for example, `<org-slug>-gram`) so plugin references resolve deterministically across polls.
+          description: Stable identifier for the marketplace, used as its key when the agent registers it with a managed tool. Matches the name written into the published marketplace.json, derived from the organization name (for example, `<org-slug>-gram`), so plugin references resolve deterministically across polls.
         url:
           type: string
-          description: Git URL for the marketplace, served by Gram's marketplace proxy.
+          description: Git URL for the marketplace, served by the marketplace proxy.
       required:
         - name
         - url
-        - auto_update
     AgentPlugin:
       type: object
       properties:
@@ -29820,7 +29816,7 @@ components:
           description: Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.
         slug:
           type: string
-          description: Plugin slug. Combined with marketplace_name this is what goes into Claude Code's `enabledPlugins` entries.
+          description: Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.
       required:
         - slug
         - marketplace_name
@@ -33736,12 +33732,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentMarketplace'
-          description: Marketplaces the agent should register in Claude Code's `extraKnownMarketplaces`. Sorted by name.
+          description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
         plugins:
           type: array
           items:
             $ref: '#/components/schemas/AgentPlugin'
-          description: Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry references one of the marketplaces above by name.
+          description: Plugins the agent should enable. Each entry references one of the marketplaces above by name.
       required:
         - etag
         - marketplaces

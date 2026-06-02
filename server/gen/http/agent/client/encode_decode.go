@@ -256,9 +256,8 @@ func DecodeGetPluginsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 // *AgentMarketplaceResponseBody.
 func unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace(v *AgentMarketplaceResponseBody) *agent.AgentMarketplace {
 	res := &agent.AgentMarketplace{
-		Name:       *v.Name,
-		URL:        *v.URL,
-		AutoUpdate: *v.AutoUpdate,
+		Name: *v.Name,
+		URL:  *v.URL,
 	}
 
 	return res

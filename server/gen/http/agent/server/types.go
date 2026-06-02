@@ -18,11 +18,11 @@ type GetPluginsResponseBody struct {
 	// Opaque revision identifier covering the marketplace + plugin set. The agent
 	// stores this to detect changes between polls.
 	Etag string `form:"etag" json:"etag" xml:"etag"`
-	// Marketplaces the agent should register in Claude Code's
-	// `extraKnownMarketplaces`. Sorted by name.
+	// Plugin marketplaces the agent should register with the tools it manages.
+	// Sorted by name.
 	Marketplaces []*AgentMarketplaceResponseBody `form:"marketplaces" json:"marketplaces" xml:"marketplaces"`
-	// Plugins the agent should list in Claude Code's `enabledPlugins`. Each entry
-	// references one of the marketplaces above by name.
+	// Plugins the agent should enable. Each entry references one of the
+	// marketplaces above by name.
 	Plugins []*AgentPluginResponseBody `form:"plugins" json:"plugins" xml:"plugins"`
 }
 
@@ -208,21 +208,20 @@ type GetPluginsGatewayErrorResponseBody struct {
 
 // AgentMarketplaceResponseBody is used to define fields on response body types.
 type AgentMarketplaceResponseBody struct {
-	// Stable identifier used as the key in Claude Code's `extraKnownMarketplaces`
-	// map. Matches the name written into the published marketplace.json, derived
-	// from the organization name (for example, `<org-slug>-gram`) so plugin
-	// references resolve deterministically across polls.
+	// Stable identifier for the marketplace, used as its key when the agent
+	// registers it with a managed tool. Matches the name written into the
+	// published marketplace.json, derived from the organization name (for example,
+	// `<org-slug>-gram`), so plugin references resolve deterministically across
+	// polls.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Git URL for the marketplace, served by Gram's marketplace proxy.
+	// Git URL for the marketplace, served by the marketplace proxy.
 	URL string `form:"url" json:"url" xml:"url"`
-	// Whether Claude Code should auto-update the marketplace.
-	AutoUpdate bool `form:"auto_update" json:"auto_update" xml:"auto_update"`
 }
 
 // AgentPluginResponseBody is used to define fields on response body types.
 type AgentPluginResponseBody struct {
-	// Plugin slug. Combined with marketplace_name this is what goes into Claude
-	// Code's `enabledPlugins` entries.
+	// Plugin slug. Combined with marketplace_name, this identifies the plugin the
+	// agent enables in the managed tool.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.

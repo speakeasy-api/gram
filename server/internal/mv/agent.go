@@ -12,7 +12,8 @@ import (
 )
 
 // BuildAgentPluginsView turns the marketplace-first rows from
-// agent.GetAgentPluginSet into Claude Code's marketplaces + plugins shape.
+// agent.GetAgentPluginSet into the tool-agnostic marketplaces + plugins view
+// the agent endpoint returns.
 //
 // For every published marketplace in the org it emits the marketplace and its
 // always-required observability plugin, then layers on the user's assigned
@@ -22,14 +23,14 @@ import (
 //
 // The marketplace name and observability slug come from the shared `naming`
 // package so they match exactly what the publish path wrote into the
-// marketplace.json — Claude Code resolves marketplaces by that name, so any
-// mismatch silently fails to enable plugins.
+// marketplace.json — tools resolve marketplaces by that name, so any mismatch
+// silently fails to enable plugins.
 //
 // Note: gram publishes one marketplace name per *org* (naming.MarketplaceName
-// is org-derived, not project-scoped), and Claude Code allows only one
-// marketplace per name. So if an org ever publishes multiple projects, they
-// collapse to a single marketplace here — matching gram's existing publish
-// limitation rather than introducing a new one.
+// is org-derived, not project-scoped), and a marketplace.json name is a single
+// identifier. So if an org ever publishes multiple projects, they collapse to a
+// single marketplace here — matching gram's existing publish limitation rather
+// than introducing a new one.
 //
 // marketplaceURL constructs the public marketplace git URL from a token; the
 // caller owns the URL shape so this builder stays free of server-side config.
@@ -48,9 +49,8 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		if _, ok := seenMarketplace[name]; !ok {
 			seenMarketplace[name] = struct{}{}
 			marketplaces = append(marketplaces, &gen.AgentMarketplace{
-				Name:       name,
-				URL:        marketplaceURL(row.MarketplaceToken.String),
-				AutoUpdate: true,
+				Name: name,
+				URL:  marketplaceURL(row.MarketplaceToken.String),
 			})
 			writeAgentPluginsETag(
 				etag,
