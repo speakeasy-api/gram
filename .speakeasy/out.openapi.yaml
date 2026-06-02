@@ -4683,6 +4683,102 @@ paths:
       tags:
         - assistants
       x-speakeasy-name-override: list
+  /rpc/assistants.sendMessage:
+    post:
+      description: Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.
+      operationId: sendAssistantMessage
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: sendMessage assistants
+      tags:
+        - assistants
+      x-speakeasy-name-override: sendMessage
+      x-speakeasy-react-hook:
+        name: SendAssistantMessage
   /rpc/assistants.update:
     post:
       description: Update an assistant.
@@ -39595,6 +39691,49 @@ components:
           description: Optional role ID for the invitee.
       required:
         - email
+    SendMessageRequestBody:
+      type: object
+      properties:
+        assistant_id:
+          type: string
+          description: The assistant to send the message to.
+          format: uuid
+        correlation_id:
+          type: string
+          description: Conversation key the message is threaded under. Send the user id for one continuing thread per user, or a fresh value to start a new conversation.
+          minLength: 1
+          maxLength: 255
+        idempotency_key:
+          type: string
+          description: Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.
+          maxLength: 255
+        message:
+          type: string
+          description: The user's message text.
+          minLength: 1
+          maxLength: 10000
+      required:
+        - assistant_id
+        - message
+        - correlation_id
+    SendMessageResult:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+          description: Whether the message was accepted and enqueued for processing.
+        chat_id:
+          type: string
+          description: The chat to poll for the assistant's reply.
+          format: uuid
+        thread_id:
+          type: string
+          description: The assistant thread the message was enqueued on.
+          format: uuid
+      required:
+        - chat_id
+        - thread_id
+        - accepted
     ServeChatAttachmentForm:
       type: object
       properties:

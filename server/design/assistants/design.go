@@ -128,6 +128,44 @@ var _ = Service("assistants", func() {
 		Meta("openapi:operationId", "deleteAssistant")
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 	})
+
+	Method("sendMessage", func() {
+		Description("Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.")
+
+		Payload(func() {
+			Attribute("assistant_id", String, "The assistant to send the message to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("message", String, "The user's message text.", func() {
+				MinLength(1)
+				MaxLength(10000)
+			})
+			Attribute("correlation_id", String, "Conversation key the message is threaded under. Send the user id for one continuing thread per user, or a fresh value to start a new conversation.", func() {
+				MinLength(1)
+				MaxLength(255)
+			})
+			Attribute("idempotency_key", String, "Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.", func() {
+				MaxLength(255)
+			})
+			Required("assistant_id", "message", "correlation_id")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SendMessageResult)
+
+		HTTP(func() {
+			POST("/rpc/assistants.sendMessage")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "sendAssistantMessage")
+		Meta("openapi:extension:x-speakeasy-name-override", "sendMessage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SendAssistantMessage"}`)
+	})
 })
 
 var CreateAssistantForm = Type("CreateAssistantForm", func() {
@@ -164,4 +202,15 @@ var UpdateAssistantForm = Type("UpdateAssistantForm", func() {
 var ListAssistantsResult = Type("ListAssistantsResult", func() {
 	Attribute("assistants", ArrayOf(shared.Assistant), "Assistants for the current project.")
 	Required("assistants")
+})
+
+var SendMessageResult = Type("SendMessageResult", func() {
+	Attribute("chat_id", String, "The chat to poll for the assistant's reply.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("thread_id", String, "The assistant thread the message was enqueued on.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("accepted", Boolean, "Whether the message was accepted and enqueued for processing.")
+	Required("chat_id", "thread_id", "accepted")
 })
