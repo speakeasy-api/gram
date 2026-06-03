@@ -395,7 +395,7 @@ func TestBuildHeadersWithOAuthToken(t *testing.T) {
 			},
 		},
 		{
-			name:       "config Authorization wins over oauth token",
+			name:       "system config Authorization wins over oauth token",
 			systemEnv:  map[string]string{"gong_authorization": "Basic dXNlcjpwYXNz"},
 			userConfig: map[string]string{},
 			headerDefs: []HeaderDefinition{
