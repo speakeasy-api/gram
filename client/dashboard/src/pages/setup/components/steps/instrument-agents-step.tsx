@@ -10,6 +10,8 @@ import {
   Ban,
 } from "lucide-react";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
+import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { useSlugs } from "@/contexts/Sdk";
 import { toast } from "sonner";
 import { codeToHtml, type BundledLanguage } from "shiki";
 import {
@@ -26,6 +28,14 @@ import { Badge, Button, Link } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
 
 const API_KEY_PLACEHOLDER = "{{GRAM_API_KEY}}";
+const MARKETPLACE_URL_PLACEHOLDER = "{{GRAM_MARKETPLACE_URL}}";
+const REPO_URL_PLACEHOLDER = "{{GRAM_REPO_URL}}";
+const REPO_NAME_PLACEHOLDER = "{{GRAM_REPO_NAME}}";
+const REPO_OWNER_PLACEHOLDER = "{{GRAM_REPO_OWNER}}";
+const CODEX_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CODEX_PLUGIN_NAME}}";
+const CLAUDE_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CLAUDE_PLUGIN_NAME}}";
+const CURSOR_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CURSOR_PLUGIN_NAME}}";
+const MARKETPLACE_NAME_PLACEHOLDER = "{{GRAM_MARKETPLACE_NAME}}";
 
 function HighlightedCode({
   code,
@@ -109,6 +119,23 @@ export function InstrumentAgentsStep({
   const [platformBlocked, setPlatformBlocked] = useState<
     Record<string, { title: string; description: string }>
   >({});
+
+  const { data: publishStatus } = usePublishStatus();
+  const { orgSlug = "" } = useSlugs();
+  const repoOwner = publishStatus?.repoOwner ?? "";
+  const repoName = publishStatus?.repoName ?? "";
+  const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
+  const repoUrl =
+    repoOwner && repoName ? `https://github.com/${repoOwner}/${repoName}` : "";
+  // Marketplace + plugin slug formulas mirror server/internal/plugins/naming/naming.go.
+  // Both sides derive from the org slug — NOT the GitHub repo name, which can
+  // be anything (e.g. "speakeasy-default-plugins"). The marketplace.json "name"
+  // field is what `enabledPlugins`/`plugins.required` reference as the
+  // `<plugin>@<marketplace>` suffix, and it's always `<orgSlug>-gram`.
+  const marketplaceName = orgSlug ? `${orgSlug}-gram` : "";
+  const claudePluginName = orgSlug ? `${orgSlug}-observability` : "";
+  const codexPluginName = orgSlug ? `${orgSlug}-observability-codex` : "";
+  const cursorPluginName = orgSlug ? `${orgSlug}-observability-cursor` : "";
 
   const createKeyMutation = useCreateAPIKeyMutation();
 
@@ -350,10 +377,23 @@ export function InstrumentAgentsStep({
               const isPending = !!apiKeyPending[activePlatform.id];
               const error = apiKeyError[activePlatform.id];
               const needsKey = !!step.requiresApiKey;
-              const displayCode =
-                step.code && needsKey && platformKey
-                  ? step.code.replaceAll(API_KEY_PLACEHOLDER, platformKey)
-                  : step.code;
+              const substitutions: Array<[string, string]> = [
+                [API_KEY_PLACEHOLDER, platformKey ?? ""],
+                [MARKETPLACE_URL_PLACEHOLDER, marketplaceUrl],
+                [REPO_URL_PLACEHOLDER, repoUrl],
+                [REPO_NAME_PLACEHOLDER, repoName],
+                [REPO_OWNER_PLACEHOLDER, repoOwner],
+                [CODEX_PLUGIN_NAME_PLACEHOLDER, codexPluginName],
+                [CLAUDE_PLUGIN_NAME_PLACEHOLDER, claudePluginName],
+                [CURSOR_PLUGIN_NAME_PLACEHOLDER, cursorPluginName],
+                [MARKETPLACE_NAME_PLACEHOLDER, marketplaceName],
+              ];
+              let displayCode = step.code;
+              if (displayCode) {
+                for (const [marker, value] of substitutions) {
+                  displayCode = displayCode.split(marker).join(value);
+                }
+              }
 
               return (
                 <div

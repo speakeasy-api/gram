@@ -79,3 +79,22 @@ export const useSlugs = () => {
 
   return { orgSlug, projectSlug };
 };
+
+/**
+ * Resolves the project slug to send on the `gram-project` request header. On
+ * project-scoped routes this matches the path slug. On org-scoped routes that
+ * still call project-scoped endpoints (e.g. the onboarding wizard hitting
+ * plugins.getPublishStatus), it honors an explicit `?projectSlug=` query
+ * param, then falls back to the `default` project every org has.
+ *
+ * Use this only for SDK header injection — UI redirect logic and link targets
+ * should keep using `useSlugs()` so they can still distinguish "user is on an
+ * org-only page" from "user is on a project page".
+ */
+export const useProjectSlugForRequests = (): string => {
+  const { projectSlug } = useSlugs();
+  const location = useLocation();
+  if (projectSlug) return projectSlug;
+  const search = new URLSearchParams(location.search);
+  return search.get("projectSlug") ?? "default";
+};

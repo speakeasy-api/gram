@@ -1,6 +1,7 @@
 export type OnboardingStep =
   | "connect-idp"
   | "directory-sync"
+  | "create-marketplace"
   | "instrument-agents"
   | "confirm-traffic";
 
@@ -23,6 +24,12 @@ export const ONBOARDING_STEPS: StepConfig[] = [
     title: "Directory Sync",
     description: "Confirm roles and admins",
     icon: "users",
+  },
+  {
+    id: "create-marketplace",
+    title: "Create Plugin Marketplace",
+    description: "Publish observability plugins to GitHub",
+    icon: "git-branch",
   },
   {
     id: "instrument-agents",

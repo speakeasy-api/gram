@@ -6,6 +6,7 @@ import { OnboardingStepper, type Step } from "./onboarding-stepper";
 import {
   ConnectIdpStep,
   DirectorySyncStep,
+  CreateMarketplaceStep,
   InstrumentAgentsStep,
   ConfirmTrafficStep,
 } from "./steps";
@@ -20,6 +21,11 @@ const STEPS: Step[] = [
     id: "directory-sync",
     title: "Directory sync",
     description: "Confirm users and roles",
+  },
+  {
+    id: "create-marketplace",
+    title: "Create plugin marketplace",
+    description: "Publish observability plugins to GitHub",
   },
   {
     id: "instrument-agents",
@@ -121,12 +127,19 @@ export function SetupWizard() {
         );
       case 2:
         return (
-          <InstrumentAgentsStep
+          <CreateMarketplaceStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
       case 3:
+        return (
+          <InstrumentAgentsStep
+            onComplete={completeCurrentStep}
+            onBack={goBack}
+          />
+        );
+      case 4:
         return (
           <ConfirmTrafficStep
             onComplete={completeCurrentStep}

@@ -1109,7 +1109,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	case "dsync":
 		// Directory sync may take time to become "linked" after portal setup.
 		// Completing the portal is sufficient to advance — DSYNC is also skippable.
-		nextStepSlug = "instrument-agents"
+		nextStepSlug = "create-marketplace"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
