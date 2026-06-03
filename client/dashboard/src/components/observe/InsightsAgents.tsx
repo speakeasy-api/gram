@@ -189,17 +189,10 @@ export function InsightsAgentsContent() {
     () => new Map((membersData?.members ?? []).map((m) => [m.id, m])),
     [membersData],
   );
-  const memberIdentifiers = useMemo(() => {
-    const ids = new Set<string>();
-    for (const m of membersData?.members ?? []) {
-      ids.add(m.id);
-      ids.add(m.email.toLowerCase());
-    }
-    return ids;
-  }, [membersData]);
-  const isOrgMember = (userId: string) =>
-    memberIdentifiers.has(userId) ||
-    memberIdentifiers.has(userId.toLowerCase());
+  const memberIds = useMemo(
+    () => (membersData?.members ?? []).map((m) => m.id),
+    [membersData],
+  );
 
   const usersQuery = useQuery({
     queryKey: [
@@ -208,8 +201,10 @@ export function InsightsAgentsContent() {
       "users",
       from.toISOString(),
       to.toISOString(),
+      memberIds,
     ],
-    queryFn: () => fetchAllUsers(client, from, to),
+    queryFn: () => fetchAllUsers(client, from, to, memberIds),
+    enabled: memberIds.length > 0,
     throwOnError: false,
   });
 
@@ -252,9 +247,10 @@ export function InsightsAgentsContent() {
       "roleUsage",
       from.toISOString(),
       to.toISOString(),
+      memberIds,
     ],
-    queryFn: () => fetchRoleUsage(client, from, to),
-    enabled: groupByDimension === "role",
+    queryFn: () => fetchRoleUsage(client, from, to, memberIds),
+    enabled: groupByDimension === "role" && memberIds.length > 0,
     throwOnError: false,
   });
 
@@ -273,9 +269,7 @@ export function InsightsAgentsContent() {
 
   const totalTokens = users.reduce((s, u) => s + effectiveTokens(u), 0);
   const totalCost = users.reduce((s, u) => s + u.totalCost, 0);
-  const activeUsers = users.filter(
-    (u) => effectiveTokens(u) > 0 && isOrgMember(u.userId),
-  ).length;
+  const activeUsers = users.filter((u) => effectiveTokens(u) > 0).length;
 
   const clientBreakdown = useMemo(() => {
     const map = new Map<
@@ -322,7 +316,7 @@ export function InsightsAgentsContent() {
   const userRows = useMemo(
     () =>
       users
-        .filter((u) => isOrgMember(u.userId))
+        .slice()
         .sort((a, b) =>
           valueMode === "cost"
             ? b.totalCost - a.totalCost
@@ -349,7 +343,7 @@ export function InsightsAgentsContent() {
                 : [],
           };
         }),
-    [users, memberMap, memberIdentifiers, valueMode, totalCost, totalTokens],
+    [users, memberMap, valueMode, totalCost, totalTokens],
   );
 
   // Unique client sources for filter dropdown
@@ -416,7 +410,7 @@ export function InsightsAgentsContent() {
     0,
   );
   const filteredActiveUsers = filteredUserRows.filter(
-    (u) => u.totalTokens > 0 && isOrgMember(u.userId),
+    (u) => u.totalTokens > 0,
   ).length;
 
   const isLoading =
@@ -1502,6 +1496,7 @@ async function fetchAllUsers(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
+  memberIds: string[],
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -1510,7 +1505,7 @@ async function fetchAllUsers(
       telemetrySearchUsers(client, {
         searchUsersPayload: {
           cursor,
-          filter: { from, to },
+          filter: { from, to, userIds: memberIds },
           limit: 1000,
           sort: "desc",
           userType: "internal",
@@ -1527,11 +1522,12 @@ async function fetchRoleUsage(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
+  memberIds: string[],
 ): Promise<RoleSummary[]> {
   const result = await unwrapAsync(
     telemetrySearchUsers(client, {
       searchUsersPayload: {
-        filter: { from, to },
+        filter: { from, to, userIds: memberIds },
         groupBy: "role",
         limit: 1000,
         sort: "desc",
