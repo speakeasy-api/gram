@@ -1277,11 +1277,6 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       source: "presidio",
     },
     {
-      id: "pii.us_driver_license",
-      title: "US state-issued driver license",
-      source: "presidio",
-    },
-    {
       id: "pii.us_itin",
       title: "US Individual Taxpayer ID Number",
       source: "presidio",
@@ -1449,7 +1444,6 @@ export const MOCK_POLICIES: DlpPolicy[] = [
       "pii.phone_number",
       "pii.us_ssn",
       "pii.us_passport",
-      "pii.us_driver_license",
     ],
     action: "flag",
     types: ["user_message", "assistant_message", "tool_response"],

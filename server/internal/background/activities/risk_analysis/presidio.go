@@ -182,8 +182,14 @@ type presidioResult struct {
 //     identifiers, etc.) and would deny legitimate tool calls / pollute
 //     batch findings. Re-enable once we have a confidence threshold or a
 //     scoped allow-list.
+//   - US_DRIVER_LICENSE: Presidio's pattern is so broad it flags arbitrary
+//     1-letter + N-digit substrings inside base64 hashes, URL paths, UUIDs,
+//     and any text containing "lic" via substring context boosting (e.g.
+//     "public", "duplicate"). See microsoft/presidio#1063 — open since 2023.
+//     Re-enable once the upstream regex is tightened.
 var presidioEntityBlacklist = map[string]struct{}{
-	"PERSON": {},
+	"PERSON":            {},
+	"US_DRIVER_LICENSE": {},
 }
 
 // filterEntities removes blacklisted entity types from the caller's list.

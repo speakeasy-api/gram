@@ -431,6 +431,28 @@ func TestTruncateAtRuneBoundaryHandlesMultibyte(t *testing.T) {
 	assert.Empty(t, truncateAtRuneBoundary(in, 0))
 }
 
+// TestFilterEntitiesDropsBlacklistedTypes asserts that PERSON and
+// US_DRIVER_LICENSE are stripped from any caller-supplied entity list
+// before reaching Presidio. PERSON is dropped because NER trips on
+// capitalized words inside tool calls; US_DRIVER_LICENSE because the
+// upstream regex is unusably broad (microsoft/presidio#1063).
+func TestFilterEntitiesDropsBlacklistedTypes(t *testing.T) {
+	t.Parallel()
+
+	// nil passes through untouched so Presidio's default entity set still applies.
+	assert.Nil(t, filterEntities(nil))
+
+	// Blacklisted entries are removed; the rest survive in order.
+	got := filterEntities([]string{"EMAIL_ADDRESS", "PERSON", "US_DRIVER_LICENSE", "CREDIT_CARD"})
+	assert.Equal(t, []string{"EMAIL_ADDRESS", "CREDIT_CARD"}, got)
+
+	// All-blacklisted input returns an empty (non-nil) slice so AnalyzeBatch
+	// can short-circuit instead of falling back to the unbounded default scan.
+	got = filterEntities([]string{"PERSON", "US_DRIVER_LICENSE"})
+	assert.NotNil(t, got)
+	assert.Empty(t, got)
+}
+
 func TestIsCancelErrClassifiesContextErrors(t *testing.T) {
 	t.Parallel()
 
