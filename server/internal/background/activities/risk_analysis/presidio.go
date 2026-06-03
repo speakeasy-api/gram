@@ -625,12 +625,14 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 //     placeholder IPs (1.2.3.4 et al.), and shape heuristics
 //     (X.0.0.0 /8 network address, sparse IPv6 like 1::, b::, dead::).
 //   - EMAIL_ADDRESS → nonPIIEmailReason in falsepositives_email.go,
-//     covering KV / env / config wrappers (`DB_USERNAME=...`,
-//     `identity=...`), GCP service-account machine identities
-//     (`.gserviceaccount.com`), and two RFC-shape sanity checks: a `/`
-//     anywhere in the candidate (invalid in an addr-spec, so the match
-//     is a URL or package path) and a digit at the end of the domain
-//     (TLDs are letters, so this catches `pkg@v1.2.3` and other
+//     primarily covering well-known fixture / placeholder domains
+//     (`@example.com`, `@acme.com`, `@acmecorp.com`, etc.), plus KV /
+//     env wrappers (`DB_USERNAME=...`, `identity=...`), GCP
+//     service-account machine identities (`.gserviceaccount.com`),
+//     and two RFC-shape sanity checks: a `/` anywhere in the
+//     candidate (invalid in an addr-spec, so the match is a URL or
+//     package path) and a digit at the end of the domain (TLDs are
+//     letters, so this catches `pkg@v1.2.3` and other
 //     version-suffixed module paths).
 //
 // Cloud / CDN attribution by AS organisation (the fp_infra_asn bucket

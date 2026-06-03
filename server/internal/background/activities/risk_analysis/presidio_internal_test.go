@@ -118,9 +118,8 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	// over-reporting rather than missing PII.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "adam@speakeasy.com"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice.brown@techstartup.io"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"), "Faker-style name is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"), "Faker-style name on a real domain is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "support@speakeasy.com"), "role alias is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "test@example.com"), "fixture domain is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "u003ealice@speakeasy.com"), "JSON-escape prefix is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "170madam@speakeasy.com"), "ANSI prefix is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "47043212+thierry-dang@users.noreply.github.com"), "github noreply is not filtered")
@@ -129,6 +128,24 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "private@privaterelay.appleid.com"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"), "template placeholder without slash is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"), "presidio log-row wrapper is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@acme.co.uk"), "placeholder SLD under an out-of-list TLD is not filtered")
+
+	// Fixture / placeholder domains — the primary motivation for the
+	// filter. example.com / .org, asdf.com, fake.com, nowhere.com,
+	// yourorg.com, acme.com, acmecorp.com, etc., regardless of the
+	// local-part. Subdomain depth is irrelevant.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "test@example.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "TEST@EXAMPLE.COM"), "case-insensitive")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@dev.example.com"), "subdomain depth doesn't matter")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "sibling-a135@test.example.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "SuperSecret123!@db.example.com"), "any local-part still filtered")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "asdf@asdf.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "fakey@fake.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "zzzunknown@nowhere.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "you@yourorg.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice@acme.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice@acme.io"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.smith@acmecorp.com"))
 
 	// KV / env / config fragments.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "DB_USERNAME=adam@speakeasy.com"))
@@ -308,11 +325,11 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		results := make([][]presidioResult, len(req.Text))
 		for i, text := range req.Text {
-			if idx := strings.Index(text, "alice@acmecorp.com"); idx >= 0 {
+			if idx := strings.Index(text, "alice@globex.com"); idx >= 0 {
 				results[i] = []presidioResult{{
 					EntityType: "EMAIL_ADDRESS",
 					Start:      idx,
-					End:        idx + len("alice@acmecorp.com"),
+					End:        idx + len("alice@globex.com"),
 					Score:      1,
 				}}
 			}
@@ -323,11 +340,11 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@acmecorp.com"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@globex.com"}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
-	assert.Equal(t, "alice@acmecorp.com", results[0][0].Match)
+	assert.Equal(t, "alice@globex.com", results[0][0].Match)
 	assert.Empty(t, results[0][0].DeadLetterReason)
 	assert.GreaterOrEqual(t, hits.Load(), int64(2), "expected at least one retry before success")
 }
