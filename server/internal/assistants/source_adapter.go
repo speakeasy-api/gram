@@ -285,7 +285,7 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (dashboardAdapter) OutputChannelGuidance() string {
 	return `## Dashboard output preferences
 
-You are answering a Gram user in the web dashboard. Reply conversationally and concisely in Markdown — the user reads your response directly in a side panel. Prefer compact tables and short summaries over long prose; this is an analyst's side panel, not a chat app.`
+You are answering a Gram user in the web dashboard's side panel. Deliver every reply by calling platform_dashboard_send_message — plain text is not shown to the user. Reply conversationally and concisely in Markdown; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.`
 }
 
 func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
