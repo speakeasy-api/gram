@@ -27,6 +27,9 @@ type McpServer struct {
 	RemoteMcpServerID *string
 	// The ID of the toolset used as the backend
 	ToolsetID *string
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility McpServerVisibility
 	// When the MCP server was created

@@ -1182,6 +1182,33 @@ CREATE TABLE IF NOT EXISTS project_managed_assistants (
 
 CREATE INDEX IF NOT EXISTS project_managed_assistants_assistant_id_idx ON project_managed_assistants (assistant_id);
 
+-- assistant_dashboard_messages is the user-visible conversation log for a
+-- dashboard assistant chat: the user's messages and the assistant's delivered
+-- replies (written by the platform_dashboard_send_message egress tool). Kept
+-- separate from chat_messages, which holds the raw model/tool transcript — the
+-- dashboard renders only this clean log. Keyed by chat_id (the deterministic
+-- assistant thread chat) with a monotonic seq for incremental polling. user_id
+-- is the dashboard user the conversation belongs to, stamped on both the user's
+-- messages and the assistant's replies so reads scope to their owner.
+CREATE TABLE IF NOT EXISTS assistant_dashboard_messages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  seq BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT assistant_dashboard_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_dashboard_messages_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_dashboard_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+);
+
+-- (chat_id, seq) is the stable cursor for incremental polling.
+CREATE INDEX IF NOT EXISTS assistant_dashboard_messages_chat_id_seq_idx ON assistant_dashboard_messages (chat_id, seq);
+
 CREATE TABLE IF NOT EXISTS assistant_toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   assistant_id uuid NOT NULL,

@@ -21,3 +21,13 @@ func DeleteGlobalVariationsPath() string {
 func ListGlobalVariationsPath() string {
 	return "/rpc/variations.listGlobal"
 }
+
+// ListGroupsVariationsPath returns the URL path to the variations service listGroups HTTP endpoint.
+func ListGroupsVariationsPath() string {
+	return "/rpc/variations.listGroups"
+}
+
+// CreateGlobalVariationsPath returns the URL path to the variations service createGlobal HTTP endpoint.
+func CreateGlobalVariationsPath() string {
+	return "/rpc/variations.createGlobal"
+}

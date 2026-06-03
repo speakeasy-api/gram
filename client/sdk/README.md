@@ -543,6 +543,7 @@ run();
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [listForOrg](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+* [setToolVariationsGroup](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 * [setUserSessionIssuer](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 * [updateOAuthProxyServer](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
@@ -593,8 +594,10 @@ run();
 
 ### [Variations](docs/sdks/variations/README.md)
 
+* [createGlobal](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 * [deleteGlobal](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 * [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+* [listGroups](docs/sdks/variations/README.md#listgroups) - listGroups variations
 * [upsertGlobal](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
@@ -879,6 +882,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsListForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`toolsetsSetToolVariationsGroup`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`toolsetsSetUserSessionIssuer`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsetsUpdateOAuthProxyServer`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
@@ -909,8 +913,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`userSessionsMint`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`userSessionsRevoke`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
+- [`variationsCreateGlobal`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+- [`variationsListGroups`](docs/sdks/variations/README.md#listgroups) - listGroups variations
 - [`variationsUpsertGlobal`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
@@ -977,6 +983,7 @@ To learn about this feature and how to get started, check
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
 - [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#create) - createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
@@ -1183,6 +1190,7 @@ To learn about this feature and how to get started, check
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
+- [`useSetToolsetToolVariationsGroupMutation`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`useSetToolsetUserSessionIssuerMutation`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
@@ -1191,6 +1199,7 @@ To learn about this feature and how to get started, check
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
+- [`useToolVariationGroups`](docs/sdks/variations/README.md#listgroups) - listGroups variations
 - [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers

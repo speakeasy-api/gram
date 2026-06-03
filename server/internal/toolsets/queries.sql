@@ -260,6 +260,14 @@ SET
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
 
+-- name: UpdateToolsetToolVariationsGroup :one
+UPDATE toolsets
+SET
+    tool_variations_group_id = @tool_variations_group_id
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id
+RETURNING *;
+
 -- name: ClearToolsetOAuthServers :one
 UPDATE toolsets
 SET

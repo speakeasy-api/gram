@@ -1,4 +1,5 @@
 import { Block, BlockInner } from "@/components/block";
+import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ export function SettingsTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
       <GeneralSection mcpServer={mcpServer} />
+      <MCPToolFilteringSection target={{ kind: "mcpServer", mcpServer }} />
       {/* TODO(AGE-2238): wire the Publishing section in once collections
           attachments learn about mcp_server_id. */}
       <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />
@@ -65,6 +67,8 @@ function GeneralSection({ mcpServer }: { mcpServer: McpServer }) {
             remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
             toolsetId: mcpServer.toolsetId ?? undefined,
             environmentId: mcpServer.environmentId ?? undefined,
+            userSessionIssuerId: mcpServer.userSessionIssuerId ?? undefined,
+            toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
             visibility: mcpServer.visibility,
           },
         },
