@@ -10,10 +10,10 @@ import (
 //
 // Three layers, in order:
 //
-//  1. Prefix table for log/audit/KV wrappers where the match is fronted
-//     by a fixed non-email token (Presidio's own audit rows,
-//     `DB_USERNAME=...`, `identity=...`, etc.). Matched against the
-//     lowercased input so the prefixes themselves stay lowercase.
+//  1. Prefix table for KV / env / config wrappers where the match is
+//     fronted by a fixed non-email token (`DB_USERNAME=...`,
+//     `identity=...`, etc.). Matched against the lowercased input so
+//     the prefixes themselves stay lowercase.
 //  2. RFC-shape sanity: `/` is invalid in both the local-part and the
 //     domain of an addr-spec, so any candidate containing `/` is a URL
 //     or path fragment, not an email. This catches Medium `@user`
@@ -67,14 +67,9 @@ type emailPrefixHit struct {
 	description string
 }
 
-// nonPIIEmailPrefixes catches matches where the email is fronted by
-// log-format noise or a non-email key. Prefix is matched against the
-// lowercased input.
+// nonPIIEmailPrefixes catches matches where the email is fronted by a
+// fixed non-email key. Prefix is matched against the lowercased input.
 var nonPIIEmailPrefixes = []emailPrefixHit{
-	// Presidio's own log/audit rows: "npresidio|EMAIL_ADDRESS|<offset>|<recid>|<email>".
-	{"npresidio|", "presidio log-row wrapper"},
-	{"presidio|", "presidio log-row wrapper"},
-
 	// KV / env / config fragments where the match is "KEY=email" or
 	// "KEY='email"; the email may be real but the surrounding text is
 	// not PII the policy author cares about.

@@ -128,10 +128,7 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "no-reply-0EWsEuUO0Gky10deUMh0Kg@mail.anthropic.com"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "private@privaterelay.appleid.com"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"), "template placeholder without slash is not filtered")
-
-	// Presidio's own log/audit rows.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "presidio|pii.email_address|41|5602|katrina@speakeasyapi.dev"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"), "presidio log-row wrapper is not filtered")
 
 	// KV / env / config fragments.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "DB_USERNAME=adam@speakeasy.com"))
