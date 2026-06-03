@@ -14,11 +14,11 @@ import { MultiSelect } from "./multi-select";
 afterEach(cleanup);
 
 const EMAILS = [
-  "alex@fermatcommerce.com",
-  "alec@fermatcommerce.com",
-  "alice@fermatcommerce.com",
-  "bob@fermatcommerce.com",
-  "carol@fermatcommerce.com",
+  "alex@speakeasyapi.dev",
+  "alec@speakeasyapi.dev",
+  "alice@speakeasyapi.dev",
+  "bob@speakeasyapi.dev",
+  "carol@speakeasyapi.dev",
 ];
 
 function openEmailSelect() {
@@ -61,19 +61,19 @@ describe("MultiSelect search filtering (AIS-84)", () => {
 
     type(input, "al");
     expect(visibleOptionLabels()).toEqual([
-      "alex@fermatcommerce.com",
-      "alec@fermatcommerce.com",
-      "alice@fermatcommerce.com",
+      "alex@speakeasyapi.dev",
+      "alec@speakeasyapi.dev",
+      "alice@speakeasyapi.dev",
     ]);
 
     type(input, "ale");
     expect(visibleOptionLabels()).toEqual([
-      "alex@fermatcommerce.com",
-      "alec@fermatcommerce.com",
+      "alex@speakeasyapi.dev",
+      "alec@speakeasyapi.dev",
     ]);
 
     type(input, "alex");
-    expect(visibleOptionLabels()).toEqual(["alex@fermatcommerce.com"]);
+    expect(visibleOptionLabels()).toEqual(["alex@speakeasyapi.dev"]);
   });
 
   it("restores broader results when characters are deleted", () => {
@@ -83,9 +83,9 @@ describe("MultiSelect search filtering (AIS-84)", () => {
     type(input, "ale");
 
     const labels = visibleOptionLabels();
-    expect(labels).toContain("alex@fermatcommerce.com");
-    expect(labels).toContain("alec@fermatcommerce.com");
-    expect(labels).not.toContain("alice@fermatcommerce.com"); // "ale" not in "alice"
+    expect(labels).toContain("alex@speakeasyapi.dev");
+    expect(labels).toContain("alec@speakeasyapi.dev");
+    expect(labels).not.toContain("alice@speakeasyapi.dev"); // "ale" not in "alice"
   });
 
   it("keeps footer actions available while searching (cmdk filtering disabled)", () => {
@@ -97,7 +97,7 @@ describe("MultiSelect search filtering (AIS-84)", () => {
 
     type(input, "alex");
 
-    expect(visibleOptionLabels()).toContain("alex@fermatcommerce.com");
+    expect(visibleOptionLabels()).toContain("alex@speakeasyapi.dev");
     expect(screen.getByText("Close")).toBeTruthy();
   });
 
