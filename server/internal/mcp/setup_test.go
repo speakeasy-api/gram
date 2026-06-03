@@ -42,6 +42,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -197,7 +199,11 @@ func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.Id
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, shadowMCPClient, posthog, telemLogger, billingStub, billingStub)
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager)
+	dashboardTools := platformtoolsruntime.DashboardExternalTools(conn)
+	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+		AssistantDashboardTools: dashboardTools,
+	})
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, dashboardTools, nil, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
