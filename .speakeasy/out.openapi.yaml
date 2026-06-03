@@ -32754,6 +32754,11 @@ components:
         enabled:
           type: boolean
           description: Whether the policy is active.
+        message_types:
+          type: array
+          items:
+            type: string
+          description: Message types this policy applies to. When empty or omitted, the policy scans all supported types.
         name:
           type: string
           description: The policy name. If omitted, a name will be auto-generated.
@@ -39138,6 +39143,11 @@ components:
           type: string
           description: The risk policy ID.
           format: uuid
+        message_types:
+          type: array
+          items:
+            type: string
+          description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.'
         name:
           type: string
           description: The policy name.
@@ -42434,6 +42444,11 @@ components:
           type: string
           description: The policy ID.
           format: uuid
+        message_types:
+          type: array
+          items:
+            type: string
+          description: Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
         name:
           type: string
           description: The policy name.
