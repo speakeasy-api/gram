@@ -189,8 +189,14 @@ export function InsightsAgentsContent() {
     () => new Map((membersData?.members ?? []).map((m) => [m.id, m])),
     [membersData],
   );
-  const memberIds = useMemo(
-    () => (membersData?.members ?? []).map((m) => m.id),
+  // Telemetry groups by user_id with a user_email fallback, so match members
+  // on both their ID and email to avoid dropping email-keyed activity.
+  const memberIdentifiers = useMemo(
+    () =>
+      (membersData?.members ?? []).flatMap((m) => [
+        m.id,
+        m.email.toLowerCase(),
+      ]),
     [membersData],
   );
 
@@ -201,10 +207,10 @@ export function InsightsAgentsContent() {
       "users",
       from.toISOString(),
       to.toISOString(),
-      memberIds,
+      memberIdentifiers,
     ],
-    queryFn: () => fetchAllUsers(client, from, to, memberIds),
-    enabled: memberIds.length > 0,
+    queryFn: () => fetchAllUsers(client, from, to, memberIdentifiers),
+    enabled: memberIdentifiers.length > 0,
     throwOnError: false,
   });
 
@@ -247,10 +253,10 @@ export function InsightsAgentsContent() {
       "roleUsage",
       from.toISOString(),
       to.toISOString(),
-      memberIds,
+      memberIdentifiers,
     ],
-    queryFn: () => fetchRoleUsage(client, from, to, memberIds),
-    enabled: groupByDimension === "role" && memberIds.length > 0,
+    queryFn: () => fetchRoleUsage(client, from, to, memberIdentifiers),
+    enabled: groupByDimension === "role" && memberIdentifiers.length > 0,
     throwOnError: false,
   });
 
@@ -1496,7 +1502,7 @@ async function fetchAllUsers(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
-  memberIds: string[],
+  userIds: string[],
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -1505,7 +1511,7 @@ async function fetchAllUsers(
       telemetrySearchUsers(client, {
         searchUsersPayload: {
           cursor,
-          filter: { from, to, userIds: memberIds },
+          filter: { from, to, userIds },
           limit: 1000,
           sort: "desc",
           userType: "internal",
@@ -1522,12 +1528,12 @@ async function fetchRoleUsage(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
-  memberIds: string[],
+  userIds: string[],
 ): Promise<RoleSummary[]> {
   const result = await unwrapAsync(
     telemetrySearchUsers(client, {
       searchUsersPayload: {
-        filter: { from, to, userIds: memberIds },
+        filter: { from, to, userIds },
         groupBy: "role",
         limit: 1000,
         sort: "desc",
