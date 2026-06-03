@@ -113,20 +113,25 @@ func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
 func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	t.Parallel()
 
-	// Real human emails flow through.
+	// Real-shape emails flow through, including the lower-confidence
+	// buckets we deliberately do NOT filter so we err on the side of
+	// over-reporting rather than missing PII.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "adam@speakeasy.com"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice.brown@techstartup.io"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"), "Faker-style name is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "support@speakeasy.com"), "role alias is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "test@example.com"), "fixture domain is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "u003ealice@speakeasy.com"), "JSON-escape prefix is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "170madam@speakeasy.com"), "ANSI prefix is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "47043212+thierry-dang@users.noreply.github.com"), "github noreply is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "git@github.com"), "ssh git user is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "no-reply-0EWsEuUO0Gky10deUMh0Kg@mail.anthropic.com"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "private@privaterelay.appleid.com"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"), "template placeholder without slash is not filtered")
 
-	// Log-format wrappers: Presidio's own audit rows, JSON-escaped
-	// angle brackets, ANSI colour codes, UUID record-id prefixes.
+	// Presidio's own log/audit rows.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "presidio|pii.email_address|41|5602|katrina@speakeasyapi.dev"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "u003c108070248+TristanSpeakEasy@users.noreply.github.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "u003ecameron@speakeasy.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "170madam@speakeasy.com"), "ANSI colour-code prefix")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "074470d8-2469-4343-9fa6-5e070a34a905|chasecrumbaugh4@gmail.com"))
 
 	// KV / env / config fragments.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "DB_USERNAME=adam@speakeasy.com"))
@@ -140,57 +145,27 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "OU=danielkov@Mac.chello.hu"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "nCLAUDE_CODE_USER_EMAIL=ecorella@moonpay.com"))
 
-	// Template placeholders.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"))
+	// GCP service accounts (machine identities, not PII).
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "argocd-image-updater@moonpay-sre.iam.gserviceaccount.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "502133085207@cloudservices.gserviceaccount.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "{project_number}@cloudbuild.gserviceaccount.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-{{PROJECT_NUMBER}}@gcp-sa-pubsub.iam.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-%s@gs-project-accounts.iam.gserviceaccount.com"))
 
-	// Package paths with @version suffix.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "github.com/GoogleCloudPlatform/cloudsql-proxy/cmd/cloud_sql_proxy@v1.37.6"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "go.opentelemetry.io/otel/sdk@v1.43.0"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "goa.design/goa/v3@v3.25.3"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "honnef.co/go/tools/cmd/staticcheck@v0.7.0"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "cloud.google.com/go/storage@v1.62.1"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "unpkg.com/react@18.3.1"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "cdn.jsdelivr.net/npm/ansi_up@5.2.1"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "deno.land/x/zod@v3.21.4"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "esm.sh/v124/zod-to-json-schema@3.21.1"), "esm.sh path with version")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "github.com/dop251/goja/debugger=github.com/speakeasy-api/goja/debugger@v0.0.0-20260223084236-ed0328a0a462"), "Go pseudo-version")
-
-	// URLs that contain "@" inside a path.
+	// Any '/' makes the string a URL or path, not an addr-spec.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "medium.com/@abdelghani.alhijawi"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "mail.google.com/mail/u/adamjamesbull@googlemail.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "iam.googleapis.com/projects/-/serviceAccounts/privacy@moonpay-prod.iam.gserviceaccount.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "a.slack-edge.com/production-standard-emoji-assets/15.0/apple-medium/1f4a1@2x.png"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "github.com/GoogleCloudPlatform/cloudsql-proxy/cmd/cloud_sql_proxy@v1.37.6"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "honnef.co/go/tools/cmd/staticcheck@v0.7.0"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "cloud.google.com/go/storage@v1.62.1"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "deno.land/x/zod@v3.21.4"))
 
-	// Machine identities.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "argocd-image-updater@moonpay-sre.iam.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "502133085207@cloudservices.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "no-reply-0EWsEuUO0Gky10deUMh0Kg@mail.anthropic.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "git@github.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "git@gitlab.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "octocat@github.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "47043212+thierry-dang@users.noreply.github.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "runner@blacksmith-scale1-01kqz14kyjypv6f6cdxyt6epjx-16vcpu.vm.blacksmith.sh"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "c_0ce3fc63f4ae4e3600b79f71a472b42523c030d53318c680084ec783606c1082@group.calendar.google.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "private@privaterelay.appleid.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "854f02720546445c97e67de68c9dd465@voda.ai"))
-
-	// Schema / route artifacts.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "n@TypeSpec.OpenAPI.info"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "n@temporal.workflow.id"))
-
-	// Fixture / placeholder domains.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "test@example.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "TEST@EXAMPLE.COM"), "case-insensitive")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "SuperSecret123!@db.example.com"), "example subdomain")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@dev.example.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "sibling-a135@test.example.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "asdf@asdf.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "fakey@fake.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "zzzunknown@nowhere.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "you@yourorg.com"))
+	// Domain ends in a digit → version suffix on a slashless path
+	// (TLDs are always letters per IANA).
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "go.opentelemetry.io/otel/sdk@v1.43.0"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "pkg@v1.2.3"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "react@18.3.1"))
 }
 
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
