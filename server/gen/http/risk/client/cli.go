@@ -317,7 +317,7 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUniqueMatch string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsUniqueMatch string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -349,6 +349,12 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	{
 		if riskListRiskResultsRuleID != "" {
 			ruleID = &riskListRiskResultsRuleID
+		}
+	}
+	var userID *string
+	{
+		if riskListRiskResultsUserID != "" {
+			userID = &riskListRiskResultsUserID
 		}
 	}
 	var uniqueMatch *bool
@@ -432,6 +438,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v.ChatID = chatID
 	v.Category = category
 	v.RuleID = ruleID
+	v.UserID = userID
 	v.UniqueMatch = uniqueMatch
 	v.From = from
 	v.To = to
@@ -446,7 +453,7 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 
 // BuildListRiskResultsForAgentPayload builds the payload for the risk
 // listRiskResultsForAgent endpoint from CLI flags.
-func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
+func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID string, riskListRiskResultsForAgentChatID string, riskListRiskResultsForAgentCategory string, riskListRiskResultsForAgentRuleID string, riskListRiskResultsForAgentUserID string, riskListRiskResultsForAgentUniqueMatch string, riskListRiskResultsForAgentFrom string, riskListRiskResultsForAgentTo string, riskListRiskResultsForAgentCursor string, riskListRiskResultsForAgentLimit string, riskListRiskResultsForAgentApikeyToken string, riskListRiskResultsForAgentSessionToken string, riskListRiskResultsForAgentProjectSlugInput string) (*risk.ListRiskResultsForAgentPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -478,6 +485,12 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 	{
 		if riskListRiskResultsForAgentRuleID != "" {
 			ruleID = &riskListRiskResultsForAgentRuleID
+		}
+	}
+	var userID *string
+	{
+		if riskListRiskResultsForAgentUserID != "" {
+			userID = &riskListRiskResultsForAgentUserID
 		}
 	}
 	var uniqueMatch *bool
@@ -561,6 +574,7 @@ func BuildListRiskResultsForAgentPayload(riskListRiskResultsForAgentPolicyID str
 	v.ChatID = chatID
 	v.Category = category
 	v.RuleID = ruleID
+	v.UserID = userID
 	v.UniqueMatch = uniqueMatch
 	v.From = from
 	v.To = to

@@ -22842,6 +22842,13 @@ paths:
                     description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
                     type: string
                 - allowEmptyValue: true
+                  description: Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).
+                  in: query
+                  name: user_id
+                  schema:
+                    description: Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).
+                    type: string
+                - allowEmptyValue: true
                   description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
                   in: query
                   name: unique_match
@@ -23009,6 +23016,13 @@ paths:
                   name: rule_id
                   schema:
                     description: Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).
+                  in: query
+                  name: user_id
+                  schema:
+                    description: Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).
                     type: string
                 - allowEmptyValue: true
                   description: If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
