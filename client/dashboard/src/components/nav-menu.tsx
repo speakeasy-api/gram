@@ -421,7 +421,7 @@ export function NavButton({
         target={target}
         onClick={handleClick}
         className={cn(
-          "relative z-[1] flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
+          "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
           "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
           active
             ? "text-foreground font-semibold"
@@ -501,7 +501,7 @@ export function CollapsibleNavGroup({
             to={defaultHref ?? "#"}
             onClick={handleClick}
             className={cn(
-              "relative z-[1] flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
+              "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
               "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
               "cursor-pointer outline-hidden",
               isOpen
@@ -604,7 +604,7 @@ export function CollapsibleNavItem({
           to={item.href()}
           onClick={handleClick}
           className={cn(
-            "relative z-[1] flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
+            "relative z-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
             item.active
               ? "text-foreground font-semibold"
               : "text-muted-foreground hover:text-foreground",
