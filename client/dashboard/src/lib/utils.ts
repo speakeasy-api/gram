@@ -43,11 +43,7 @@ export function capitalize(str: string) {
  * identifiers, which should keep their original casing.
  */
 export function titleCaseSlug(slug: string) {
-  return slug
-    .split("-")
-    .filter(Boolean)
-    .map(capitalize)
-    .join(" ");
+  return slug.split("-").filter(Boolean).map(capitalize).join(" ");
 }
 
 export function assert(condition: unknown, message: string): asserts condition {
