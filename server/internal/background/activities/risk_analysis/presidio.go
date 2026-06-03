@@ -614,25 +614,40 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 }
 
 // isPresidioFalsePositive filters Presidio matches the policy author
-// would treat as noise. For IP_ADDRESS it delegates to the unified
-// catalog in falsepositives_ip.go, which covers:
-//   - IANA-reserved space (RFC1918, loopback, link-local, multicast,
+// would treat as noise. It dispatches per entity type to the
+// per-category catalogs:
+//
+//   - IP_ADDRESS → nonPIIIPReason in falsepositives_ip.go, covering
+//     IANA-reserved space (RFC1918, loopback, link-local, multicast,
 //     CGNAT, documentation, 6to4 deprecated, class E, benchmarking,
-//     this-network, limited broadcast);
-//   - well-known public DNS resolvers (Cloudflare, Google, Quad9,
-//     OpenDNS, AdGuard, etc.);
-//   - common placeholder IPs (1.2.3.4 et al.);
-//   - shape heuristics (X.0.0.0 /8 network address, sparse IPv6 like
-//     1::, b::, dead::).
+//     this-network, limited broadcast), well-known public DNS resolvers
+//     (Cloudflare, Google, Quad9, OpenDNS, AdGuard, etc.), common
+//     placeholder IPs (1.2.3.4 et al.), and shape heuristics
+//     (X.0.0.0 /8 network address, sparse IPv6 like 1::, b::, dead::).
+//   - EMAIL_ADDRESS → nonPIIEmailReason in falsepositives_email.go,
+//     covering log-format wrappers (Presidio's own audit rows,
+//     JSON-escaped angle brackets, ANSI colour codes, UUID record-id
+//     prefixes), non-email shapes (KV pairs, template placeholders,
+//     URLs and package paths containing "@"), machine identities (GCP
+//     service accounts, GitHub noreply, Anthropic transactional
+//     no-reply, CI runner hostnames, Calendar group IDs, Apple Private
+//     Relay), and well-known fixture domains (*.example.com,
+//     asdf.com, etc.).
 //
 // Cloud / CDN attribution by AS organisation (the fp_infra_asn bucket
-// in the offline classifier) requires runtime ASN lookup and is
-// deliberately out of scope here.
+// in the offline IP classifier) and Faker-style placeholder names /
+// generic role aliases (the lower-confidence email buckets) are
+// deliberately out of scope; they need a runtime ASN lookup or a
+// per-customer policy decision respectively.
 func isPresidioFalsePositive(entityType, match string) bool {
-	if entityType != "IP_ADDRESS" {
+	switch entityType {
+	case "IP_ADDRESS":
+		return nonPIIIPReason(strings.TrimSpace(match)) != ""
+	case "EMAIL_ADDRESS":
+		return nonPIIEmailReason(match) != ""
+	default:
 		return false
 	}
-	return nonPIIIPReason(strings.TrimSpace(match)) != ""
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the

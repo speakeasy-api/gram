@@ -100,9 +100,97 @@ func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "2607:f8b0:4002:c0e::200e"), "real IPv6 anycast")
 
-	// Other entity types are never filtered by this rule.
+	// IP-shaped inputs that happen to land in the EMAIL_ADDRESS lane
+	// fall through cleanly (neither shape matches an email rule).
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "8.8.8.8"))
+
+	// Unknown entity types are never filtered.
+	assert.False(t, isPresidioFalsePositive("PERSON", "ada@speakeasy.com"))
+	assert.False(t, isPresidioFalsePositive("", "8.8.8.8"))
+}
+
+func TestIsPresidioFalsePositive_Email(t *testing.T) {
+	t.Parallel()
+
+	// Real human emails flow through.
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "adam@speakeasy.com"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice.brown@techstartup.io"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"), "Faker-style name is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "support@speakeasy.com"), "role alias is not filtered")
+
+	// Log-format wrappers: Presidio's own audit rows, JSON-escaped
+	// angle brackets, ANSI colour codes, UUID record-id prefixes.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "presidio|pii.email_address|41|5602|katrina@speakeasyapi.dev"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "u003c108070248+TristanSpeakEasy@users.noreply.github.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "u003ecameron@speakeasy.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "170madam@speakeasy.com"), "ANSI colour-code prefix")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "074470d8-2469-4343-9fa6-5e070a34a905|chasecrumbaugh4@gmail.com"))
+
+	// KV / env / config fragments.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "DB_USERNAME=adam@speakeasy.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "email='Chadrick_Quigley52@yahoo.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "email_addr='Kurtis20@yahoo.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "identity=adam@speakeasy.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user=david@speakeasyapi.dev"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "author=david@speakeasyapi.dev"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-account=slack-deploy-bot-runtime@speakeasy-prod-354914.iam.gserviceaccount.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "smtp.mailfrom=mail@hgstrust.org"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "OU=danielkov@Mac.chello.hu"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "nCLAUDE_CODE_USER_EMAIL=ecorella@moonpay.com"))
+
+	// Template placeholders.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "{project_number}@cloudbuild.gserviceaccount.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-{{PROJECT_NUMBER}}@gcp-sa-pubsub.iam.gserviceaccount.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-%s@gs-project-accounts.iam.gserviceaccount.com"))
+
+	// Package paths with @version suffix.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "github.com/GoogleCloudPlatform/cloudsql-proxy/cmd/cloud_sql_proxy@v1.37.6"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "go.opentelemetry.io/otel/sdk@v1.43.0"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "goa.design/goa/v3@v3.25.3"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "honnef.co/go/tools/cmd/staticcheck@v0.7.0"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "cloud.google.com/go/storage@v1.62.1"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "unpkg.com/react@18.3.1"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "cdn.jsdelivr.net/npm/ansi_up@5.2.1"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "deno.land/x/zod@v3.21.4"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "esm.sh/v124/zod-to-json-schema@3.21.1"), "esm.sh path with version")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "github.com/dop251/goja/debugger=github.com/speakeasy-api/goja/debugger@v0.0.0-20260223084236-ed0328a0a462"), "Go pseudo-version")
+
+	// URLs that contain "@" inside a path.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "medium.com/@abdelghani.alhijawi"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "mail.google.com/mail/u/adamjamesbull@googlemail.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "iam.googleapis.com/projects/-/serviceAccounts/privacy@moonpay-prod.iam.gserviceaccount.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "a.slack-edge.com/production-standard-emoji-assets/15.0/apple-medium/1f4a1@2x.png"))
+
+	// Machine identities.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "argocd-image-updater@moonpay-sre.iam.gserviceaccount.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "502133085207@cloudservices.gserviceaccount.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "no-reply-0EWsEuUO0Gky10deUMh0Kg@mail.anthropic.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "git@github.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "git@gitlab.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "octocat@github.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "47043212+thierry-dang@users.noreply.github.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "runner@blacksmith-scale1-01kqz14kyjypv6f6cdxyt6epjx-16vcpu.vm.blacksmith.sh"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "c_0ce3fc63f4ae4e3600b79f71a472b42523c030d53318c680084ec783606c1082@group.calendar.google.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "private@privaterelay.appleid.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "854f02720546445c97e67de68c9dd465@voda.ai"))
+
+	// Schema / route artifacts.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "n@TypeSpec.OpenAPI.info"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "n@temporal.workflow.id"))
+
+	// Fixture / placeholder domains.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "test@example.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "TEST@EXAMPLE.COM"), "case-insensitive")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "SuperSecret123!@db.example.com"), "example subdomain")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@dev.example.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "sibling-a135@test.example.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "asdf@asdf.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "fakey@fake.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "zzzunknown@nowhere.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "you@yourorg.com"))
 }
 
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
@@ -248,11 +336,11 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		results := make([][]presidioResult, len(req.Text))
 		for i, text := range req.Text {
-			if idx := strings.Index(text, "alice@example.com"); idx >= 0 {
+			if idx := strings.Index(text, "alice@acmecorp.com"); idx >= 0 {
 				results[i] = []presidioResult{{
 					EntityType: "EMAIL_ADDRESS",
 					Start:      idx,
-					End:        idx + len("alice@example.com"),
+					End:        idx + len("alice@acmecorp.com"),
 					Score:      1,
 				}}
 			}
@@ -263,11 +351,11 @@ func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := newTestPresidioClient(t, srv.URL)
-	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@example.com"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@acmecorp.com"}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
-	assert.Equal(t, "alice@example.com", results[0][0].Match)
+	assert.Equal(t, "alice@acmecorp.com", results[0][0].Match)
 	assert.Empty(t, results[0][0].DeadLetterReason)
 	assert.GreaterOrEqual(t, hits.Load(), int64(2), "expected at least one retry before success")
 }

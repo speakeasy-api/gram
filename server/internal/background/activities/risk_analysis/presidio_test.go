@@ -58,7 +58,7 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	messages := make([]string, 75)
 	emails := make([]string, len(messages))
 	for i := range messages {
-		emails[i] = fmt.Sprintf("remap%03d@example.com", i)
+		emails[i] = fmt.Sprintf("remap%03d@acmecorp.com", i)
 		messages[i] = fmt.Sprintf("message %03d contact %s end", i, emails[i])
 	}
 
@@ -210,7 +210,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	scanner := risk_analysis.NewScanner()
 
 	// Message with both a secret (AWS key) and PII (email)
-	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@example.com"
+	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@acmecorp.com"
 
 	gitleaksFindings, err := scanner.Scan(content)
 	require.NoError(t, err)
