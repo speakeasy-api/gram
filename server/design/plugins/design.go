@@ -387,6 +387,51 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "publishPlugins")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PublishPlugins"}`)
 	})
+
+	Method("getMarketplaceSettings", func() {
+		Description("Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(MarketplaceSettingsResult)
+
+		HTTP(func() {
+			GET("/rpc/plugins.getMarketplaceSettings")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMarketplaceSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMarketplaceSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MarketplaceSettings"}`)
+	})
+
+	Method("updateMarketplaceSettings", func() {
+		Description("Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.")
+
+		Payload(func() {
+			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(UpdateMarketplaceSettingsResult)
+
+		HTTP(func() {
+			POST("/rpc/plugins.updateMarketplaceSettings")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateMarketplaceSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateMarketplaceSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMarketplaceSettings"}`)
+	})
 })
 
 // --- Models ---
@@ -541,4 +586,19 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 var PublishPluginsResult = Type("PublishPluginsResult", func() {
 	Required("repo_url")
 	Attribute("repo_url", String, "The URL of the published GitHub repository.")
+})
+
+var MarketplaceSettingsResult = Type("MarketplaceSettingsResult", func() {
+	Required("default_name", "effective_name")
+
+	Attribute("marketplace_name", String, "User-provided override for the marketplace name. Absent when no override is configured.")
+	Attribute("default_name", String, "The default marketplace name used when no override is configured.")
+	Attribute("effective_name", String, "The marketplace name that will be used at publish time (override if set, otherwise default).")
+})
+
+var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", func() {
+	Required("settings", "republished")
+
+	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
+	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
 })

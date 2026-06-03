@@ -45,6 +45,7 @@ const (
 	sourceKindCron       = bgtriggers.DefinitionSlugCron
 	sourceKindWake       = bgtriggers.DefinitionSlugWake
 	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
+	dashboardRoleUser    = "user"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -1189,8 +1190,30 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	// pgx.ErrNoRows means the event was already enqueued by an earlier attempt
 	// (idempotent retry). We still signal: a turn whose earlier coordinator
 	// signal failed must be picked up when the client retries.
+	eventCreated := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("insert assistant thread event: %w", err)
+	}
+
+	// Record the user's turn in the dashboard conversation log, in the same tx
+	// as the event so the log and the processing queue can't diverge. Guarded
+	// by eventCreated so an idempotent retry doesn't duplicate the row.
+	if eventCreated && sourceKind == sourceKindDashboard {
+		var dash dashboardEventPayload
+		if err := json.Unmarshal(normalizedPayloadJSON, &dash); err != nil {
+			return EnqueueResult{}, fmt.Errorf("decode dashboard payload for log: %w", err)
+		}
+		if dash.Text != "" {
+			if _, err := queries.InsertDashboardMessage(ctx, assistantrepo.InsertDashboardMessageParams{
+				ProjectID: assistant.ProjectID,
+				ChatID:    chatID,
+				UserID:    dash.UserID,
+				Role:      dashboardRoleUser,
+				Content:   dash.Text,
+			}); err != nil {
+				return EnqueueResult{}, fmt.Errorf("record dashboard user message: %w", err)
+			}
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1818,11 +1841,26 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").Log(ctx, s.logger, logAttrs...)
 	}
 
+	// The managed-assistant platform toolset (carrying the dashboard egress
+	// tool) is granted only to the project's managed assistant, so no other
+	// assistant can deliver into the dashboard conversation log.
+	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
+	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
+	case mErr == nil:
+		if managed.ID == assistant.ID {
+			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+		}
+	case errors.Is(mErr, pgx.ErrNoRows):
+		// Project has no managed assistant; dashboard tools stay ungranted.
+	default:
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").Log(ctx, s.logger, logAttrs...)
+	}
+
 	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
 	// best-effort URLs rather than aborting the whole bootstrap. The runner
 	// will discover the failure when it tries to list tools and the
 	// assistant can tell the user which integration is broken.
-	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets)
+	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, platformSlugs)
 
 	instructions, err := composeInstructions(assistant.Instructions, thread)
 	if err != nil {
@@ -1900,8 +1938,7 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
-func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow) []runtimeMCPServer {
-	platformToolsets := []string{platformtools.AssistantsPlatformToolsetSlug}
+func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow, platformToolsets []string) []runtimeMCPServer {
 	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
 		// Misconfiguration (no MCP slug, MCP disabled) is a tenant-side
@@ -1936,7 +1973,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		})
 	}
 
-	// Implicit platform toolsets granted to every assistant runtime; not
+	// Platform toolsets granted to this runtime (caller-determined); not
 	// surfaced as user-managed toolsets and not persisted in
 	// assistant_toolsets so users can't detach them. The "_platform-" ID
 	// prefix can't collide with user toolset slugs because the slug grammar

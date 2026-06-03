@@ -71,10 +71,10 @@ export class McpServers extends ClientSDK {
   }
 
   /**
-   * listMcpEndpoints mcpEndpoints
+   * listMcpServers mcpServers
    *
    * @remarks
-   * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
+   * List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
    */
   async list(
     request?: operations.ListMcpServersRequest | undefined,
