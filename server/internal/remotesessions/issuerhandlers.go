@@ -30,8 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// discoveryHTTPTimeout caps every outbound RFC 8414 discovery probe so a slow
-// upstream cannot tie up the request handler.
+// discoveryHTTPTimeout caps the whole issuer discovery sequence — every
+// candidate probe shares this single budget — so a slow upstream cannot tie up
+// the request handler.
 const discoveryHTTPTimeout = 10 * time.Second
 
 // rfc8414Document is the subset of the RFC 8414 / OpenID Connect Discovery
@@ -485,7 +486,12 @@ func (e *discoveryError) UserMessage() string {
 // guardian.Policy gates the outbound dial.
 //
 // It probes the well-known locations returned by issuerProbeCandidates in
-// order, returning the first that yields a valid document. When every probe
+// order, returning the first that yields a usable document — one carrying both
+// an authorization_endpoint and a token_endpoint. A 200 that parses but lacks
+// those endpoints is almost always a SPA/gateway catch-all answering our
+// speculative candidate rather than real metadata, so it is skipped in favor of
+// a later candidate (e.g. the origin-style fallback); it is surfaced only as a
+// last resort when no candidate yields a usable document. When every probe
 // fails the first (canonical RFC 8414) candidate's error is surfaced, wrapped
 // in a *discoveryError so the handler can attach the upstream URL and status to
 // the user-facing error.
@@ -505,14 +511,34 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	client := policy.Client()
 
 	var firstErr *discoveryError
+	var fallbackDoc rfc8414Document
+	haveFallback := false
 	for _, wellKnown := range candidates {
 		doc, attemptErr := attemptIssuerProbe(reqCtx, client, wellKnown)
-		if attemptErr == nil {
-			return doc, collectDiscoveryWarnings(issuerURL, doc), nil
+		if attemptErr != nil {
+			if firstErr == nil {
+				firstErr = attemptErr
+			}
+			continue
 		}
-		if firstErr == nil {
-			firstErr = attemptErr
+
+		// A 200 that parses but advertises no usable OAuth endpoints is almost
+		// always a catch-all answering our speculative candidate, not real
+		// metadata. Remember the first such document but keep probing — a later
+		// candidate (e.g. the origin-style fallback) may carry the real one.
+		if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
+			if !haveFallback {
+				fallbackDoc = doc
+				haveFallback = true
+			}
+			continue
 		}
+
+		return doc, collectDiscoveryWarnings(issuerURL, doc), nil
+	}
+
+	if haveFallback {
+		return fallbackDoc, collectDiscoveryWarnings(issuerURL, fallbackDoc), nil
 	}
 
 	return rfc8414Document{}, nil, firstErr

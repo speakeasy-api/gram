@@ -172,21 +172,16 @@ func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Pol
 	client := policy.Client()
 
 	var lastErr *ProtectedResourceDiscoveryError
-	for i, probeURL := range candidates {
+	for _, probeURL := range candidates {
 		doc, attemptErr := attemptProtectedResourceProbe(reqCtx, client, probeURL)
 		if attemptErr == nil {
 			return doc, collectProtectedResourceWarnings(resourceURL, doc), nil
 		}
 
-		// Non-final candidates are speculative: the path-style URL is our own
-		// RFC 9728 §3.1 path-insertion guess, so any failure there just means
-		// "not advertised here" and we fall through to the canonical
-		// origin-style URL. Only the final candidate's error is surfaced, so a
-		// genuine fault at the real location is never masked by a fallback probe.
+		// Non-final candidates are speculative; only the final candidate's
+		// error survives the loop, so a genuine fault at the canonical
+		// origin-style URL is never masked by a fallback probe.
 		lastErr = attemptErr
-		if i == len(candidates)-1 {
-			return OAuthProtectedResourceMetadata{}, nil, attemptErr
-		}
 	}
 
 	return OAuthProtectedResourceMetadata{}, nil, lastErr
