@@ -312,7 +312,10 @@ vi.mock("@/components/moon/textarea", () => ({
   ),
 }));
 
-import { ApprovalRequestsContent } from "./ApprovalRequestsContent";
+import {
+  ApprovalRequestsContent,
+  DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION,
+} from "./ApprovalRequestsContent";
 
 function renderContent(projectId = "project-1") {
   const queryClient = new QueryClient();
@@ -404,9 +407,7 @@ describe("ApprovalRequestsContent", () => {
     ).toBeTruthy();
     expect(screen.getByText("No access rules")).toBeTruthy();
     expect(
-      screen.getByText(
-        "Create a rule manually or approve a request to allow or deny matching resources.",
-      ),
+      screen.getByText(DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION),
     ).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Add Rule" })).toHaveLength(1);
     expect(screen.queryByText("Requested")).toBeNull();
@@ -476,9 +477,7 @@ describe("ApprovalRequestsContent", () => {
       expect(screen.getByText("No access rules")).toBeTruthy();
     });
     expect(
-      screen.getByText(
-        "Create a rule manually or approve a request to allow or deny matching resources.",
-      ),
+      screen.getByText(DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add Rule" })).toHaveProperty(
       "disabled",
@@ -506,9 +505,7 @@ describe("ApprovalRequestsContent", () => {
       expect(screen.getByText("No access rules")).toBeTruthy();
     });
     expect(
-      screen.getByText(
-        "Create a rule manually or approve a request to allow or deny matching resources.",
-      ),
+      screen.getByText(DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add Rule" })).toHaveProperty(
       "disabled",
@@ -848,6 +845,11 @@ describe("ApprovalRequestsContent", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Add Rule" }));
     expect(screen.queryByText("Select project")).toBeNull();
+    expect(
+      screen.getByText("Configure an allow rule for matching requests."),
+    ).toBeTruthy();
+    expect(screen.getByText("Allow matching calls.")).toBeTruthy();
+    expect(screen.queryByText("Deny")).toBeNull();
     fireEvent.change(screen.getByLabelText("Rule name"), {
       target: { value: "New project rule" },
     });
@@ -862,6 +864,7 @@ describe("ApprovalRequestsContent", () => {
           createShadowMCPAccessRuleForm: expect.objectContaining({
             displayName: "New project rule",
             accessScope: "project",
+            disposition: "allowed",
             projectIds: ["project-1"],
             matchBreadth: "full_url",
             matchValue: "https://new.example.com/mcp",

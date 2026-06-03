@@ -92,8 +92,8 @@ const ACCESS_RULE_BLOCKING_POLICY_REQUIREMENTS = [
 ] as const;
 const CREATE_BLOCKING_POLICY_MESSAGE =
   "Create a blocking Shadow MCP policy before adding access rules.";
-const DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION =
-  "Create a rule manually or approve a request to allow or deny matching resources.";
+export const DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION =
+  "Create a rule manually or approve a request to allow matching resources.";
 
 type AccessRuleCreateAvailability =
   | { status: "available" }
@@ -204,6 +204,22 @@ function getAccessRulesEmptyDescription(
   }
 
   return DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION;
+}
+
+function getAccessRuleSheetDescription(isCreatingRule: boolean) {
+  if (isCreatingRule) {
+    return "Configure an allow rule for matching requests.";
+  }
+
+  return "Configure an allow or deny decision for matching requests.";
+}
+
+function getAccessRuleDetailsLabel(disposition: ShadowMCPDisposition) {
+  if (disposition === "allowed") {
+    return "Allow rule details";
+  }
+
+  return "Deny rule details";
 }
 
 function ServerCell({
@@ -609,6 +625,7 @@ function AccessRuleSheet({
   }, [rule, open]);
 
   const projectIds = [projectId];
+  const isCreatingRule = !rule;
   const canSubmit =
     displayName.trim().length > 0 &&
     matchValue.trim().length > 0 &&
@@ -640,7 +657,7 @@ function AccessRuleSheet({
             {rule ? "Edit Access Rule" : "Add Access Rule"}
           </SheetTitle>
           <SheetDescription>
-            Configure an allow or deny decision for matching requests.
+            {getAccessRuleSheetDescription(isCreatingRule)}
           </SheetDescription>
         </SheetHeader>
 
@@ -650,7 +667,10 @@ function AccessRuleSheet({
             onValueChange={(value) =>
               setDisposition(value as ShadowMCPDisposition)
             }
-            className="border-border bg-muted/20 grid grid-cols-2 gap-1 rounded-md border p-1"
+            className={cn(
+              "border-border bg-muted/20 grid gap-1 rounded-md border p-1",
+              isCreatingRule ? "grid-cols-1" : "grid-cols-2",
+            )}
           >
             <label
               className={cn(
@@ -668,22 +688,24 @@ function AccessRuleSheet({
                 </Type>
               </span>
             </label>
-            <label
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-sm px-3 py-2.5 transition-colors",
-                disposition === "denied" && "bg-background shadow-xs",
-              )}
-            >
-              <RadioGroupItem value="denied" className="mt-0.5" />
-              <span>
-                <Badge variant="destructive">
-                  <Badge.Text>Deny</Badge.Text>
-                </Badge>
-                <Type muted small>
-                  Block matching calls.
-                </Type>
-              </span>
-            </label>
+            {!isCreatingRule && (
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-sm px-3 py-2.5 transition-colors",
+                  disposition === "denied" && "bg-background shadow-xs",
+                )}
+              >
+                <RadioGroupItem value="denied" className="mt-0.5" />
+                <span>
+                  <Badge variant="destructive">
+                    <Badge.Text>Deny</Badge.Text>
+                  </Badge>
+                  <Type muted small>
+                    Block matching calls.
+                  </Type>
+                </span>
+              </label>
+            )}
           </RadioGroup>
 
           <section className="border-border space-y-4 rounded-md border px-4 py-4">
@@ -692,9 +714,7 @@ function AccessRuleSheet({
                 Rule
               </Type>
               <Type muted small>
-                {disposition === "allowed"
-                  ? "Allow rule details"
-                  : "Deny rule details"}
+                {getAccessRuleDetailsLabel(disposition)}
               </Type>
             </div>
 
@@ -1347,7 +1367,7 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
           <div>
             <Heading variant="h5">Access Rules</Heading>
             <Type muted small className="mt-1">
-              Manage resources that are explicitly allowed or denied.
+              Manage resources that are explicitly allowed.
             </Type>
           </div>
 
