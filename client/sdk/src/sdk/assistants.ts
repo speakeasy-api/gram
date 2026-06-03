@@ -6,6 +6,7 @@ import { assistantsCreate } from "../funcs/assistantsCreate.js";
 import { assistantsDelete } from "../funcs/assistantsDelete.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsList } from "../funcs/assistantsList.js";
+import { assistantsListMessages } from "../funcs/assistantsListMessages.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -83,6 +84,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListAssistantsResult> {
     return unwrapAsync(assistantsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listMessages assistants
+   *
+   * @remarks
+   * List a dashboard conversation log for a chat (the user's messages and the assistant's delivered replies). Only the user who owns the conversation may read it. Poll with after_seq to fetch only newer messages.
+   */
+  async listMessages(
+    request: operations.ListAssistantMessagesRequest,
+    security?: operations.ListAssistantMessagesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListMessagesResult> {
+    return unwrapAsync(assistantsListMessages(
       this,
       request,
       security,

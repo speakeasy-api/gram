@@ -130,6 +130,34 @@ func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpi
 	return i, err
 }
 
+const callerOwnsDashboardChat = `-- name: CallerOwnsDashboardChat :one
+SELECT 1 AS ok
+FROM assistant_dashboard_messages
+WHERE chat_id = $1
+  AND project_id = $2
+  AND user_id = $3
+LIMIT 1
+`
+
+type CallerOwnsDashboardChatParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	UserID    string
+}
+
+// Read gate for a dashboard conversation: returns a row only when the caller has
+// at least one message in the chat. The conversation key (correlation id) is
+// client-chosen and not user-namespaced, so a chat_id can hold rows for more
+// than one user; scoping by user_id keeps each caller to their own conversation.
+// No row means the caller has nothing here (chat doesn't exist for them), which
+// the handler surfaces as not-found so existence isn't disclosed.
+func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDashboardChatParams) (int32, error) {
+	row := q.db.QueryRow(ctx, callerOwnsDashboardChat, arg.ChatID, arg.ProjectID, arg.UserID)
+	var ok int32
+	err := row.Scan(&ok)
+	return ok, err
+}
+
 const claimNextPendingEvent = `-- name: ClaimNextPendingEvent :one
 WITH next_event AS (
   SELECT e.id
@@ -1340,13 +1368,15 @@ SELECT id, chat_id, role, content, seq, created_at
 FROM assistant_dashboard_messages
 WHERE chat_id = $1
   AND project_id = $2
-  AND seq > $3
+  AND user_id = $3
+  AND seq > $4
 ORDER BY seq
 `
 
 type ListDashboardMessagesParams struct {
 	ChatID    uuid.UUID
 	ProjectID uuid.UUID
+	UserID    string
 	AfterSeq  int64
 }
 
@@ -1360,9 +1390,17 @@ type ListDashboardMessagesRow struct {
 }
 
 // Reads a dashboard chat's conversation log in send order, optionally only
-// messages newer than a cursor (after_seq) for incremental polling.
+// messages newer than a cursor (after_seq) for incremental polling. Scoped to
+// the caller's own rows: chat_id is a hash of the client-chosen correlation id
+// and is not user-namespaced, so a single chat_id can hold more than one user's
+// messages — filtering by user_id keeps a reader to their own conversation.
 func (q *Queries) ListDashboardMessages(ctx context.Context, arg ListDashboardMessagesParams) ([]ListDashboardMessagesRow, error) {
-	rows, err := q.db.Query(ctx, listDashboardMessages, arg.ChatID, arg.ProjectID, arg.AfterSeq)
+	rows, err := q.db.Query(ctx, listDashboardMessages,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.UserID,
+		arg.AfterSeq,
+	)
 	if err != nil {
 		return nil, err
 	}

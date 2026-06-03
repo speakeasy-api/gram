@@ -59,6 +59,7 @@ func TestDashboardConversationLogRoundTrip(t *testing.T) {
 	logged, err := q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
+		UserID:    "user-1",
 		AfterSeq:  0,
 	})
 	require.NoError(t, err)
@@ -70,7 +71,7 @@ func TestDashboardConversationLogRoundTrip(t *testing.T) {
 	// user row.
 	_, err = core.EnqueueTriggerTask(ctx, dashboardTask(managed.ID, correlation, "evt-1", "what are my top errors?", "user-1"))
 	require.NoError(t, err)
-	logged, err = q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{ChatID: chatID, ProjectID: projectID, AfterSeq: 0})
+	logged, err = q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{ChatID: chatID, ProjectID: projectID, UserID: "user-1", AfterSeq: 0})
 	require.NoError(t, err)
 	require.Len(t, logged, 1, "idempotent retry must not duplicate the user turn")
 
@@ -100,7 +101,7 @@ func TestDashboardConversationLogRoundTrip(t *testing.T) {
 		&out,
 	))
 
-	logged, err = q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{ChatID: chatID, ProjectID: projectID, AfterSeq: 0})
+	logged, err = q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{ChatID: chatID, ProjectID: projectID, UserID: "user-1", AfterSeq: 0})
 	require.NoError(t, err)
 	require.Len(t, logged, 2)
 	require.Equal(t, "assistant", logged[1].Role)
@@ -127,12 +128,12 @@ func TestDashboardFreshCorrelationStartsNewLog(t *testing.T) {
 	require.NoError(t, err)
 
 	q := assistantsrepo.New(conn)
-	first, err := q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{ChatID: deterministicChatID(managed.ID, "conv-1"), ProjectID: projectID, AfterSeq: 0})
+	first, err := q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{ChatID: deterministicChatID(managed.ID, "conv-1"), ProjectID: projectID, UserID: "user-1", AfterSeq: 0})
 	require.NoError(t, err)
 	require.Len(t, first, 1)
 	require.Equal(t, "first conversation", first[0].Content)
 
-	second, err := q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{ChatID: deterministicChatID(managed.ID, "conv-2"), ProjectID: projectID, AfterSeq: 0})
+	second, err := q.ListDashboardMessages(ctx, assistantsrepo.ListDashboardMessagesParams{ChatID: deterministicChatID(managed.ID, "conv-2"), ProjectID: projectID, UserID: "user-1", AfterSeq: 0})
 	require.NoError(t, err)
 	require.Len(t, second, 1)
 	require.Equal(t, "fresh start", second[0].Content)

@@ -1227,6 +1227,55 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}, nil
 }
 
+type dashboardMessageRecord struct {
+	ID        uuid.UUID
+	Role      string
+	Content   string
+	Seq       int64
+	CreatedAt time.Time
+}
+
+// ListDashboardMessages returns a dashboard chat's conversation log in send
+// order, optionally only messages newer than afterSeq, scoped to callerUserID's
+// own messages. The conversation key (correlation id) is client-chosen and not
+// user-namespaced, so a single chat_id can hold more than one user's rows; every
+// read is filtered to the caller so one user can never see another's messages.
+// Returns pgx.ErrNoRows when the caller has no messages in the chat, so a
+// conversation they don't participate in reads the same as one that doesn't
+// exist.
+func (s *ServiceCore) ListDashboardMessages(ctx context.Context, projectID, chatID uuid.UUID, callerUserID string, afterSeq int64) ([]dashboardMessageRecord, error) {
+	q := assistantrepo.New(s.db)
+
+	if _, err := q.CallerOwnsDashboardChat(ctx, assistantrepo.CallerOwnsDashboardChatParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+		UserID:    callerUserID,
+	}); err != nil {
+		return nil, fmt.Errorf("resolve dashboard chat access: %w", err)
+	}
+
+	rows, err := q.ListDashboardMessages(ctx, assistantrepo.ListDashboardMessagesParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+		UserID:    callerUserID,
+		AfterSeq:  afterSeq,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list dashboard messages: %w", err)
+	}
+	out := make([]dashboardMessageRecord, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, dashboardMessageRecord{
+			ID:        r.ID,
+			Role:      r.Role,
+			Content:   r.Content,
+			Seq:       r.Seq,
+			CreatedAt: r.CreatedAt.Time,
+		})
+	}
+	return out, nil
+}
+
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
 	switch task.DefinitionSlug {
 	case "slack":
