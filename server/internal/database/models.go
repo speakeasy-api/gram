@@ -834,7 +834,8 @@ type OrganizationMcpCollectionServerAttachment struct {
 	PublishedBy  pgtype.Text
 	ID           uuid.UUID
 	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
+	ToolsetID    uuid.NullUUID
+	McpServerID  uuid.NullUUID
 	Deleted      bool
 }
 
