@@ -90,7 +90,9 @@ export function useAgentToken(opts: {
         (k) => k.id !== data.id && k.scopes.includes(AGENT_SCOPE),
       );
       try {
-        const fresh = await queryClient.fetchQuery(buildListAPIKeysQuery(client));
+        const fresh = await queryClient.fetchQuery(
+          buildListAPIKeysQuery(client),
+        );
         stale = (fresh.keys ?? []).filter(
           (k) => k.id !== data.id && k.scopes.includes(AGENT_SCOPE),
         );

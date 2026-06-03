@@ -627,6 +627,7 @@ function FleetIdentity() {
           <code>0600 root:wheel</code> on macOS won't work; use{" "}
           <code>0640</code> with an explicit group/read ACL for the agent user.
           The agent only reads this file; it never writes it.
+        </Type>
         <Table headers={["OS", "Path", "Owner"]}>
           {MANAGED_CONFIG_PATHS.map((row) => (
             <tr key={row.os} className="border-t">
