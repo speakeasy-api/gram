@@ -301,8 +301,14 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		// Look up inviter display name + email and org name for the email template.
 		inviterName, inviterEmail := ac.UserID, ""
 		if u, err := userrepo.New(s.db).GetUser(ctx, ac.UserID); err == nil {
-			inviterName = u.DisplayName
-			inviterEmail = u.Email
+			inviterName = strings.TrimSpace(u.DisplayName)
+			inviterEmail = strings.TrimSpace(u.Email)
+			if inviterName == "" {
+				inviterName = inviterEmail
+			}
+			if inviterName == "" {
+				inviterName = ac.UserID
+			}
 		}
 		orgName := ac.ActiveOrganizationID
 		if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID); err == nil {
