@@ -763,22 +763,6 @@ export default function DeviceAgent() {
               your org's required AI-tool plugins and MCP configuration, then
               reports compliance back to Speakeasy.
             </Page.Section.Description>
-            <Page.Section.Body>
-              <Alert variant="info">
-                <Icon name="info" className="h-4 w-4" />
-                <AlertTitle>
-                  Interim install — signed installers in progress
-                </AlertTitle>
-                <AlertDescription>
-                  Signed <code>.pkg</code> / <code>.msi</code> /{" "}
-                  <code>.deb</code> installers and one-click MDM binary
-                  deployment are still being built. Until they ship, follow the
-                  install steps below (the binaries are published but not yet
-                  code-signed). The managed configuration is fully supported
-                  today.
-                </AlertDescription>
-              </Alert>
-            </Page.Section.Body>
           </Page.Section>
 
           <Page.Section>
