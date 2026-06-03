@@ -16,8 +16,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// seedChatMessage creates a chat and message for the given project, returning the chat ID and message ID.
+// seedChatMessage creates a chat and message for the given project, returning
+// the chat ID and message ID. The chat is left without an external user id.
 func seedChatMessage(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	return seedChatMessageWithUser(t, ti, projectID, orgID, "")
+}
+
+// seedChatMessageWithUser creates a chat and message for the given project,
+// returning the chat ID and message ID. A non-empty externalUserID stamps the
+// chat's external user id so user_id filtering can be exercised; an empty
+// string leaves it unset (NULL).
+func seedChatMessageWithUser(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, externalUserID string) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
 
@@ -28,6 +38,7 @@ func seedChatMessage(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID 
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: orgID,
+		ExternalUserID: pgtype.Text{String: externalUserID, Valid: externalUserID != ""},
 	})
 	require.NoError(t, err)
 
@@ -138,34 +149,6 @@ func TestListRiskResults_ExcludesNotFound(t *testing.T) {
 	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
 	require.Empty(t, result.Results)
-}
-
-// seedChatMessageWithUser is like seedChatMessage but stamps the chat with an
-// external user id so user_id filtering can be exercised.
-func seedChatMessageWithUser(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, externalUserID string) (uuid.UUID, uuid.UUID) {
-	t.Helper()
-	ctx := t.Context()
-
-	chatID, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	_, err = ti.chatRepo.UpsertChat(ctx, chatrepo.UpsertChatParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		ExternalUserID: pgtype.Text{String: externalUserID, Valid: true},
-	})
-	require.NoError(t, err)
-
-	msgID, err := testrepo.New(ti.conn).InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
-		ChatID:    chatID,
-		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
-		Role:      "user",
-		Content:   "test message with a secret",
-	})
-	require.NoError(t, err)
-
-	return chatID, msgID
 }
 
 func TestListRiskResults_ByUserID(t *testing.T) {
