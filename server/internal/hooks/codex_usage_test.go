@@ -9,9 +9,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
 
-//go:fix inline
-func sp(s string) *string { return new(s) }
-
 // strAttr builds an OTLP string-valued log attribute, the shape Codex emits.
 func strAttr(key, val string) *gen.OTELAttribute {
 	return &gen.OTELAttribute{Key: key, Value: &gen.OTELAttributeValue{StringValue: new(val)}}
