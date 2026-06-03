@@ -194,6 +194,7 @@ func (dashboardTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 type dashboardTriggerEvent struct {
 	Text           string `json:"text" cel:"text"`
 	UserID         string `json:"user_id,omitempty" cel:"user_id"`
+	CorrelationID  string `json:"correlation_id,omitempty" cel:"correlation_id"`
 	IdempotencyKey string `json:"idempotency_key,omitempty" cel:"idempotency_key"`
 }
 
@@ -641,10 +642,10 @@ var supportedSlackEventTypes = []string{
 }
 
 var registry = map[string]Definition{
-	"slack":     newSlackDefinition(),
-	"cron":      newCronDefinition(),
-	"wake":      newWakeDefinition(),
-	"dashboard": newDashboardDefinition(),
+	DefinitionSlugSlack:     newSlackDefinition(),
+	DefinitionSlugCron:      newCronDefinition(),
+	DefinitionSlugWake:      newWakeDefinition(),
+	DefinitionSlugDashboard: newDashboardDefinition(),
 }
 
 func List() []Definition {
@@ -700,7 +701,7 @@ func newSlackDefinition() Definition {
 	)
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "slack",
+		Slug:                 DefinitionSlugSlack,
 		Title:                "Slack",
 		Description:          "Receive Slack Events API callbacks and map them to Gram trigger events.",
 		Kind:                 KindWebhook,
@@ -853,7 +854,7 @@ func newCronDefinition() Definition {
 	schema := buildInputSchema[cronTriggerConfig]()
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "cron",
+		Slug:                 DefinitionSlugCron,
 		Title:                "Cron",
 		Description:          "Run a trigger on a Temporal-backed cron schedule.",
 		Kind:                 KindSchedule,
@@ -917,7 +918,7 @@ func newWakeDefinition() Definition {
 	schema := buildInputSchema[wakeTriggerConfig]()
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "wake",
+		Slug:                 DefinitionSlugWake,
 		Title:                "Wake",
 		Description:          "One-shot self-wake of an assistant thread at an absolute future time.",
 		Kind:                 KindSchedule,
@@ -984,7 +985,7 @@ func newDashboardDefinition() Definition {
 	schema := buildInputSchema[dashboardTriggerConfig]()
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "dashboard",
+		Slug:                 DefinitionSlugDashboard,
 		Title:                "Dashboard",
 		Description:          "Direct messages from the Gram dashboard assistant sidebar.",
 		Kind:                 KindDirect,
@@ -1012,9 +1013,12 @@ func newDashboardDefinition() Definition {
 			if event.IdempotencyKey == "" {
 				return nil, fmt.Errorf("dashboard message idempotency key is required")
 			}
+			if event.CorrelationID == "" {
+				return nil, fmt.Errorf("dashboard message correlation id is required")
+			}
 			return &EventEnvelope{
 				EventID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte(instance.ID.String()+":"+event.IdempotencyKey)).String(),
-				CorrelationID:     event.UserID,
+				CorrelationID:     event.CorrelationID,
 				TriggerInstanceID: instance.ID.String(),
 				DefinitionSlug:    instance.DefinitionSlug,
 				Event:             event,

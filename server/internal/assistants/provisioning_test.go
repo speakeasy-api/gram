@@ -9,10 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
 func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
@@ -61,6 +63,15 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	got, err := core.GetManagedAssistant(ctx, projectID)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, got.ID)
+
+	triggers, err := triggerrepo.New(conn).ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
+		ProjectID:      projectID,
+		DefinitionSlug: sourceKindDashboard,
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      first.ID.String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, triggers, 1, "re-enable must not duplicate the dashboard trigger")
 }
 
 func TestEnableManagedAssistantAttachesMCPReachableToolsets(t *testing.T) {

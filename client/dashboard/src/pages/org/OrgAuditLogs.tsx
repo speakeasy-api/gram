@@ -479,9 +479,11 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
   const client = useGramContext();
 
   const projectSlug = organization.projects[0]?.slug ?? "";
-  const { data: toolsetsData, isLoading: isLoadingToolsets } = useListToolsets({
-    gramProject: projectSlug,
-  });
+  const { data: toolsetsData, isLoading: isLoadingToolsets } = useListToolsets(
+    { gramProject: projectSlug },
+    undefined,
+    { enabled: Boolean(projectSlug) },
+  );
 
   const getSession = useCallback(async () => {
     const res = await chatSessionsCreate(

@@ -25,6 +25,7 @@ import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
+import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPAccessRule } from "@gram/client/models/components/shadowmcpaccessrule.js";
 import type { ShadowMCPApprovalRequest } from "@gram/client/models/components/shadowmcpapprovalrequest.js";
 import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/approveShadowMCPApprovalRequest.js";
@@ -33,6 +34,7 @@ import { useDeleteShadowMCPAccessRuleMutation } from "@gram/client/react-query/d
 import { useDenyShadowMCPApprovalRequestMutation } from "@gram/client/react-query/denyShadowMCPApprovalRequest.js";
 import { invalidateAllShadowMCPAccessRules } from "@gram/client/react-query/shadowMCPAccessRules.js";
 import { invalidateAllShadowMCPApprovalRequests } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useUpdateShadowMCPAccessRuleMutation } from "@gram/client/react-query/updateShadowMCPAccessRule.js";
 import {
   Badge,
@@ -42,12 +44,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Icon,
   Table,
+  Tooltip,
+  TooltipContent,
+  TooltipPortal,
+  TooltipTrigger,
 } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Inbox, Plus, ShieldCheck } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import {
   formatShortDate,
@@ -75,6 +83,21 @@ type ReviewAction = "approve" | "deny";
 const APPROVAL_REQUESTS_PAGE_SIZE = 100;
 const APPROVAL_REQUESTS_QUERY_KEY = ["approval-requests", "requests"];
 const APPROVAL_REQUEST_RULES_QUERY_KEY = ["approval-requests", "access-rules"];
+const ACCESS_RULE_BLOCKING_POLICY_REQUIREMENTS = [
+  {
+    source: "shadow_mcp",
+    label: "Shadow MCP",
+  },
+] as const;
+const CREATE_BLOCKING_POLICY_MESSAGE =
+  "Create a blocking Shadow MCP policy before adding access rules.";
+const DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION =
+  "Create a rule manually or approve a request to allow or deny matching resources.";
+
+type AccessRuleCreateAvailability =
+  | { status: "available" }
+  | { status: "checking"; reason: string }
+  | { status: "missing_blocking_policy"; reason: string };
 
 const MATCH_BREADTH_OPTIONS: {
   value: ShadowMCPMatchBreadth;
@@ -83,6 +106,40 @@ const MATCH_BREADTH_OPTIONS: {
   { value: "full_url", label: "Full URL" },
   { value: "url_host", label: "URL host" },
 ];
+
+function getAccessRuleCreateAvailability({
+  canCreateAccessRules,
+  isLoadingPolicies,
+}: {
+  canCreateAccessRules: boolean;
+  isLoadingPolicies: boolean;
+}): AccessRuleCreateAvailability {
+  if (isLoadingPolicies) {
+    return {
+      status: "checking",
+      reason: "Checking Shadow MCP policies...",
+    };
+  }
+
+  if (!canCreateAccessRules) {
+    return {
+      status: "missing_blocking_policy",
+      reason: CREATE_BLOCKING_POLICY_MESSAGE,
+    };
+  }
+
+  return { status: "available" };
+}
+
+function policyEnablesAccessRules(policy: RiskPolicy) {
+  return (
+    policy.enabled &&
+    policy.action === "block" &&
+    ACCESS_RULE_BLOCKING_POLICY_REQUIREMENTS.some((requirement) =>
+      policy.sources.includes(requirement.source),
+    )
+  );
+}
 
 function TableEmptyState({
   title,
@@ -111,7 +168,7 @@ function ApprovalSectionEmptyState({
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
-  description: string;
+  description: React.ReactNode;
   action?: React.ReactNode;
 }) {
   return (
@@ -128,6 +185,24 @@ function ApprovalSectionEmptyState({
       {action}
     </div>
   );
+}
+
+function getAccessRulesEmptyDescription(
+  availability: AccessRuleCreateAvailability,
+) {
+  if (availability.status === "missing_blocking_policy") {
+    const policyLabel = ACCESS_RULE_BLOCKING_POLICY_REQUIREMENTS.map(
+      (requirement) => requirement.label,
+    ).join(", ");
+
+    return `Create a blocking risk policy for ${policyLabel} servers before adding access rules.`;
+  }
+
+  if (availability.status === "checking") {
+    return availability.reason;
+  }
+
+  return DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION;
 }
 
 function ServerCell({
@@ -714,13 +789,49 @@ function RuleActionsMenu({
   );
 }
 
-function AddRuleButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button onClick={onClick}>
+function AddRuleButton({
+  disabled,
+  disabledReason,
+  onClick,
+}: {
+  disabled?: boolean;
+  disabledReason?: string;
+  onClick: () => void;
+}) {
+  const button = (
+    <Button disabled={disabled} onClick={disabled ? undefined : onClick}>
       <Button.LeftIcon>
         <Plus className="h-4 w-4" />
       </Button.LeftIcon>
       <Button.Text>Add Rule</Button.Text>
+    </Button>
+  );
+
+  if (!disabled) {
+    return button;
+  }
+
+  return (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <div className="inline-flex cursor-not-allowed">{button}</div>
+      </TooltipTrigger>
+      <TooltipPortal>
+        <TooltipContent>{disabledReason}</TooltipContent>
+      </TooltipPortal>
+    </Tooltip>
+  );
+}
+
+function ManagePoliciesButton() {
+  return (
+    <Button variant="primary" asChild>
+      <Link to="../risk-policies" relative="path">
+        <Button.Text>Manage Policies</Button.Text>
+        <Button.RightIcon>
+          <Icon name="arrow-right" />
+        </Button.RightIcon>
+      </Link>
     </Button>
   );
 }
@@ -771,6 +882,9 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: projectId.length > 0,
   });
+  const policiesQuery = useRiskListPolicies(undefined, undefined, {
+    enabled: canAdmin && projectId.length > 0,
+  });
 
   const requests = useMemo(
     () => requestsQuery.data?.pages.flatMap((page) => page.requests) ?? [],
@@ -780,6 +894,27 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
     () => rulesQuery.data?.pages.flatMap((page) => page.rules) ?? [],
     [rulesQuery.data?.pages],
   );
+  const canCreateAccessRules = useMemo(
+    () =>
+      policiesQuery.error
+        ? true
+        : (policiesQuery.data?.policies.some(policyEnablesAccessRules) ??
+          false),
+    [policiesQuery.data?.policies, policiesQuery.error],
+  );
+  const accessRuleCreateAvailability = getAccessRuleCreateAvailability({
+    canCreateAccessRules,
+    isLoadingPolicies: policiesQuery.isLoading,
+  });
+  const addRuleDisabledReason =
+    accessRuleCreateAvailability.status === "available"
+      ? undefined
+      : accessRuleCreateAvailability.reason;
+  const accessRulesEmptyDescription = getAccessRulesEmptyDescription(
+    accessRuleCreateAvailability,
+  );
+  const showManagePoliciesEmptyAction =
+    accessRuleCreateAvailability.status === "missing_blocking_policy";
   const requestsLoading = requestsQuery.isLoading;
   const requestsError = requestsQuery.error;
   const rulesLoading = rulesQuery.isLoading;
@@ -1221,7 +1356,11 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
                 </SelectContent>
               </Select>
               <RequireScope scope="org:admin" level="component">
-                <AddRuleButton onClick={openCreateRuleSheet} />
+                <AddRuleButton
+                  disabled={!!addRuleDisabledReason}
+                  disabledReason={addRuleDisabledReason}
+                  onClick={openCreateRuleSheet}
+                />
               </RequireScope>
             </div>
           )}
@@ -1238,11 +1377,19 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
           <ApprovalSectionEmptyState
             icon={ShieldCheck}
             title="No access rules"
-            description="Create a rule manually or approve a request to allow or deny matching resources."
+            description={accessRulesEmptyDescription}
             action={
-              <RequireScope scope="org:admin" level="component">
-                <AddRuleButton onClick={openCreateRuleSheet} />
-              </RequireScope>
+              showManagePoliciesEmptyAction ? (
+                <ManagePoliciesButton />
+              ) : (
+                <RequireScope scope="org:admin" level="component">
+                  <AddRuleButton
+                    disabled={!!addRuleDisabledReason}
+                    disabledReason={addRuleDisabledReason}
+                    onClick={openCreateRuleSheet}
+                  />
+                </RequireScope>
+              )
             }
           />
         ) : (

@@ -410,6 +410,7 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	if userID != "" {
 		attrs[attr.UserIDKey] = userID
 	}
+	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
 		attrs[attr.HookErrorKey] = payload.Error

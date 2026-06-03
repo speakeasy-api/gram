@@ -17,6 +17,7 @@ import (
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -1307,4 +1308,109 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 
 	require.Contains(t, mcpConfig.MCPServers, "Server codex-enabled")
 	require.NotContains(t, mcpConfig.MCPServers, "Server codex-disabled")
+}
+
+// PublishProject with SkipIfUnchanged set re-publishes the first time (no
+// stored fingerprint), skips when nothing changed, and re-publishes again once
+// the plugin set changes.
+func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Skip Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "skip-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Skip Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	input := plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	}
+
+	// First publish: no fingerprint on record yet, so it must publish.
+	first, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, first.Skipped)
+	require.True(t, mock.pushFilesCalled)
+
+	// Second publish, nothing changed: the fingerprint matches, so it skips
+	// without touching GitHub or minting keys.
+	mock.pushFilesCalled = false
+	mock.createRepoCalled = false
+	mock.addCollaboratorCalled = false
+	second, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.True(t, second.Skipped, "unchanged project must be skipped")
+	require.False(t, mock.pushFilesCalled, "skipped publish must not push to GitHub")
+	require.False(t, mock.createRepoCalled, "skipped publish must not call CreateRepo")
+	require.False(t, mock.addCollaboratorCalled, "skipped publish must not add collaborators")
+
+	// Changing the plugin set changes the fingerprint, forcing a re-publish.
+	toolset2 := createTestToolset(t, ctx, ti.conn, "skip-toolset-2")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset2.ID.String(),
+		DisplayName: "Skip Server 2",
+		Policy:      "optional",
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	third, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, third.Skipped, "changed plugin set must re-publish")
+	require.True(t, mock.pushFilesCalled)
+}
+
+// A dashboard publish (PublishPlugins, which never skips) must still record the
+// fingerprint, so a subsequent automated rollout sees the project as unchanged.
+func TestPluginsService_PublishProject_SkipsAfterDashboardPublish(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dashboard Then Rollout"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "dashboard-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Dashboard Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.True(t, mock.pushFilesCalled)
+
+	mock.pushFilesCalled = false
+	result, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Skipped, "rollout must skip a project the dashboard just published unchanged")
+	require.False(t, mock.pushFilesCalled)
 }

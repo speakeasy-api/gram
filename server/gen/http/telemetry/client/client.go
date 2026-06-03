@@ -45,6 +45,10 @@ type Client struct {
 	// getUserMetricsSummary endpoint.
 	GetUserMetricsSummaryDoer goahttp.Doer
 
+	// GetEmployeeDataFlowGraph Doer is the HTTP client used to make requests to
+	// the getEmployeeDataFlowGraph endpoint.
+	GetEmployeeDataFlowGraphDoer goahttp.Doer
+
 	// GetObservabilityOverview Doer is the HTTP client used to make requests to
 	// the getObservabilityOverview endpoint.
 	GetObservabilityOverviewDoer goahttp.Doer
@@ -96,6 +100,7 @@ func NewClient(
 		CaptureEventDoer:             doer,
 		GetProjectMetricsSummaryDoer: doer,
 		GetUserMetricsSummaryDoer:    doer,
+		GetEmployeeDataFlowGraphDoer: doer,
 		GetObservabilityOverviewDoer: doer,
 		GetProjectOverviewDoer:       doer,
 		ListFilterOptionsDoer:        doer,
@@ -273,6 +278,30 @@ func (c *Client) GetUserMetricsSummary() goa.Endpoint {
 		resp, err := c.GetUserMetricsSummaryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getUserMetricsSummary", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetEmployeeDataFlowGraph returns an endpoint that makes HTTP requests to the
+// telemetry service getEmployeeDataFlowGraph server.
+func (c *Client) GetEmployeeDataFlowGraph() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetEmployeeDataFlowGraphRequest(c.encoder)
+		decodeResponse = DecodeGetEmployeeDataFlowGraphResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetEmployeeDataFlowGraphRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetEmployeeDataFlowGraphDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getEmployeeDataFlowGraph", err)
 		}
 		return decodeResponse(resp)
 	}

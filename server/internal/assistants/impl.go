@@ -216,6 +216,44 @@ func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssist
 	return nil
 }
 
+func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePayload) (*gen.SendMessageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	// Messages are sent as the calling user, so a user identity is required.
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "sending a message requires a user identity").Log(ctx, s.logger)
+	}
+
+	assistantID, err := uuid.Parse(payload.AssistantID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").Log(ctx, s.logger)
+	}
+
+	idempotencyKey := ""
+	if payload.IdempotencyKey != nil {
+		idempotencyKey = *payload.IdempotencyKey
+	}
+
+	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, payload.CorrelationID, payload.Message, idempotencyKey)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "assistant not found").Log(ctx, s.logger)
+		}
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "send assistant message")
+	}
+
+	return &gen.SendMessageResult{
+		ChatID:   result.ChatID.String(),
+		ThreadID: result.ThreadID.String(),
+		Accepted: result.Accepted,
+	}, nil
+}
+
 func (s *Service) Kind() string {
 	return bgtriggers.TargetKindAssistant
 }

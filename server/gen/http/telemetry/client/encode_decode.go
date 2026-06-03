@@ -1718,6 +1718,249 @@ func DecodeGetUserMetricsSummaryResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetEmployeeDataFlowGraphRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service
+// "getEmployeeDataFlowGraph" endpoint
+func (c *Client) BuildGetEmployeeDataFlowGraphRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetEmployeeDataFlowGraphTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getEmployeeDataFlowGraph", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetEmployeeDataFlowGraphRequest returns an encoder for requests sent
+// to the telemetry getEmployeeDataFlowGraph server.
+func EncodeGetEmployeeDataFlowGraphRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetEmployeeDataFlowGraphPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getEmployeeDataFlowGraph", "*telemetry.GetEmployeeDataFlowGraphPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetEmployeeDataFlowGraphRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getEmployeeDataFlowGraph", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetEmployeeDataFlowGraphResponse returns a decoder for responses
+// returned by the telemetry getEmployeeDataFlowGraph endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetEmployeeDataFlowGraphResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetEmployeeDataFlowGraphResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetEmployeeDataFlowGraphResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			res := NewGetEmployeeDataFlowGraphResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetEmployeeDataFlowGraphUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			return nil, NewGetEmployeeDataFlowGraphUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetEmployeeDataFlowGraphForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			return nil, NewGetEmployeeDataFlowGraphForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetEmployeeDataFlowGraphBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			return nil, NewGetEmployeeDataFlowGraphBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetEmployeeDataFlowGraphNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			return nil, NewGetEmployeeDataFlowGraphNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetEmployeeDataFlowGraphConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			return nil, NewGetEmployeeDataFlowGraphConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetEmployeeDataFlowGraphUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			return nil, NewGetEmployeeDataFlowGraphUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetEmployeeDataFlowGraphInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			return nil, NewGetEmployeeDataFlowGraphInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetEmployeeDataFlowGraphInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+				}
+				err = ValidateGetEmployeeDataFlowGraphInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+				}
+				return nil, NewGetEmployeeDataFlowGraphInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetEmployeeDataFlowGraphUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+				}
+				err = ValidateGetEmployeeDataFlowGraphUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+				}
+				return nil, NewGetEmployeeDataFlowGraphUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getEmployeeDataFlowGraph", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetEmployeeDataFlowGraphGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			err = ValidateGetEmployeeDataFlowGraphGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getEmployeeDataFlowGraph", err)
+			}
+			return nil, NewGetEmployeeDataFlowGraphGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getEmployeeDataFlowGraph", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetObservabilityOverviewRequest instantiates a HTTP request object with
 // method and path set to call the "telemetry" service
 // "getObservabilityOverview" endpoint
@@ -3624,6 +3867,37 @@ func unmarshalModelUsageResponseBodyToTelemetryModelUsage(v *ModelUsageResponseB
 	res := &telemetry.ModelUsage{
 		Name:  *v.Name,
 		Count: *v.Count,
+	}
+
+	return res
+}
+
+// unmarshalEmployeeDataFlowNodeResponseBodyToTelemetryEmployeeDataFlowNode
+// builds a value of type *telemetry.EmployeeDataFlowNode from a value of type
+// *EmployeeDataFlowNodeResponseBody.
+func unmarshalEmployeeDataFlowNodeResponseBodyToTelemetryEmployeeDataFlowNode(v *EmployeeDataFlowNodeResponseBody) *telemetry.EmployeeDataFlowNode {
+	res := &telemetry.EmployeeDataFlowNode{
+		ID:          *v.ID,
+		Tier:        *v.Tier,
+		Label:       *v.Label,
+		TotalCalls:  *v.TotalCalls,
+		ServerClass: v.ServerClass,
+	}
+
+	return res
+}
+
+// unmarshalEmployeeDataFlowEdgeResponseBodyToTelemetryEmployeeDataFlowEdge
+// builds a value of type *telemetry.EmployeeDataFlowEdge from a value of type
+// *EmployeeDataFlowEdgeResponseBody.
+func unmarshalEmployeeDataFlowEdgeResponseBodyToTelemetryEmployeeDataFlowEdge(v *EmployeeDataFlowEdgeResponseBody) *telemetry.EmployeeDataFlowEdge {
+	res := &telemetry.EmployeeDataFlowEdge{
+		ID:           *v.ID,
+		Source:       *v.Source,
+		Target:       *v.Target,
+		CallCount:    *v.CallCount,
+		SuccessCount: *v.SuccessCount,
+		FailureCount: *v.FailureCount,
 	}
 
 	return res

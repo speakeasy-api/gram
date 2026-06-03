@@ -1009,6 +1009,105 @@ func TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader(t *testing.
 	assert.NotContains(t, body, "GRAM_KEY", "OAuth-protected install command must not reference the GRAM_KEY env var")
 }
 
+// TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey covers the new
+// OAuth scheme: a private toolset gated by a user_session_issuer (rather than
+// the legacy oauth_proxy/external_oauth fields) delegates identity to OAuth, so
+// the install page must not ask for a GRAM key.
+func TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "private-usi-mcp-" + uuid.NewString()[:8]
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private USI Toolset",
+		Slug:                   "private-usi-ts-" + uuid.NewString()[:8],
+		Description:            conv.ToPGText("Private toolset gated by a user_session_issuer"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText(mcpSlug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+
+	_, err = ti.toolsetRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.NotContains(t, body, "gram-key", "issuer-gated install command must not reference the gram-key input")
+	assert.NotContains(t, body, "gram-environment", "issuer-gated install command must not reference the gram-environment input")
+	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated install command must not reference the GRAM_KEY env var")
+}
+
+// TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey covers the bridge
+// case: the user_session_issuer is attached to the mcp_server, not the
+// toolset. The toolset is private with no OAuth of its own, so without
+// consulting the mcp_server's issuer the page would wrongly render the GRAM
+// key input.
+func TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Bridged USI Toolset",
+		Slug:                   "bridged-usi-ts-" + uuid.NewString()[:8],
+		Description:            conv.ToPGText("Private toolset bridged by an issuer-gated mcp_server"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("bridged-usi-mcp-" + uuid.NewString()[:8]),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+
+	endpointSlug := "bridged-usi-endpoint-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:                "Issuer-Gated Bridged Server",
+		visibility:          mcpservers.VisibilityPrivate,
+		endpointSlug:        endpointSlug,
+		toolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.NotContains(t, body, "gram-key", "issuer-gated mcp_server install command must not reference the gram-key input")
+	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated mcp_server install command must not reference the GRAM_KEY env var")
+}
+
 // TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset
 // WITHOUT a custom domain can still be loaded via the platform domain when the
 // logged-in user's organization happens to have a custom domain configured. This
