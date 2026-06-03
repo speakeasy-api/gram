@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 39396a7d412b57eb75909efae5b88b5b
+  docChecksum: b720c3cc3d79ced6e160ca24f7e3eba2
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -399,7 +399,7 @@ trackedFiles:
   docs/models/components/headerinput.md:
     last_write_checksum: sha1:adc9e1b54d733fb807511030368240cc0e7a2172
   docs/models/components/hookeventname.md:
-    last_write_checksum: sha1:40dbdeaa22786c8ecbcf0b2118412046293ed619
+    last_write_checksum: sha1:6acb4839f2dcab33667922d7d62c892bff1dda7a
   docs/models/components/hooksbreakdownrow.md:
     last_write_checksum: sha1:900079c3c7d59fd6d0002d87cf638bf60051b5b8
   docs/models/components/hooksourceusage.md:
@@ -2037,7 +2037,7 @@ trackedFiles:
   docs/models/operations/hasrisk.md:
     last_write_checksum: sha1:76c9013597780a0d352e7017e3408921b9d88a82
   docs/models/operations/hooksnumberclauderequest.md:
-    last_write_checksum: sha1:a62ccb401f93e4465c46a5c6a33e5d8e68468877
+    last_write_checksum: sha1:4563e3aae412dc5d77936eaeedbcf51d49458563
   docs/models/operations/hooksnumbercodexrequest.md:
     last_write_checksum: sha1:944773a8a9a68d3111939c8aa5550002aaddf9f3
   docs/models/operations/hooksnumbercodexsecurity.md:
@@ -3855,7 +3855,7 @@ trackedFiles:
   src/models/components/chatsummary.ts:
     last_write_checksum: sha1:aff9564e3cb1d2ecaa44e06c99bc75b4fc5d7115
   src/models/components/claudehookpayload.ts:
-    last_write_checksum: sha1:f990486e8333c922eb2244e05361ba69c4c472b7
+    last_write_checksum: sha1:841e011717e25eb61d8841b71a7047db2157d9c9
   src/models/components/claudehookresult.ts:
     last_write_checksum: sha1:efd4bc197c346a55142b1b3f65194d6c497e554c
   src/models/components/cloneclientfromoauthproxyproviderform.ts:

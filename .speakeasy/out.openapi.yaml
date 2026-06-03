@@ -32093,6 +32093,7 @@ components:
           description: The type of hook event
           enum:
             - SessionStart
+            - ConfigChange
             - PreToolUse
             - PostToolUse
             - PostToolUseFailure
