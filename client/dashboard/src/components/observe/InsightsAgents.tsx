@@ -322,7 +322,7 @@ export function InsightsAgentsContent() {
   const userRows = useMemo(
     () =>
       users
-        .slice()
+        .filter((u) => isOrgMember(u.userId))
         .sort((a, b) =>
           valueMode === "cost"
             ? b.totalCost - a.totalCost
@@ -349,7 +349,7 @@ export function InsightsAgentsContent() {
                 : [],
           };
         }),
-    [users, memberMap, valueMode, totalCost, totalTokens],
+    [users, memberMap, memberIdentifiers, valueMode, totalCost, totalTokens],
   );
 
   // Unique client sources for filter dropdown
