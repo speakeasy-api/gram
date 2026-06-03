@@ -450,9 +450,8 @@ export function NavButton({
         {stage && (
           <ReleaseStageBadge
             stage={stage}
-            size="xs"
             noTooltip
-            className="-my-1 origin-left scale-75 group-data-[collapsible=icon]:hidden"
+            className="group-data-[collapsible=icon]:hidden"
           />
         )}
       </Link>
@@ -523,7 +522,7 @@ export function CollapsibleNavGroup({
               <ReleaseStageBadge
                 stage={stage}
                 noTooltip
-                className="-my-1 origin-left scale-75 transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
+                className="transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
               />
             )}
           </Link>
@@ -616,12 +615,7 @@ export function CollapsibleNavItem({
           </span>
           {item.title === "Billing" && <ProductTierBadge />}
           {(stage ?? item.stage) && (
-            <ReleaseStageBadge
-              stage={(stage ?? item.stage)!}
-              size="xs"
-              noTooltip
-              className="-my-1 origin-left scale-75"
-            />
+            <ReleaseStageBadge stage={(stage ?? item.stage)!} noTooltip />
           )}
         </Link>
       </div>
