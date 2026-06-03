@@ -479,14 +479,18 @@ func (e *discoveryError) UserMessage() string {
 	}
 }
 
-// discoverIssuerMetadata fetches and parses an RFC 8414
-// .well-known/oauth-authorization-server document, returning the parsed body
-// and any deviations from the spec callers should be aware of. The supplied
-// guardian.Policy gates the outbound dial. Failures are wrapped in a
-// *discoveryError so the handler can attach the upstream URL and status to
+// discoverIssuerMetadata fetches and parses an issuer's RFC 8414 / OpenID
+// Connect Discovery metadata document, returning the parsed body and any
+// deviations from the spec callers should be aware of. The supplied
+// guardian.Policy gates the outbound dial.
+//
+// It probes the well-known locations returned by issuerProbeCandidates in
+// order, returning the first that yields a valid document. When every probe
+// fails the first (canonical RFC 8414) candidate's error is surfaced, wrapped
+// in a *discoveryError so the handler can attach the upstream URL and status to
 // the user-facing error.
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
-	wellKnown, err := wellKnownURL(issuerURL)
+	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
 		return rfc8414Document{}, nil, &discoveryError{
 			WellKnownURL: "",
@@ -498,9 +502,29 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	reqCtx, cancel := context.WithTimeout(ctx, discoveryHTTPTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, wellKnown, nil)
+	client := policy.Client()
+
+	var firstErr *discoveryError
+	for _, wellKnown := range candidates {
+		doc, attemptErr := attemptIssuerProbe(reqCtx, client, wellKnown)
+		if attemptErr == nil {
+			return doc, collectDiscoveryWarnings(issuerURL, doc), nil
+		}
+		if firstErr == nil {
+			firstErr = attemptErr
+		}
+	}
+
+	return rfc8414Document{}, nil, firstErr
+}
+
+// attemptIssuerProbe issues a single GET against an issuer well-known URL and
+// returns either the parsed RFC 8414 / OIDC document or a typed error annotated
+// with the probed URL and upstream status.
+func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKnown string) (rfc8414Document, *discoveryError) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
 	if err != nil {
-		return rfc8414Document{}, nil, &discoveryError{
+		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("build discovery request: %w", err),
@@ -508,9 +532,9 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := policy.Client().Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return rfc8414Document{}, nil, &discoveryError{
+		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("fetch discovery document: %w", err),
@@ -519,7 +543,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
-		return rfc8414Document{}, nil, &discoveryError{
+		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("discovery returned status %d", resp.StatusCode),
@@ -528,7 +552,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return rfc8414Document{}, nil, &discoveryError{
+		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("read discovery body: %w", err),
@@ -537,37 +561,64 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 
 	var doc rfc8414Document
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return rfc8414Document{}, nil, &discoveryError{
+		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("decode discovery document: %w", err),
 		}
 	}
 
-	warnings := collectDiscoveryWarnings(issuerURL, doc)
-
-	return doc, warnings, nil
+	return doc, nil
 }
 
-// wellKnownURL composes the RFC 8414 .well-known path for an issuer. RFC 8414
-// places the path immediately after the host (scheme://host/.well-known/...);
-// any path component on the issuer is appended to the well-known URL.
-func wellKnownURL(issuerURL string) (string, error) {
+// issuerProbeCandidates returns the ordered list of well-known metadata URLs to
+// probe for an issuer. The first candidate is the canonical RFC 8414 location;
+// the rest broaden coverage to OpenID Connect Discovery and to non-compliant
+// upstreams that only serve metadata at the origin root.
+//
+// RFC 8414 §3 inserts the well-known path between the host and the issuer path;
+// OpenID Connect Discovery appends "/.well-known/openid-configuration" after the
+// issuer. Many identity providers (Auth0, Okta, Google, Azure AD, Keycloak)
+// serve only the OIDC document, so it is always probed. When the issuer has a
+// path component we additionally fall back to the origin-style locations, since
+// some gateways and SPA catch-alls serve metadata at the root regardless of the
+// issuer path. Duplicate URLs (e.g. when the issuer has no path) are collapsed.
+func issuerProbeCandidates(issuerURL string) ([]string, error) {
 	u, err := url.Parse(issuerURL)
 	if err != nil {
-		return "", fmt.Errorf("parse issuer url: %w", err)
+		return nil, fmt.Errorf("parse issuer url: %w", err)
 	}
 	if u.Scheme == "" || u.Host == "" {
-		return "", fmt.Errorf("issuer url must include scheme and host")
+		return nil, fmt.Errorf("issuer url must include scheme and host")
 	}
 
+	origin := (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 	path := strings.TrimSuffix(u.Path, "/")
-	wellKnown := *u
-	wellKnown.Path = "/.well-known/oauth-authorization-server" + path
-	wellKnown.RawQuery = ""
-	wellKnown.Fragment = ""
 
-	return wellKnown.String(), nil
+	seen := make(map[string]struct{})
+	candidates := make([]string, 0, 5)
+	add := func(raw string) {
+		if _, ok := seen[raw]; ok {
+			return
+		}
+		seen[raw] = struct{}{}
+		candidates = append(candidates, raw)
+	}
+
+	// RFC 8414 §3: well-known inserted between host and issuer path.
+	add(origin + "/.well-known/oauth-authorization-server" + path)
+	// RFC 8414 §3.1 OIDC-compatible form: openid-configuration inserted between
+	// host and issuer path.
+	add(origin + "/.well-known/openid-configuration" + path)
+	if path != "" {
+		// OpenID Connect Discovery: well-known appended after the issuer path.
+		add(origin + path + "/.well-known/openid-configuration")
+		// Origin-style fallback: strip the issuer path entirely.
+		add(origin + "/.well-known/oauth-authorization-server")
+		add(origin + "/.well-known/openid-configuration")
+	}
+
+	return candidates, nil
 }
 
 // collectDiscoveryWarnings reports RFC 8414 deviations on the parsed metadata
