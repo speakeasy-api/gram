@@ -79,6 +79,70 @@ func TestSelector_ResourceID_absent(t *testing.T) {
 	require.Equal(t, "*", Selector(nil).ResourceID())
 }
 
+func TestSelector_IsRestricted(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		selector   Selector
+		restricted bool
+	}{
+		{
+			name:       "pure wildcard",
+			selector:   Selector{"resource_kind": "*", "resource_id": "*"},
+			restricted: false,
+		},
+		{
+			name:       "scope wildcard is still scoped",
+			selector:   Selector{"resource_kind": "mcp", "resource_id": "*"},
+			restricted: true,
+		},
+		{
+			name:       "extra dimension is scoped",
+			selector:   Selector{"resource_kind": "*", "resource_id": "*", "tool": "dangerous"},
+			restricted: true,
+		},
+		{
+			name:       "legacy resource wildcard is unrestricted",
+			selector:   Selector{"resource_id": "*"},
+			restricted: false,
+		},
+		{
+			name:       "missing resource id is restricted",
+			selector:   Selector{"resource_kind": "*"},
+			restricted: true,
+		},
+		{
+			name:       "unknown one-key selector is restricted",
+			selector:   Selector{"unknown": "*"},
+			restricted: true,
+		},
+		{
+			name:       "missing resource kind with extra key is restricted",
+			selector:   Selector{"resource_id": "*", "unknown": "*"},
+			restricted: true,
+		},
+		{
+			name:       "nil is unrestricted wildcard",
+			selector:   nil,
+			restricted: false,
+		},
+		{
+			name:       "empty is unrestricted wildcard",
+			selector:   Selector{},
+			restricted: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.restricted, tt.selector.IsRestricted())
+		})
+	}
+}
+
 func TestSelector_MarshalJSON_nil(t *testing.T) {
 	t.Parallel()
 
@@ -265,7 +329,7 @@ func TestMCPCheck_injectsProjectID(t *testing.T) {
 	check := MCPCheck(ScopeMCPRead, "server_456", "proj_123")
 	require.Equal(t, ScopeMCPRead, check.Scope)
 	require.Equal(t, "server_456", check.ResourceID)
-	require.Equal(t, "proj_123", check.Dimensions["project_id"])
+	require.Equal(t, "proj_123", check.Dimensions[SelectorKeyProjectID])
 }
 
 func TestMCPCheck_emptyProjectIDOmitsDimension(t *testing.T) {

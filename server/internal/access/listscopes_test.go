@@ -17,7 +17,7 @@ func TestService_ListScopes(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 9)
+	require.Len(t, result.Scopes, 10)
 
 	bySlug := make(map[string]*gen.ScopeDefinition, len(result.Scopes))
 	for _, scope := range result.Scopes {
@@ -29,6 +29,7 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, "mcp", bySlug[string(authz.ScopeMCPConnect)].ResourceType)
 	require.Equal(t, "environment", bySlug[string(authz.ScopeEnvironmentRead)].ResourceType)
 	require.Equal(t, "environment", bySlug[string(authz.ScopeEnvironmentWrite)].ResourceType)
+	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyEvaluate)].ResourceType)
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
 }
 

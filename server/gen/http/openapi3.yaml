@@ -36347,6 +36347,7 @@ components:
                         - mcp:connect
                         - environment:read
                         - environment:write
+                        - risk_policy:evaluate
                 selectors:
                     type: array
                     items:
@@ -36366,6 +36367,7 @@ components:
                             - mcp:connect
                             - environment:read
                             - environment:write
+                            - risk_policy:evaluate
                     description: The inherited scopes the primary scope grants.
             required:
                 - scope
@@ -39653,6 +39655,7 @@ components:
                         - mcp:connect
                         - environment:read
                         - environment:write
+                        - risk_policy:evaluate
                 selectors:
                     type: array
                     items:
@@ -39722,6 +39725,7 @@ components:
                         - project
                         - mcp
                         - environment
+                        - risk_policy
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -39735,6 +39739,7 @@ components:
                         - mcp:connect
                         - environment:read
                         - environment:write
+                        - risk_policy:evaluate
             required:
                 - slug
                 - description
@@ -40155,6 +40160,7 @@ components:
                         - mcp
                         - org
                         - environment
+                        - risk_policy
                         - '*'
                 tool:
                     type: string
@@ -42534,14 +42540,14 @@ components:
         UpdateRoleForm:
             type: object
             properties:
-                description:
-                    type: string
-                    description: Updated description.
-                grants:
+                add_grants:
                     type: array
                     items:
                         $ref: '#/components/schemas/RoleGrant'
-                    description: Updated scope grants.
+                    description: Scope grants to add.
+                description:
+                    type: string
+                    description: Updated description.
                 id:
                     type: string
                     description: The ID of the role to update.
@@ -42553,6 +42559,11 @@ components:
                 name:
                     type: string
                     description: Updated display name.
+                remove_grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleGrant'
+                    description: Scope grants to remove.
             required:
                 - id
         UpdateSecurityVariableDisplayNameForm:

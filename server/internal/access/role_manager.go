@@ -185,8 +185,8 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
-	if _, err := authz.SyncGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, roleGrantPayloads(payload.Grants)); err != nil {
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, r.logger)
+	if _, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, roleGrantPayloads(payload.Grants), nil); err != nil {
+		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "add grants for created role").Log(ctx, r.logger)
 	}
 
 	workosSyncs := []workosSync{func(ctx context.Context) {
@@ -274,7 +274,7 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 
 	sysRole := isSystemRole(currentRole.Slug)
-	if sysRole && (payload.Name != nil || payload.Description != nil || payload.Grants != nil) {
+	if sysRole && (payload.Name != nil || payload.Description != nil || payload.AddGrants != nil || payload.RemoveGrants != nil) {
 		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role properties cannot be updated, only member assignment is allowed").Log(ctx, r.logger)
 	}
 	if sysRole && payload.MemberIds == nil {
@@ -328,10 +328,10 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			MemberCount:  int(updatedRow.MemberCount),
 		}
 
-		if payload.Grants != nil {
-			syncedGrants, err := authz.SyncGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, roleGrantPayloads(payload.Grants))
+		if payload.AddGrants != nil || payload.RemoveGrants != nil {
+			syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, roleGrantPayloads(payload.AddGrants), roleGrantPayloads(payload.RemoveGrants))
 			if err != nil {
-				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, r.logger)
+				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").Log(ctx, r.logger)
 			}
 			updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 			for _, grant := range syncedGrants {

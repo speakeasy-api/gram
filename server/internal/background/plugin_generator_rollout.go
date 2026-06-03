@@ -129,10 +129,7 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 		after = &candidates.Candidates[len(candidates.Candidates)-1].ProjectID
 
 		for start := 0; start < len(candidates.Candidates); start += pluginGeneratorRolloutConcurrency {
-			end := start + pluginGeneratorRolloutConcurrency
-			if end > len(candidates.Candidates) {
-				end = len(candidates.Candidates)
-			}
+			end := min(start+pluginGeneratorRolloutConcurrency, len(candidates.Candidates))
 
 			futures := make([]workflow.Future, 0, end-start)
 			for _, candidate := range candidates.Candidates[start:end] {

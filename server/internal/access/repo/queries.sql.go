@@ -33,6 +33,38 @@ func (q *Queries) DeletePrincipalGrant(ctx context.Context, arg DeletePrincipalG
 	return result.RowsAffected(), nil
 }
 
+const deletePrincipalGrantByIdentity = `-- name: DeletePrincipalGrantByIdentity :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND COALESCE(effect, 'allow') = COALESCE($4::text, 'allow')
+  AND selectors = $5
+`
+
+type DeletePrincipalGrantByIdentityParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Effect         string
+	Selectors      []byte
+}
+
+// Removes a specific grant row by principal, scope, effect, and selector.
+func (q *Queries) DeletePrincipalGrantByIdentity(ctx context.Context, arg DeletePrincipalGrantByIdentityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalGrantByIdentity,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deletePrincipalGrantsByPrincipal = `-- name: DeletePrincipalGrantsByPrincipal :execrows
 DELETE FROM principal_grants
 WHERE organization_id = $1
@@ -458,6 +490,36 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 		return nil, err
 	}
 	return items, nil
+}
+
+const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :execrows
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
+DO NOTHING
+`
+
+type InsertPrincipalGrantIfAbsentParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Effect         pgtype.Text
+	Selectors      []byte
+}
+
+// Creates a single grant row and leaves existing identical rows untouched.
+func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listAccessMembers = `-- name: ListAccessMembers :many

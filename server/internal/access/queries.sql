@@ -38,11 +38,27 @@ ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), s
 DO UPDATE SET updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at;
 
+-- name: InsertPrincipalGrantIfAbsent :execrows
+-- Creates a single grant row and leaves existing identical rows untouched.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES (@organization_id, @principal_urn, @scope, @effect, @selectors)
+ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
+DO NOTHING;
+
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
 DELETE FROM principal_grants
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: DeletePrincipalGrantByIdentity :execrows
+-- Removes a specific grant row by principal, scope, effect, and selector.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
+  AND selectors = @selectors;
 
 -- name: DeletePrincipalGrantsByResource :execrows
 -- Removes grant rows for a single resource selector.
