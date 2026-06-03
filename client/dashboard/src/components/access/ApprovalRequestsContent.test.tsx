@@ -149,6 +149,23 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   DropdownMenuTrigger: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
+  Dialog: Object.assign(
+    ({
+      children,
+      open,
+    }: {
+      children: ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => (open ? <div role="dialog">{children}</div> : null),
+    {
+      Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+      Header: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+      Title: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+      Description: ({ children }: { children: ReactNode }) => <p>{children}</p>,
+      Footer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    },
+  ),
   Table: ({
     columns,
     data,
@@ -362,6 +379,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
 });
 
@@ -1000,6 +1018,89 @@ describe("ApprovalRequestsContent", () => {
       projectId: "project-1",
       disposition: undefined,
       cursor: undefined,
+    });
+  });
+
+  it("confirms access rule deletion with a design system dialog", async () => {
+    const deleteRule = vi.fn().mockResolvedValue({});
+    const browserConfirm = vi.fn().mockReturnValue(true);
+    vi.stubGlobal("confirm", browserConfirm);
+    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
+      requests: [],
+    });
+    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
+      rules: [
+        {
+          id: "rule-delete",
+          displayName: "Delete me",
+          resourceType: "shadow_mcp",
+          disposition: "allowed",
+          accessScope: "project",
+          projectId: "project-1",
+          matchBreadth: "url_host",
+          matchValue: "delete.example.com",
+          updatedAt: new Date("2026-01-01"),
+        },
+      ],
+    });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: deleteRule,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Delete me")).toBeTruthy();
+    });
+    const deleteRuleRow = screen.getByText("Delete me").closest("tr");
+    if (!deleteRuleRow) throw new Error("Rule row not found");
+    fireEvent.click(
+      within(deleteRuleRow).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeTruthy();
+    });
+    expect(
+      screen.getByRole("heading", { name: "Delete access rule" }),
+    ).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    const ruleName = within(dialog).getByText("Delete me");
+    expect(ruleName.tagName).toBe("CODE");
+    expect(ruleName.className).toContain("font-mono");
+    const header = screen.getByRole("heading", {
+      name: "Delete access rule",
+    }).parentElement;
+    expect(header?.contains(ruleName)).toBe(false);
+    expect(
+      within(dialog).getByText(/This action cannot be undone\./),
+    ).toBeTruthy();
+    expect(browserConfirm).not.toHaveBeenCalled();
+    expect(deleteRule).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(deleteRule).toHaveBeenCalledWith({
+        request: { id: "rule-delete" },
+      });
     });
   });
 
