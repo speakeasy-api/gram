@@ -698,10 +698,11 @@ func TestGenerateClaudeObservabilityRoutesInventoryEventsToOwnScript(t *testing.
 		require.NotContains(t, matchers[0].Hooks[0].Command, "hooks/hook.sh")
 	}
 
-	// ConfigChange must be synchronous: Claude Code does not support async
-	// hooks for it (per https://code.claude.com/docs/en/hooks).
+	// ConfigChange is async (fire-and-forget): it has no allow/deny decision
+	// to honor, so Claude must not be held up while the MCP inventory is
+	// re-synced mid-session.
 	require.NotNil(t, parsed.Hooks["ConfigChange"][0].Hooks[0].Async)
-	require.False(t, *parsed.Hooks["ConfigChange"][0].Hooks[0].Async, "ConfigChange must not be async")
+	require.True(t, *parsed.Hooks["ConfigChange"][0].Hooks[0].Async, "ConfigChange must be async")
 
 	for event, matchers := range parsed.Hooks {
 		if event == "SessionStart" || event == "ConfigChange" {

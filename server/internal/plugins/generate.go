@@ -77,13 +77,13 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // deny/allow decision. Stop must also be blocking: when async=true,
 // Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
 // — an apparent bug on the client side. Marking it synchronous is the
-// only reliable way to get Stop events to fire. ConfigChange is synchronous
-// because Claude Code does not support async hooks for it (per
-// https://code.claude.com/docs/en/hooks). All other events return true for
-// fire-and-forget telemetry so Claude is not held up.
+// only reliable way to get Stop events to fire. All other events
+// (including ConfigChange, which has no allow/deny decision to honor)
+// return true for fire-and-forget telemetry so Claude is not held up while
+// the MCP inventory is re-synced mid-session.
 func claudeHookAsyncFlag(event string) *bool {
 	switch event {
-	case "UserPromptSubmit", "PreToolUse", "Stop", "ConfigChange":
+	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
 		return &f
 	default:
@@ -901,9 +901,8 @@ exit 0
 //
 // The script is fire-and-forget: neither SessionStart nor ConfigChange has
 // an allow/deny decision to honor, so we always exit 0 and discard the
-// response body to keep latency invisible to Claude. (SessionStart runs
-// async; ConfigChange runs synchronously because Claude Code does not
-// support async hooks for it.)
+// response body to keep latency invisible to Claude. Both events run async
+// so Claude is never held up while the inventory is gathered.
 //
 // Auth headers match renderHookScript so server-side attribution works:
 // Gram-Key always, Gram-Project when ProjectSlug is set.
