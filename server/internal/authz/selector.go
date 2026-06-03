@@ -3,7 +3,6 @@ package authz
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -13,6 +12,14 @@ import (
 // For a grant selector to match a check selector, every key in the grant must
 // either equal the corresponding check value or be the wildcard "*".
 type Selector map[string]string
+
+const (
+	SelectorKeyResourceKind = "resource_kind"
+	SelectorKeyResourceID   = "resource_id"
+	SelectorKeyTool         = "tool"
+	SelectorKeyDisposition  = "disposition"
+	SelectorKeyProjectID    = "project_id"
+)
 
 // Matches reports whether this (grant) selector satisfies the given check
 // selector. A nil/empty grant selector matches any check (defensive fallback).
@@ -53,22 +60,23 @@ func (s Selector) StrictMatches(check Selector) bool {
 	return true
 }
 
-// ResourceKindForScope derives the resource kind from a scope's family prefix.
+// ResourceKindForScope derives the selector resource kind from a scope.
 func ResourceKindForScope(scope Scope) string {
-	s := string(scope)
-	switch {
-	case strings.HasPrefix(s, "project:"):
-		return "project"
-	case strings.HasPrefix(s, "remote-mcp:"):
-		return "mcp"
-	case strings.HasPrefix(s, "mcp:"):
-		return "mcp"
-	case strings.HasPrefix(s, "org:"):
-		return "org"
-	case strings.HasPrefix(s, "environment:"):
-		return "environment"
+	switch scope.Parts().Resource {
+	case "project":
+		return ResourceKindProject
+	case "remote-mcp":
+		return ResourceKindMCP
+	case "mcp":
+		return ResourceKindMCP
+	case "org":
+		return ResourceKindOrg
+	case "environment":
+		return ResourceKindEnvironment
+	case "risk_policy":
+		return ResourceKindRiskPolicy
 	default:
-		return "*"
+		return ResourceKindWildcard
 	}
 }
 
@@ -92,9 +100,13 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
-	"mcp": {"tool": true, "disposition": true, "project_id": true},
-	"environment": {
-		"project_id": true,
+	ResourceKindMCP: {
+		SelectorKeyTool:        true,
+		SelectorKeyDisposition: true,
+		SelectorKeyProjectID:   true,
+	},
+	ResourceKindEnvironment: {
+		SelectorKeyProjectID: true,
 	},
 }
 
@@ -105,20 +117,20 @@ var allowedSelectorKeys = map[string]map[string]bool{
 //   - extra keys must be in the allowed set for the scope family
 //   - unknown keys are rejected
 func ValidateSelector(scope Scope, sel Selector) error {
-	kind, hasKind := sel["resource_kind"]
-	_, hasID := sel["resource_id"]
+	kind, hasKind := sel[SelectorKeyResourceKind]
+	_, hasID := sel[SelectorKeyResourceID]
 	if !hasKind || !hasID {
 		return fmt.Errorf("selector must include both resource_kind and resource_id")
 	}
 
 	expectedKind := ResourceKindForScope(scope)
 	if scope == ScopeRoot {
-		if kind != "*" {
-			return fmt.Errorf("root scope requires resource_kind=*, got %q", kind)
+		if kind != ResourceKindWildcard {
+			return fmt.Errorf("root scope requires resource_kind=%s, got %q", ResourceKindWildcard, kind)
 		}
 		// root allows no extra keys
 		for k := range sel {
-			if k != "resource_kind" && k != "resource_id" {
+			if k != SelectorKeyResourceKind && k != SelectorKeyResourceID {
 				return fmt.Errorf("root scope does not allow extra selector key %q", k)
 			}
 		}
@@ -131,13 +143,13 @@ func ValidateSelector(scope Scope, sel Selector) error {
 
 	allowed := allowedSelectorKeys[expectedKind]
 	for k, v := range sel {
-		if k == "resource_kind" || k == "resource_id" {
+		if k == SelectorKeyResourceKind || k == SelectorKeyResourceID {
 			continue
 		}
 		if !allowed[k] {
 			return fmt.Errorf("selector key %q is not allowed for scope %q", k, scope)
 		}
-		if k == "disposition" && !validDispositions[v] {
+		if k == SelectorKeyDisposition && !validDispositions[v] {
 			return fmt.Errorf("invalid disposition value %q", v)
 		}
 	}
@@ -148,8 +160,8 @@ func ValidateSelector(scope Scope, sel Selector) error {
 // NewSelector creates a selector with resource_kind derived from scope.
 func NewSelector(scope Scope, resourceID string) Selector {
 	return Selector{
-		"resource_kind": ResourceKindForScope(scope),
-		"resource_id":   resourceID,
+		SelectorKeyResourceKind: ResourceKindForScope(scope),
+		SelectorKeyResourceID:   resourceID,
 	}
 }
 
@@ -196,10 +208,33 @@ func NewDenyGrantWithSelector(scope Scope, selector Selector) Grant {
 // ResourceID extracts the resource_id value from the selector.
 // Returns "*" if no resource_id key is present.
 func (s Selector) ResourceID() string {
-	if id, ok := s["resource_id"]; ok {
+	if id, ok := s[SelectorKeyResourceID]; ok {
 		return id
 	}
 	return WildcardResource
+}
+
+// IsRestricted reports whether the selector constrains at least one resource
+// dimension. A short wildcard selector is treated as unrestricted for backward
+// compatibility with pre-resource-kind rows that only carried resource_id.
+func (s Selector) IsRestricted() bool {
+	if len(s) == 0 {
+		return false
+	}
+	if len(s) == 1 {
+		id, ok := s[SelectorKeyResourceID]
+		return !ok || id != WildcardResource
+	}
+	if len(s) != 2 {
+		return true
+	}
+
+	kind, hasKind := s[SelectorKeyResourceKind]
+	id, hasID := s[SelectorKeyResourceID]
+	if !hasKind || !hasID {
+		return true
+	}
+	return kind != WildcardResource || id != WildcardResource
 }
 
 // SelectorFromRow parses the selectors JSONB column into a Selector.

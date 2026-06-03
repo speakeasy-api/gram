@@ -84,7 +84,7 @@ func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 		ID:       organizationID,
 		Name:     "Test Org",
-		Slug:     "test-org",
+		Slug:     organizationID,
 		WorkosID: conv.PtrToPGText(conv.PtrEmpty("workos-org-" + organizationID)),
 	})
 	require.NoError(t, err)

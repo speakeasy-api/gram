@@ -20,6 +20,10 @@ export type HooksNumberCursorRequest = {
    * project header
    */
   gramProject?: string | undefined;
+  /**
+   * Optional endpoint hostname supplied by the Gram hook plugin.
+   */
+  xGramHookHostname?: string | undefined;
   cursorHookPayload: components.CursorHookPayload;
 };
 
@@ -58,6 +62,7 @@ export function hooksNumberCursorSecurityToJSON(
 export type HooksNumberCursorRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
+  "X-Gram-Hook-Hostname"?: string | undefined;
   CursorHookPayload: components.CursorHookPayload$Outbound;
 };
 
@@ -69,12 +74,14 @@ export const HooksNumberCursorRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
+    xGramHookHostname: z.optional(z.string()),
     cursorHookPayload: components.CursorHookPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
+      xGramHookHostname: "X-Gram-Hook-Hostname",
       cursorHookPayload: "CursorHookPayload",
     });
   }),

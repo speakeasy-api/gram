@@ -69,6 +69,19 @@ SELECT EXISTS(
     AND deleted_at IS NULL
 ) AS exists;
 
+-- name: HasActiveOrganizationUser :one
+-- Returns whether a Gram user is an active member of the organization.
+SELECT EXISTS(
+  SELECT 1
+  FROM users
+  JOIN organization_user_relationships
+    ON organization_user_relationships.user_id = users.id
+  WHERE users.id = @user_id
+    AND users.deleted_at IS NULL
+    AND organization_user_relationships.organization_id = @organization_id
+    AND organization_user_relationships.deleted_at IS NULL
+) AS exists;
+
 -- name: GetOrganizationUserRelationship :one
 SELECT *
 FROM organization_user_relationships

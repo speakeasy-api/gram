@@ -138,6 +138,7 @@ func TestService_CreateRole_WorkOSConflictUsesLocalRole(t *testing.T) {
 	require.True(t, ok)
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_1", "Custom Builder", "org-custom-builder", "Can build selected resources"))
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID), authz.ScopeRiskPolicyEvaluate, "policy-1")
 	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Custom Builder",
 		Slug:        "org-custom-builder",
@@ -154,6 +155,13 @@ func TestService_CreateRole_WorkOSConflictUsesLocalRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, roleID, role.ID)
 	require.Equal(t, "Custom Builder", role.Name)
+
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
+	scopes := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		scopes = append(scopes, grant.Scope)
+	}
+	require.Contains(t, scopes, string(authz.ScopeRiskPolicyEvaluate))
 }
 
 func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {

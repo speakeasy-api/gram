@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   useRoles: vi.fn(),
   useApprovalRequests: vi.fn(),
   useAccessRules: vi.fn(),
+  useRiskListPolicies: vi.fn(),
   useSdkClient: vi.fn(),
   mutation: vi.fn(),
   invalidate: vi.fn(),
@@ -65,6 +67,10 @@ vi.mock("@gram/client/react-query/shadowMCPAccessRules.js", () => ({
   useShadowMCPAccessRules: mocks.useAccessRules,
 }));
 
+vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  useRiskListPolicies: mocks.useRiskListPolicies,
+}));
+
 vi.mock("@gram/client/react-query/approveShadowMCPApprovalRequest.js", () => ({
   useApproveShadowMCPApprovalRequestMutation: mocks.mutation,
 }));
@@ -110,8 +116,22 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       LeftIcon: ({ children }: { children: ReactNode }) => (
         <span>{children}</span>
       ),
+      RightIcon: ({ children }: { children: ReactNode }) => (
+        <span>{children}</span>
+      ),
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
+  ),
+  Icon: ({ name }: { name: string }) => <span aria-hidden>{name}</span>,
+  Tooltip: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  TooltipContent: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  TooltipTrigger: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  TooltipPortal: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
   ),
   DropdownMenu: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
@@ -281,9 +301,20 @@ function renderContent(projectId = "project-1") {
   const queryClient = new QueryClient();
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <ApprovalRequestsContent projectId={projectId} />
-    </QueryClientProvider>,
+    <MemoryRouter
+      initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
+    >
+      <Routes>
+        <Route
+          path="/:orgSlug/projects/:projectSlug/approval-requests"
+          element={
+            <QueryClientProvider client={queryClient}>
+              <ApprovalRequestsContent projectId={projectId} />
+            </QueryClientProvider>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
@@ -307,6 +338,20 @@ beforeEach(() => {
   });
   mocks.useAccessRules.mockReturnValue({
     data: { rules: [] },
+    isLoading: false,
+    error: null,
+  });
+  mocks.useRiskListPolicies.mockReturnValue({
+    data: {
+      policies: [
+        {
+          id: "policy-1",
+          enabled: true,
+          action: "block",
+          sources: ["shadow_mcp"],
+        },
+      ],
+    },
     isLoading: false,
     error: null,
   });
@@ -350,6 +395,108 @@ describe("ApprovalRequestsContent", () => {
     expect(screen.queryByText("Approved")).toBeNull();
     expect(screen.queryByText("All")).toBeNull();
     expect(screen.queryByText("Approval History")).toBeNull();
+  });
+
+  it("shows a manage policies empty state when no blocking Shadow MCP policy is enabled", async () => {
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            id: "policy-1",
+            enabled: true,
+            action: "flag",
+            sources: ["shadow_mcp"],
+          },
+          {
+            id: "policy-2",
+            enabled: false,
+            action: "block",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("No access rules")).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        "Create a blocking risk policy for Shadow MCP servers before adding access rules.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add Rule" })).toBeNull();
+    const managePoliciesLink = screen.getByRole("link", {
+      name: "Manage Policies",
+    });
+    expect(managePoliciesLink.getAttribute("href")).toBe(
+      "/speakeasy/projects/project-1/risk-policies",
+    );
+  });
+
+  it("shows the add rule empty state when a blocking Shadow MCP policy is enabled", async () => {
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("No access rules")).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        "Create a rule manually or approve a request to allow or deny matching resources.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add Rule" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    expect(screen.queryByRole("link", { name: "Manage Policies" })).toBeNull();
+  });
+
+  it("shows the add rule empty state when policies fail to load", async () => {
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error("Policy load failed"),
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("No access rules")).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        "Create a rule manually or approve a request to allow or deny matching resources.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add Rule" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    expect(screen.queryByRole("link", { name: "Manage Policies" })).toBeNull();
   });
 
   it("does not load or render approval requests for non-admin org readers", () => {

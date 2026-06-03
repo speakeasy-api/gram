@@ -152,7 +152,7 @@ func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *
 		Outcome:              l.Outcome,
 		Reason:               l.Reason,
 		Scope:                string(focus.Scope),
-		ResourceKind:         focusSelector["resource_kind"],
+		ResourceKind:         focusSelector[SelectorKeyResourceKind],
 		ResourceID:           focus.ResourceID,
 		Selector:             marshalSelector(focusSelector),
 		ExpandedScopes:       expanded,

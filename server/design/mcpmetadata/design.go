@@ -88,10 +88,13 @@ var McpExport = Type("McpExport", func() {
 var McpMetadata = Type("McpMetadata", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("Metadata used to configure the MCP install page.")
+	Description("Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.")
 
 	Attribute("id", String, "The ID of the metadata record")
-	Attribute("toolset_id", String, "The toolset associated with this install page metadata", func() {
+	Attribute("toolset_id", String, "The toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_id", String, "The MCP server associated with this install page metadata. Mutually exclusive with toolset_id.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo", func() {
@@ -117,7 +120,7 @@ var McpMetadata = Type("McpMetadata", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "toolset_id", "created_at", "updated_at")
+	Required("id", "created_at", "updated_at")
 })
 
 var _ = Service("mcpMetadata", func() {
@@ -130,16 +133,17 @@ var _ = Service("mcpMetadata", func() {
 	shared.DeclareErrorResponses()
 
 	Method("getMcpMetadata", func() {
-		Description("Fetch the metadata that powers the MCP install page.")
+		Description("Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
-
-			Required("toolset_slug")
+			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.")
+			Attribute("mcp_server_id", String, "The ID of the MCP server associated with this install page metadata. Mutually exclusive with toolset_slug.", func() {
+				Format(FormatUUID)
+			})
 
 			security.ByKeyPayload()
 			security.SessionPayload()
@@ -156,6 +160,7 @@ var _ = Service("mcpMetadata", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("toolset_slug")
+			Param("mcp_server_id")
 			Response(StatusOK)
 		})
 
@@ -165,27 +170,28 @@ var _ = Service("mcpMetadata", func() {
 	})
 
 	Method("setMcpMetadata", func() {
-		Description("Create or update the metadata that powers the MCP install page.")
+		Description("Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
+			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.")
+			Attribute("mcp_server_id", String, "The ID of the MCP server associated with this install page metadata. Mutually exclusive with toolset_slug.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo")
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
 			Attribute("external_documentation_text", String, "A blob of text for the button on the MCP server page")
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
-			Attribute("default_environment_id", String, "The default environment to load variables from", func() {
+			Attribute("default_environment_id", String, "The default environment to load variables from. Not supported when mcp_server_id is provided.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("installation_override_url", String, "URL to redirect to instead of showing the default installation page", func() {
 				Format(FormatURI)
 			})
 			Attribute("environment_configs", ArrayOf(McpEnvironmentConfigInput), "The list of environment variables to configure for this MCP")
-
-			Required("toolset_slug")
 
 			security.ByKeyPayload()
 			security.SessionPayload()

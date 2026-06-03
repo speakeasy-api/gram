@@ -1321,7 +1321,8 @@ FROM (
     AND ($3::timestamptz IS NULL OR cm.created_at >= $3::timestamptz)
     AND ($4::timestamptz IS NULL OR cm.created_at < $4::timestamptz)
     AND ($5::text = '' OR rr.rule_id ILIKE '%' || $5::text || '%')
-    AND ($6::text = '' OR (
+    AND ($6::text = '' OR c.external_user_id ILIKE '%' || $6::text || '%')
+    AND ($7::text = '' OR (
     CASE
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
@@ -1366,15 +1367,15 @@ FROM (
       WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $6::text)
+  ) = $7::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
-    $7::timestamptz IS NULL
-    OR (sub.message_created_at, sub.id) < ($7::timestamptz, $8::uuid)
+    $8::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($8::timestamptz, $9::uuid)
   )
 ORDER BY sub.message_created_at DESC, sub.id DESC
-LIMIT $9
+LIMIT $10
 `
 
 type ListRiskResultsByProjectFoundParams struct {
@@ -1383,6 +1384,7 @@ type ListRiskResultsByProjectFoundParams struct {
 	FromTime               pgtype.Timestamptz
 	ToTime                 pgtype.Timestamptz
 	RuleID                 string
+	UserID                 string
 	Category               string
 	CursorMessageCreatedAt pgtype.Timestamptz
 	CursorID               uuid.NullUUID
@@ -1434,6 +1436,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 		arg.FromTime,
 		arg.ToTime,
 		arg.RuleID,
+		arg.UserID,
 		arg.Category,
 		arg.CursorMessageCreatedAt,
 		arg.CursorID,

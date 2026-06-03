@@ -26,6 +26,7 @@ type Server struct {
 	CaptureEvent             http.Handler
 	GetProjectMetricsSummary http.Handler
 	GetUserMetricsSummary    http.Handler
+	GetEmployeeDataFlowGraph http.Handler
 	GetObservabilityOverview http.Handler
 	GetProjectOverview       http.Handler
 	ListFilterOptions        http.Handler
@@ -68,6 +69,7 @@ func New(
 			{"CaptureEvent", "POST", "/rpc/telemetry.captureEvent"},
 			{"GetProjectMetricsSummary", "POST", "/rpc/telemetry.getProjectMetricsSummary"},
 			{"GetUserMetricsSummary", "POST", "/rpc/telemetry.getUserMetricsSummary"},
+			{"GetEmployeeDataFlowGraph", "POST", "/rpc/telemetry.getEmployeeDataFlowGraph"},
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
 			{"ListFilterOptions", "POST", "/rpc/telemetry.listFilterOptions"},
@@ -82,6 +84,7 @@ func New(
 		CaptureEvent:             NewCaptureEventHandler(e.CaptureEvent, mux, decoder, encoder, errhandler, formatter),
 		GetProjectMetricsSummary: NewGetProjectMetricsSummaryHandler(e.GetProjectMetricsSummary, mux, decoder, encoder, errhandler, formatter),
 		GetUserMetricsSummary:    NewGetUserMetricsSummaryHandler(e.GetUserMetricsSummary, mux, decoder, encoder, errhandler, formatter),
+		GetEmployeeDataFlowGraph: NewGetEmployeeDataFlowGraphHandler(e.GetEmployeeDataFlowGraph, mux, decoder, encoder, errhandler, formatter),
 		GetObservabilityOverview: NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
 		GetProjectOverview:       NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
 		ListFilterOptions:        NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
@@ -103,6 +106,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CaptureEvent = m(s.CaptureEvent)
 	s.GetProjectMetricsSummary = m(s.GetProjectMetricsSummary)
 	s.GetUserMetricsSummary = m(s.GetUserMetricsSummary)
+	s.GetEmployeeDataFlowGraph = m(s.GetEmployeeDataFlowGraph)
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
 	s.GetProjectOverview = m(s.GetProjectOverview)
 	s.ListFilterOptions = m(s.ListFilterOptions)
@@ -123,6 +127,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCaptureEventHandler(mux, h.CaptureEvent)
 	MountGetProjectMetricsSummaryHandler(mux, h.GetProjectMetricsSummary)
 	MountGetUserMetricsSummaryHandler(mux, h.GetUserMetricsSummary)
+	MountGetEmployeeDataFlowGraphHandler(mux, h.GetEmployeeDataFlowGraph)
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
 	MountListFilterOptionsHandler(mux, h.ListFilterOptions)
@@ -485,6 +490,60 @@ func NewGetUserMetricsSummaryHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getUserMetricsSummary")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetEmployeeDataFlowGraphHandler configures the mux to serve the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint.
+func MountGetEmployeeDataFlowGraphHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getEmployeeDataFlowGraph", f)
+}
+
+// NewGetEmployeeDataFlowGraphHandler creates a HTTP handler which loads the
+// HTTP request and calls the "telemetry" service "getEmployeeDataFlowGraph"
+// endpoint.
+func NewGetEmployeeDataFlowGraphHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetEmployeeDataFlowGraphRequest(mux, decoder)
+		encodeResponse = EncodeGetEmployeeDataFlowGraphResponse(encoder)
+		encodeError    = EncodeGetEmployeeDataFlowGraphError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getEmployeeDataFlowGraph")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

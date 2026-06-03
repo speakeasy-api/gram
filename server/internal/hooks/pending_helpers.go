@@ -138,6 +138,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	if metadata.UserID != "" {
 		attrs[attr.UserIDKey] = metadata.UserID
 	}
+	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
 		attrs[attr.HookErrorKey] = payload.Error
@@ -206,6 +207,15 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	return attrs
+}
+
+func applyHookHostnameAttr(attrs map[attr.Key]any, hostname *string) {
+	if hostname == nil {
+		return
+	}
+	if value := strings.TrimSpace(*hostname); value != "" {
+		attrs[attr.HookHostnameKey] = value
+	}
 }
 
 // MetricDataPoint represents a single metric aggregated across all data points for a model+session

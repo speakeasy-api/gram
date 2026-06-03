@@ -2,8 +2,12 @@
 -- that Gram talks to as an OAuth client.
 
 -- name: CreateRemoteSessionIssuer :one
+-- Serves both creation paths: a project-level issuer passes a valid project_id
+-- plus its organization_id; an organization-level (cross-project) issuer passes
+-- a NULL project_id plus organization_id.
 INSERT INTO remote_session_issuers (
     project_id,
+    organization_id,
     slug,
     issuer,
     authorization_endpoint,
@@ -19,6 +23,7 @@ INSERT INTO remote_session_issuers (
 )
 VALUES (
     @project_id,
+    @organization_id,
     @slug,
     @issuer,
     @authorization_endpoint,
@@ -35,19 +40,28 @@ VALUES (
 RETURNING *;
 
 -- name: GetRemoteSessionIssuerByID :one
+-- Project-scoped read that also resolves organization-level issuers belonging
+-- to the project's org, so projects inherit cross-project issuers.
 SELECT *
 FROM remote_session_issuers
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+WHERE id = @id
+  AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id))
+  AND deleted IS FALSE;
 
 -- name: GetRemoteSessionIssuerBySlug :one
+-- Slug lookups are strictly project-scoped: the (project_id, slug) unique index
+-- makes this deterministic. Organization-level issuers are not slug-addressable
+-- (their slugs are not uniqueness-constrained); fetch them by id instead.
 SELECT *
 FROM remote_session_issuers
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListRemoteSessionIssuersByProjectID :many
+-- Lists the project's own issuers plus organization-level issuers inherited
+-- from the project's org.
 SELECT *
 FROM remote_session_issuers
-WHERE project_id = @project_id
+WHERE (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id))
   AND deleted IS FALSE
   AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
 ORDER BY id DESC
@@ -94,6 +108,67 @@ RETURNING *;
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- Organization-level remote session issuers — cross-project issuers scoped to
+-- an organization (project_id IS NULL). Managed via the
+-- organizationRemoteSessionIssuers service and accessed by id.
+
+-- name: GetOrganizationRemoteSessionIssuerByID :one
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: ListOrganizationRemoteSessionIssuers :many
+SELECT *
+FROM remote_session_issuers
+WHERE organization_id = @organization_id
+  AND project_id IS NULL
+  AND deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: UpdateOrganizationRemoteSessionIssuer :one
+-- Same three-state narg semantics on the nullable endpoint columns as
+-- UpdateRemoteSessionIssuer; scoped to organization-level rows (project_id IS NULL).
+UPDATE remote_session_issuers
+SET
+    slug = COALESCE(sqlc.narg('slug'), slug),
+    issuer = COALESCE(sqlc.narg('issuer'), issuer),
+    authorization_endpoint = CASE
+        WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
+    END,
+    token_endpoint = CASE
+        WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    registration_endpoint = CASE
+        WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
+    END,
+    jwks_uri = CASE
+        WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
+    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
+    grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
+    response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    oidc = COALESCE(sqlc.narg('oidc'), oidc),
+    passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    updated_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteOrganizationRemoteSessionIssuer :one
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL AND deleted IS FALSE
 RETURNING *;
 
 -- name: CountRemoteSessionClientsByIssuerID :one

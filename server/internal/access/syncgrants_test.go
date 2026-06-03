@@ -10,35 +10,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
+func TestService_patchRoleGrants_preservesUnmentionedGrants(t *testing.T) {
 	t.Parallel()
 
-	ctx, svc, conn := newInternalTestService(t)
-	organizationID := "org_sync_grants_replace"
-	roleSlug := "custom-editor"
+	ctx, _, conn := newInternalTestService(t)
+	organizationID := "org_patch_grants_preserve_unmentioned"
+	roleSlug := "custom-audiences"
 	seedInternalOrganization(t, ctx, conn, organizationID)
 	rolePrincipal := seedInternalRole(t, ctx, conn, organizationID, roleSlug)
 	legacyRolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
-	seedInternalGrant(t, ctx, conn, organizationID, legacyRolePrincipal, string(authz.ScopeProjectRead), "project-old")
-	seedInternalGrant(t, ctx, conn, organizationID, legacyRolePrincipal, string(authz.ScopeProjectWrite), "project-stale")
-	seedInternalGrant(t, ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "other-role"), string(authz.ScopeProjectRead), "project-other")
+	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeProjectRead), "project-old")
+	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeRiskPolicyEvaluate), "policy-canonical")
+	seedInternalGrant(t, ctx, conn, organizationID, legacyRolePrincipal, string(authz.ScopeRiskPolicyEvaluate), "policy-legacy")
 
-	err := authz.SyncGrants(ctx, svc.logger, conn, organizationID, roleSlug, rolePrincipal.String(), []*authz.RoleGrant{
-		{
-			Scope:     string(authz.ScopeProjectRead),
-			Selectors: nil,
-		},
-		{
-			Scope: string(authz.ScopeMCPConnect),
-			Selectors: []authz.Selector{
-				{"resource_kind": "mcp", "resource_id": "tool:payments"},
-				{"resource_kind": "mcp", "resource_id": "tool:analytics"},
-			},
-		},
+	_, err := authz.PatchRoleGrantsTx(ctx, conn, organizationID, roleSlug, rolePrincipal.String(), []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeProjectWrite),
 			Selectors: nil,
+		},
+	}, []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeProjectRead),
+			Selectors: []authz.Selector{authz.NewSelector(authz.ScopeProjectRead, "project-old")},
 		},
 	})
 	require.NoError(t, err)
@@ -48,82 +42,29 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 		PrincipalUrn:   rolePrincipal.String(),
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 4)
+	require.Len(t, rows, 2)
 
-	got := make([]string, 0, len(rows))
+	type grantResourceKey struct {
+		scope      string
+		resourceID string
+	}
+
+	got := make([]grantResourceKey, 0, len(rows))
 	for _, row := range rows {
 		selectors, err := authz.SelectorFromRow(row.Selectors)
 		require.NoError(t, err)
-		got = append(got, row.Scope+"|"+selectors.ResourceID())
+		got = append(got, grantResourceKey{scope: row.Scope, resourceID: selectors.ResourceID()})
 	}
-	require.ElementsMatch(t, []string{
-		string(authz.ScopeProjectRead) + "|" + authz.WildcardResource,
-		string(authz.ScopeProjectWrite) + "|" + authz.WildcardResource,
-		string(authz.ScopeMCPConnect) + "|tool:analytics",
-		string(authz.ScopeMCPConnect) + "|tool:payments",
+	require.ElementsMatch(t, []grantResourceKey{
+		{scope: string(authz.ScopeProjectWrite), resourceID: authz.WildcardResource},
+		{scope: string(authz.ScopeRiskPolicyEvaluate), resourceID: "policy-canonical"},
 	}, got)
+
 	legacyRows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: organizationID,
 		PrincipalUrn:   legacyRolePrincipal.String(),
 	})
 	require.NoError(t, err)
-	require.Empty(t, legacyRows)
-
-	otherRows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: organizationID,
-		PrincipalUrn:   "role:other-role",
-	})
-	require.NoError(t, err)
-	require.Len(t, otherRows, 1)
-	otherSel, err := authz.SelectorFromRow(otherRows[0].Selectors)
-	require.NoError(t, err)
-	require.Equal(t, "project-other", otherSel.ResourceID())
-}
-
-func TestService_syncGrants_emptySelectorsCreatesNoGrant(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newInternalTestService(t)
-	organizationID := "org_sync_grants_empty_sel"
-	roleSlug := "custom-empty-sel"
-	seedInternalOrganization(t, ctx, conn, organizationID)
-	rolePrincipal := seedInternalRole(t, ctx, conn, organizationID, roleSlug)
-
-	// Empty non-nil selectors = no access (not wildcard).
-	err := authz.SyncGrants(ctx, svc.logger, conn, organizationID, roleSlug, rolePrincipal.String(), []*authz.RoleGrant{
-		{
-			Scope:     string(authz.ScopeMCPConnect),
-			Selectors: []authz.Selector{},
-		},
-	})
-	require.NoError(t, err)
-
-	rows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: organizationID,
-		PrincipalUrn:   rolePrincipal.String(),
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows, "empty selectors should produce zero grant rows, not a wildcard")
-}
-
-func TestService_syncGrants_clearsRoleGrantsWhenEmpty(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newInternalTestService(t)
-	organizationID := "org_sync_grants_clear"
-	roleSlug := "custom-viewer"
-	seedInternalOrganization(t, ctx, conn, organizationID)
-	rolePrincipal := seedInternalRole(t, ctx, conn, organizationID, roleSlug)
-	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeProjectRead), authz.WildcardResource)
-	seedInternalGrant(t, ctx, conn, organizationID, rolePrincipal, string(authz.ScopeMCPRead), "tool:payments")
-
-	err := authz.SyncGrants(ctx, svc.logger, conn, organizationID, roleSlug, rolePrincipal.String(), nil)
-	require.NoError(t, err)
-
-	rows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: organizationID,
-		PrincipalUrn:   rolePrincipal.String(),
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows)
+	require.Len(t, legacyRows, 1)
+	require.Equal(t, string(authz.ScopeRiskPolicyEvaluate), legacyRows[0].Scope)
 }

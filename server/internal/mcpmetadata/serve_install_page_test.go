@@ -22,9 +22,12 @@ import (
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -286,7 +289,7 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 	// Set metadata with instructions
 	instructions := "Test Hub - Search and analyze test data\n\n## Key Capabilities\n\n- Search test records\n- Filter by status\n\n## Usage Patterns\n\nUse search before filtering"
 	_, err = testInstance.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
-		ToolsetSlug:      types.Slug(toolset.Slug),
+		ToolsetSlug:      conv.PtrEmpty(types.Slug(toolset.Slug)),
 		Instructions:     &instructions,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -1006,6 +1009,105 @@ func TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader(t *testing.
 	assert.NotContains(t, body, "GRAM_KEY", "OAuth-protected install command must not reference the GRAM_KEY env var")
 }
 
+// TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey covers the new
+// OAuth scheme: a private toolset gated by a user_session_issuer (rather than
+// the legacy oauth_proxy/external_oauth fields) delegates identity to OAuth, so
+// the install page must not ask for a GRAM key.
+func TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "private-usi-mcp-" + uuid.NewString()[:8]
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private USI Toolset",
+		Slug:                   "private-usi-ts-" + uuid.NewString()[:8],
+		Description:            conv.ToPGText("Private toolset gated by a user_session_issuer"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText(mcpSlug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+
+	_, err = ti.toolsetRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.NotContains(t, body, "gram-key", "issuer-gated install command must not reference the gram-key input")
+	assert.NotContains(t, body, "gram-environment", "issuer-gated install command must not reference the gram-environment input")
+	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated install command must not reference the GRAM_KEY env var")
+}
+
+// TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey covers the bridge
+// case: the user_session_issuer is attached to the mcp_server, not the
+// toolset. The toolset is private with no OAuth of its own, so without
+// consulting the mcp_server's issuer the page would wrongly render the GRAM
+// key input.
+func TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Bridged USI Toolset",
+		Slug:                   "bridged-usi-ts-" + uuid.NewString()[:8],
+		Description:            conv.ToPGText("Private toolset bridged by an issuer-gated mcp_server"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("bridged-usi-mcp-" + uuid.NewString()[:8]),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+
+	endpointSlug := "bridged-usi-endpoint-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:                "Issuer-Gated Bridged Server",
+		visibility:          mcpservers.VisibilityPrivate,
+		endpointSlug:        endpointSlug,
+		toolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.NotContains(t, body, "gram-key", "issuer-gated mcp_server install command must not reference the gram-key input")
+	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated mcp_server install command must not reference the GRAM_KEY env var")
+}
+
 // TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset
 // WITHOUT a custom domain can still be loaded via the platform domain when the
 // logged-in user's organization happens to have a custom domain configured. This
@@ -1220,4 +1322,318 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 		"omitted external MCP header must not appear in the install snippet")
 	assert.Contains(t, body, "GLYPHIC_TRACE_ID",
 		"user-provided external MCP header (no env config) must still appear in the install snippet")
+}
+
+// TestServeInstallPage_McpServer_RemoteBacked_PublicRenders confirms the
+// install page renders for a Remote-MCP-backed mcp_server when resolved
+// through the mcp_endpoints lookup, using the mcp_server's own visibility
+// flag for the public-access gate. The rendered URL must match the
+// mcp_endpoint slug (not the mcp_server.slug, which embeds an internal id
+// suffix and is not the public address).
+func TestServeInstallPage_McpServer_RemoteBacked_PublicRenders(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	remoteServer := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcp_repo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://upstream.example.com/mcp",
+	})
+
+	endpointSlug := "remote-mcp-public-" + uuid.NewString()[:8]
+	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:              "Remote MCP Public",
+		visibility:        mcpservers.VisibilityPublic,
+		endpointSlug:      endpointSlug,
+		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+	})
+
+	docURL := "https://docs.example.com/remote-mcp"
+	instructions := "Connect to Remote MCP using your client."
+	serverID := server.ID.String()
+	_, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID:              &serverID,
+		ExternalDocumentationURL: &docURL,
+		Instructions:             &instructions,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	// Use a bare context: a public install must not require an auth context.
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, endpointSlug, "rendered page should reference the mcp_endpoint slug")
+	assert.Contains(t, body, "Connect to Remote MCP", "instructions from mcp_server-keyed metadata should render")
+	assert.Contains(t, body, docURL, "docs URL from mcp_server-keyed metadata should render")
+}
+
+// TestServeInstallPage_McpServer_RemoteBacked_PrivateRedirectsToLogin
+// asserts that a private Remote-MCP-backed install page redirects an
+// unauthenticated request to /login rather than serving the page or 404.
+func TestServeInstallPage_McpServer_RemoteBacked_PrivateRedirectsToLogin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	remoteServer := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcp_repo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://upstream.example.com/mcp",
+	})
+
+	endpointSlug := "remote-mcp-private-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:              "Remote MCP Private",
+		visibility:        mcpservers.VisibilityPrivate,
+		endpointSlug:      endpointSlug,
+		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusFound, rr.Code, "private install page must redirect unauthenticated callers")
+	assert.Contains(t, rr.Header().Get("Location"), "/login")
+}
+
+// TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering
+// confirms that a toolset-backed mcp_server, when reached through the
+// mcp_endpoints resolution path, renders via the existing toolset-flavored
+// pipeline — preserving tool listings, security inputs, and the existing
+// install-snippet shape during the dual-source phase.
+func TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Toolset Bridge",
+		Slug:                   "toolset-bridge-" + uuid.NewString()[:8],
+		Description:            conv.ToPGText("Toolset behind an mcp_server bridge"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("toolset-bridge-mcp-" + uuid.NewString()[:8]),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	endpointSlug := "bridge-endpoint-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:         "Bridged Server",
+		visibility:   mcpservers.VisibilityPrivate, // intentionally private to confirm toolset.McpIsPublic wins
+		endpointSlug: endpointSlug,
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	// Toolset is public, so even though the mcp_server is private the install page renders.
+	require.Equal(t, http.StatusOK, rr.Code,
+		"toolset.McpIsPublic should drive the gate when the mcp_server bridges to a toolset")
+	body := rr.Body.String()
+	assert.Contains(t, body, endpointSlug, "rendered page should reference the mcp_endpoint slug as the install URL")
+}
+
+// TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata confirms
+// that when both toolset-keyed and mcp_server-keyed metadata rows exist
+// for a toolset-backed mcp_server, the mcp_server-keyed row is the one
+// surfaced on the install page. This is the precondition for letting the
+// dashboard Edit Branding affordance on the Remote MCP page take effect
+// without rewriting legacy toolset rows.
+func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Prefer MCP-Server Metadata",
+		Slug:                   "prefer-mcp-" + uuid.NewString()[:8],
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("prefer-mcp-" + uuid.NewString()[:8]),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	endpointSlug := "prefer-endpoint-" + uuid.NewString()[:8]
+	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		visibility:   mcpservers.VisibilityPublic,
+		endpointSlug: endpointSlug,
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	})
+
+	// Write toolset-keyed metadata (legacy path).
+	toolsetDocs := "https://legacy-toolset-docs.example.com"
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
+		ExternalDocumentationURL: &toolsetDocs,
+	})
+	require.NoError(t, err)
+
+	// Write mcp_server-keyed metadata (new path).
+	serverDocs := "https://new-mcp-server-docs.example.com"
+	serverID := server.ID.String()
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID:              &serverID,
+		ExternalDocumentationURL: &serverDocs,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, serverDocs, "mcp_server-keyed metadata should win")
+	assert.NotContains(t, body, toolsetDocs, "toolset-keyed metadata should not leak when mcp_server-keyed exists")
+}
+
+// TestServeInstallPage_McpServer_FallsBackToToolsetMetadata covers the
+// migration bridge for AGE-1902: a toolset-backed mcp_server with no
+// mcp_server-keyed metadata row must still render branding from the
+// existing toolset-keyed metadata.
+func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Toolset Metadata Fallback",
+		Slug:                   "fallback-" + uuid.NewString()[:8],
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("fallback-" + uuid.NewString()[:8]),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	endpointSlug := "fallback-endpoint-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		visibility:   mcpservers.VisibilityPublic,
+		endpointSlug: endpointSlug,
+		toolsetID:    uuid.NullUUID{UUID: toolset.ID, Valid: true},
+	})
+
+	// Only toolset-keyed metadata exists.
+	legacyDocs := "https://legacy-toolset.example.com"
+	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
+		ExternalDocumentationURL: &legacyDocs,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), legacyDocs,
+		"toolset-keyed metadata should be the fallback source when no mcp_server-keyed row exists")
+}
+
+// TestServeInstallPage_McpServer_InstallationOverrideURL ensures the override
+// redirect honors mcp_server-keyed metadata, matching the existing toolset
+// behaviour so customer-hosted install pages keep working across backends.
+func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	remoteServer := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcp_repo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://upstream.example.com/mcp",
+	})
+
+	endpointSlug := "override-" + uuid.NewString()[:8]
+	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		visibility:        mcpservers.VisibilityPublic,
+		endpointSlug:      endpointSlug,
+		remoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+	})
+
+	override := "https://custom-install-page.example.com/install"
+	serverID := server.ID.String()
+	_, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID:             &serverID,
+		InstallationOverrideURL: &override,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusFound, rr.Code)
+	require.Equal(t, override, rr.Header().Get("Location"))
 }

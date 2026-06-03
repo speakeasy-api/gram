@@ -573,6 +573,10 @@ CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
 ON trigger_instances (environment_id)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
+ON trigger_instances (project_id, target_ref)
+WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
@@ -951,6 +955,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_key
 ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS tool_variations_groups (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
+  description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tool_variations_groups_pkey PRIMARY KEY (id),
+  CONSTRAINT tool_variations_groups_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -976,6 +996,11 @@ CREATE TABLE IF NOT EXISTS toolsets (
   -- behaviour is gated only when this is set, so legacy paths stay unchanged.
   user_session_issuer_id uuid,
 
+  -- Optionally enables a variations group for runtime filtering and
+  -- modifications. Otherwise defaults to project global (source-level)
+  -- variations for runtime modifications.
+  tool_variations_group_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -987,6 +1012,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_exclusivity CHECK ((external_oauth_server_id IS NULL) != (oauth_proxy_server_id IS NULL) OR (external_oauth_server_id IS NULL AND oauth_proxy_server_id IS NULL))
 );
 
@@ -1456,22 +1482,6 @@ CREATE TABLE IF NOT EXISTS slack_registrations (
 
   CONSTRAINT slack_registrations_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
   CONSTRAINT slack_registrations_slack_app_id_slack_account_id_key UNIQUE (slack_app_id, slack_account_id)
-);
-
-CREATE TABLE IF NOT EXISTS tool_variations_groups (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
-  description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT tool_variations_groups_pkey PRIMARY KEY (id),
-  CONSTRAINT tool_variations_groups_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS project_tool_variations (
@@ -2447,6 +2457,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   user_session_issuer_id uuid,
   remote_mcp_server_id uuid,
   toolset_id uuid,
+  -- Optionally enables a variations group for runtime filtering and
+  -- modifications. Otherwise defaults to project global (source-level)
+  -- variations for runtime modifications.
+  tool_variations_group_id uuid,
   visibility TEXT NOT NULL CHECK (visibility <> ''),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2460,6 +2474,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
+  CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set: either a remote MCP server or a toolset.
   CONSTRAINT mcp_servers_backend_exclusivity_check CHECK ((remote_mcp_server_id IS NULL) != (toolset_id IS NULL))
 );

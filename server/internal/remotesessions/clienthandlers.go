@@ -72,11 +72,14 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	// Reject the remote session issuer if it belongs to a different project, so
-	// a client can't be attached to another tenant's issuer.
+	// Reject the remote session issuer if it isn't reachable from the caller's
+	// project, so a client can't be attached to another tenant's issuer. The
+	// lookup accepts both the project's own issuers and organization-level
+	// issuers.
 	if _, err = txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:        issuerID,
-		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
+		ID:             issuerID,
+		ProjectID:      conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID: conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)
@@ -224,10 +227,14 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	}
 
 	// Confirm the issuer the caller named lives in the same project so a clone
-	// cannot graft a client onto an unrelated tenant's issuer.
+	// cannot graft a client onto an unrelated tenant's issuer. A NULL
+	// organization_id keeps this lookup strictly project-scoped — cloning a
+	// client onto an organization-level issuer is part of the deferred runtime
+	// work, not this management path.
 	if _, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:        issuerID,
-		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		ID:             issuerID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID: conv.ToPGTextEmpty(""),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)

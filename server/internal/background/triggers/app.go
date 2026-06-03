@@ -33,7 +33,10 @@ const (
 	StatusFired         = "fired"
 	StatusCancelled     = "cancelled"
 
-	DefinitionSlugWake = "wake"
+	DefinitionSlugSlack     = "slack"
+	DefinitionSlugCron      = "cron"
+	DefinitionSlugWake      = "wake"
+	DefinitionSlugDashboard = "dashboard"
 )
 
 var (
@@ -236,6 +239,9 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
 	}
+	if definition.Kind == KindDirect {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %q triggers are system-managed and cannot be created directly", ErrBadRequest, params.DefinitionSlug)
+	}
 
 	configJSON, err := marshalConfigJSON(params.Config)
 	if err != nil {
@@ -307,6 +313,9 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	definition, config, err := a.validateInstance(ctx, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), params.DefinitionSlug, params.Config)
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
+	}
+	if definition.Kind == KindDirect {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %q triggers are system-managed and cannot be updated directly", ErrBadRequest, params.DefinitionSlug)
 	}
 
 	configJSON, err := marshalConfigJSON(params.Config)
@@ -829,6 +838,50 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 	}
 
 	a.emitDeliveryLog(instance, envelope, DeliveryStatusSent, "trigger event enqueued", nil)
+	return task, nil
+}
+
+// IngestDirect handles a synchronous, app-invoked trigger event (e.g. a message
+// from the dashboard assistant sidebar) through the same path as webhook and
+// schedule ingress: it builds the event from the instance's direct-ingress
+// definition, runs ProcessEvent (status/filter/target checks + delivery log),
+// and dispatches the resulting task inline. Returns the dispatched task, or nil
+// when the instance is paused or the event was filtered out.
+func (a *App) IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []byte, receivedAt time.Time) (*Task, error) {
+	instance, err := a.repo.GetTriggerInstanceByIDPublic(ctx, instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("get trigger instance: %w", err)
+	}
+
+	rawConfig, err := configJSONToMap(instance.ConfigJson)
+	if err != nil {
+		return nil, fmt.Errorf("decode trigger config: %w", err)
+	}
+
+	definition, config, err := a.validateInstance(ctx, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), instance.DefinitionSlug, rawConfig)
+	if err != nil {
+		return nil, fmt.Errorf("validate trigger instance: %w", err)
+	}
+	if definition.BuildDirectEvent == nil {
+		return nil, fmt.Errorf("trigger definition %q does not implement direct ingress", instance.DefinitionSlug)
+	}
+
+	envelope, err := definition.BuildDirectEvent(instance, config, payload, receivedAt)
+	if err != nil {
+		return nil, fmt.Errorf("build direct event: %w", err)
+	}
+
+	task, err := a.ProcessEvent(ctx, instance, *envelope)
+	if err != nil {
+		return nil, fmt.Errorf("process event: %w", err)
+	}
+	if task == nil {
+		return nil, nil
+	}
+
+	if err := a.Dispatch(ctx, *task); err != nil {
+		return nil, err
+	}
 	return task, nil
 }
 

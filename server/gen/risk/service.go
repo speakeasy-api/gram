@@ -353,6 +353,9 @@ type ListRiskResultsForAgentPayload struct {
 	// Optional rule identifier substring to filter by (case-insensitive, e.g.
 	// 'secret' matches all 'secret.*' rules).
 	RuleID *string
+	// Optional user identifier substring to filter by (case-insensitive, matched
+	// against the chat's external user id).
+	UserID *string
 	// If true, collapse results to one row per (policy_id, rule_id, match),
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
@@ -393,6 +396,9 @@ type ListRiskResultsPayload struct {
 	// Optional rule identifier substring to filter by (case-insensitive, e.g.
 	// 'secret' matches all 'secret.*' rules).
 	RuleID *string
+	// Optional user identifier substring to filter by (case-insensitive, matched
+	// against the chat's external user id).
+	UserID *string
 	// If true, collapse results to one row per (policy_id, rule_id, match),
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
