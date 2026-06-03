@@ -40364,6 +40364,7 @@ components:
             - tool_io_logs
             - session_capture
             - authz_challenge_logging
+            - webhooks
             - sso
             - scim
           maxLength: 60
