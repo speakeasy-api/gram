@@ -5,6 +5,8 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +17,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -22,9 +27,12 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -391,4 +399,181 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 	w2, err2 := servePublicHTTP(t, ctxWithDomain, ti, endpointSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err2)
 	require.Equal(t, http.StatusOK, w2.Code, "custom-domain-scoped request must resolve the endpoint; body=%s", w2.Body.String())
+}
+
+// newStatelessRemoteMCPUpstream returns an httptest server that answers MCP
+// JSON-RPC POSTs (initialize, tools/list, tools/call) with plain JSON,
+// echoing the request id. It deliberately skips the streamable-HTTP session
+// state machine (Mcp-Session-Id handshake, notifications/initialized) so a
+// test can exercise the remote proxy's interceptors without driving a full
+// MCP client handshake — mirroring the dumb upstream used by
+// TestServePublic_McpEndpoint_RemoteBacked_Proxies. The single tool is named
+// toolName.
+func newStatelessRemoteMCPUpstream(t *testing.T, toolName string) *httptest.Server {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		_ = json.Unmarshal(body, &req)
+
+		var result any
+		switch req.Method {
+		case "initialize":
+			result = map[string]any{
+				"protocolVersion": "2025-03-26",
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "upstream", "version": "1.0"},
+			}
+		case "tools/list":
+			result = map[string]any{"tools": []map[string]any{{
+				"name":        toolName,
+				"description": "Returns pong",
+				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
+			}}}
+		case "tools/call":
+			result = map[string]any{"content": []map[string]any{{"type": "text", "text": "pong"}}, "isError": false}
+		default:
+			result = map[string]any{}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": result})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// seedUserMCPConnectGrant writes a server-level mcp:connect grant on the
+// user principal derived from a user-session JWT subject. A server-level
+// selector (resource id, no tool dimension) admits any tool on the server,
+// so it survives both the tools/list filter and the tools/call authz check.
+func seedUserMCPConnectGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, serverID string) {
+	t.Helper()
+
+	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, serverID).MarshalJSON()
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
+		Scope:          string(authz.ScopeMCPConnect),
+		Effect:         pgtype.Text{},
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+}
+
+// decodeMCPResult unmarshals a JSON-RPC response body, asserts it carries no
+// error, and returns the result object.
+func decodeMCPResult(t *testing.T, body []byte) map[string]any {
+	t.Helper()
+
+	var resp struct {
+		Result map[string]any  `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(body, &resp), "response body: %s", string(body))
+	require.Nil(t, resp.Error, "response must not surface a JSON-RPC error: %s", string(body))
+	return resp.Result
+}
+
+// TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesGrants
+// pins the AGE-2672 regression: an issuer-gated, private, remote-backed MCP
+// endpoint served to an RBAC-enforced caller must prepare authz grants
+// before the proxy's private-visibility mcp:connect interceptors run.
+//
+// Before the fix, serveRemoteBackend only called authz.PrepareContext on the
+// non-issuer-gated path. For issuer-gated callers the proxy still attached
+// the tools/list mcp:connect filter and the tools/call authz interceptor;
+// with an enterprise org + session principal + RBAC enabled, those ran
+// FindMatched / Require against a context with no prepared grants, returned
+// ErrMissingGrants (mapped to CodeUnexpected), and the proxy substituted a
+// JSON-RPC error event — yielding zero tools and a broken tools/call even
+// though HTTP stayed 200.
+//
+// This is the first test to drive the full HTTP issuer-gated path with a
+// real user-session JWT bearer. That bearer triggers RBAC enforcement (API
+// keys, used by the engine-level RBAC tests in rpc_tools_list_test.go, bypass
+// RBAC by design), which is precisely the condition the bug needed.
+func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Mark the caller's org enterprise so authz.ShouldEnforce returns true
+	// (enterprise + session principal + the test engine's always-on RBAC
+	// flag). Without this the missing-grants path is dead — RBAC never
+	// enforces and the bug cannot reproduce.
+	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
+		GramAccountType: "enterprise",
+		ID:              authCtx.ActiveOrganizationID,
+	}))
+
+	const toolName = "ping"
+	upstream := newStatelessRemoteMCPUpstream(t, toolName)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	endpointSlug := "endpoint-" + uuid.NewString()
+	_, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
+
+	// Grant the calling user a server-level mcp:connect grant. PrepareContext
+	// derives the user principal from the JWT subject (an active org member)
+	// and loads this grant; the interceptors then admit the tool. The grant
+	// resource is the remote_mcp_servers id — the resource the proxy's
+	// mcp:connect interceptors check (see ProxyManager.Build).
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, remoteServer.ID.String())
+
+	// Mint a user-session JWT for the issuer-gated endpoint. The audience is
+	// the issuer URN (remote-backed endpoints bind the audience to the
+	// issuer, not the backend id). Subject is the dev user, an active member
+	// of the org, so PrepareContext can resolve principals.
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
+		urn.NewUserSubject(mockidp.MockUserID),
+		urn.NewUserSessionIssuer(issuerID).String(),
+		ti.serverURL.String()+"/x/mcp/"+endpointSlug,
+		time.Hour,
+	)
+	require.NoError(t, err)
+
+	// A plain context (no session auth) so the only credential is the bearer
+	// JWT, exactly as a real Remote MCP client would present it.
+	initResp, err := servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, initResp.Code, "initialize: %s", initResp.Body.String())
+
+	listResp, err := servePublicHTTP(t, context.Background(), ti, endpointSlug, makeToolsListBody(), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, listResp.Code, "tools/list: %s", listResp.Body.String())
+
+	// Regression assertion: before the fix the mcp:connect filter ran
+	// FindMatched against a context with no prepared grants, returned
+	// ErrMissingGrants -> CodeUnexpected, and the proxy substituted a
+	// JSON-RPC error event yielding zero tools. After the fix grants are
+	// prepared and the granted tool survives the filter.
+	listResult := decodeMCPResult(t, listResp.Body.Bytes())
+	tools, ok := listResult["tools"].([]any)
+	require.True(t, ok, "tools/list result must carry a tools array: %s", listResp.Body.String())
+	require.Len(t, tools, 1, "the granted tool must survive the mcp:connect filter")
+
+	// tools/call is gated by the same grants via ToolsCallAuthzInterceptor —
+	// it must also succeed now that grants are prepared.
+	callBody, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      3,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": toolName, "arguments": map[string]any{}},
+	})
+	require.NoError(t, err)
+	callResp, err := servePublicHTTP(t, context.Background(), ti, endpointSlug, callBody, token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, callResp.Code, "tools/call: %s", callResp.Body.String())
+	decodeMCPResult(t, callResp.Body.Bytes())
 }

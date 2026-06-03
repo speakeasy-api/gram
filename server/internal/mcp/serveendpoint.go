@@ -311,12 +311,29 @@ func (s *Service) serveRemoteBackend(
 			if !ok || authCtx == nil || project.OrganizationID != authCtx.ActiveOrganizationID {
 				return oops.C(oops.CodeUnauthorized)
 			}
+		}
 
-			var prepErr error
-			ctx, prepErr = s.authz.PrepareContext(ctx)
-			if prepErr != nil {
-				return oops.E(oops.CodeUnexpected, prepErr, "load access grants").Log(ctx, logger)
-			}
+		// Prepare RBAC grants for both the issuer-gated and non-issuer-gated
+		// paths. The proxy attaches the private-visibility mcp:connect
+		// interceptors (tools/list filter, tools/call authz) regardless of how
+		// the caller authenticated, and for RBAC-enforced callers those run
+		// FindMatched / Require, which fail with ErrMissingGrants unless grants
+		// are in context. Issuer-gated callers were authenticated by
+		// ApplyIssuerGate, which stamps the principal but does not load grants,
+		// so without this they hit that failure (AGE-2672). PrepareContext runs
+		// after the non-issuer-gated identity auth above has stamped the auth
+		// context, and is a no-op for callers RBAC never enforces.
+		var prepErr error
+		ctx, prepErr = s.authz.PrepareContext(ctx)
+		if prepErr != nil {
+			return oops.E(oops.CodeUnexpected, prepErr, "load access grants").Log(ctx, logger)
+		}
+
+		// Non-issuer-gated callers get an upfront mcp:connect fail-fast before
+		// the proxy. Issuer-gated callers rely on the per-tool response/request
+		// interceptors instead, which is acceptable since the JWT
+		// audience/issuer is already bound to the endpoint's project.
+		if !issuerGated {
 			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: mcpServer.ID.String(), Dimensions: nil}); err != nil {
 				return err
 			}
