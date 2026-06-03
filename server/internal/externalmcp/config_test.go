@@ -394,6 +394,30 @@ func TestBuildHeadersWithOAuthToken(t *testing.T) {
 				"Authorization": "Bearer oauth-token",
 			},
 		},
+		{
+			name:       "config Authorization wins over oauth token",
+			systemEnv:  map[string]string{"gong_authorization": "Basic dXNlcjpwYXNz"},
+			userConfig: map[string]string{},
+			headerDefs: []HeaderDefinition{
+				{Name: "gong_authorization", HeaderName: "Authorization"},
+			},
+			oauthToken: "gating-oauth-token",
+			expected: map[string]string{
+				"Authorization": "Basic dXNlcjpwYXNz",
+			},
+		},
+		{
+			name:       "user config Authorization wins over oauth token",
+			systemEnv:  map[string]string{},
+			userConfig: map[string]string{"gong_authorization": "Basic dXNlcjpwYXNz"},
+			headerDefs: []HeaderDefinition{
+				{Name: "gong_authorization", HeaderName: "Authorization"},
+			},
+			oauthToken: "gating-oauth-token",
+			expected: map[string]string{
+				"Authorization": "Basic dXNlcjpwYXNz",
+			},
+		},
 	}
 
 	for _, tt := range tests {

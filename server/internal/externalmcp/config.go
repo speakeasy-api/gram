@@ -9,12 +9,13 @@ import (
 // BuildHeaders constructs HTTP headers from system environment variables and user configuration.
 //
 // Logic:
-// 1. ALL system env values become headers using the appropriate header names.
-// 2. For keys with header definitions, use the definition's HeaderName.
-// 3. For keys without definitions, derive the header name using ToHTTPHeader.
-// 4. User config can override values (only for keys with header definitions).
-// 5. Empty values are skipped.
-// 6. If oauthToken is provided, sets Authorization: Bearer <token>.
+//  1. ALL system env values become headers using the appropriate header names.
+//  2. For keys with header definitions, use the definition's HeaderName.
+//  3. For keys without definitions, derive the header name using ToHTTPHeader.
+//  4. User config can override values (only for keys with header definitions).
+//  5. Empty values are skipped.
+//  6. If oauthToken is provided and no Authorization header was already set from
+//     config, sets Authorization: Bearer <token>.
 func BuildHeaders(
 	systemEnv *toolconfig.CaseInsensitiveEnv,
 	userConfig *toolconfig.CaseInsensitiveEnv,
@@ -66,9 +67,13 @@ func BuildHeaders(
 		}
 	}
 
-	// Set Authorization header from OAuth token if provided
+	// Forward the gating OAuth token only when config did not already provide an
+	// explicit Authorization. A configured static credential (e.g. "Basic ...")
+	// for the upstream must win over the forwarded gating token.
 	if oauthToken != "" {
-		headers["Authorization"] = "Bearer " + oauthToken
+		if _, ok := headers["Authorization"]; !ok {
+			headers["Authorization"] = "Bearer " + oauthToken
+		}
 	}
 
 	return headers
