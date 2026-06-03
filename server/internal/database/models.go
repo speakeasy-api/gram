@@ -1223,6 +1223,7 @@ type RiskPolicy struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
+	MessageTypes         []string
 	Action               string
 	AudienceType         string
 	AutoName             bool

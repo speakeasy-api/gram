@@ -2759,6 +2759,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
+  message_types TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
