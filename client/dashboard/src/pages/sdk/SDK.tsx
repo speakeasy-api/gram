@@ -112,7 +112,7 @@ export const SdkContent = ({
   let heading = (
     <div className="flex items-end justify-between gap-4">
       <Type variant="subheading">
-        Use Gram MCP servers to build agentic workflows in many popular
+        Use platform MCP servers to build agentic workflows in many popular
         frameworks
       </Type>
       {langFrameworkDropdowns}

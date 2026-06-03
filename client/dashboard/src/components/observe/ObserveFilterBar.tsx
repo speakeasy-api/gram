@@ -1,4 +1,5 @@
-import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import type { TypesToInclude } from "@gram/client/models/components";
 import { useMemo, useState } from "react";
 import { ChevronDown, Check } from "lucide-react";

@@ -12,8 +12,12 @@ package types
 type McpMetadata struct {
 	// The ID of the metadata record
 	ID string
-	// The toolset associated with this install page metadata
-	ToolsetID string
+	// The toolset associated with this install page metadata. Mutually exclusive
+	// with mcp_server_id.
+	ToolsetID *string
+	// The MCP server associated with this install page metadata. Mutually
+	// exclusive with toolset_id.
+	McpServerID *string
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string
 	// A link to external documentation for the MCP install page

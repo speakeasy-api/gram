@@ -35,6 +35,7 @@ func (stubTemporalRun) GetRunID() string { return "run" }
 type stubTemporalClient struct {
 	registrationCalls int
 	deletionCalls     int
+	updateCalls       int
 	lastDomain        string
 }
 
@@ -42,7 +43,7 @@ func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, 
 	return nil, nil
 }
 
-func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind) (client.WorkflowRun, error) {
+func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.registrationCalls++
 	s.lastDomain = domain
 	return stubTemporalRun{}, nil
@@ -50,6 +51,12 @@ func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context
 
 func (s *stubTemporalClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, _ k8s.ProvisionerKind) (client.WorkflowRun, error) {
 	s.deletionCalls++
+	s.lastDomain = domain
+	return stubTemporalRun{}, nil
+}
+
+func (s *stubTemporalClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
+	s.updateCalls++
 	s.lastDomain = domain
 	return stubTemporalRun{}, nil
 }

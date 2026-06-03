@@ -573,6 +573,10 @@ CREATE INDEX IF NOT EXISTS trigger_instances_environment_id_idx
 ON trigger_instances (environment_id)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
+ON trigger_instances (project_id, target_ref)
+WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
@@ -612,6 +616,8 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   cert_secret_name TEXT,
   -- Discriminates which K8s API provisioned this domain. Gateway rows write NULL cert_secret_name.
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
+  -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
+  ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -949,6 +955,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_key
 ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS tool_variations_groups (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
+  description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tool_variations_groups_pkey PRIMARY KEY (id),
+  CONSTRAINT tool_variations_groups_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -974,6 +996,11 @@ CREATE TABLE IF NOT EXISTS toolsets (
   -- behaviour is gated only when this is set, so legacy paths stay unchanged.
   user_session_issuer_id uuid,
 
+  -- Optionally enables a variations group for runtime filtering and
+  -- modifications. Otherwise defaults to project global (source-level)
+  -- variations for runtime modifications.
+  tool_variations_group_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -985,6 +1012,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_exclusivity CHECK ((external_oauth_server_id IS NULL) != (oauth_proxy_server_id IS NULL) OR (external_oauth_server_id IS NULL AND oauth_proxy_server_id IS NULL))
 );
 
@@ -1132,6 +1160,27 @@ CREATE TABLE IF NOT EXISTS assistants (
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
+
+-- project_managed_assistants maps a project to its single platform-managed
+-- assistant (the one powering the AI Insights sidebar). Kept in its own table
+-- rather than a flag on assistants/projects so the relation has an explicit
+-- lifecycle: the row exists only while the feature is toggled on for the
+-- project, and cascades away when either the project or the assistant is
+-- removed. project_id is the primary key, enforcing 0-or-1 managed assistant
+-- per project.
+CREATE TABLE IF NOT EXISTS project_managed_assistants (
+  project_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT project_managed_assistants_pkey PRIMARY KEY (project_id),
+  CONSTRAINT project_managed_assistants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT project_managed_assistants_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS project_managed_assistants_assistant_id_idx ON project_managed_assistants (assistant_id);
 
 CREATE TABLE IF NOT EXISTS assistant_toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1433,22 +1482,6 @@ CREATE TABLE IF NOT EXISTS slack_registrations (
 
   CONSTRAINT slack_registrations_slack_app_id_fkey FOREIGN KEY (slack_app_id) REFERENCES slack_apps (id) ON DELETE CASCADE,
   CONSTRAINT slack_registrations_slack_app_id_slack_account_id_key UNIQUE (slack_app_id, slack_account_id)
-);
-
-CREATE TABLE IF NOT EXISTS tool_variations_groups (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
-  description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT tool_variations_groups_pkey PRIMARY KEY (id),
-  CONSTRAINT tool_variations_groups_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS project_tool_variations (
@@ -1983,27 +2016,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_collect
   ON organization_mcp_collection_registries (collection_id)
   WHERE deleted IS FALSE;
 
--- Join table linking servers to collections (for catalog publishing)
-CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
-  published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  published_by TEXT,
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  collection_id uuid NOT NULL,
-  toolset_id uuid NOT NULL,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT organization_mcp_collection_server_attachments_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_mcp_collection_server_attachments_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
-  CONSTRAINT organization_mcp_collection_server_attachments_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_toolset_key
-  ON organization_mcp_collection_server_attachments (collection_id, toolset_id)
-  WHERE deleted IS FALSE;
-
 CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
@@ -2424,6 +2436,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   user_session_issuer_id uuid,
   remote_mcp_server_id uuid,
   toolset_id uuid,
+  -- Optionally enables a variations group for runtime filtering and
+  -- modifications. Otherwise defaults to project global (source-level)
+  -- variations for runtime modifications.
+  tool_variations_group_id uuid,
   visibility TEXT NOT NULL CHECK (visibility <> ''),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2437,6 +2453,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
+  CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   -- Exactly one backend must be set: either a remote MCP server or a toolset.
   CONSTRAINT mcp_servers_backend_exclusivity_check CHECK ((remote_mcp_server_id IS NULL) != (toolset_id IS NULL))
 );
@@ -2456,6 +2473,35 @@ WHERE remote_mcp_server_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)
 WHERE toolset_id IS NOT NULL;
+
+-- Join table linking servers to collections (for catalog publishing)
+CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
+  published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  published_by TEXT,
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  collection_id uuid NOT NULL,
+  toolset_id uuid,
+  mcp_server_id uuid,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT organization_mcp_collection_server_attachments_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_mcp_collection_server_attachments_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
+  CONSTRAINT organization_mcp_collection_server_attachments_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT organization_mcp_collection_server_attachments_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
+  -- Exactly one backend must be set: either a toolset or an mcp_server.
+  CONSTRAINT organization_mcp_collection_server_attachments_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_toolset_key
+  ON organization_mcp_collection_server_attachments (collection_id, toolset_id)
+  WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_mcp_server_key
+  ON organization_mcp_collection_server_attachments (collection_id, mcp_server_id)
+  WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
@@ -2626,6 +2672,11 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
   ON plugin_assignments (plugin_id, principal_urn);
 
+-- Read-side index for the device-agent endpoint, which resolves an
+-- organization to its assignments by principal URN on every poll.
+CREATE INDEX IF NOT EXISTS plugin_assignments_organization_id_principal_urn_idx
+  ON plugin_assignments (organization_id, principal_urn);
+
 -- Tracks the GitHub repository where plugin packages are published for a project.
 CREATE TABLE IF NOT EXISTS plugin_github_connections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2639,6 +2690,13 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   -- existing connections (and any future connection without the marketplace
   -- surface enabled) are unconstrained.
   marketplace_token TEXT,
+  -- Stable content hash of the plugin packages last published to this repo,
+  -- independent of per-publish values (manifest version, injected API keys).
+  -- The automated generator rollout compares the current fingerprint against
+  -- this value and skips republishing when nothing has changed. Nullable so
+  -- connections published before fingerprinting existed re-publish once to
+  -- backfill it.
+  published_fingerprint TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2701,7 +2759,9 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
+  message_types TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
+  audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
   version BIGINT NOT NULL,
@@ -2712,12 +2772,17 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
   CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policies_audience_type_check CHECK (audience_type IN ('everyone', 'targeted')),
   CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policies_project_id_audience_type_idx
+ON risk_policies (project_id, audience_type)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (

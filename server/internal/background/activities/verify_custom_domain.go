@@ -69,6 +69,7 @@ type VerifyCustomDomainArgs struct {
 	CreatedBy       urn.Principal
 	CreatedByName   *string
 	ProvisionerKind k8s.ProvisionerKind
+	IPAllowlist     []string
 }
 
 var prohibitedDomainRoots = []string{"getgram.ai", "speakeasy.com", "speakeasyapi.dev"}
@@ -104,12 +105,17 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		if kind == "" {
 			kind = k8s.ProvisionerKindIngress
 		}
+		ipAllowlist := args.IPAllowlist
+		if ipAllowlist == nil {
+			ipAllowlist = []string{}
+		}
 		domain, err = cdr.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
 			OrganizationID:  args.OrgID,
 			Domain:          args.Domain,
 			IngressName:     conv.PtrToPGText(nil),
 			CertSecretName:  conv.PtrToPGText(nil),
 			ProvisionerKind: string(kind),
+			IpAllowlist:     ipAllowlist,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error creating custom domain").Log(ctx, d.logger)

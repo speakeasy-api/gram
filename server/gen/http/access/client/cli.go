@@ -137,9 +137,16 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 	{
 		err = json.Unmarshal([]byte(accessUpdateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"effect\": \"deny\",\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"add_grants\": [\n         {\n            \"effect\": \"deny\",\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"description\": \"abc123\",\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"remove_grants\": [\n         {\n            \"effect\": \"deny\",\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ]\n   }'")
 		}
-		for _, e := range body.Grants {
+		for _, e := range body.AddGrants {
+			if e != nil {
+				if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		for _, e := range body.RemoveGrants {
 			if e != nil {
 				if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
@@ -167,14 +174,24 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 		Name:        body.Name,
 		Description: body.Description,
 	}
-	if body.Grants != nil {
-		v.Grants = make([]*access.RoleGrant, len(body.Grants))
-		for i, val := range body.Grants {
+	if body.AddGrants != nil {
+		v.AddGrants = make([]*access.RoleGrant, len(body.AddGrants))
+		for i, val := range body.AddGrants {
 			if val == nil {
-				v.Grants[i] = nil
+				v.AddGrants[i] = nil
 				continue
 			}
-			v.Grants[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
+			v.AddGrants[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	}
+	if body.RemoveGrants != nil {
+		v.RemoveGrants = make([]*access.RoleGrant, len(body.RemoveGrants))
+		for i, val := range body.RemoveGrants {
+			if val == nil {
+				v.RemoveGrants[i] = nil
+				continue
+			}
+			v.RemoveGrants[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
 		}
 	}
 	if body.MemberIds != nil {

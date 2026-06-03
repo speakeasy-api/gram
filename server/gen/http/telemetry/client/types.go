@@ -114,6 +114,19 @@ type GetUserMetricsSummaryRequestBody struct {
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 }
 
+// GetEmployeeDataFlowGraphRequestBody is the type of the "telemetry" service
+// "getEmployeeDataFlowGraph" endpoint HTTP request body.
+type GetEmployeeDataFlowGraphRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+	// User ID to get the graph for (mutually exclusive with external_user_id)
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// External user ID to get the graph for (mutually exclusive with user_id)
+	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+}
+
 // GetObservabilityOverviewRequestBody is the type of the "telemetry" service
 // "getObservabilityOverview" endpoint HTTP request body.
 type GetObservabilityOverviewRequestBody struct {
@@ -260,6 +273,15 @@ type GetProjectMetricsSummaryResponseBody struct {
 type GetUserMetricsSummaryResponseBody struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummaryResponseBody `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphResponseBody is the type of the "telemetry" service
+// "getEmployeeDataFlowGraph" endpoint HTTP response body.
+type GetEmployeeDataFlowGraphResponseBody struct {
+	// Graph nodes grouped by tier
+	Nodes []*EmployeeDataFlowNodeResponseBody `form:"nodes,omitempty" json:"nodes,omitempty" xml:"nodes,omitempty"`
+	// Weighted graph edges between adjacent populated tiers
+	Edges []*EmployeeDataFlowEdgeResponseBody `form:"edges,omitempty" json:"edges,omitempty" xml:"edges,omitempty"`
 }
 
 // GetObservabilityOverviewResponseBody is the type of the "telemetry" service
@@ -1613,6 +1635,196 @@ type GetUserMetricsSummaryUnexpectedResponseBody struct {
 // service "getUserMetricsSummary" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetUserMetricsSummaryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphUnauthorizedResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetEmployeeDataFlowGraphUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphForbiddenResponseBody is the type of the "telemetry"
+// service "getEmployeeDataFlowGraph" endpoint HTTP response body for the
+// "forbidden" error.
+type GetEmployeeDataFlowGraphForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphBadRequestResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "bad_request" error.
+type GetEmployeeDataFlowGraphBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphNotFoundResponseBody is the type of the "telemetry"
+// service "getEmployeeDataFlowGraph" endpoint HTTP response body for the
+// "not_found" error.
+type GetEmployeeDataFlowGraphNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphConflictResponseBody is the type of the "telemetry"
+// service "getEmployeeDataFlowGraph" endpoint HTTP response body for the
+// "conflict" error.
+type GetEmployeeDataFlowGraphConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetEmployeeDataFlowGraphUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphInvalidResponseBody is the type of the "telemetry"
+// service "getEmployeeDataFlowGraph" endpoint HTTP response body for the
+// "invalid" error.
+type GetEmployeeDataFlowGraphInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphInvariantViolationResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetEmployeeDataFlowGraphInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphUnexpectedResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "unexpected" error.
+type GetEmployeeDataFlowGraphUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEmployeeDataFlowGraphGatewayErrorResponseBody is the type of the
+// "telemetry" service "getEmployeeDataFlowGraph" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetEmployeeDataFlowGraphGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3079,6 +3291,39 @@ type ModelUsageResponseBody struct {
 	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
 }
 
+// EmployeeDataFlowNodeResponseBody is used to define fields on response body
+// types.
+type EmployeeDataFlowNodeResponseBody struct {
+	// Stable node ID
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Graph tier. Origin nodes identify the hostname or client context that
+	// started the call, not the MCP server URL.
+	Tier *string `form:"tier,omitempty" json:"tier,omitempty" xml:"tier,omitempty"`
+	// Display label
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// Total calls involving this node
+	TotalCalls *int64 `form:"total_calls,omitempty" json:"total_calls,omitempty" xml:"total_calls,omitempty"`
+	// Server classification, present for MCP server nodes
+	ServerClass *string `form:"server_class,omitempty" json:"server_class,omitempty" xml:"server_class,omitempty"`
+}
+
+// EmployeeDataFlowEdgeResponseBody is used to define fields on response body
+// types.
+type EmployeeDataFlowEdgeResponseBody struct {
+	// Stable edge ID
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Source node ID
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Target node ID
+	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
+	// Total calls represented by this edge
+	CallCount *int64 `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+	// Successful calls represented by this edge
+	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
+	// Failed or blocked calls represented by this edge
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+}
+
 // ObservabilitySummaryResponseBody is used to define fields on response body
 // types.
 type ObservabilitySummaryResponseBody struct {
@@ -3514,6 +3759,19 @@ func NewGetUserMetricsSummaryRequestBody(p *telemetry.GetUserMetricsSummaryPaylo
 		ExternalUserID: p.ExternalUserID,
 		EventSource:    p.EventSource,
 		HookSource:     p.HookSource,
+	}
+	return body
+}
+
+// NewGetEmployeeDataFlowGraphRequestBody builds the HTTP request body from the
+// payload of the "getEmployeeDataFlowGraph" endpoint of the "telemetry"
+// service.
+func NewGetEmployeeDataFlowGraphRequestBody(p *telemetry.GetEmployeeDataFlowGraphPayload) *GetEmployeeDataFlowGraphRequestBody {
+	body := &GetEmployeeDataFlowGraphRequestBody{
+		From:           p.From,
+		To:             p.To,
+		UserID:         p.UserID,
+		ExternalUserID: p.ExternalUserID,
 	}
 	return body
 }
@@ -4802,6 +5060,180 @@ func NewGetUserMetricsSummaryGatewayError(body *GetUserMetricsSummaryGatewayErro
 	return v
 }
 
+// NewGetEmployeeDataFlowGraphResultOK builds a "telemetry" service
+// "getEmployeeDataFlowGraph" endpoint result from a HTTP "OK" response.
+func NewGetEmployeeDataFlowGraphResultOK(body *GetEmployeeDataFlowGraphResponseBody) *telemetry.GetEmployeeDataFlowGraphResult {
+	v := &telemetry.GetEmployeeDataFlowGraphResult{}
+	v.Nodes = make([]*telemetry.EmployeeDataFlowNode, len(body.Nodes))
+	for i, val := range body.Nodes {
+		if val == nil {
+			v.Nodes[i] = nil
+			continue
+		}
+		v.Nodes[i] = unmarshalEmployeeDataFlowNodeResponseBodyToTelemetryEmployeeDataFlowNode(val)
+	}
+	v.Edges = make([]*telemetry.EmployeeDataFlowEdge, len(body.Edges))
+	for i, val := range body.Edges {
+		if val == nil {
+			v.Edges[i] = nil
+			continue
+		}
+		v.Edges[i] = unmarshalEmployeeDataFlowEdgeResponseBodyToTelemetryEmployeeDataFlowEdge(val)
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphUnauthorized builds a telemetry service
+// getEmployeeDataFlowGraph endpoint unauthorized error.
+func NewGetEmployeeDataFlowGraphUnauthorized(body *GetEmployeeDataFlowGraphUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphForbidden builds a telemetry service
+// getEmployeeDataFlowGraph endpoint forbidden error.
+func NewGetEmployeeDataFlowGraphForbidden(body *GetEmployeeDataFlowGraphForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphBadRequest builds a telemetry service
+// getEmployeeDataFlowGraph endpoint bad_request error.
+func NewGetEmployeeDataFlowGraphBadRequest(body *GetEmployeeDataFlowGraphBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphNotFound builds a telemetry service
+// getEmployeeDataFlowGraph endpoint not_found error.
+func NewGetEmployeeDataFlowGraphNotFound(body *GetEmployeeDataFlowGraphNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphConflict builds a telemetry service
+// getEmployeeDataFlowGraph endpoint conflict error.
+func NewGetEmployeeDataFlowGraphConflict(body *GetEmployeeDataFlowGraphConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphUnsupportedMedia builds a telemetry service
+// getEmployeeDataFlowGraph endpoint unsupported_media error.
+func NewGetEmployeeDataFlowGraphUnsupportedMedia(body *GetEmployeeDataFlowGraphUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphInvalid builds a telemetry service
+// getEmployeeDataFlowGraph endpoint invalid error.
+func NewGetEmployeeDataFlowGraphInvalid(body *GetEmployeeDataFlowGraphInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphInvariantViolation builds a telemetry service
+// getEmployeeDataFlowGraph endpoint invariant_violation error.
+func NewGetEmployeeDataFlowGraphInvariantViolation(body *GetEmployeeDataFlowGraphInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphUnexpected builds a telemetry service
+// getEmployeeDataFlowGraph endpoint unexpected error.
+func NewGetEmployeeDataFlowGraphUnexpected(body *GetEmployeeDataFlowGraphUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEmployeeDataFlowGraphGatewayError builds a telemetry service
+// getEmployeeDataFlowGraph endpoint gateway_error error.
+func NewGetEmployeeDataFlowGraphGatewayError(body *GetEmployeeDataFlowGraphGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetObservabilityOverviewResultOK builds a "telemetry" service
 // "getObservabilityOverview" endpoint result from a HTTP "OK" response.
 func NewGetObservabilityOverviewResultOK(body *GetObservabilityOverviewResponseBody) *telemetry.GetObservabilityOverviewResult {
@@ -5966,6 +6398,32 @@ func ValidateGetUserMetricsSummaryResponseBody(body *GetUserMetricsSummaryRespon
 	if body.Metrics != nil {
 		if err2 := ValidateProjectSummaryResponseBody(body.Metrics); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphResponseBody runs the validations defined on
+// GetEmployeeDataFlowGraphResponseBody
+func ValidateGetEmployeeDataFlowGraphResponseBody(body *GetEmployeeDataFlowGraphResponseBody) (err error) {
+	if body.Nodes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("nodes", "body"))
+	}
+	if body.Edges == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("edges", "body"))
+	}
+	for _, e := range body.Nodes {
+		if e != nil {
+			if err2 := ValidateEmployeeDataFlowNodeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Edges {
+		if e != nil {
+			if err2 := ValidateEmployeeDataFlowEdgeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -7841,6 +8299,248 @@ func ValidateGetUserMetricsSummaryUnexpectedResponseBody(body *GetUserMetricsSum
 // ValidateGetUserMetricsSummaryGatewayErrorResponseBody runs the validations
 // defined on getUserMetricsSummary_gateway_error_response_body
 func ValidateGetUserMetricsSummaryGatewayErrorResponseBody(body *GetUserMetricsSummaryGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphUnauthorizedResponseBody runs the
+// validations defined on getEmployeeDataFlowGraph_unauthorized_response_body
+func ValidateGetEmployeeDataFlowGraphUnauthorizedResponseBody(body *GetEmployeeDataFlowGraphUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphForbiddenResponseBody runs the validations
+// defined on getEmployeeDataFlowGraph_forbidden_response_body
+func ValidateGetEmployeeDataFlowGraphForbiddenResponseBody(body *GetEmployeeDataFlowGraphForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphBadRequestResponseBody runs the validations
+// defined on getEmployeeDataFlowGraph_bad_request_response_body
+func ValidateGetEmployeeDataFlowGraphBadRequestResponseBody(body *GetEmployeeDataFlowGraphBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphNotFoundResponseBody runs the validations
+// defined on getEmployeeDataFlowGraph_not_found_response_body
+func ValidateGetEmployeeDataFlowGraphNotFoundResponseBody(body *GetEmployeeDataFlowGraphNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphConflictResponseBody runs the validations
+// defined on getEmployeeDataFlowGraph_conflict_response_body
+func ValidateGetEmployeeDataFlowGraphConflictResponseBody(body *GetEmployeeDataFlowGraphConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphUnsupportedMediaResponseBody runs the
+// validations defined on
+// getEmployeeDataFlowGraph_unsupported_media_response_body
+func ValidateGetEmployeeDataFlowGraphUnsupportedMediaResponseBody(body *GetEmployeeDataFlowGraphUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphInvalidResponseBody runs the validations
+// defined on getEmployeeDataFlowGraph_invalid_response_body
+func ValidateGetEmployeeDataFlowGraphInvalidResponseBody(body *GetEmployeeDataFlowGraphInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphInvariantViolationResponseBody runs the
+// validations defined on
+// getEmployeeDataFlowGraph_invariant_violation_response_body
+func ValidateGetEmployeeDataFlowGraphInvariantViolationResponseBody(body *GetEmployeeDataFlowGraphInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphUnexpectedResponseBody runs the validations
+// defined on getEmployeeDataFlowGraph_unexpected_response_body
+func ValidateGetEmployeeDataFlowGraphUnexpectedResponseBody(body *GetEmployeeDataFlowGraphUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEmployeeDataFlowGraphGatewayErrorResponseBody runs the
+// validations defined on getEmployeeDataFlowGraph_gateway_error_response_body
+func ValidateGetEmployeeDataFlowGraphGatewayErrorResponseBody(body *GetEmployeeDataFlowGraphGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9750,6 +10450,58 @@ func ValidateModelUsageResponseBody(body *ModelUsageResponseBody) (err error) {
 	}
 	if body.Count == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	return
+}
+
+// ValidateEmployeeDataFlowNodeResponseBody runs the validations defined on
+// EmployeeDataFlowNodeResponseBody
+func ValidateEmployeeDataFlowNodeResponseBody(body *EmployeeDataFlowNodeResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Tier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tier", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.TotalCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_calls", "body"))
+	}
+	if body.Tier != nil {
+		if !(*body.Tier == "origin" || *body.Tier == "client" || *body.Tier == "server" || *body.Tier == "tool") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tier", *body.Tier, []any{"origin", "client", "server", "tool"}))
+		}
+	}
+	if body.ServerClass != nil {
+		if !(*body.ServerClass == "gram" || *body.ServerClass == "external" || *body.ServerClass == "local") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.server_class", *body.ServerClass, []any{"gram", "external", "local"}))
+		}
+	}
+	return
+}
+
+// ValidateEmployeeDataFlowEdgeResponseBody runs the validations defined on
+// EmployeeDataFlowEdgeResponseBody
+func ValidateEmployeeDataFlowEdgeResponseBody(body *EmployeeDataFlowEdgeResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	if body.SuccessCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("success_count", "body"))
+	}
+	if body.FailureCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
 	}
 	return
 }

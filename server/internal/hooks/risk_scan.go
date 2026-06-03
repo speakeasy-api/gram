@@ -29,7 +29,12 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	text := extractClaudeText(payload)
+	hookEvent, ok := parseClaudeHookEvent(payload.HookEventName)
+	if !ok {
+		return nil
+	}
+
+	text := extractClaudeText(payload, hookEvent)
 	if text == "" {
 		return nil
 	}
@@ -78,7 +83,12 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	text := extractCursorText(payload)
+	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
+	if !ok {
+		return nil
+	}
+
+	text := extractCursorText(payload, hookEvent)
 	if text == "" {
 		return nil
 	}
@@ -107,7 +117,12 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	text := extractCodexText(payload)
+	hookEvent, ok := parseCodexHookEvent(payload.HookEventName)
+	if !ok {
+		return nil
+	}
+
+	text := extractCodexText(payload, hookEvent)
 	if text == "" {
 		return nil
 	}
@@ -143,13 +158,13 @@ func renderUserBlockReason(userMessage *string, auditReason string) string {
 }
 
 // extractClaudeText returns the scannable text content from a Claude hook payload.
-func extractClaudeText(payload *gen.ClaudePayload) string {
-	switch payload.HookEventName {
-	case "UserPromptSubmit":
+func extractClaudeText(payload *gen.ClaudePayload, hookEvent HookEvent) string {
+	switch hookEvent {
+	case HookEventUserPromptSubmit:
 		if payload.Prompt != nil {
 			return *payload.Prompt
 		}
-	case "PreToolUse":
+	case HookEventPreToolUse:
 		if payload.ToolInput != nil {
 			b, err := json.Marshal(payload.ToolInput)
 			if err != nil {
@@ -157,7 +172,7 @@ func extractClaudeText(payload *gen.ClaudePayload) string {
 			}
 			return string(b)
 		}
-	case "PostToolUse":
+	case HookEventPostToolUse:
 		if payload.ToolResponse != nil {
 			b, err := json.Marshal(payload.ToolResponse)
 			if err != nil {
@@ -165,18 +180,20 @@ func extractClaudeText(payload *gen.ClaudePayload) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }
 
 // extractCursorText returns the scannable text content from a Cursor hook payload.
-func extractCursorText(payload *gen.CursorPayload) string {
-	switch payload.HookEventName {
-	case "beforeSubmitPrompt":
+func extractCursorText(payload *gen.CursorPayload, hookEvent HookEvent) string {
+	switch hookEvent {
+	case HookEventBeforeSubmitPrompt:
 		if payload.Prompt != nil {
 			return *payload.Prompt
 		}
-	case "preToolUse", "beforeMCPExecution":
+	case HookEventPreToolUse, HookEventBeforeMCPExecution:
 		if payload.ToolInput != nil {
 			b, err := json.Marshal(payload.ToolInput)
 			if err != nil {
@@ -184,18 +201,20 @@ func extractCursorText(payload *gen.CursorPayload) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }
 
 // extractCodexText returns the scannable text content from a Codex hook payload.
-func extractCodexText(payload *gen.CodexPayload) string {
-	switch payload.HookEventName {
-	case "UserPromptSubmit":
+func extractCodexText(payload *gen.CodexPayload, hookEvent HookEvent) string {
+	switch hookEvent {
+	case HookEventUserPromptSubmit:
 		if payload.Prompt != nil {
 			return *payload.Prompt
 		}
-	case "PreToolUse", "PermissionRequest":
+	case HookEventPreToolUse, HookEventPermissionRequest:
 		if payload.ToolInput != nil {
 			b, err := json.Marshal(payload.ToolInput)
 			if err != nil {
@@ -203,6 +222,8 @@ func extractCodexText(payload *gen.CodexPayload) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }

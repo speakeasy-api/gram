@@ -58,7 +58,7 @@ function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
         No assistants yet
       </Type>
       <Type small muted className="mb-4 max-w-md text-center">
-        Create an assistant to let your team interact with Gram MCP servers
+        Create an assistant to let your team interact with platform MCP servers
         directly.
       </Type>
       <RequireScope
@@ -322,7 +322,7 @@ function SlackAppsInner() {
       <Page.Section>
         <Page.Section.Title>Assistants</Page.Section.Title>
         <Page.Section.Description>
-          Create and manage assistants that connect your team to Gram MCP
+          Create and manage assistants that connect your team to platform MCP
           servers in Slack.
         </Page.Section.Description>
         <Page.Section.CTA>

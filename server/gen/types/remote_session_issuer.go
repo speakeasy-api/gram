@@ -12,8 +12,10 @@ package types
 type RemoteSessionIssuer struct {
 	// The remote_session_issuer id.
 	ID string
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID string
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string
 	// Project-unique slug.
 	Slug string
 	// Issuer URL; matches the iss claim.

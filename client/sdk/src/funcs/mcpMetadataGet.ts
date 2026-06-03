@@ -31,11 +31,11 @@ import { Result } from "../types/fp.js";
  * getMcpMetadata mcpMetadata
  *
  * @remarks
- * Fetch the metadata that powers the MCP install page.
+ * Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
  */
 export function mcpMetadataGet(
   client: GramCore,
-  request: operations.GetMcpMetadataRequest,
+  request?: operations.GetMcpMetadataRequest | undefined,
   security?: operations.GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function mcpMetadataGet(
 
 async function $do(
   client: GramCore,
-  request: operations.GetMcpMetadataRequest,
+  request?: operations.GetMcpMetadataRequest | undefined,
   security?: operations.GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -84,7 +84,11 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.GetMcpMetadataRequest$outboundSchema, value),
+    (value) =>
+      z.parse(
+        z.optional(operations.GetMcpMetadataRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -96,20 +100,21 @@ async function $do(
   const path = pathToFunc("/rpc/mcpMetadata.get")();
 
   const query = encodeFormQuery({
-    "toolset_slug": payload.toolset_slug,
+    "mcp_server_id": payload?.mcp_server_id,
+    "toolset_slug": payload?.toolset_slug,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

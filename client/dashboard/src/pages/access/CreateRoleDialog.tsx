@@ -164,6 +164,140 @@ function getDenyPanels(allowLevel: string | null): ActivePanel[] {
   }
 }
 
+function sdkGrantsFromForm(grants: Record<string, RoleGrant>): SdkRoleGrant[] {
+  const sdkGrants: SdkRoleGrant[] = [];
+
+  for (const grant of Object.values(grants)) {
+    const allowSelectors: Selector[] = [];
+    const denySelectors: Selector[] = [];
+    let hasUnrestrictedAllow = false;
+
+    for (const rule of grant.rules) {
+      if (rule.effect === "allow") {
+        if (rule.selectors === null) hasUnrestrictedAllow = true;
+        else if (rule.selectors.length > 0) {
+          allowSelectors.push(...rule.selectors);
+        }
+      } else if (rule.selectors && rule.selectors.length > 0) {
+        denySelectors.push(...rule.selectors);
+      }
+    }
+
+    if (!hasUnrestrictedAllow && allowSelectors.length === 0) continue;
+
+    sdkGrants.push({
+      scope: grant.scope,
+      selectors: hasUnrestrictedAllow ? undefined : allowSelectors,
+    });
+
+    if (denySelectors.length > 0) {
+      sdkGrants.push({
+        scope: grant.scope,
+        effect: "deny",
+        selectors: denySelectors,
+      });
+    }
+  }
+
+  return sdkGrants;
+}
+
+type GrantIdentity = {
+  scope: SdkRoleGrant["scope"];
+  effect: "allow" | "deny";
+  selector?: Selector;
+};
+
+function selectorKey(selector: Selector | undefined): string {
+  if (!selector) return "*";
+  return JSON.stringify({
+    disposition: selector.disposition ?? "",
+    projectId: selector.projectId ?? "",
+    resourceId: selector.resourceId,
+    resourceKind: selector.resourceKind,
+    tool: selector.tool ?? "",
+  });
+}
+
+function grantIdentityKey(identity: GrantIdentity): string {
+  return `${identity.scope}\x00${identity.effect}\x00${selectorKey(identity.selector)}`;
+}
+
+function grantIdentities(grants: SdkRoleGrant[]): GrantIdentity[] {
+  return grants.flatMap((grant) => {
+    const effect = (grant.effect ?? "allow") as "allow" | "deny";
+    if (!grant.selectors || grant.selectors.length === 0) {
+      return [{ scope: grant.scope, effect }];
+    }
+    return grant.selectors.map((selector) => ({
+      scope: grant.scope,
+      effect,
+      selector: selector as Selector,
+    }));
+  });
+}
+
+function grantsFromIdentities(identities: GrantIdentity[]): SdkRoleGrant[] {
+  const unrestricted: SdkRoleGrant[] = [];
+  const grouped = new Map<string, SdkRoleGrant>();
+
+  for (const identity of identities) {
+    if (!identity.selector) {
+      unrestricted.push({
+        scope: identity.scope,
+        effect: identity.effect === "deny" ? "deny" : undefined,
+        selectors: undefined,
+      });
+      continue;
+    }
+
+    const key = `${identity.scope}\x00${identity.effect}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.selectors = [...(existing.selectors ?? []), identity.selector];
+      continue;
+    }
+
+    grouped.set(key, {
+      scope: identity.scope,
+      effect: identity.effect === "deny" ? "deny" : undefined,
+      selectors: [identity.selector],
+    });
+  }
+
+  return [...unrestricted, ...grouped.values()];
+}
+
+function diffGrants(
+  before: SdkRoleGrant[],
+  after: SdkRoleGrant[],
+): { addGrants: SdkRoleGrant[]; removeGrants: SdkRoleGrant[] } {
+  const beforeByKey = new Map(
+    grantIdentities(before).map((identity) => [
+      grantIdentityKey(identity),
+      identity,
+    ]),
+  );
+  const afterByKey = new Map(
+    grantIdentities(after).map((identity) => [
+      grantIdentityKey(identity),
+      identity,
+    ]),
+  );
+
+  const addIdentities = [...afterByKey]
+    .filter(([key]) => !beforeByKey.has(key))
+    .map(([, identity]) => identity);
+  const removeIdentities = [...beforeByKey]
+    .filter(([key]) => !afterByKey.has(key))
+    .map(([, identity]) => identity);
+
+  return {
+    addGrants: grantsFromIdentities(addIdentities),
+    removeGrants: grantsFromIdentities(removeIdentities),
+  };
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 interface CreateRoleDialogProps {
@@ -281,7 +415,25 @@ export function CreateRoleDialog({
   });
 
   const isMutating = createRole.isPending || updateRole.isPending;
-  const grantCount = effectiveGrantCount(grants);
+  const visibleScopeSlugs = useMemo(
+    () =>
+      new Set<Scope>(
+        scopeGroups.flatMap((group) =>
+          group.scopes.map((s) => s.slug as Scope),
+        ),
+      ),
+    [scopeGroups],
+  );
+  const visibleGrants = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(grants).filter(([scope]) =>
+          visibleScopeSlugs.has(scope as Scope),
+        ),
+      ),
+    [grants, visibleScopeSlugs],
+  );
+  const grantCount = effectiveGrantCount(visibleGrants);
 
   const saveDisabled = isSaveDisabled({
     isMutating,
@@ -479,47 +631,19 @@ export function CreateRoleDialog({
   // ─── Submit ───────────────────────────────────────────────────
 
   const handleSubmit = () => {
-    const sdkGrants: SdkRoleGrant[] = [];
-
-    for (const grant of Object.values(grants)) {
-      const allowSelectors: Selector[] = [];
-      const denySelectors: Selector[] = [];
-      let hasUnrestrictedAllow = false;
-
-      for (const rule of grant.rules) {
-        if (rule.effect === "allow") {
-          if (rule.selectors === null) hasUnrestrictedAllow = true;
-          else if (rule.selectors.length > 0)
-            allowSelectors.push(...rule.selectors);
-        } else {
-          if (rule.selectors && rule.selectors.length > 0)
-            denySelectors.push(...rule.selectors);
-        }
-      }
-
-      // Skip scopes with no effective allows
-      if (!hasUnrestrictedAllow && allowSelectors.length === 0) continue;
-
-      sdkGrants.push({
-        scope: grant.scope,
-        selectors: hasUnrestrictedAllow ? undefined : allowSelectors,
-      });
-
-      if (denySelectors.length > 0) {
-        sdkGrants.push({
-          scope: grant.scope,
-          effect: "deny",
-          selectors: denySelectors,
-        });
-      }
-    }
+    const sdkGrants = sdkGrantsFromForm(grants);
 
     if (isEditing) {
+      const initialGrants = sdkGrantsFromForm(grantsFromRole(editingRole));
+      const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
+
       updateRole.mutate({
         request: {
           updateRoleForm: {
             id: editingRole.id,
-            ...(isSystemRole ? {} : { name, description, grants: sdkGrants }),
+            ...(isSystemRole
+              ? {}
+              : { name, description, addGrants, removeGrants }),
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -685,8 +809,8 @@ export function CreateRoleDialog({
                     {isSystemRole && (
                       <div className="bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-2 text-xs">
                         <Info className="h-3.5 w-3.5 shrink-0" />
-                        System role permissions are managed by Gram and cannot
-                        be changed.
+                        System role permissions are managed by the platform and
+                        cannot be changed.
                       </div>
                     )}
                     {scopeGroups.map((group) => {

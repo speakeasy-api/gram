@@ -19,7 +19,7 @@ SET version = version + 1
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
 
 type BumpRiskPolicyVersionParams struct {
@@ -41,7 +41,9 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,
+		&i.MessageTypes,
 		&i.Action,
+		&i.AudienceType,
 		&i.AutoName,
 		&i.UserMessage,
 		&i.Version,
@@ -217,7 +219,7 @@ VALUES (
   , $13
   , 1
 )
-RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRiskPolicyParams struct {
@@ -264,7 +266,9 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,
+		&i.MessageTypes,
 		&i.Action,
+		&i.AudienceType,
 		&i.AutoName,
 		&i.UserMessage,
 		&i.Version,
@@ -494,7 +498,7 @@ func (q *Queries) GetRiskOverviewCounts(ctx context.Context, arg GetRiskOverview
 }
 
 const getRiskPolicy = `-- name: GetRiskPolicy :one
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
@@ -520,7 +524,9 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,
+		&i.MessageTypes,
 		&i.Action,
+		&i.AudienceType,
 		&i.AutoName,
 		&i.UserMessage,
 		&i.Version,
@@ -605,7 +611,7 @@ func (q *Queries) ListCustomDetectionRules(ctx context.Context, projectID uuid.U
 }
 
 const listEnabledEnforcingPoliciesByProject = `-- name: ListEnabledEnforcingPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -633,7 +639,9 @@ func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, pro
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
+			&i.MessageTypes,
 			&i.Action,
+			&i.AudienceType,
 			&i.AutoName,
 			&i.UserMessage,
 			&i.Version,
@@ -653,7 +661,7 @@ func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, pro
 }
 
 const listEnabledRiskPoliciesByProject = `-- name: ListEnabledRiskPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -680,7 +688,9 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
+			&i.MessageTypes,
 			&i.Action,
+			&i.AudienceType,
 			&i.AutoName,
 			&i.UserMessage,
 			&i.Version,
@@ -700,7 +710,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 }
 
 const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -729,7 +739,9 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
+			&i.MessageTypes,
 			&i.Action,
+			&i.AudienceType,
 			&i.AutoName,
 			&i.UserMessage,
 			&i.Version,
@@ -749,7 +761,7 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 }
 
 const listEnabledToolIdentityPoliciesByProject = `-- name: ListEnabledToolIdentityPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -781,7 +793,9 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
+			&i.MessageTypes,
 			&i.Action,
+			&i.AudienceType,
 			&i.AutoName,
 			&i.UserMessage,
 			&i.Version,
@@ -1034,7 +1048,7 @@ func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, arg ListRiskOver
 }
 
 const listRiskPolicies = `-- name: ListRiskPolicies :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1061,7 +1075,9 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
+			&i.MessageTypes,
 			&i.Action,
+			&i.AudienceType,
 			&i.AutoName,
 			&i.UserMessage,
 			&i.Version,
@@ -1305,7 +1321,8 @@ FROM (
     AND ($3::timestamptz IS NULL OR cm.created_at >= $3::timestamptz)
     AND ($4::timestamptz IS NULL OR cm.created_at < $4::timestamptz)
     AND ($5::text = '' OR rr.rule_id ILIKE '%' || $5::text || '%')
-    AND ($6::text = '' OR (
+    AND ($6::text = '' OR c.external_user_id ILIKE '%' || $6::text || '%')
+    AND ($7::text = '' OR (
     CASE
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
@@ -1350,15 +1367,15 @@ FROM (
       WHEN rr.source = 'presidio' THEN 'pii'
       ELSE 'custom'
     END
-  ) = $6::text)
+  ) = $7::text)
 ) sub
 WHERE sub.dedup_rank = 1
   AND (
-    $7::timestamptz IS NULL
-    OR (sub.message_created_at, sub.id) < ($7::timestamptz, $8::uuid)
+    $8::timestamptz IS NULL
+    OR (sub.message_created_at, sub.id) < ($8::timestamptz, $9::uuid)
   )
 ORDER BY sub.message_created_at DESC, sub.id DESC
-LIMIT $9
+LIMIT $10
 `
 
 type ListRiskResultsByProjectFoundParams struct {
@@ -1367,6 +1384,7 @@ type ListRiskResultsByProjectFoundParams struct {
 	FromTime               pgtype.Timestamptz
 	ToTime                 pgtype.Timestamptz
 	RuleID                 string
+	UserID                 string
 	Category               string
 	CursorMessageCreatedAt pgtype.Timestamptz
 	CursorID               uuid.NullUUID
@@ -1418,6 +1436,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 		arg.FromTime,
 		arg.ToTime,
 		arg.RuleID,
+		arg.UserID,
 		arg.Category,
 		arg.CursorMessageCreatedAt,
 		arg.CursorID,
@@ -1876,7 +1895,7 @@ SET name = $1
 WHERE id = $11
   AND project_id = $12
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRiskPolicyParams struct {
@@ -1921,7 +1940,9 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,
+		&i.MessageTypes,
 		&i.Action,
+		&i.AudienceType,
 		&i.AutoName,
 		&i.UserMessage,
 		&i.Version,

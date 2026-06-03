@@ -31,6 +31,7 @@ export const ResourceKind = {
   Mcp: "mcp",
   Org: "org",
   Environment: "environment",
+  RiskPolicy: "risk_policy",
   Wildcard: "*",
 } as const;
 /**

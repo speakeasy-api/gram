@@ -306,6 +306,7 @@ type CustomDomain struct {
 	IngressName     pgtype.Text
 	CertSecretName  pgtype.Text
 	ProvisionerKind string
+	IpAllowlist     []string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
@@ -700,19 +701,20 @@ type McpRegistry struct {
 }
 
 type McpServer struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	EnvironmentID       uuid.NullUUID
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
-	ToolsetID           uuid.NullUUID
-	Visibility          string
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	Visibility            string
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
 
 type OauthProxyClientInfo struct {
@@ -832,7 +834,8 @@ type OrganizationMcpCollectionServerAttachment struct {
 	PublishedBy  pgtype.Text
 	ID           uuid.UUID
 	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
+	ToolsetID    uuid.NullUUID
+	McpServerID  uuid.NullUUID
 	Deleted      bool
 }
 
@@ -994,14 +997,15 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	InstallationID   int64
-	RepoOwner        string
-	RepoName         string
-	MarketplaceToken pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	InstallationID       int64
+	RepoOwner            string
+	RepoName             string
+	MarketplaceToken     pgtype.Text
+	PublishedFingerprint pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type PluginServer struct {
@@ -1060,6 +1064,13 @@ type ProjectAllowedOrigin struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type ProjectManagedAssistant struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
 
 type ProjectMarketplaceSetting struct {
@@ -1212,7 +1223,9 @@ type RiskPolicy struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
+	MessageTypes         []string
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Version              int64
@@ -1339,6 +1352,7 @@ type Toolset struct {
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
 	UserSessionIssuerID    uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

@@ -48,8 +48,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
-
 // GitHub usernames: 1-39 chars, starts with alphanumeric, alphanumeric or hyphen.
 // Strict enough to prevent path traversal in API URL construction.
 var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
@@ -159,6 +157,30 @@ func NewService(
 		repo:      repo.New(db),
 		auth:      auth.New(logger, db, sessions, authzEngine),
 		authz:     authzEngine,
+		audit:     auditLogger,
+		github:    github,
+		serverURL: serverURL,
+		keyPrefix: auth.APIKeyPrefix(env),
+	}
+}
+
+func NewPublisher(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	auditLogger *audit.Logger,
+	github *GitHubConfig,
+	env string,
+	serverURL string,
+) *Service {
+	logger = logger.With(attr.SlogComponent("plugins"))
+
+	return &Service{
+		tracer:    nil,
+		logger:    logger,
+		db:        db,
+		repo:      repo.New(db),
+		auth:      nil,
+		authz:     nil,
 		audit:     auditLogger,
 		github:    github,
 		serverURL: serverURL,
@@ -740,10 +762,34 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	for _, urn := range payload.PrincipalUrns {
-		if !validPrincipalURN.MatchString(urn) {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid principal URN: %s", urn)
+	// Normalize and validate every principal URN through urn.ParsePrincipal so
+	// the typed wrapper is the single source of truth on what a principal is.
+	// The wildcard is a literal token (not a typed URN), so it takes a
+	// fast-path. Email IDs are lowercased here so the device-agent endpoint
+	// can match a lowercased lookup deterministically.
+	urns := make([]string, 0, len(payload.PrincipalUrns))
+	seenURNs := make(map[string]struct{}, len(payload.PrincipalUrns))
+	for _, raw := range payload.PrincipalUrns {
+		var principalURN string
+		if raw == urn.PrincipalWildcard {
+			principalURN = raw
+		} else {
+			normalized := raw
+			if addr, ok := strings.CutPrefix(raw, string(urn.PrincipalTypeEmail)+":"); ok {
+				normalized = string(urn.PrincipalTypeEmail) + ":" + strings.ToLower(strings.TrimSpace(addr))
+			}
+			parsed, err := urn.ParsePrincipal(normalized)
+			if err != nil {
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid principal URN: %s", raw)
+			}
+			principalURN = parsed.String()
 		}
+
+		if _, ok := seenURNs[principalURN]; ok {
+			continue
+		}
+		seenURNs[principalURN] = struct{}{}
+		urns = append(urns, principalURN)
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -758,12 +804,12 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeUnexpected, err, "remove existing assignments").Log(ctx, s.logger)
 	}
 
-	assignments := make([]*gen.PluginAssignment, 0, len(payload.PrincipalUrns))
-	for _, urn := range payload.PrincipalUrns {
+	assignments := make([]*gen.PluginAssignment, 0, len(urns))
+	for _, u := range urns {
 		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       pluginID,
 			OrganizationID: ac.ActiveOrganizationID,
-			PrincipalUrn:   urn,
+			PrincipalUrn:   u,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").Log(ctx, s.logger)
@@ -780,7 +826,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		PluginID:         plugin.ID,
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
-		PrincipalURNs:    payload.PrincipalUrns,
+		PrincipalURNs:    urns,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin assignments set").Log(ctx, s.logger)
 	}
@@ -959,10 +1005,10 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 }
 
 // writePluginZip serializes the file map as a deterministic ZIP, marking
-// shell scripts executable so hook.sh runs after extraction. The GitHub
+// shell scripts executable so hook.sh / hook_async.sh run after extraction. The GitHub
 // publish path applies the same rule via Tree mode 100755 in
 // thirdparty/github/repo.go; keep them in sync — without the execute bit,
-// Claude Code and Cursor silently fail on `./hook.sh: permission denied`.
+// Claude Code, Cursor, and Codex silently fail on `./hook.sh: permission denied`.
 func writePluginZip(w io.Writer, files map[string][]byte) error {
 	zw := zip.NewWriter(w)
 	paths := make([]string, 0, len(files))
@@ -1092,16 +1138,6 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeBadRequest, nil, "GitHub publishing is not configured")
 	}
 
-	pluginInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-
-	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, *ac.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get project").Log(ctx, s.logger)
-	}
-
 	for _, u := range payload.GithubUsernames {
 		if u == "" || !validGitHubUsername.MatchString(u) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid github username: %q", u)
@@ -1114,6 +1150,158 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnauthorized, nil, "publish requires a session-authenticated context")
 	}
 
+	outcome, err := s.publishProject(ctx, publishProjectInput{
+		ProjectID:        *ac.ProjectID,
+		ProjectName:      "",
+		ProjectSlug:      *ac.ProjectSlug,
+		OrganizationID:   ac.ActiveOrganizationID,
+		OrganizationSlug: ac.OrganizationSlug,
+		Actor: publishActor{
+			Principal:       urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			DisplayName:     ac.Email,
+			Slug:            nil,
+			CreatedByUserID: ac.UserID,
+		},
+		GitHubUsernames: payload.GithubUsernames,
+		CommitMessage:   "Update plugin packages",
+		// A human clicked Publish: always republish so the manifest version
+		// bumps and installed copies refresh.
+		SkipIfUnchanged: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.PublishPluginsResult{RepoURL: outcome.RepoURL}, nil
+}
+
+type PublishProjectInput struct {
+	ProjectID       uuid.UUID
+	CreatedByUserID string
+	CommitMessage   string
+	// SkipIfUnchanged short-circuits the publish when the project's current
+	// fingerprint matches the one last published, avoiding a no-op GitHub
+	// commit and fresh API keys. Set by the automated rollout; the dashboard
+	// publish leaves it false so a human-initiated publish always refreshes.
+	SkipIfUnchanged bool
+}
+
+type PublishProjectResult struct {
+	RepoURL string
+	// Skipped is true when SkipIfUnchanged was set and the fingerprint matched,
+	// so nothing was published.
+	Skipped bool
+}
+
+func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput) (*PublishProjectResult, error) {
+	if s.github == nil {
+		return nil, fmt.Errorf("github publishing is not configured")
+	}
+	if input.CreatedByUserID == "" {
+		return nil, fmt.Errorf("created by user id is required")
+	}
+
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, input.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+
+	actorDisplayName := "Gram"
+	result, err := s.publishProject(ctx, publishProjectInput{
+		ProjectID:        project.ProjectID,
+		ProjectName:      project.ProjectName,
+		ProjectSlug:      project.ProjectSlug,
+		OrganizationID:   project.ID,
+		OrganizationSlug: project.Slug,
+		Actor: publishActor{
+			Principal:       urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+			DisplayName:     &actorDisplayName,
+			Slug:            nil,
+			CreatedByUserID: input.CreatedByUserID,
+		},
+		GitHubUsernames: nil,
+		CommitMessage:   conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged: input.SkipIfUnchanged,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &PublishProjectResult{RepoURL: result.RepoURL, Skipped: result.Skipped}, nil
+}
+
+type publishActor struct {
+	Principal       urn.Principal
+	DisplayName     *string
+	Slug            *string
+	CreatedByUserID string
+}
+
+type publishProjectInput struct {
+	ProjectID        uuid.UUID
+	ProjectName      string
+	ProjectSlug      string
+	OrganizationID   string
+	OrganizationSlug string
+	Actor            publishActor
+	GitHubUsernames  []string
+	CommitMessage    string
+	SkipIfUnchanged  bool
+}
+
+// publishOutcome is the internal result of publishProject. Skipped is true when
+// SkipIfUnchanged was set and the fingerprint matched, in which case no GitHub
+// commit was made and RepoURL points at the existing repo (or is empty if the
+// project has no connection yet).
+type publishOutcome struct {
+	RepoURL string
+	Skipped bool
+}
+
+func (s *Service) publishProject(ctx context.Context, input publishProjectInput) (*publishOutcome, error) {
+	pluginInfos, err := s.resolvePluginInfos(ctx, input.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	projectName := input.ProjectName
+	if projectName == "" {
+		project, err := projectsrepo.New(s.db).GetProjectByID(ctx, input.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "get project").Log(ctx, s.logger)
+		}
+		projectName = project.Name
+	}
+
+	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug)
+
+	// Compute the fingerprint up front from the resolved config so we can both
+	// short-circuit unchanged publishes (before minting keys or touching
+	// GitHub) and persist it after a successful push.
+	fingerprint, err := PluginFingerprint(pluginInfos, cfg)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute plugin fingerprint").Log(ctx, s.logger)
+	}
+
+	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
+	// so the rows we persist round-trip cleanly through the case-insensitive
+	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
+	repoOwner := strings.ToLower(s.github.Org)
+	repoName := strings.ToLower(input.OrganizationSlug + "-" + input.ProjectSlug + "-plugins")
+	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
+
+	if input.SkipIfUnchanged {
+		existing, err := s.repo.GetGitHubConnection(ctx, input.ProjectID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Never published — fall through and publish for the first time.
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "get github connection").Log(ctx, s.logger)
+		case conv.FromPGTextOrEmpty[string](existing.PublishedFingerprint) == fingerprint:
+			return &publishOutcome{RepoURL: repoURL, Skipped: true}, nil
+		}
+	}
+
 	mcpCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeConsumer, "mcp")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").Log(ctx, s.logger)
@@ -1123,7 +1311,6 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").Log(ctx, s.logger)
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug)
 	cfg.APIKey = mcpCandidate.fullKey
 	cfg.HooksAPIKey = hooksCandidate.fullKey
 
@@ -1131,12 +1318,6 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate plugin packages").Log(ctx, s.logger)
 	}
-
-	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
-	// so the rows we persist round-trip cleanly through the case-insensitive
-	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
-	repoOwner := strings.ToLower(s.github.Org)
-	repoName := strings.ToLower(ac.OrganizationSlug + "-" + *ac.ProjectSlug + "-plugins")
 
 	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, repoOwner, repoName, true); err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "create github repo").Log(ctx, s.logger)
@@ -1148,17 +1329,17 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		repoOwner,
 		repoName,
 		"main",
-		"Update plugin packages",
+		input.CommitMessage,
 		files,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "push plugin files to GitHub").Log(ctx, s.logger)
 	}
 
-	for _, username := range payload.GithubUsernames {
+	for _, username := range input.GitHubUsernames {
 		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, "pull"); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
-				attr.SlogOrganizationID(ac.ActiveOrganizationID),
+				attr.SlogOrganizationID(input.OrganizationID),
 				attr.SlogGitHubUsername(username),
 				attr.SlogError(err),
 			)
@@ -1175,12 +1356,11 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	// credentials when GitHub fails. If this transaction itself fails, the
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
-	if err := s.persistPluginAPIKeys(ctx, ac, []pluginAPIKeyCandidate{mcpCandidate, hooksCandidate}, project.Name, repoOwner, repoName, pluginSlugs); err != nil {
+	if err := s.persistPluginAPIKeys(ctx, input, []pluginAPIKeyCandidate{mcpCandidate, hooksCandidate}, projectName, repoOwner, repoName, pluginSlugs, fingerprint); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").Log(ctx, s.logger)
 	}
 
-	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
-	return &gen.PublishPluginsResult{RepoURL: repoURL}, nil
+	return &publishOutcome{RepoURL: repoURL, Skipped: false}, nil
 }
 
 // pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key
@@ -1227,13 +1407,14 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 // candidate fails to insert, none are persisted.
 func (s *Service) persistPluginAPIKeys(
 	ctx context.Context,
-	ac *contextvalues.AuthContext,
+	input publishProjectInput,
 	candidates []pluginAPIKeyCandidate,
 	projectName string,
 	repoOwner, repoName string,
 	pluginSlugs []string,
+	fingerprint string,
 ) error {
-	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
+	projectID := uuid.NullUUID{UUID: input.ProjectID, Valid: true}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1245,12 +1426,12 @@ func (s *Service) persistPluginAPIKeys(
 	for _, candidate := range candidates {
 		scopes := []string{candidate.scope.String()}
 		createdKey, err := keysQ.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-			OrganizationID:  ac.ActiveOrganizationID,
+			OrganizationID:  input.OrganizationID,
 			Name:            candidate.keyName,
 			KeyHash:         candidate.keyHash,
 			KeyPrefix:       candidate.keyPrefix,
 			Scopes:          scopes,
-			CreatedByUserID: ac.UserID,
+			CreatedByUserID: input.Actor.CreatedByUserID,
 			ProjectID:       projectID,
 		})
 		if err != nil {
@@ -1258,11 +1439,11 @@ func (s *Service) persistPluginAPIKeys(
 		}
 
 		if err := s.audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
-			OrganizationID:   ac.ActiveOrganizationID,
+			OrganizationID:   input.OrganizationID,
 			ProjectID:        projectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-			ActorDisplayName: ac.Email,
-			ActorSlug:        nil,
+			Actor:            input.Actor.Principal,
+			ActorDisplayName: input.Actor.DisplayName,
+			ActorSlug:        input.Actor.Slug,
 			KeyURN:           urn.NewAPIKey(createdKey.ID),
 			KeyName:          candidate.keyName,
 			Scopes:           scopes,
@@ -1280,27 +1461,24 @@ func (s *Service) persistPluginAPIKeys(
 		return fmt.Errorf("generate marketplace token: %w", err)
 	}
 	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
-		ProjectID:        *ac.ProjectID,
-		InstallationID:   s.github.InstallationID,
-		RepoOwner:        repoOwner,
-		RepoName:         repoName,
-		MarketplaceToken: pgtype.Text{String: candidateToken, Valid: true},
+		ProjectID:            input.ProjectID,
+		InstallationID:       s.github.InstallationID,
+		RepoOwner:            repoOwner,
+		RepoName:             repoName,
+		MarketplaceToken:     pgtype.Text{String: candidateToken, Valid: true},
+		PublishedFingerprint: conv.ToPGText(fingerprint),
 	}); err != nil {
 		return fmt.Errorf("upsert github connection: %w", err)
 	}
 
-	projectSlug := ""
-	if ac.ProjectSlug != nil {
-		projectSlug = *ac.ProjectSlug
-	}
 	if err := s.audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		ProjectID:        *ac.ProjectID,
+		OrganizationID:   input.OrganizationID,
+		ProjectID:        input.ProjectID,
 		ProjectName:      projectName,
-		ProjectSlug:      projectSlug,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
+		ProjectSlug:      input.ProjectSlug,
+		Actor:            input.Actor.Principal,
+		ActorDisplayName: input.Actor.DisplayName,
+		ActorSlug:        input.Actor.Slug,
 		PluginSlugs:      pluginSlugs,
 		RepoOwner:        repoOwner,
 		RepoName:         repoName,
@@ -1346,11 +1524,16 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		}
 
 		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
+			mcpBase := s.serverURL
+			if cd := conv.FromPGText[string](r.ToolsetCustomDomain); cd != nil {
+				mcpBase = fmt.Sprintf("https://%s", *cd)
+			}
 			serverInfo := PluginServerInfo{
 				DisplayName: r.ServerDisplayName,
 				Policy:      r.ServerPolicy,
-				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
+				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, *mcpSlug),
 				IsPublic:    r.ToolsetIsPublic,
+				IsOAuth:     r.ToolsetIsOauth,
 				EnvConfigs:  nil,
 			}
 

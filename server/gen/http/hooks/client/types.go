@@ -134,6 +134,8 @@ type CodexRequestBody struct {
 	HookEventName string `form:"hook_event_name" json:"hook_event_name" xml:"hook_event_name"`
 	// The Codex session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Email of the authenticated Codex user, if available
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// Path to the conversation transcript file
 	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
 	// The working directory when the event fired
@@ -1343,6 +1345,7 @@ func NewCodexRequestBody(p *hooks.CodexPayload) *CodexRequestBody {
 	body := &CodexRequestBody{
 		HookEventName:  p.HookEventName,
 		SessionID:      p.SessionID,
+		UserEmail:      p.UserEmail,
 		TranscriptPath: p.TranscriptPath,
 		Cwd:            p.Cwd,
 		Model:          p.Model,

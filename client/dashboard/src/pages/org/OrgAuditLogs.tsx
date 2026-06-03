@@ -1,4 +1,5 @@
 import { useQueryState } from "nuqs";
+import type { MCPServerEntry } from "@gram-ai/elements";
 import { recommended } from "@gram-ai/elements/plugins";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -21,12 +22,14 @@ import { Switch } from "@/components/ui/switch";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import type { AuditLog } from "@gram/client/models/components";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import {
   useAuditLogsInfinite,
   useAuditLogFacets,
   useGramContext,
+  useListToolsets,
 } from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
@@ -476,6 +479,11 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
   const client = useGramContext();
 
   const projectSlug = organization.projects[0]?.slug ?? "";
+  const { data: toolsetsData, isLoading: isLoadingToolsets } = useListToolsets(
+    { gramProject: projectSlug },
+    undefined,
+    { enabled: Boolean(projectSlug) },
+  );
 
   const getSession = useCallback(async () => {
     const res = await chatSessionsCreate(
@@ -497,12 +505,18 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
 
   const serverURL = getServerURL();
 
-  // Derive observability MCP URL the same way useObservabilityMcpConfig does.
-  const mcpUrl = serverURL.includes("app.getgram.ai")
-    ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
-    : serverURL.includes("dev.getgram.ai")
-      ? "https://dev.getgram.ai/mcp/speakeasy-team-gram"
-      : import.meta.env.VITE_GRAM_OBSERVABILITY_MCP_URL || undefined;
+  // Build MCP server entries for all project toolsets
+  const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
+    if (isLoadingToolsets || !toolsetsData?.toolsets?.length) {
+      return undefined;
+    }
+
+    return toolsetsData.toolsets.map((toolset) => ({
+      url: internalMcpUrl({ slug: projectSlug }, toolset),
+      name: toolset.slug,
+      environment: toolset.defaultEnvironmentSlug,
+    }));
+  }, [toolsetsData?.toolsets, projectSlug, isLoadingToolsets]);
 
   const auditToolsFilter = useCallback(
     ({ toolName }: { toolName: string }) =>
@@ -532,9 +546,9 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
         GRAM_APIKEY_HEADER_GRAM_KEY: "",
         GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT: projectSlug,
       },
-      ...(mcpUrl && { mcp: mcpUrl }),
+      ...(mcps && mcps.length > 0 && { mcps }),
     }),
-    [projectSlug, auditToolsFilter, serverURL, getSession, session, mcpUrl],
+    [projectSlug, auditToolsFilter, serverURL, getSession, session, mcps],
   );
 
   return (

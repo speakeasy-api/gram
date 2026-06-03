@@ -13,6 +13,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const attachRemoteSessionClientToUserSessionIssuer = `-- name: AttachRemoteSessionClientToUserSessionIssuer :exec
+INSERT INTO remote_session_client_user_session_issuers (
+    remote_session_client_id,
+    user_session_issuer_id
+) VALUES (
+    $1,
+    $2
+)
+ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING
+`
+
+type AttachRemoteSessionClientToUserSessionIssuerParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) AttachRemoteSessionClientToUserSessionIssuer(ctx context.Context, arg AttachRemoteSessionClientToUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, attachRemoteSessionClientToUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
 const countActiveRemoteSessionsByClientID = `-- name: CountActiveRemoteSessionsByClientID :one
 SELECT COUNT(*)
 FROM remote_sessions
@@ -21,6 +42,48 @@ WHERE remote_session_client_id = $1 AND deleted IS FALSE
 
 func (q *Queries) CountActiveRemoteSessionsByClientID(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countActiveRemoteSessionsByClientID, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLegacyRemoteSessionClientsForUserSessionIssuer = `-- name: CountLegacyRemoteSessionClientsForUserSessionIssuer :one
+SELECT COUNT(c.id)
+FROM remote_session_clients AS c
+JOIN user_session_issuers AS usi ON usi.id = c.user_session_issuer_id
+WHERE c.user_session_issuer_id = $1
+  AND usi.project_id = $2
+  AND usi.deleted IS FALSE
+  AND c.project_id = $2
+  AND c.deleted IS FALSE
+`
+
+type CountLegacyRemoteSessionClientsForUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) CountLegacyRemoteSessionClientsForUserSessionIssuer(ctx context.Context, arg CountLegacyRemoteSessionClientsForUserSessionIssuerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLegacyRemoteSessionClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRemoteSessionClientUserSessionIssuerBindings = `-- name: CountRemoteSessionClientUserSessionIssuerBindings :one
+SELECT COUNT(remote_session_client_id)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+  AND user_session_issuer_id = $2
+`
+
+type CountRemoteSessionClientUserSessionIssuerBindingsParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) CountRemoteSessionClientUserSessionIssuerBindings(ctx context.Context, arg CountRemoteSessionClientUserSessionIssuerBindingsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRemoteSessionClientUserSessionIssuerBindings, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -50,7 +113,8 @@ INSERT INTO remote_session_clients (
     client_secret_expires_at,
     token_endpoint_auth_method,
     scope,
-    audience
+    audience,
+    legacy_callback_url
 )
 VALUES (
     $1,
@@ -62,7 +126,8 @@ VALUES (
     $7,
     $8,
     $9::text[],
-    $10
+    $10,
+    $11
 )
 RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
@@ -78,6 +143,7 @@ type CreateRemoteSessionClientParams struct {
 	TokenEndpointAuthMethod pgtype.Text
 	Scope                   []string
 	Audience                pgtype.Text
+	LegacyCallbackUrl       bool
 }
 
 func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemoteSessionClientParams) (RemoteSessionClient, error) {
@@ -92,6 +158,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.TokenEndpointAuthMethod,
 		arg.Scope,
 		arg.Audience,
+		arg.LegacyCallbackUrl,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -119,6 +186,7 @@ const createRemoteSessionIssuer = `-- name: CreateRemoteSessionIssuer :one
 
 INSERT INTO remote_session_issuers (
     project_id,
+    organization_id,
     slug,
     issuer,
     authorization_endpoint,
@@ -145,13 +213,15 @@ VALUES (
     $10,
     $11,
     $12,
-    $13
+    $13,
+    $14
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionIssuerParams struct {
 	ProjectID                         uuid.NullUUID
+	OrganizationID                    pgtype.Text
 	Slug                              string
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
@@ -168,9 +238,13 @@ type CreateRemoteSessionIssuerParams struct {
 
 // Remote session issuers — upstream Authorization Server identity records
 // that Gram talks to as an OAuth client.
+// Serves both creation paths: a project-level issuer passes a valid project_id
+// plus its organization_id; an organization-level (cross-project) issuer passes
+// a NULL project_id plus organization_id.
 func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, createRemoteSessionIssuer,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.Slug,
 		arg.Issuer,
 		arg.AuthorizationEndpoint,
@@ -184,6 +258,45 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.Oidc,
 		arg.Passthrough,
 	)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteOrganizationRemoteSessionIssuer = `-- name: DeleteOrganizationRemoteSessionIssuer :one
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1 AND organization_id = $2 AND project_id IS NULL AND deleted IS FALSE
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+`
+
+type DeleteOrganizationRemoteSessionIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+func (q *Queries) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, arg DeleteOrganizationRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, deleteOrganizationRemoteSessionIssuer, arg.ID, arg.OrganizationID)
 	var i RemoteSessionIssuer
 	err := row.Scan(
 		&i.ID,
@@ -284,6 +397,24 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 	return i, err
 }
 
+const deleteUserSessionIssuerAttachmentsForRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = $1
+  AND c.project_id = $2
+`
+
+type DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams struct {
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.NullUUID
+}
+
+func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx context.Context, arg DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams) error {
+	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForRemoteSessionClient, arg.RemoteSessionClientID, arg.ProjectID)
+	return err
+}
+
 const getActiveRemoteSession = `-- name: GetActiveRemoteSession :one
 SELECT id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
 FROM remote_sessions
@@ -358,6 +489,51 @@ func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAut
 	return i, err
 }
 
+const getOrganizationRemoteSessionIssuerByID = `-- name: GetOrganizationRemoteSessionIssuerByID :one
+
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id IS NULL
+  AND deleted IS FALSE
+`
+
+type GetOrganizationRemoteSessionIssuerByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Organization-level remote session issuers — cross-project issuers scoped to
+// an organization (project_id IS NULL). Managed via the
+// organizationRemoteSessionIssuers service and accessed by id.
+func (q *Queries) GetOrganizationRemoteSessionIssuerByID(ctx context.Context, arg GetOrganizationRemoteSessionIssuerByIDParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionIssuerByID, arg.ID, arg.OrganizationID)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
 SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
@@ -392,7 +568,23 @@ func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSession
 }
 
 const getRemoteSessionClientByID = `-- name: GetRemoteSessionClientByID :one
-SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+SELECT
+    id,
+    project_id,
+    remote_session_issuer_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_encrypted,
+    client_id_issued_at,
+    client_secret_expires_at,
+    token_endpoint_auth_method,
+    scope,
+    audience,
+    legacy_callback_url,
+    created_at,
+    updated_at,
+    deleted_at,
+    deleted
 FROM remote_session_clients
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -434,6 +626,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -457,6 +650,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
 	ClientAudience          pgtype.Text
+	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -484,6 +678,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.TokenEndpointAuthMethod,
 		&i.ClientScope,
 		&i.ClientAudience,
+		&i.LegacyCallbackUrl,
 		&i.RemoteSessionIssuerID,
 		&i.UserSessionIssuerID,
 		&i.IssuerSlug,
@@ -500,16 +695,21 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 const getRemoteSessionIssuerByID = `-- name: GetRemoteSessionIssuerByID :one
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+WHERE id = $1
+  AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3))
+  AND deleted IS FALSE
 `
 
 type GetRemoteSessionIssuerByIDParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.NullUUID
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
 }
 
+// Project-scoped read that also resolves organization-level issuers belonging
+// to the project's org, so projects inherit cross-project issuers.
 func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteSessionIssuerByIDParams) (RemoteSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByID, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RemoteSessionIssuer
 	err := row.Scan(
 		&i.ID,
@@ -546,6 +746,9 @@ type GetRemoteSessionIssuerBySlugParams struct {
 	ProjectID uuid.NullUUID
 }
 
+// Slug lookups are strictly project-scoped: the (project_id, slug) unique index
+// makes this deterministic. Organization-level issuers are not slug-addressable
+// (their slugs are not uniqueness-constrained); fetch them by id instead.
 func (q *Queries) GetRemoteSessionIssuerBySlug(ctx context.Context, arg GetRemoteSessionIssuerBySlugParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, getRemoteSessionIssuerBySlug, arg.Slug, arg.ProjectID)
 	var i RemoteSessionIssuer
@@ -571,6 +774,24 @@ func (q *Queries) GetRemoteSessionIssuerBySlug(ctx context.Context, arg GetRemot
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getUserSessionIssuerForProject = `-- name: GetUserSessionIssuerForProject :one
+SELECT id
+FROM user_session_issuers
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type GetUserSessionIssuerForProjectParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUserSessionIssuerForProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getUserSessionIssuerForProject, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertRemoteSession = `-- name: InsertRemoteSession :one
@@ -666,22 +887,93 @@ func (q *Queries) ListConnectedClientIDsForSubject(ctx context.Context, arg List
 	return items, nil
 }
 
+const listOrganizationRemoteSessionIssuers = `-- name: ListOrganizationRemoteSessionIssuers :many
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE organization_id = $1
+  AND project_id IS NULL
+  AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR id < $2::uuid)
+ORDER BY id DESC
+LIMIT $3
+`
+
+type ListOrganizationRemoteSessionIssuersParams struct {
+	OrganizationID pgtype.Text
+	Cursor         uuid.NullUUID
+	LimitValue     int32
+}
+
+func (q *Queries) ListOrganizationRemoteSessionIssuers(ctx context.Context, arg ListOrganizationRemoteSessionIssuersParams) ([]RemoteSessionIssuer, error) {
+	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionIssuers, arg.OrganizationID, arg.Cursor, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionIssuer
+	for rows.Next() {
+		var i RemoteSessionIssuer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Slug,
+			&i.Issuer,
+			&i.AuthorizationEndpoint,
+			&i.TokenEndpoint,
+			&i.RegistrationEndpoint,
+			&i.JwksUri,
+			&i.ScopesSupported,
+			&i.GrantTypesSupported,
+			&i.ResponseTypesSupported,
+			&i.TokenEndpointAuthMethodsSupported,
+			&i.Oidc,
+			&i.Passthrough,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionClientsByProjectID = `-- name: ListRemoteSessionClientsByProjectID :many
-SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+SELECT
+    id,
+    project_id,
+    remote_session_issuer_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_encrypted,
+    client_id_issued_at,
+    client_secret_expires_at,
+    token_endpoint_auth_method,
+    scope,
+    audience,
+    legacy_callback_url,
+    created_at,
+    updated_at,
+    deleted_at,
+    deleted
 FROM remote_session_clients
 WHERE project_id = $1
   AND deleted IS FALSE
   AND ($2::uuid IS NULL OR remote_session_issuer_id = $2::uuid)
-  AND ($3::uuid IS NULL OR user_session_issuer_id = $3::uuid)
-  AND ($4::uuid IS NULL OR id < $4::uuid)
+  AND ($3::uuid IS NULL OR id < $3::uuid)
 ORDER BY id DESC
-LIMIT $5
+LIMIT $4
 `
 
 type ListRemoteSessionClientsByProjectIDParams struct {
 	ProjectID             uuid.NullUUID
 	RemoteSessionIssuerID uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
 }
@@ -690,7 +982,171 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectID,
 		arg.ProjectID,
 		arg.RemoteSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionClient
+	for rows.Next() {
+		var i RemoteSessionClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.RemoteSessionIssuerID,
+			&i.UserSessionIssuerID,
+			&i.ClientID,
+			&i.ClientSecretEncrypted,
+			&i.ClientIDIssuedAt,
+			&i.ClientSecretExpiresAt,
+			&i.TokenEndpointAuthMethod,
+			&i.Scope,
+			&i.Audience,
+			&i.LegacyCallbackUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionClientsByProjectIDForUserSessionIssuer = `-- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuer :many
+SELECT
+    c.id,
+    c.project_id,
+    c.remote_session_issuer_id,
+    c.user_session_issuer_id,
+    c.client_id,
+    c.client_secret_encrypted,
+    c.client_id_issued_at,
+    c.client_secret_expires_at,
+    c.token_endpoint_auth_method,
+    c.scope,
+    c.audience,
+    c.legacy_callback_url,
+    c.created_at,
+    c.updated_at,
+    c.deleted_at,
+    c.deleted
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.user_session_issuer_id = $1
+  AND usi.project_id = $2
+  AND usi.deleted IS FALSE
+  AND c.project_id = $2
+  AND c.deleted IS FALSE
+  AND ($3::uuid IS NULL OR c.remote_session_issuer_id = $3::uuid)
+  AND ($4::uuid IS NULL OR c.id < $4::uuid)
+ORDER BY c.id DESC
+LIMIT $5
+`
+
+type ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams struct {
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionIssuerID uuid.NullUUID
+	Cursor                uuid.NullUUID
+	LimitValue            int32
+}
+
+func (q *Queries) ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams) ([]RemoteSessionClient, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectIDForUserSessionIssuer,
 		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.RemoteSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionClient
+	for rows.Next() {
+		var i RemoteSessionClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.RemoteSessionIssuerID,
+			&i.UserSessionIssuerID,
+			&i.ClientID,
+			&i.ClientSecretEncrypted,
+			&i.ClientIDIssuedAt,
+			&i.ClientSecretExpiresAt,
+			&i.TokenEndpointAuthMethod,
+			&i.Scope,
+			&i.Audience,
+			&i.LegacyCallbackUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionClientsByProjectIDForUserSessionIssuerLegacy = `-- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuerLegacy :many
+SELECT
+    c.id,
+    c.project_id,
+    c.remote_session_issuer_id,
+    c.user_session_issuer_id,
+    c.client_id,
+    c.client_secret_encrypted,
+    c.client_id_issued_at,
+    c.client_secret_expires_at,
+    c.token_endpoint_auth_method,
+    c.scope,
+    c.audience,
+    c.legacy_callback_url,
+    c.created_at,
+    c.updated_at,
+    c.deleted_at,
+    c.deleted
+FROM remote_session_clients AS c
+JOIN user_session_issuers AS usi ON usi.id = c.user_session_issuer_id
+WHERE c.user_session_issuer_id = $1
+  AND usi.project_id = $2
+  AND usi.deleted IS FALSE
+  AND c.project_id = $2
+  AND c.deleted IS FALSE
+  AND ($3::uuid IS NULL OR c.remote_session_issuer_id = $3::uuid)
+  AND ($4::uuid IS NULL OR c.id < $4::uuid)
+ORDER BY c.id DESC
+LIMIT $5
+`
+
+type ListRemoteSessionClientsByProjectIDForUserSessionIssuerLegacyParams struct {
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionIssuerID uuid.NullUUID
+	Cursor                uuid.NullUUID
+	LimitValue            int32
+}
+
+func (q *Queries) ListRemoteSessionClientsByProjectIDForUserSessionIssuerLegacy(ctx context.Context, arg ListRemoteSessionClientsByProjectIDForUserSessionIssuerLegacyParams) ([]RemoteSessionClient, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectIDForUserSessionIssuerLegacy,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.RemoteSessionIssuerID,
 		arg.Cursor,
 		arg.LimitValue,
 	)
@@ -737,6 +1193,7 @@ SELECT
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -746,12 +1203,16 @@ SELECT
     i.scopes_supported                     AS scopes_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
-FROM remote_session_clients AS c
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-WHERE c.user_session_issuer_id = $1
-  AND c.project_id              = $2
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.user_session_issuer_id = $1
+  AND c.project_id = $2
+  AND usi.project_id = $2
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
+  AND usi.deleted IS FALSE
 ORDER BY c.id ASC
 `
 
@@ -767,6 +1228,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	TokenEndpointAuthMethod pgtype.Text
 	ClientScope             []string
 	ClientAudience          pgtype.Text
+	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -780,7 +1242,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 
 // Joined client + issuer view used by the consent renderer and the
 // ChallengeManager. Returns one row per remote_session_client linked to
-// the given user_session_issuer.
+// the given user_session_issuer through the join table.
 func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsForUserSessionIssuerParams) ([]ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID)
 	if err != nil {
@@ -797,6 +1259,100 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.TokenEndpointAuthMethod,
 			&i.ClientScope,
 			&i.ClientAudience,
+			&i.LegacyCallbackUrl,
+			&i.RemoteSessionIssuerID,
+			&i.UserSessionIssuerID,
+			&i.IssuerSlug,
+			&i.IssuerUrl,
+			&i.AuthorizationEndpoint,
+			&i.TokenEndpoint,
+			&i.ScopesSupported,
+			&i.Passthrough,
+			&i.Oidc,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionClientsForUserSessionIssuerLegacy = `-- name: ListRemoteSessionClientsForUserSessionIssuerLegacy :many
+SELECT
+    c.id                                   AS client_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
+    c.legacy_callback_url                  AS legacy_callback_url,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    c.user_session_issuer_id               AS user_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = c.user_session_issuer_id
+WHERE c.user_session_issuer_id = $1
+  AND c.project_id = $2
+  AND usi.project_id = $2
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+  AND usi.deleted IS FALSE
+ORDER BY c.id ASC
+`
+
+type ListRemoteSessionClientsForUserSessionIssuerLegacyParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.NullUUID
+}
+
+type ListRemoteSessionClientsForUserSessionIssuerLegacyRow struct {
+	ClientID                uuid.UUID
+	ExternalClientID        string
+	ClientSecretEncrypted   pgtype.Text
+	TokenEndpointAuthMethod pgtype.Text
+	ClientScope             []string
+	ClientAudience          pgtype.Text
+	LegacyCallbackUrl       bool
+	RemoteSessionIssuerID   uuid.UUID
+	UserSessionIssuerID     uuid.UUID
+	IssuerSlug              string
+	IssuerUrl               string
+	AuthorizationEndpoint   pgtype.Text
+	TokenEndpoint           pgtype.Text
+	ScopesSupported         []string
+	Passthrough             bool
+	Oidc                    bool
+}
+
+// Legacy-column fallback used during AGE-2520 while untouched rows may not
+// have a join-table binding yet.
+func (q *Queries) ListRemoteSessionClientsForUserSessionIssuerLegacy(ctx context.Context, arg ListRemoteSessionClientsForUserSessionIssuerLegacyParams) ([]ListRemoteSessionClientsForUserSessionIssuerLegacyRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuerLegacy, arg.UserSessionIssuerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionClientsForUserSessionIssuerLegacyRow
+	for rows.Next() {
+		var i ListRemoteSessionClientsForUserSessionIssuerLegacyRow
+		if err := rows.Scan(
+			&i.ClientID,
+			&i.ExternalClientID,
+			&i.ClientSecretEncrypted,
+			&i.TokenEndpointAuthMethod,
+			&i.ClientScope,
+			&i.ClientAudience,
+			&i.LegacyCallbackUrl,
 			&i.RemoteSessionIssuerID,
 			&i.UserSessionIssuerID,
 			&i.IssuerSlug,
@@ -820,21 +1376,29 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 const listRemoteSessionIssuersByProjectID = `-- name: ListRemoteSessionIssuersByProjectID :many
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
-WHERE project_id = $1
+WHERE (project_id = $1 OR (project_id IS NULL AND organization_id = $2))
   AND deleted IS FALSE
-  AND ($2::uuid IS NULL OR id < $2::uuid)
+  AND ($3::uuid IS NULL OR id < $3::uuid)
 ORDER BY id DESC
-LIMIT $3
+LIMIT $4
 `
 
 type ListRemoteSessionIssuersByProjectIDParams struct {
-	ProjectID  uuid.NullUUID
-	Cursor     uuid.NullUUID
-	LimitValue int32
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Cursor         uuid.NullUUID
+	LimitValue     int32
 }
 
+// Lists the project's own issuers plus organization-level issuers inherited
+// from the project's org.
 func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg ListRemoteSessionIssuersByProjectIDParams) ([]RemoteSessionIssuer, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionIssuersByProjectID, arg.ProjectID, arg.Cursor, arg.LimitValue)
+	rows, err := q.db.Query(ctx, listRemoteSessionIssuersByProjectID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -985,6 +1549,99 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remote
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateOrganizationRemoteSessionIssuer = `-- name: UpdateOrganizationRemoteSessionIssuer :one
+UPDATE remote_session_issuers
+SET
+    slug = COALESCE($1, slug),
+    issuer = COALESCE($2, issuer),
+    authorization_endpoint = CASE
+        WHEN $3::text = '' THEN NULL
+        ELSE COALESCE($3, authorization_endpoint)
+    END,
+    token_endpoint = CASE
+        WHEN $4::text = '' THEN NULL
+        ELSE COALESCE($4, token_endpoint)
+    END,
+    registration_endpoint = CASE
+        WHEN $5::text = '' THEN NULL
+        ELSE COALESCE($5, registration_endpoint)
+    END,
+    jwks_uri = CASE
+        WHEN $6::text = '' THEN NULL
+        ELSE COALESCE($6, jwks_uri)
+    END,
+    scopes_supported = COALESCE($7::text[], scopes_supported),
+    grant_types_supported = COALESCE($8::text[], grant_types_supported),
+    response_types_supported = COALESCE($9::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($10::text[], token_endpoint_auth_methods_supported),
+    oidc = COALESCE($11, oidc),
+    passthrough = COALESCE($12, passthrough),
+    updated_at = clock_timestamp()
+WHERE id = $13 AND organization_id = $14 AND project_id IS NULL AND deleted IS FALSE
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateOrganizationRemoteSessionIssuerParams struct {
+	Slug                              pgtype.Text
+	Issuer                            pgtype.Text
+	AuthorizationEndpoint             pgtype.Text
+	TokenEndpoint                     pgtype.Text
+	RegistrationEndpoint              pgtype.Text
+	JwksUri                           pgtype.Text
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+	Oidc                              pgtype.Bool
+	Passthrough                       pgtype.Bool
+	ID                                uuid.UUID
+	OrganizationID                    pgtype.Text
+}
+
+// Same three-state narg semantics on the nullable endpoint columns as
+// UpdateRemoteSessionIssuer; scoped to organization-level rows (project_id IS NULL).
+func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg UpdateOrganizationRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, updateOrganizationRemoteSessionIssuer,
+		arg.Slug,
+		arg.Issuer,
+		arg.AuthorizationEndpoint,
+		arg.TokenEndpoint,
+		arg.RegistrationEndpoint,
+		arg.JwksUri,
+		arg.ScopesSupported,
+		arg.GrantTypesSupported,
+		arg.ResponseTypesSupported,
+		arg.TokenEndpointAuthMethodsSupported,
+		arg.Oidc,
+		arg.Passthrough,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateRemoteSessionClient = `-- name: UpdateRemoteSessionClient :one

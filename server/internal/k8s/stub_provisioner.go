@@ -26,25 +26,26 @@ type StubCall struct {
 	Domain       string
 	ResourceName string
 	SecretName   string
+	IPAllowlist  []string
 }
 
 func (p *StubProvisioner) Kind() ProvisionerKind { return p.kind }
 
-func (p *StubProvisioner) Setup(ctx context.Context, domain string) (SetupResult, error) {
-	p.calls = append(p.calls, StubCall{Method: "Setup", Domain: domain, ResourceName: "", SecretName: ""})
+func (p *StubProvisioner) Setup(ctx context.Context, domain string, ipAllowlist []string) (SetupResult, error) {
+	p.calls = append(p.calls, StubCall{Method: "Setup", Domain: domain, ResourceName: "", SecretName: "", IPAllowlist: ipAllowlist})
 	p.logger.InfoContext(ctx, "stub provisioner: setup (no-op)", attr.SlogURLDomain(domain))
 	name, _ := SanitizeDomainForK8sName(domain)
 	return SetupResult{ResourceName: name, SecretName: ""}, nil
 }
 
 func (p *StubProvisioner) Get(ctx context.Context, resourceName string) error {
-	p.calls = append(p.calls, StubCall{Method: "Get", Domain: "", ResourceName: resourceName, SecretName: ""})
+	p.calls = append(p.calls, StubCall{Method: "Get", Domain: "", ResourceName: resourceName, SecretName: "", IPAllowlist: nil})
 	p.logger.InfoContext(ctx, "stub provisioner: get (no-op)", attr.SlogResourceName(resourceName))
 	return nil
 }
 
 func (p *StubProvisioner) Delete(ctx context.Context, resourceName, secretName string) error {
-	p.calls = append(p.calls, StubCall{Method: "Delete", Domain: "", ResourceName: resourceName, SecretName: secretName})
+	p.calls = append(p.calls, StubCall{Method: "Delete", Domain: "", ResourceName: resourceName, SecretName: secretName, IPAllowlist: nil})
 	p.logger.InfoContext(ctx, "stub provisioner: delete (no-op)", attr.SlogResourceName(resourceName))
 	return nil
 }

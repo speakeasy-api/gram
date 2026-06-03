@@ -91,12 +91,13 @@ func TestListRemoteSessions_FilteredByClient(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rs-list-client", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client").String()
-	clientA := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "rs-list-client-a")
-	clientB := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "rs-list-client-b")
+	userIssuerAID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client-a").String()
+	userIssuerBID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client-b").String()
+	clientA := createRemoteClient(t, ctx, ti, issuerID, userIssuerAID, "rs-list-client-a")
+	clientB := createRemoteClient(t, ctx, ti, issuerID, userIssuerBID, "rs-list-client-b")
 
-	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_a"), userIssuerID, clientA)
-	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_b"), userIssuerID, clientB)
+	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_a"), userIssuerAID, clientA)
+	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_b"), userIssuerBID, clientB)
 
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
 		SubjectUrn:            nil,

@@ -51,7 +51,7 @@ export type McpMetadataSetMutationError =
  * setMcpMetadata mcpMetadata
  *
  * @remarks
- * Create or update the metadata that powers the MCP install page.
+ * Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.
  */
 export function useMcpMetadataSetMutation(
   options?: MutationHookOptions<

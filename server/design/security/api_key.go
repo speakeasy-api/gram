@@ -13,6 +13,7 @@ var ByKey = APIKeySecurity(constants.KeySecurityScheme, func() {
 	Scope("producer", "producer based tool access")
 	Scope("chat", "chat based model usage access")
 	Scope("hooks", "hooks based access for Claude Code integrations")
+	Scope("agent", "device agent fetching assigned plugins for the enrolled user")
 })
 
 var ByKeyPayload = func() {

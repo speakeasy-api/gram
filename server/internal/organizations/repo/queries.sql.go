@@ -611,6 +611,32 @@ func (q *Queries) GetSvixAppID(ctx context.Context, id string) (pgtype.Text, err
 	return svix_app_id, err
 }
 
+const hasActiveOrganizationUser = `-- name: HasActiveOrganizationUser :one
+SELECT EXISTS(
+  SELECT 1
+  FROM users
+  JOIN organization_user_relationships
+    ON organization_user_relationships.user_id = users.id
+  WHERE users.id = $1
+    AND users.deleted_at IS NULL
+    AND organization_user_relationships.organization_id = $2
+    AND organization_user_relationships.deleted_at IS NULL
+) AS exists
+`
+
+type HasActiveOrganizationUserParams struct {
+	UserID         string
+	OrganizationID string
+}
+
+// Returns whether a Gram user is an active member of the organization.
+func (q *Queries) HasActiveOrganizationUser(ctx context.Context, arg HasActiveOrganizationUserParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveOrganizationUser, arg.UserID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const hasOrganizationUserRelationship = `-- name: HasOrganizationUserRelationship :one
 SELECT EXISTS(
   SELECT 1

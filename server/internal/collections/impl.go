@@ -482,7 +482,7 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 	attached, err := tx.IsServerAttachedToOrganizationMcpCollection(ctx, repo.IsServerAttachedToOrganizationMcpCollectionParams{
 		CollectionID:   collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ToolsetID:      toolsetID,
+		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error checking collection server attachment").Log(ctx, s.logger)
@@ -494,7 +494,7 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 	if err := tx.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
 		CollectionID:   collectionID,
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ToolsetID:      toolsetID,
+		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to detach server from collection").Log(ctx, s.logger)
 	}
@@ -678,7 +678,7 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 	_, err = queries.AttachServerToOrganizationMcpCollection(ctx, repo.AttachServerToOrganizationMcpCollectionParams{
 		CollectionID:   collectionID,
 		OrganizationID: organizationID,
-		ToolsetID:      toolsetID,
+		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
 		PublishedBy:    conv.PtrToPGTextEmpty(&userID),
 	})
 	if err != nil {

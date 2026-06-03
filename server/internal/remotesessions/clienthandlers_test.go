@@ -1,70 +1,23 @@
 package remotesessions_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
-	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
-
-func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
-	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
-		ProjectID:          *authCtx.ProjectID,
-		Slug:               slug,
-		AuthnChallengeMode: "interactive",
-		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
-	})
-	require.NoError(t, err)
-	return issuer.ID
-}
-
-func createRemoteIssuer(t *testing.T, ctx context.Context, svc *remoteServiceUnderTest, slug, regEndpoint string) string {
-	t.Helper()
-	authEP := "https://idp.example.com/authorize"
-	tokenEP := "https://idp.example.com/token"
-	regEP := regEndpoint
-	created, err := svc.service.CreateRemoteSessionIssuer(ctx, &issuersgen.CreateRemoteSessionIssuerPayload{
-		Slug:                              slug,
-		Issuer:                            "https://idp.example.com",
-		AuthorizationEndpoint:             &authEP,
-		TokenEndpoint:                     &tokenEP,
-		RegistrationEndpoint:              &regEP,
-		JwksURI:                           nil,
-		ScopesSupported:                   []string{"openid"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		ResponseTypesSupported:            []string{"code"},
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
-		Oidc:                              nil,
-		Passthrough:                       nil,
-	})
-	require.NoError(t, err)
-	return created.ID
-}
-
-type remoteServiceUnderTest = testInstance
 
 func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	t.Parallel()
@@ -95,6 +48,12 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	require.Equal(t, issuerID, result.RemoteSessionIssuerID)
 	require.Equal(t, userIssuerID, result.UserSessionIssuerID)
 	require.NotEmpty(t, result.ID)
+
+	clientUUID, err := uuid.Parse(result.ID)
+	require.NoError(t, err)
+	userIssuerUUID, err := uuid.Parse(userIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 	require.NoError(t, err)
@@ -196,6 +155,92 @@ func TestCreateRemoteSessionClient_RBACForbidden(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestCreateRemoteSessionClient_RejectsCrossProjectUserIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-xproj-usi", "")
+	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
+	foreignUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-foreign").String()
+
+	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   foreignUserIssuer,
+		ClientID:              "xproj-usi-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestCreateRemoteSessionClient_RejectsCrossProjectRemoteIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
+	foreignRemoteIssuer := createRemoteIssuerInProject(t, ctx, ti.conn, otherProject, "rsi-foreign").String()
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-xproj-rsi").String()
+
+	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: foreignRemoteIssuer,
+		UserSessionIssuerID:   userIssuerID,
+		ClientID:              "xproj-rsi-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestUpdateRemoteSessionClient_RejectsCrossProjectUserIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-update-xproj", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-update-xproj").String()
+
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		ClientID:              "update-xproj-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
+	foreignUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-update-foreign").String()
+
+	_, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
+		ID:                      created.ID,
+		ClientSecret:            nil,
+		UserSessionIssuerID:     &foreignUserIssuer,
+		TokenEndpointAuthMethod: nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	// The rejected update rolls back: the original binding is untouched.
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	userIssuerUUID, err := uuid.Parse(userIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
+}
+
 func TestGetRemoteSessionClient(t *testing.T) {
 	t.Parallel()
 
@@ -242,10 +287,10 @@ func TestListRemoteSessionClients(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-list", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list").String()
 
 	for _, c := range []string{"list-client-1", "list-client-2"} {
 		clientID := c
+		userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list-"+clientID).String()
 		_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 			RemoteSessionIssuerID: issuerID,
 			UserSessionIssuerID:   userIssuerID,
@@ -274,18 +319,63 @@ func TestListRemoteSessionClients(t *testing.T) {
 	}
 }
 
+func TestListRemoteSessionClients_UserIssuerLegacyFallbackBackfills(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-list-legacy", "")
+	issuerUUID, err := uuid.Parse(issuerID)
+	require.NoError(t, err)
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list-legacy")
+
+	legacyClient, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		RemoteSessionIssuerID:   issuerUUID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                "legacy-list-client",
+		ClientSecretEncrypted:   pgtype.Text{},
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		TokenEndpointAuthMethod: pgtype.Text{},
+		Scope:                   nil,
+		Audience:                pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, legacyClient.ID, userIssuerID))
+
+	userIssuerIDString := userIssuerID.String()
+	result, err := ti.service.ListRemoteSessionClients(ctx, &clientsgen.ListRemoteSessionClientsPayload{
+		RemoteSessionIssuerID: nil,
+		UserSessionIssuerID:   &userIssuerIDString,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, legacyClient.ID.String(), result.Items[0].ID)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, legacyClient.ID, userIssuerID))
+}
+
 func TestListRemoteSessionClients_PaginationTraversal(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-page", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-page").String()
 
 	const total = 5
 	wantIDs := make(map[string]bool, total)
 	for range total {
-		id := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, uuid.NewString())
+		clientID := uuid.NewString()
+		userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-page-"+clientID).String()
+		id := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, clientID)
 		wantIDs[id] = true
 	}
 
@@ -361,6 +451,15 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	oldUserIssuerUUID, err := uuid.Parse(userIssuerID)
+	require.NoError(t, err)
+	newUserIssuerUUID, err := uuid.Parse(otherUserIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, oldUserIssuerUUID))
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, newUserIssuerUUID))
 }
 
 func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
@@ -666,54 +765,7 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	activeSessions, err := repo.New(ti.conn).CountActiveRemoteSessionsByClientID(ctx, clientUUID)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), activeSessions)
-}
-
-// withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
-// Tests for admin-only endpoints opt in explicitly so non-admin paths exercise
-// the realistic default produced by testenv.InitAuthContext.
-func withAdmin(t *testing.T, ctx context.Context) context.Context {
-	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-	authCtx.IsAdmin = true
-	return contextvalues.SetAuthContext(ctx, authCtx)
-}
-
-// insertProxyProvider seeds an oauth_proxy_server + oauth_proxy_provider row
-// with the supplied secrets JSONB for the clone tests.
-func insertProxyProvider(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug, providerType string, secrets []byte) uuid.UUID {
-	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	q := oauthrepo.New(conn)
-	srv, err := q.UpsertOAuthProxyServer(ctx, oauthrepo.UpsertOAuthProxyServerParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      "srv-" + slug,
-		Audience:  conv.ToPGText("https://example.com"),
-	})
-	require.NoError(t, err)
-
-	prov, err := q.UpsertOAuthProxyProvider(ctx, oauthrepo.UpsertOAuthProxyProviderParams{
-		ProjectID:                         *authCtx.ProjectID,
-		OauthProxyServerID:                srv.ID,
-		Slug:                              slug,
-		ProviderType:                      providerType,
-		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
-		TokenEndpoint:                     conv.ToPGText("https://idp.example.com/token"),
-		RegistrationEndpoint:              conv.ToPGText("https://idp.example.com/register"),
-		ScopesSupported:                   []string{"openid"},
-		ResponseTypesSupported:            []string{"code"},
-		ResponseModesSupported:            []string{"query"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
-		SecurityKeyNames:                  []string{},
-		Secrets:                           secrets,
-	})
-	require.NoError(t, err)
-	return prov.ID
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
 }
 
 func TestCloneClientFromOAuthProxyProvider_HappyPath(t *testing.T) {
@@ -793,39 +845,6 @@ func TestCloneClientFromOAuthProxyProvider_RejectsGramProvider(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
-}
-
-// seedEnvironmentWithEntries creates an environment + entries via the same
-// EnvironmentEntries helper the production code uses, so values land encrypted
-// under the test encryption key. Returns the environment slug.
-func seedEnvironmentWithEntries(t *testing.T, ctx context.Context, ti *testInstance, slug string, entries map[string]string) string {
-	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	envRow, err := environmentsrepo.New(ti.conn).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		Name:           slug,
-		Slug:           slug,
-		Description:    pgtype.Text{},
-	})
-	require.NoError(t, err)
-
-	names := make([]string, 0, len(entries))
-	values := make([]string, 0, len(entries))
-	for name, value := range entries {
-		names = append(names, name)
-		values = append(values, value)
-	}
-	_, err = ti.envEntries.CreateEnvironmentEntries(ctx, environmentsrepo.CreateEnvironmentEntriesParams{
-		EnvironmentID: envRow.ID,
-		Names:         names,
-		Values:        values,
-	})
-	require.NoError(t, err)
-	return envRow.Slug
 }
 
 func TestCloneClientFromOAuthProxyProvider_EnvBackedSecrets(t *testing.T) {

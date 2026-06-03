@@ -110,8 +110,10 @@ type DiscoverRemoteSessionIssuerResponseBody struct {
 type CreateRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Project-unique slug.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
@@ -142,8 +144,10 @@ type CreateRemoteSessionIssuerResponseBody struct {
 type UpdateRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Project-unique slug.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
@@ -182,8 +186,10 @@ type ListRemoteSessionIssuersResponseBody struct {
 type GetRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Project-unique slug.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
@@ -1353,8 +1359,10 @@ type DeleteRemoteSessionIssuerGatewayErrorResponseBody struct {
 type RemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Project-unique slug.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
@@ -1434,6 +1442,7 @@ func NewCreateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *C
 	body := &CreateRemoteSessionIssuerResponseBody{
 		ID:                    res.ID,
 		ProjectID:             res.ProjectID,
+		OrganizationID:        res.OrganizationID,
 		Slug:                  res.Slug,
 		Issuer:                res.Issuer,
 		AuthorizationEndpoint: res.AuthorizationEndpoint,
@@ -1479,6 +1488,7 @@ func NewUpdateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *U
 	body := &UpdateRemoteSessionIssuerResponseBody{
 		ID:                    res.ID,
 		ProjectID:             res.ProjectID,
+		OrganizationID:        res.OrganizationID,
 		Slug:                  res.Slug,
 		Issuer:                res.Issuer,
 		AuthorizationEndpoint: res.AuthorizationEndpoint,
@@ -1546,6 +1556,7 @@ func NewGetRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *GetR
 	body := &GetRemoteSessionIssuerResponseBody{
 		ID:                    res.ID,
 		ProjectID:             res.ProjectID,
+		OrganizationID:        res.OrganizationID,
 		Slug:                  res.Slug,
 		Issuer:                res.Issuer,
 		AuthorizationEndpoint: res.AuthorizationEndpoint,

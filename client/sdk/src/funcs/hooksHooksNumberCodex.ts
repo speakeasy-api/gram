@@ -107,6 +107,11 @@ async function $do(
       explode: false,
       charEncoding: "none",
     }),
+    "X-Gram-Hook-Hostname": encodeSimple(
+      "X-Gram-Hook-Hostname",
+      payload["X-Gram-Hook-Hostname"],
+      { explode: false, charEncoding: "none" },
+    ),
   }));
 
   const requestSecurity = resolveSecurity(

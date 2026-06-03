@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 func TestCodex_PreToolUse_ShadowMCPBlockWithoutURLEvidenceOmitsRequestLink(t *testing.T) {
@@ -29,4 +31,50 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithoutURLEvidenceOmitsRequestLink(t *te
 	require.NotNil(t, result.Reason)
 	require.NotContains(t, *result.Reason, "Request access:")
 	require.NotContains(t, *result.Reason, shadowMCPApprovalRequestPrompt)
+}
+
+func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	email := "dev@example.com"
+	payload := &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		UserEmail:     &email,
+	}
+	metadata := &SessionMetadata{
+		SessionID:   "",
+		ServiceName: "Codex",
+		UserEmail:   email,
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	}
+
+	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), payload, metadata)
+	require.Equal(t, email, attrs[attr.UserEmailKey])
+}
+
+func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-with-email"
+	email := "dev@example.com"
+	_, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+	})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	require.Equal(t, email, metadata.UserEmail)
 }

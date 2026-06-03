@@ -20,7 +20,14 @@ func WithExactGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) c
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	return authz.GrantsToContext(ctx, grants)
+	normalized := append([]authz.Grant(nil), grants...)
+	for i := range normalized {
+		if normalized[i].Effect == "" {
+			normalized[i].Effect = authz.PolicyEffectAllow
+		}
+	}
+
+	return authz.GrantsToContext(ctx, normalized)
 }
 
 func RBACAlwaysEnabled(context.Context, string) (bool, error) {

@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -53,7 +54,6 @@ type Activities struct {
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
-	freeTierReportingUsageMetrics   *activities.FreeTierReportingUsageMetrics
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
 	getSlackProjectContext          *activities.GetSlackProjectContext
@@ -96,6 +96,7 @@ type Activities struct {
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	pluginPublisher                 *activities.PluginPublisher
 }
 
 func NewActivities(
@@ -134,6 +135,7 @@ func NewActivities(
 	workosClient activities.WorkOSClient,
 	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
+	pluginPublisher activities.PluginPublishClient,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -147,7 +149,6 @@ func NewActivities(
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		freeTierReportingUsageMetrics:   activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:          activities.NewSlackProjectContextActivity(logger, db, slackClient),
@@ -190,6 +191,7 @@ func NewActivities(
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 	}
 }
 
@@ -263,10 +265,6 @@ func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args a
 
 func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
 	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
-}
-
-func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs []string) error {
-	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
 }
 
 func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
@@ -450,4 +448,20 @@ func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time
 		return 0, fmt.Errorf("gc outbox processed rows: %w", err)
 	}
 	return n, nil
+}
+
+func (a *Activities) ListPluginPublishCandidates(ctx context.Context, input activities.ListPluginPublishCandidatesInput) (*activities.ListPluginPublishCandidatesResult, error) {
+	result, err := a.pluginPublisher.ListCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list plugin publish candidates: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+	result, err := a.pluginPublisher.PublishProject(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("publish plugin project: %w", err)
+	}
+	return result, nil
 }

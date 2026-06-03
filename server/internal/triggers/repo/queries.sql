@@ -23,6 +23,35 @@ INSERT INTO trigger_instances (
     @status
 ) RETURNING *;
 
+-- name: CreateDashboardTriggerInstance :one
+INSERT INTO trigger_instances (
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status
+) VALUES (
+    @organization_id,
+    @project_id,
+    @definition_slug,
+    @name,
+    @environment_id,
+    @target_kind,
+    @target_ref,
+    @target_display,
+    @config_json,
+    @status
+)
+ON CONFLICT (project_id, target_ref)
+  WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE
+DO NOTHING
+RETURNING *;
+
 -- name: ListTriggerInstances :many
 SELECT *
 FROM trigger_instances ti

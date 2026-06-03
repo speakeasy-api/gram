@@ -35,15 +35,16 @@ import (
 )
 
 const (
-	DefaultWarmTTLSeconds = 300
-	DefaultMaxConcurrency = 1
+	DefaultWarmTTLSeconds = 60
+	DefaultMaxConcurrency = 5
 
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack      = "slack"
-	sourceKindCron       = "cron"
-	sourceKindWake       = "wake"
+	sourceKindSlack      = bgtriggers.DefinitionSlugSlack
+	sourceKindCron       = bgtriggers.DefinitionSlugCron
+	sourceKindWake       = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -252,7 +253,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 type EnqueueResult struct {
 	AssistantID  uuid.UUID
 	ThreadID     uuid.UUID
-	EventCreated bool
+	ShouldSignal bool
 }
 
 type ProcessThreadEventsResult struct {
@@ -286,20 +287,28 @@ type WakeCanceller interface {
 	CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error
 }
 
+// DashboardIngestor ingests a synchronous, app-invoked message against a direct
+// trigger instance, returning the dispatched task (nil when filtered/paused).
+// Implemented by the triggers App's IngestDirect.
+type DashboardIngestor interface {
+	IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []byte, receivedAt time.Time) (*bgtriggers.Task, error)
+}
+
 type ServiceCore struct {
-	logger           *slog.Logger
-	tracer           trace.Tracer
-	db               *pgxpool.Pool
-	guardianPolicy   *guardian.Policy
-	encryptionClient *encryption.Client
-	runtime          RuntimeBackend
-	slackClient      *slackclient.SlackClient
-	assistantTokens  *assistanttokens.Manager
-	serverURL        *url.URL
-	telemetryLogger  *telemetry.Logger
-	contextWindow    *openrouter.ContextWindowResolver
-	wakeCanceller    WakeCanceller
-	chatWriter       *chat.ChatMessageWriter
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	db                *pgxpool.Pool
+	guardianPolicy    *guardian.Policy
+	encryptionClient  *encryption.Client
+	runtime           RuntimeBackend
+	slackClient       *slackclient.SlackClient
+	assistantTokens   *assistanttokens.Manager
+	serverURL         *url.URL
+	telemetryLogger   *telemetry.Logger
+	contextWindow     *openrouter.ContextWindowResolver
+	wakeCanceller     WakeCanceller
+	chatWriter        *chat.ChatMessageWriter
+	dashboardIngestor DashboardIngestor
 }
 
 func NewServiceCore(
@@ -316,19 +325,20 @@ func NewServiceCore(
 	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
 	return &ServiceCore{
-		logger:           logger,
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:               db,
-		guardianPolicy:   guardianPolicy,
-		encryptionClient: encryptionClient,
-		runtime:          newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:      slackClient,
-		assistantTokens:  assistantTokens,
-		serverURL:        serverURL,
-		telemetryLogger:  telemetryLogger,
-		contextWindow:    contextWindow,
-		wakeCanceller:    nil,
-		chatWriter:       nil,
+		logger:            logger,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:                db,
+		guardianPolicy:    guardianPolicy,
+		encryptionClient:  encryptionClient,
+		runtime:           newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:       slackClient,
+		assistantTokens:   assistantTokens,
+		serverURL:         serverURL,
+		telemetryLogger:   telemetryLogger,
+		contextWindow:     contextWindow,
+		wakeCanceller:     nil,
+		chatWriter:        nil,
+		dashboardIngestor: nil,
 	}
 }
 
@@ -336,6 +346,13 @@ func NewServiceCore(
 // assistants must not import triggers.
 func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
 	s.wakeCanceller = c
+}
+
+// SetDashboardIngestor wires the trigger App used to ingest dashboard sidebar
+// messages. Set after construction to match the existing post-construction
+// injection pattern. SendDashboardMessage fails if the ingestor was never set.
+func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
+	s.dashboardIngestor = i
 }
 
 // SetChatMessageWriter wires the chat writer used by self-heal. Set after
@@ -1106,7 +1123,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 			attr.SlogAssistantID(assistantID.String()),
 			attr.SlogTriggerInstanceID(task.TriggerInstanceID),
 		)
-		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, EventCreated: false}, nil
+		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, ShouldSignal: false}, nil
 	case err != nil:
 		return EnqueueResult{}, err
 	}
@@ -1114,7 +1131,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{
 			AssistantID:  assistant.ID,
 			ThreadID:     uuid.Nil,
-			EventCreated: false,
+			ShouldSignal: false,
 		}, nil
 	}
 
@@ -1158,7 +1175,6 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{}, fmt.Errorf("upsert assistant thread: %w", err)
 	}
 
-	var eventCreated bool
 	_, err = queries.InsertAssistantThreadEvent(ctx, assistantrepo.InsertAssistantThreadEventParams{
 		AssistantThreadID:     threadID,
 		AssistantID:           assistant.ID,
@@ -1170,13 +1186,11 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		NormalizedPayloadJson: normalizedPayloadJSON,
 		SourcePayloadJson:     sourcePayloadJSON,
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		eventCreated = false
-	case err != nil:
+	// pgx.ErrNoRows means the event was already enqueued by an earlier attempt
+	// (idempotent retry). We still signal: a turn whose earlier coordinator
+	// signal failed must be picked up when the client retries.
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("insert assistant thread event: %w", err)
-	default:
-		eventCreated = true
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1186,7 +1200,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	return EnqueueResult{
 		AssistantID:  assistant.ID,
 		ThreadID:     threadID,
-		EventCreated: eventCreated,
+		ShouldSignal: true,
 	}, nil
 }
 
@@ -1257,6 +1271,23 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 			}
 		}
 		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindDashboard:
+		var event dashboardEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode dashboard trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(dashboardSourceRef{UserID: event.UserID})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal dashboard source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindDashboard, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
 		return "", nil, nil, nil, fmt.Errorf("assistant source %q is not supported", task.DefinitionSlug)
 	}

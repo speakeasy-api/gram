@@ -45,6 +45,7 @@ func TestDeleteDomain_ZeroEndpoints_NoCascadeAudits(t *testing.T) {
 		IngressName:     pgTextValid("ingress-zero"),
 		CertSecretName:  pgTextValid("cert-zero"),
 		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 
@@ -81,6 +82,7 @@ func TestDeleteDomain_CascadesSoftDeleteToMcpEndpointsAcrossProjects(t *testing.
 		IngressName:     pgTextValid("ingress-cascade"),
 		CertSecretName:  pgTextValid("cert-cascade"),
 		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
 

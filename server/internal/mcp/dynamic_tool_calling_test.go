@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -171,7 +172,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		}
 
 		argsRaw := json.RawMessage(`{"tool_names": []}`)
-		reqID := msgID{format: 1, Number: 1}
+		reqID := mcpjsonrpc.NumberID(1)
 
 		_, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
 		require.Error(t, err)
@@ -190,7 +191,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		}
 
 		argsRaw := json.RawMessage(`{}`)
-		reqID := msgID{format: 1, Number: 1}
+		reqID := mcpjsonrpc.NumberID(1)
 
 		_, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
 		require.Error(t, err)
@@ -203,7 +204,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 
 		toolset := &types.Toolset{}
 		argsRaw := json.RawMessage(`{invalid}`)
-		reqID := msgID{format: 1, Number: 1}
+		reqID := mcpjsonrpc.NumberID(1)
 
 		_, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
 		require.Error(t, err)
@@ -234,7 +235,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		}
 
 		argsRaw := json.RawMessage(`{"tool_names": ["get-user"]}`)
-		reqID := msgID{format: 1, Number: 1}
+		reqID := mcpjsonrpc.NumberID(1)
 
 		response, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
 		require.NoError(t, err)
@@ -257,7 +258,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		}
 
 		argsRaw := json.RawMessage(`{"tool_names": ["nonexistent-tool"]}`)
-		reqID := msgID{format: 1, Number: 1}
+		reqID := mcpjsonrpc.NumberID(1)
 
 		response, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
 		require.NoError(t, err)
@@ -279,7 +280,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		}
 
 		argsRaw := json.RawMessage(`{"tool_names": ["proxy-tool"]}`)
-		reqID := msgID{format: 1, Number: 1}
+		reqID := mcpjsonrpc.NumberID(1)
 
 		_, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
 		require.Error(t, err)
@@ -300,7 +301,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		}
 
 		argsRaw := json.RawMessage(`{"tool_names": ["tool-a", "tool-c"]}`)
-		reqID := msgID{format: 1, Number: 1}
+		reqID := mcpjsonrpc.NumberID(1)
 
 		response, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
 		require.NoError(t, err)
@@ -321,7 +322,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		}
 
 		argsRaw := json.RawMessage(`{"tool_names": ["  my-tool  "]}`)
-		reqID := msgID{format: 1, Number: 1}
+		reqID := mcpjsonrpc.NumberID(1)
 
 		response, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
 		require.NoError(t, err)

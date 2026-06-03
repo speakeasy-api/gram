@@ -121,10 +121,13 @@ SELECT
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
   t.mcp_slug AS toolset_mcp_slug,
-  t.mcp_is_public AS toolset_is_public
+  t.mcp_is_public AS toolset_is_public,
+  (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth,
+  cd.domain AS toolset_custom_domain
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
+LEFT JOIN custom_domains cd ON cd.id = t.custom_domain_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;
@@ -136,6 +139,30 @@ SELECT name FROM organization_metadata WHERE id = @id;
 SELECT *
 FROM plugin_github_connections
 WHERE project_id = @project_id;
+
+-- name: ListPluginPublishCandidates :many
+-- Lists projects with a GitHub plugin connection for the automated generator
+-- rollout, paginated by project_id (pass the zero UUID to start). Each row
+-- carries the user that created the project's most recent plugins-mcp API key,
+-- used as the publish actor. This is a deliberate cross-project sweep, so unlike
+-- the tenant-scoped queries it is not constrained to a single project_id.
+SELECT
+  c.project_id,
+  k.created_by_user_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN LATERAL (
+  SELECT created_by_user_id
+  FROM api_keys
+  WHERE project_id = c.project_id
+    AND deleted IS FALSE
+    AND name LIKE 'plugins-mcp-%'
+  ORDER BY created_at DESC
+  LIMIT 1
+) k ON TRUE
+WHERE c.project_id > @after_project_id
+ORDER BY c.project_id ASC
+LIMIT @result_limit;
 
 -- name: GetGitHubConnectionByMarketplaceToken :one
 -- Resolves a marketplace proxy URL token to the upstream connection. The token
@@ -149,13 +176,16 @@ WHERE marketplace_token = @marketplace_token;
 -- argument is the candidate token to use if no token is currently set; on
 -- conflict the existing token is preserved via COALESCE so callers can pass a
 -- freshly-generated token on every publish without overwriting prior state.
--- Token rotation goes through a separate query.
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token)
-VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token)
+-- Token rotation goes through a separate query. published_fingerprint is the
+-- content hash of the packages just published and is always overwritten, so
+-- subsequent rollout runs can detect when nothing changed.
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint)
+VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_fingerprint)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
+      published_fingerprint = EXCLUDED.published_fingerprint,
       updated_at = clock_timestamp()
 RETURNING *;

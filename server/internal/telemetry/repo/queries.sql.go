@@ -1139,6 +1139,40 @@ func toolCallExprsFor(eventSource string) toolCallExpressions {
 	}
 }
 
+func chAttr(path string) string {
+	return "toString(attributes." + path + ")"
+}
+
+func chMultiIf(args ...string) string {
+	return "multiIf(" + strings.Join(args, ", ") + ")"
+}
+
+func chFirstNonEmpty(exprs ...string) string {
+	if len(exprs) == 0 {
+		return "''"
+	}
+	if len(exprs) == 1 {
+		return exprs[0]
+	}
+
+	args := make([]string, 0, len(exprs)*2-1)
+	for _, expr := range exprs[:len(exprs)-1] {
+		args = append(args, expr+" != ''", expr)
+	}
+	args = append(args, exprs[len(exprs)-1])
+
+	return chMultiIf(args...)
+}
+
+func chAny(conditions ...string) string {
+	wrapped := make([]string, 0, len(conditions))
+	for _, condition := range conditions {
+		wrapped = append(wrapped, "("+condition+")")
+	}
+
+	return "(" + strings.Join(wrapped, " OR ") + ")"
+}
+
 // SearchUsersParams contains the parameters for searching users with aggregated metrics.
 type SearchUsersParams struct {
 	GramProjectID    string
@@ -1420,6 +1454,143 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 	}
 
 	return &metrics, nil
+}
+
+// GetEmployeeDataFlowGraphParams contains parameters for getting an employee data flow graph.
+type GetEmployeeDataFlowGraphParams struct {
+	GramProjectID  string
+	TimeStart      int64
+	TimeEnd        int64
+	UserID         string // user_id (mutually exclusive with ExternalUserID)
+	ExternalUserID string // external_user_id (mutually exclusive with UserID)
+}
+
+const employeeDataFlowMaxPathTuples uint64 = 100
+
+type employeeDataFlowExpressions struct {
+	origin      string
+	client      string
+	server      string
+	serverClass string
+	tool        string
+	isCall      string
+	isSuccess   string
+	isFailure   string
+}
+
+func employeeDataFlowExprs() employeeDataFlowExpressions {
+	externalMCPName := chFirstNonEmpty(
+		chAttr("gram.external_mcp.name"),
+		chAttr("gram.external_mcp.slug"),
+		chAttr("gram.external_mcp.id"),
+		"''",
+	)
+	mcpMatch := chAttr("gram.mcp.match")
+	mcpServerURL := chAttr("gram.mcp.server_url")
+	hookEvent := chAttr("gram.hook.event")
+	httpStatus := "toInt32OrZero(" + chAttr("http.response.status_code") + ")"
+	urnSource := "arrayElement(splitByChar(':', gram_urn), 3)"
+
+	hookCall := "event_source = 'hook' AND tool_name != '' AND " + hookEvent + " IN ('PostToolUse', 'PostToolUseFailure')"
+	gramCall := "event_source != 'hook' AND startsWith(gram_urn, 'tools:')"
+
+	server := chMultiIf(
+		"remote_mcp_server_id != ''",
+		chFirstNonEmpty("tool_source", externalMCPName, "remote_mcp_server_id"),
+		externalMCPName+" != ''",
+		externalMCPName,
+		mcpMatch+" != ''",
+		mcpMatch,
+		"tool_source != ''",
+		"tool_source",
+		"startsWith(gram_urn, 'tools:')",
+		urnSource,
+		"'local'",
+	)
+
+	return employeeDataFlowExpressions{
+		origin: chAttr("gram.hook.hostname"),
+		client: chFirstNonEmpty(
+			"hook_source",
+			"event_source",
+			"'unknown'",
+		),
+		server: server,
+		serverClass: chMultiIf(
+			"remote_mcp_server_id != '' OR (startsWith(gram_urn, 'tools:') AND event_source != 'hook')",
+			"'gram'",
+			externalMCPName+" != '' OR "+mcpServerURL+" != '' OR "+mcpMatch+" != ''",
+			"'external'",
+			server+" = 'local'",
+			"'local'",
+			"tool_source = ''",
+			"'local'",
+			"'external'",
+		),
+		tool:      chFirstNonEmpty("tool_name", "gram_urn", "urn", "''"),
+		isCall:    chAny(hookCall, gramCall),
+		isSuccess: chAny("event_source = 'hook' AND tool_name != '' AND "+hookEvent+" = 'PostToolUse'", gramCall+" AND "+httpStatus+" >= 200 AND "+httpStatus+" < 300"),
+		isFailure: chAny("event_source = 'hook' AND tool_name != '' AND "+hookEvent+" = 'PostToolUseFailure'", gramCall+" AND "+httpStatus+" >= 400"),
+	}
+}
+
+// GetEmployeeDataFlowGraph aggregates an employee's tool-call telemetry into
+// path tuples: origin -> MCP client -> MCP server -> tool.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetEmployeeDataFlowGraph(ctx context.Context, arg GetEmployeeDataFlowGraphParams) ([]EmployeeDataFlowRow, error) {
+	exprs := employeeDataFlowExprs()
+
+	sb := sq.Select(
+		exprs.origin+" AS origin",
+		exprs.client+" AS client",
+		exprs.server+" AS server",
+		exprs.serverClass+" AS server_class",
+		exprs.tool+" AS tool",
+		"count() AS call_count",
+		"countIf("+exprs.isSuccess+") AS success_count",
+		"countIf("+exprs.isFailure+") AS failure_count",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where(exprs.isCall)
+
+	if arg.UserID != "" {
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
+	} else if arg.ExternalUserID != "" {
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
+	}
+
+	sb = sb.GroupBy("origin", "client", "server", "server_class", "tool").
+		OrderBy("call_count DESC").
+		Limit(employeeDataFlowMaxPathTuples)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get employee data flow graph query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	graphRows := []EmployeeDataFlowRow{}
+	for rows.Next() {
+		var row EmployeeDataFlowRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		graphRows = append(graphRows, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return graphRows, nil
 }
 
 // ListFilterOptionsParams contains the parameters for listing filter options.

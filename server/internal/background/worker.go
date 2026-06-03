@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -80,6 +81,7 @@ type WorkerOptions struct {
 	WorkOSClient                   activities.WorkOSClient
 	SvixClient                     *svix.Svix
 	ProductFeatures                *productfeatures.Client
+	PluginPublisher                *plugins.Service
 }
 
 func ForDeploymentProcessing(
@@ -126,6 +128,7 @@ func ForDeploymentProcessing(
 		SvixClient:                     nil,
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
+		PluginPublisher:                nil,
 	}
 }
 
@@ -170,6 +173,7 @@ func NewTemporalWorker(
 		SvixClient:                     nil,
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
+		PluginPublisher:                nil,
 	}
 
 	for _, o := range options {
@@ -207,6 +211,7 @@ func NewTemporalWorker(
 			SvixClient:                     conv.Default(o.SvixClient, opts.SvixClient),
 			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
+			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
 		}
 	}
 
@@ -266,6 +271,7 @@ func NewTemporalWorker(
 		opts.WorkOSClient,
 		opts.SvixClient,
 		opts.ProductFeatures,
+		opts.PluginPublisher,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -283,7 +289,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
-	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
@@ -325,6 +330,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
+	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIUsage)
@@ -335,6 +342,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
@@ -369,6 +377,7 @@ func NewTemporalWorker(
 	// Outbox -> Relay workflow and GC
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
+	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -414,6 +423,12 @@ func NewTemporalWorker(
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if opts.PluginPublisher != nil {
+		if err := AddPluginGeneratorRolloutSchedule(context.Background(), env); err != nil {
+			logger.ErrorContext(context.Background(), "failed to add plugin generator rollout schedule", attr.SlogError(err))
+		}
 	}
 
 	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker}

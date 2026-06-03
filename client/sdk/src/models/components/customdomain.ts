@@ -26,6 +26,10 @@ export type CustomDomain = {
    */
   id: string;
   /**
+   * IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.
+   */
+  ipAllowlist: Array<string>;
+  /**
    * The custom domain is actively being registered
    */
   isUpdating: boolean;
@@ -54,6 +58,7 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
       ),
       domain: z.string(),
       id: z.string(),
+      ip_allowlist: z.array(z.string()),
       is_updating: z.boolean(),
       organization_id: z.string(),
       updated_at: z.pipe(
@@ -65,6 +70,7 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
+        "ip_allowlist": "ipAllowlist",
         "is_updating": "isUpdating",
         "organization_id": "organizationId",
         "updated_at": "updatedAt",
