@@ -279,10 +279,8 @@ func (s *Service) ListMessages(ctx context.Context, payload *gen.ListMessagesPay
 	records, err := s.core.ListDashboardMessages(ctx, *authCtx.ProjectID, chatID, authCtx.UserID, afterSeq)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "conversation not found").Log(ctx, s.logger)
-	case errors.Is(err, errDashboardForbidden):
-		// Don't disclose existence: a chat owned by another user reads the same
-		// as one that doesn't exist.
+		// A conversation the caller has no messages in reads the same as one that
+		// doesn't exist, so its existence isn't disclosed.
 		return nil, oops.E(oops.CodeNotFound, err, "conversation not found").Log(ctx, s.logger)
 	case err != nil:
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "list assistant messages")

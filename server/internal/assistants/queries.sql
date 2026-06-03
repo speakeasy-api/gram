@@ -105,24 +105,30 @@ RETURNING id, seq, created_at;
 
 -- name: ListDashboardMessages :many
 -- Reads a dashboard chat's conversation log in send order, optionally only
--- messages newer than a cursor (after_seq) for incremental polling.
+-- messages newer than a cursor (after_seq) for incremental polling. Scoped to
+-- the caller's own rows: chat_id is a hash of the client-chosen correlation id
+-- and is not user-namespaced, so a single chat_id can hold more than one user's
+-- messages — filtering by user_id keeps a reader to their own conversation.
 SELECT id, chat_id, role, content, seq, created_at
 FROM assistant_dashboard_messages
 WHERE chat_id = @chat_id
   AND project_id = @project_id
+  AND user_id = @user_id
   AND seq > @after_seq
 ORDER BY seq;
 
--- name: GetDashboardChatOwner :one
--- Returns the user id that owns a dashboard chat — stamped on every log row.
--- Used to enforce that a caller reads only their own conversation, since the
--- conversation key (correlation id) is client-chosen and not project-unique.
--- No rows means the chat has no dashboard messages (doesn't exist / not a
--- dashboard chat).
-SELECT user_id
+-- name: CallerOwnsDashboardChat :one
+-- Read gate for a dashboard conversation: returns a row only when the caller has
+-- at least one message in the chat. The conversation key (correlation id) is
+-- client-chosen and not user-namespaced, so a chat_id can hold rows for more
+-- than one user; scoping by user_id keeps each caller to their own conversation.
+-- No row means the caller has nothing here (chat doesn't exist for them), which
+-- the handler surfaces as not-found so existence isn't disclosed.
+SELECT 1 AS ok
 FROM assistant_dashboard_messages
 WHERE chat_id = @chat_id
   AND project_id = @project_id
+  AND user_id = @user_id
 LIMIT 1;
 
 -- name: ResolveToolsetsForWrite :many

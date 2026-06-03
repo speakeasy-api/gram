@@ -82,6 +82,37 @@ func TestListMessagesRejectsCrossUserRead(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// A chat_id is a hash of the client-chosen correlation id, not namespaced by
+// user, so two project members can write into the same chat_id. A reader must
+// see only their own messages, never the other user's.
+func TestListMessagesScopesCoMingledChatToCaller(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_list_messages_comingled")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+
+	// Both users thread under the same correlation id, so both land in the same
+	// chat_id.
+	const correlation = "shared-key"
+	_, err = svc.core.EnqueueTriggerTask(ctx, dashboardTask(managed.ID, correlation, "evt-mine", "my secret", "user-test"))
+	require.NoError(t, err)
+	_, err = svc.core.EnqueueTriggerTask(ctx, dashboardTask(managed.ID, correlation, "evt-theirs", "their secret", "other-user"))
+	require.NoError(t, err)
+
+	got, err := svc.ListMessages(ctx, &gen.ListMessagesPayload{
+		ChatID:           deterministicChatID(managed.ID, correlation).String(),
+		AfterSeq:         nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Messages, 1, "caller must not see the other user's co-mingled message")
+	require.Equal(t, "my secret", got.Messages[0].Content)
+}
+
 func TestListMessagesNotFound(t *testing.T) {
 	t.Parallel()
 

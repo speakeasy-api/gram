@@ -1227,10 +1227,6 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}, nil
 }
 
-// errDashboardForbidden is returned when a caller asks to read a dashboard
-// conversation they do not own.
-var errDashboardForbidden = errors.New("dashboard conversation belongs to another user")
-
 type dashboardMessageRecord struct {
 	ID        uuid.UUID
 	Role      string
@@ -1240,28 +1236,28 @@ type dashboardMessageRecord struct {
 }
 
 // ListDashboardMessages returns a dashboard chat's conversation log in send
-// order, optionally only messages newer than afterSeq. callerUserID must own the
-// conversation — the conversation key (correlation id) is client-chosen and not
-// project-unique, so project scope alone would let any project member read
-// another user's chat by its id. Returns pgx.ErrNoRows when no such dashboard
-// chat exists, and errDashboardForbidden when it belongs to a different user.
+// order, optionally only messages newer than afterSeq, scoped to callerUserID's
+// own messages. The conversation key (correlation id) is client-chosen and not
+// user-namespaced, so a single chat_id can hold more than one user's rows; every
+// read is filtered to the caller so one user can never see another's messages.
+// Returns pgx.ErrNoRows when the caller has no messages in the chat, so a
+// conversation they don't participate in reads the same as one that doesn't
+// exist.
 func (s *ServiceCore) ListDashboardMessages(ctx context.Context, projectID, chatID uuid.UUID, callerUserID string, afterSeq int64) ([]dashboardMessageRecord, error) {
 	q := assistantrepo.New(s.db)
 
-	owner, err := q.GetDashboardChatOwner(ctx, assistantrepo.GetDashboardChatOwnerParams{
+	if _, err := q.CallerOwnsDashboardChat(ctx, assistantrepo.CallerOwnsDashboardChatParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("resolve dashboard chat owner: %w", err)
-	}
-	if owner == "" || owner != callerUserID {
-		return nil, errDashboardForbidden
+		UserID:    callerUserID,
+	}); err != nil {
+		return nil, fmt.Errorf("resolve dashboard chat access: %w", err)
 	}
 
 	rows, err := q.ListDashboardMessages(ctx, assistantrepo.ListDashboardMessagesParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
+		UserID:    callerUserID,
 		AfterSeq:  afterSeq,
 	})
 	if err != nil {
