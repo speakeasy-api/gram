@@ -61,7 +61,8 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
-	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
 	if err != nil {
 		return err
 	}
