@@ -57,7 +57,9 @@ export default function CliCallback(props: CliCallbackProps) {
     }
 
     createProducerKey(createKey, session.session)
-      .then((key) => transmitKey(localCallbackUrl, key, projectSlug))
+      .then((key) =>
+        transmitKey(localCallbackUrl, key, projectSlug, session.user.email),
+      )
       .catch((err) => {
         setError(
           err instanceof Error ? err.message : "Failed to create API key",
@@ -146,11 +148,15 @@ async function transmitKey(
   callbackUrl: string,
   apiKey: string,
   projectSlug: string | null,
+  userEmail: string,
 ): Promise<void> {
   const url = new URL(callbackUrl);
   url.searchParams.set("api_key", apiKey);
   if (projectSlug) {
     url.searchParams.set("project", projectSlug);
+  }
+  if (userEmail) {
+    url.searchParams.set("email", userEmail);
   }
 
   window.location.replace(url.toString());

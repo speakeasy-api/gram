@@ -20,6 +20,10 @@ export type HooksNumberCodexRequest = {
    * project header
    */
   gramProject?: string | undefined;
+  /**
+   * Optional endpoint hostname supplied by the Gram hook plugin.
+   */
+  xGramHookHostname?: string | undefined;
   codexHookPayload: components.CodexHookPayload;
 };
 
@@ -58,6 +62,7 @@ export function hooksNumberCodexSecurityToJSON(
 export type HooksNumberCodexRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
+  "X-Gram-Hook-Hostname"?: string | undefined;
   CodexHookPayload: components.CodexHookPayload$Outbound;
 };
 
@@ -69,12 +74,14 @@ export const HooksNumberCodexRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
+    xGramHookHostname: z.optional(z.string()),
     codexHookPayload: components.CodexHookPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
+      xGramHookHostname: "X-Gram-Hook-Hostname",
       codexHookPayload: "CodexHookPayload",
     });
   }),

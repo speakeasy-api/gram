@@ -444,6 +444,53 @@ func BuildGetUserMetricsSummaryPayload(telemetryGetUserMetricsSummaryBody string
 	return v, nil
 }
 
+// BuildGetEmployeeDataFlowGraphPayload builds the payload for the telemetry
+// getEmployeeDataFlowGraph endpoint from CLI flags.
+func BuildGetEmployeeDataFlowGraphPayload(telemetryGetEmployeeDataFlowGraphBody string, telemetryGetEmployeeDataFlowGraphApikeyToken string, telemetryGetEmployeeDataFlowGraphSessionToken string, telemetryGetEmployeeDataFlowGraphProjectSlugInput string) (*telemetry.GetEmployeeDataFlowGraphPayload, error) {
+	var err error
+	var body GetEmployeeDataFlowGraphRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetEmployeeDataFlowGraphBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetEmployeeDataFlowGraphApikeyToken != "" {
+			apikeyToken = &telemetryGetEmployeeDataFlowGraphApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetEmployeeDataFlowGraphSessionToken != "" {
+			sessionToken = &telemetryGetEmployeeDataFlowGraphSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetEmployeeDataFlowGraphProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetEmployeeDataFlowGraphProjectSlugInput
+		}
+	}
+	v := &telemetry.GetEmployeeDataFlowGraphPayload{
+		From:           body.From,
+		To:             body.To,
+		UserID:         body.UserID,
+		ExternalUserID: body.ExternalUserID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetObservabilityOverviewPayload builds the payload for the telemetry
 // getObservabilityOverview endpoint from CLI flags.
 func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody string, telemetryGetObservabilityOverviewApikeyToken string, telemetryGetObservabilityOverviewSessionToken string, telemetryGetObservabilityOverviewProjectSlugInput string) (*telemetry.GetObservabilityOverviewPayload, error) {

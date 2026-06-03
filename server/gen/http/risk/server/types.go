@@ -9763,12 +9763,13 @@ func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *st
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, chatID *string, category *string, ruleID *string, uniqueMatch *bool, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, chatID *string, category *string, ruleID *string, userID *string, uniqueMatch *bool, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Category = category
 	v.RuleID = ruleID
+	v.UserID = userID
 	v.UniqueMatch = uniqueMatch
 	v.From = from
 	v.To = to
@@ -9783,12 +9784,13 @@ func NewListRiskResultsPayload(policyID *string, chatID *string, category *strin
 
 // NewListRiskResultsForAgentPayload builds a risk service
 // listRiskResultsForAgent endpoint payload.
-func NewListRiskResultsForAgentPayload(policyID *string, chatID *string, category *string, ruleID *string, uniqueMatch *bool, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsForAgentPayload {
+func NewListRiskResultsForAgentPayload(policyID *string, chatID *string, category *string, ruleID *string, userID *string, uniqueMatch *bool, from *string, to *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsForAgentPayload {
 	v := &risk.ListRiskResultsForAgentPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Category = category
 	v.RuleID = ruleID
+	v.UserID = userID
 	v.UniqueMatch = uniqueMatch
 	v.From = from
 	v.To = to
