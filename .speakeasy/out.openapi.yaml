@@ -4683,6 +4683,113 @@ paths:
       tags:
         - assistants
       x-speakeasy-name-override: list
+  /rpc/assistants.listMessages:
+    get:
+      description: List a dashboard conversation log for a chat (the user's messages and the assistant's delivered replies). Only the user who owns the conversation may read it. Poll with after_seq to fetch only newer messages.
+      operationId: listAssistantMessages
+      parameters:
+        - allowEmptyValue: true
+          description: The chat id returned by sendMessage.
+          in: query
+          name: chat_id
+          required: true
+          schema:
+            description: The chat id returned by sendMessage.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Return only messages with seq greater than this; omit or 0 for the full log.
+          in: query
+          name: after_seq
+          schema:
+            description: Return only messages with seq greater than this; omit or 0 for the full log.
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMessagesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listMessages assistants
+      tags:
+        - assistants
+      x-speakeasy-name-override: listMessages
+      x-speakeasy-react-hook:
+        name: ListAssistantMessages
   /rpc/assistants.sendMessage:
     post:
       description: Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.
@@ -33488,6 +33595,36 @@ components:
         - project_name
         - project_slug
         - mcp_server_id
+    DashboardMessage:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Message content (Markdown).
+        created_at:
+          type: string
+          description: RFC3339 creation timestamp.
+          format: date-time
+        id:
+          type: string
+          description: Message id.
+          format: uuid
+        role:
+          type: string
+          description: Message author.
+          enum:
+            - user
+            - assistant
+        seq:
+          type: integer
+          description: Monotonic cursor; pass the latest value as after_seq to poll for newer messages.
+          format: int64
+      required:
+        - id
+        - role
+        - content
+        - seq
+        - created_at
     DeleteAIIntegrationConfigRequest:
       type: object
       properties:
@@ -36181,6 +36318,16 @@ components:
           description: The members in your organization.
       required:
         - members
+    ListMessagesResult:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardMessage'
+          description: Conversation log in send order.
+      required:
+        - messages
     ListPackagesResult:
       type: object
       properties:

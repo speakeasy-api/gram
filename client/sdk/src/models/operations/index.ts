@@ -154,6 +154,7 @@ export * from "./listallowedorigins.js";
 export * from "./listapikeys.js";
 export * from "./listassets.js";
 export * from "./listassistantmemories.js";
+export * from "./listassistantmessages.js";
 export * from "./listassistants.js";
 export * from "./listattributekeys.js";
 export * from "./listauditlogfacets.js";

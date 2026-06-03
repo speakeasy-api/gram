@@ -166,6 +166,36 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "sendMessage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SendAssistantMessage"}`)
 	})
+
+	Method("listMessages", func() {
+		Description("List a dashboard conversation log for a chat (the user's messages and the assistant's delivered replies). Only the user who owns the conversation may read it. Poll with after_seq to fetch only newer messages.")
+
+		Payload(func() {
+			Attribute("chat_id", String, "The chat id returned by sendMessage.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("after_seq", Int64, "Return only messages with seq greater than this; omit or 0 for the full log.")
+			Required("chat_id")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListMessagesResult)
+
+		HTTP(func() {
+			GET("/rpc/assistants.listMessages")
+			Param("chat_id")
+			Param("after_seq")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAssistantMessages")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMessages")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAssistantMessages"}`)
+	})
 })
 
 var CreateAssistantForm = Type("CreateAssistantForm", func() {
@@ -213,4 +243,24 @@ var SendMessageResult = Type("SendMessageResult", func() {
 	})
 	Attribute("accepted", Boolean, "Whether the message was accepted and enqueued for processing.")
 	Required("chat_id", "thread_id", "accepted")
+})
+
+var DashboardMessage = Type("DashboardMessage", func() {
+	Attribute("id", String, "Message id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("role", String, "Message author.", func() {
+		Enum("user", "assistant")
+	})
+	Attribute("content", String, "Message content (Markdown).")
+	Attribute("seq", Int64, "Monotonic cursor; pass the latest value as after_seq to poll for newer messages.")
+	Attribute("created_at", String, "RFC3339 creation timestamp.", func() {
+		Format(FormatDateTime)
+	})
+	Required("id", "role", "content", "seq", "created_at")
+})
+
+var ListMessagesResult = Type("ListMessagesResult", func() {
+	Attribute("messages", ArrayOf(DashboardMessage), "Conversation log in send order.")
+	Required("messages")
 })

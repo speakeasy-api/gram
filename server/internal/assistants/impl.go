@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -252,6 +253,52 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		ThreadID: result.ThreadID.String(),
 		Accepted: result.Accepted,
 	}, nil
+}
+
+func (s *Service) ListMessages(ctx context.Context, payload *gen.ListMessagesPayload) (*gen.ListMessagesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "reading messages requires a user identity").Log(ctx, s.logger)
+	}
+
+	chatID, err := uuid.Parse(payload.ChatID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id").Log(ctx, s.logger)
+	}
+	var afterSeq int64
+	if payload.AfterSeq != nil {
+		afterSeq = *payload.AfterSeq
+	}
+
+	records, err := s.core.ListDashboardMessages(ctx, *authCtx.ProjectID, chatID, authCtx.UserID, afterSeq)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "conversation not found").Log(ctx, s.logger)
+	case errors.Is(err, errDashboardForbidden):
+		// Don't disclose existence: a chat owned by another user reads the same
+		// as one that doesn't exist.
+		return nil, oops.E(oops.CodeNotFound, err, "conversation not found").Log(ctx, s.logger)
+	case err != nil:
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "list assistant messages")
+	}
+
+	messages := make([]*gen.DashboardMessage, 0, len(records))
+	for _, r := range records {
+		messages = append(messages, &gen.DashboardMessage{
+			ID:        r.ID.String(),
+			Role:      r.Role,
+			Content:   r.Content,
+			Seq:       r.Seq,
+			CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339Nano),
+		})
+	}
+	return &gen.ListMessagesResult{Messages: messages}, nil
 }
 
 func (s *Service) Kind() string {

@@ -169,6 +169,13 @@ type SendMessageResponseBody struct {
 	Accepted bool `form:"accepted" json:"accepted" xml:"accepted"`
 }
 
+// ListMessagesResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body.
+type ListMessagesResponseBody struct {
+	// Conversation log in send order.
+	Messages []*DashboardMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
+}
+
 // ListAssistantsUnauthorizedResponseBody is the type of the "assistants"
 // service "listAssistants" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1275,6 +1282,188 @@ type SendMessageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListMessagesUnauthorizedResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body for the "unauthorized" error.
+type ListMessagesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesForbiddenResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body for the "forbidden" error.
+type ListMessagesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesBadRequestResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body for the "bad_request" error.
+type ListMessagesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesNotFoundResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body for the "not_found" error.
+type ListMessagesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesConflictResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body for the "conflict" error.
+type ListMessagesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesUnsupportedMediaResponseBody is the type of the "assistants"
+// service "listMessages" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListMessagesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesInvalidResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body for the "invalid" error.
+type ListMessagesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesInvariantViolationResponseBody is the type of the "assistants"
+// service "listMessages" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListMessagesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesUnexpectedResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body for the "unexpected" error.
+type ListMessagesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMessagesGatewayErrorResponseBody is the type of the "assistants" service
+// "listMessages" endpoint HTTP response body for the "gateway_error" error.
+type ListMessagesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AssistantResponseBody is used to define fields on response body types.
 type AssistantResponseBody struct {
 	// The assistant ID.
@@ -1308,6 +1497,21 @@ type AssistantToolsetRefResponseBody struct {
 	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
 	// Optional environment slug used when invoking the toolset.
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
+}
+
+// DashboardMessageResponseBody is used to define fields on response body types.
+type DashboardMessageResponseBody struct {
+	// Message id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message author.
+	Role string `form:"role" json:"role" xml:"role"`
+	// Message content (Markdown).
+	Content string `form:"content" json:"content" xml:"content"`
+	// Monotonic cursor; pass the latest value as after_seq to poll for newer
+	// messages.
+	Seq int64 `form:"seq" json:"seq" xml:"seq"`
+	// RFC3339 creation timestamp.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // AssistantToolsetRefRequestBody is used to define fields on request body
@@ -1435,6 +1639,25 @@ func NewSendMessageResponseBody(res *assistants.SendMessageResult) *SendMessageR
 		ChatID:   res.ChatID,
 		ThreadID: res.ThreadID,
 		Accepted: res.Accepted,
+	}
+	return body
+}
+
+// NewListMessagesResponseBody builds the HTTP response body from the result of
+// the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesResponseBody(res *assistants.ListMessagesResult) *ListMessagesResponseBody {
+	body := &ListMessagesResponseBody{}
+	if res.Messages != nil {
+		body.Messages = make([]*DashboardMessageResponseBody, len(res.Messages))
+		for i, val := range res.Messages {
+			if val == nil {
+				body.Messages[i] = nil
+				continue
+			}
+			body.Messages[i] = marshalAssistantsDashboardMessageToDashboardMessageResponseBody(val)
+		}
+	} else {
+		body.Messages = []*DashboardMessageResponseBody{}
 	}
 	return body
 }
@@ -2292,6 +2515,146 @@ func NewSendMessageGatewayErrorResponseBody(res *goa.ServiceError) *SendMessageG
 	return body
 }
 
+// NewListMessagesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesUnauthorizedResponseBody(res *goa.ServiceError) *ListMessagesUnauthorizedResponseBody {
+	body := &ListMessagesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesForbiddenResponseBody builds the HTTP response body from the
+// result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesForbiddenResponseBody(res *goa.ServiceError) *ListMessagesForbiddenResponseBody {
+	body := &ListMessagesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesBadRequestResponseBody builds the HTTP response body from the
+// result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesBadRequestResponseBody(res *goa.ServiceError) *ListMessagesBadRequestResponseBody {
+	body := &ListMessagesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesNotFoundResponseBody(res *goa.ServiceError) *ListMessagesNotFoundResponseBody {
+	body := &ListMessagesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesConflictResponseBody builds the HTTP response body from the
+// result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesConflictResponseBody(res *goa.ServiceError) *ListMessagesConflictResponseBody {
+	body := &ListMessagesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListMessagesUnsupportedMediaResponseBody {
+	body := &ListMessagesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesInvalidResponseBody builds the HTTP response body from the
+// result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesInvalidResponseBody(res *goa.ServiceError) *ListMessagesInvalidResponseBody {
+	body := &ListMessagesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesInvariantViolationResponseBody(res *goa.ServiceError) *ListMessagesInvariantViolationResponseBody {
+	body := &ListMessagesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesUnexpectedResponseBody(res *goa.ServiceError) *ListMessagesUnexpectedResponseBody {
+	body := &ListMessagesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMessagesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listMessages" endpoint of the "assistants" service.
+func NewListMessagesGatewayErrorResponseBody(res *goa.ServiceError) *ListMessagesGatewayErrorResponseBody {
+	body := &ListMessagesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListAssistantsPayload builds a assistants service listAssistants endpoint
 // payload.
 func NewListAssistantsPayload(sessionToken *string, projectSlugInput *string) *assistants.ListAssistantsPayload {
@@ -2386,6 +2749,18 @@ func NewSendMessagePayload(body *SendMessageRequestBody, sessionToken *string, p
 		CorrelationID:  *body.CorrelationID,
 		IdempotencyKey: body.IdempotencyKey,
 	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListMessagesPayload builds a assistants service listMessages endpoint
+// payload.
+func NewListMessagesPayload(chatID string, afterSeq *int64, sessionToken *string, projectSlugInput *string) *assistants.ListMessagesPayload {
+	v := &assistants.ListMessagesPayload{}
+	v.ChatID = chatID
+	v.AfterSeq = afterSeq
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

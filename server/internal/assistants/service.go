@@ -1227,6 +1227,59 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}, nil
 }
 
+// errDashboardForbidden is returned when a caller asks to read a dashboard
+// conversation they do not own.
+var errDashboardForbidden = errors.New("dashboard conversation belongs to another user")
+
+type dashboardMessageRecord struct {
+	ID        uuid.UUID
+	Role      string
+	Content   string
+	Seq       int64
+	CreatedAt time.Time
+}
+
+// ListDashboardMessages returns a dashboard chat's conversation log in send
+// order, optionally only messages newer than afterSeq. callerUserID must own the
+// conversation — the conversation key (correlation id) is client-chosen and not
+// project-unique, so project scope alone would let any project member read
+// another user's chat by its id. Returns pgx.ErrNoRows when no such dashboard
+// chat exists, and errDashboardForbidden when it belongs to a different user.
+func (s *ServiceCore) ListDashboardMessages(ctx context.Context, projectID, chatID uuid.UUID, callerUserID string, afterSeq int64) ([]dashboardMessageRecord, error) {
+	q := assistantrepo.New(s.db)
+
+	owner, err := q.GetDashboardChatOwner(ctx, assistantrepo.GetDashboardChatOwnerParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve dashboard chat owner: %w", err)
+	}
+	if owner == "" || owner != callerUserID {
+		return nil, errDashboardForbidden
+	}
+
+	rows, err := q.ListDashboardMessages(ctx, assistantrepo.ListDashboardMessagesParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+		AfterSeq:  afterSeq,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list dashboard messages: %w", err)
+	}
+	out := make([]dashboardMessageRecord, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, dashboardMessageRecord{
+			ID:        r.ID,
+			Role:      r.Role,
+			Content:   r.Content,
+			Seq:       r.Seq,
+			CreatedAt: r.CreatedAt.Time,
+		})
+	}
+	return out, nil
+}
+
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
 	switch task.DefinitionSlug {
 	case "slack":

@@ -113,6 +113,18 @@ WHERE chat_id = @chat_id
   AND seq > @after_seq
 ORDER BY seq;
 
+-- name: GetDashboardChatOwner :one
+-- Returns the user id that owns a dashboard chat — stamped on every log row.
+-- Used to enforce that a caller reads only their own conversation, since the
+-- conversation key (correlation id) is client-chosen and not project-unique.
+-- No rows means the chat has no dashboard messages (doesn't exist / not a
+-- dashboard chat).
+SELECT user_id
+FROM assistant_dashboard_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id
+LIMIT 1;
+
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
 FROM toolsets

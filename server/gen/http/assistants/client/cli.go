@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"unicode/utf8"
 
 	assistants "github.com/speakeasy-api/gram/server/gen/assistants"
@@ -270,6 +271,49 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 		CorrelationID:  body.CorrelationID,
 		IdempotencyKey: body.IdempotencyKey,
 	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListMessagesPayload builds the payload for the assistants listMessages
+// endpoint from CLI flags.
+func BuildListMessagesPayload(assistantsListMessagesChatID string, assistantsListMessagesAfterSeq string, assistantsListMessagesSessionToken string, assistantsListMessagesProjectSlugInput string) (*assistants.ListMessagesPayload, error) {
+	var err error
+	var chatID string
+	{
+		chatID = assistantsListMessagesChatID
+		err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", chatID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var afterSeq *int64
+	{
+		if assistantsListMessagesAfterSeq != "" {
+			val, err := strconv.ParseInt(assistantsListMessagesAfterSeq, 10, 64)
+			afterSeq = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for afterSeq, must be INT64")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsListMessagesSessionToken != "" {
+			sessionToken = &assistantsListMessagesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsListMessagesProjectSlugInput != "" {
+			projectSlugInput = &assistantsListMessagesProjectSlugInput
+		}
+	}
+	v := &assistants.ListMessagesPayload{}
+	v.ChatID = chatID
+	v.AfterSeq = afterSeq
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

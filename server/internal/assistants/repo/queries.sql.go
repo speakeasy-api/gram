@@ -803,6 +803,31 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
+const getDashboardChatOwner = `-- name: GetDashboardChatOwner :one
+SELECT user_id
+FROM assistant_dashboard_messages
+WHERE chat_id = $1
+  AND project_id = $2
+LIMIT 1
+`
+
+type GetDashboardChatOwnerParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Returns the user id that owns a dashboard chat — stamped on every log row.
+// Used to enforce that a caller reads only their own conversation, since the
+// conversation key (correlation id) is client-chosen and not project-unique.
+// No rows means the chat has no dashboard messages (doesn't exist / not a
+// dashboard chat).
+func (q *Queries) GetDashboardChatOwner(ctx context.Context, arg GetDashboardChatOwnerParams) (string, error) {
+	row := q.db.QueryRow(ctx, getDashboardChatOwner, arg.ChatID, arg.ProjectID)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const getDashboardThreadTarget = `-- name: GetDashboardThreadTarget :one
 SELECT chat_id, COALESCE(source_ref_json->>'user_id', '')::TEXT AS user_id
 FROM assistant_threads
