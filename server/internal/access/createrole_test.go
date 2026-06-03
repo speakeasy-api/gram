@@ -4,6 +4,7 @@ import (
 	"errors"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -163,7 +165,7 @@ func TestService_CreateRole_RejectsActiveLocalSlugCollision(t *testing.T) {
 	require.Contains(t, scopes, string(authz.ScopeRiskPolicyEvaluate))
 }
 
-func TestService_CreateRole_ReactivatesDeletedLocalSlug(t *testing.T) {
+func TestService_CreateRole_ReactivatesDeletedSlug(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -174,8 +176,16 @@ func TestService_CreateRole_ReactivatesDeletedLocalSlug(t *testing.T) {
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID), authz.ScopeRiskPolicyEvaluate, "policy-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
 
-	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "org-custom-builder").Return(nil).Once()
-	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
+	deleted, err := accessrepo.New(ti.conn).MarkOrganizationRoleDeleted(ctx, accessrepo.MarkOrganizationRoleDeletedParams{
+		WorkosDeletedAt:   conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID: conv.ToPGTextEmpty("evt_role_deleted"),
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		WorkosSlug:        "org-custom-builder",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+
+	err = authz.DeleteRoleGrants(ctx, accessrepo.New(ti.conn), authCtx.ActiveOrganizationID, "org-custom-builder", "role:organization:"+roleID)
 	require.NoError(t, err)
 
 	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{

@@ -184,6 +184,7 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_created_at = EXCLUDED.workos_created_at,
     workos_updated_at = EXCLUDED.workos_updated_at,
     deleted_at = NULL,
+    workos_deleted_at = NULL,
     updated_at = clock_timestamp()
 WHERE organization_roles.deleted_at IS NOT NULL
 RETURNING
