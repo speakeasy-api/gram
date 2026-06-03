@@ -184,7 +184,11 @@ export function InsightsAgentsContent() {
     return PRESET_RANGE_LABELS[dateRange] ?? "the selected range";
   }, [customRange, customRangeLabel, dateRange]);
 
-  const { data: membersData, isLoading: membersLoading } = useMembers();
+  const {
+    data: membersData,
+    isLoading: membersLoading,
+    error: membersError,
+  } = useMembers();
   const memberMap = useMemo(
     () => new Map((membersData?.members ?? []).map((m) => [m.id, m])),
     [membersData],
@@ -421,7 +425,7 @@ export function InsightsAgentsContent() {
 
   const isLoading =
     membersLoading || usersQuery.isLoading || projectQuery.isLoading;
-  const error = usersQuery.error ?? projectQuery.error;
+  const error = membersError ?? usersQuery.error ?? projectQuery.error;
 
   const handlePresetChange = (preset: DateRangePreset) => {
     setDateRange(preset);
