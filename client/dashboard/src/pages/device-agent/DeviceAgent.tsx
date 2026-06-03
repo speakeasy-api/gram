@@ -425,10 +425,9 @@ function InstallAgent() {
       <Type muted>
         The agent is two binaries: <code>speakeasyd</code>, the background
         daemon that does the enforcement, and <code>speakeasy</code>, the CLI
-        for status and enrollment. The steps are the same for everyone — run
-        them by hand for a personal setup, or script them in your MDM payload's
-        postinstall (run them in the logged-in user's context, since the agent
-        runs as that user).
+        for status and enrollment. Both can be installed manually or scripted in
+        your MDM payload's postinstall (run them in the logged-in user's
+        context, since the agent runs as that user).
         {version ? (
           <>
             {" "}
@@ -477,7 +476,7 @@ function ManualIdentity() {
     <div className="flex flex-col gap-4">
       <Type muted>
         On a device that isn't MDM-managed, set identity by signing in once
-        after installing — no <code>managed.json</code> required.
+        after installing with no <code>managed.json</code> required.
       </Type>
       <CodeBlock language="bash">{`speakeasy enroll`}</CodeBlock>
       <Type small muted>
@@ -519,7 +518,7 @@ function GenerateInlineButton({
         disabled
           ? "Generating an agent token requires the org:admin role."
           : existing
-            ? "An agent token already exists — this mints a fresh one to drop into managed.json."
+            ? "An agent token already exists — this rotates your existing tokens and adds the new token into managed.json."
             : undefined
       }
       className="-my-1 inline-flex h-6 items-center px-2 py-0 align-middle text-xs"
@@ -599,9 +598,9 @@ function FleetIdentity() {
     <div className="flex flex-col gap-8">
       <Type muted>
         On an MDM-managed device the agent reads its identity from a{" "}
-        <code>managed.json</code> that IT deploys (Kandji, Jamf, Intune, …) — no
-        per-user enrollment. IT owns this file; the agent only reads it, and it
-        wins over anything a user sets locally.
+        <code>managed.json</code> that IT deploys (Kandji, Jamf, Intune, ...)
+        with no per-user enrollment. IT owns this file; the agent only reads it,
+        and it wins over anything a user sets locally.
       </Type>
 
       <div>
@@ -667,10 +666,10 @@ function FleetIdentity() {
         </CodeBlock>
         <Type small muted className="mt-2">
           <code>org_slug</code> and <code>org_name</code> are pre-filled for
-          this org. <code>email</code> is per-user — have your MDM substitute
-          its per-user email variable (Kandji / Jamf <code>$EMAIL</code>, or
-          your platform's equivalent) so one profile serves the whole fleet, or
-          omit <code>email</code> and have each user run{" "}
+          this org. <code>email</code> is per-user; have your MDM substitute its
+          per-user email variable (Kandji / Jamf <code>$EMAIL</code>, or your
+          platform's equivalent) so one profile serves the whole fleet, or omit{" "}
+          <code>email</code> and have each user run{" "}
           <code>speakeasy enroll</code>. Click{" "}
           <strong className="text-foreground">Generate token</strong> in the
           example to mint the <code>org_token</code>.
@@ -721,7 +720,7 @@ function FleetIdentity() {
         <SubHeading>Security</SubHeading>
         <ul className="text-muted-foreground flex flex-col gap-2 text-sm">
           <li>
-            <code>org_token</code> is a credential — distribute it the way you'd
+            <code>org_token</code> is a credential. Distribute it the way you'd
             distribute any API key, and don't commit it or paste it into chat.
           </li>
           <li>
@@ -759,11 +758,9 @@ export default function DeviceAgent() {
               Install the agent
             </Page.Section.Title>
             <Page.Section.Description>
-              The Speakeasy device agent runs on developer laptops and enforces
-              your org's required AI-tool plugins and MCP configuration, then
-              reports compliance back to Speakeasy. Download the daemon + CLI
-              and register the background service — the same steps work whether
-              you run them by hand or script them in your MDM deployment.
+              The Speakeasy device agent runs on-device and enforces your org's
+              required AI-tool plugins and MCP configuration, then reports
+              compliance back to Speakeasy.
             </Page.Section.Description>
             <Page.Section.Body>
               <InstallAgent />
