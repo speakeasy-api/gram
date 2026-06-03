@@ -59,7 +59,8 @@ func nonPIIEmailReason(s string) string {
 	}
 
 	if strings.HasSuffix(lower, ".gserviceaccount.com") ||
-		strings.Contains(lower, "@cloudservices.gserviceaccount") {
+	if strings.HasSuffix(lower, ".gserviceaccount.com") ||
+		strings.HasSuffix(lower, "@cloudservices.gserviceaccount.com") {
 		return "gcp service account"
 	}
 
