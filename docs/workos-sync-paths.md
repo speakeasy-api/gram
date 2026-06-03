@@ -89,15 +89,46 @@ User upserts and deletes do not call `ShouldProcessEvent` directly. They rely on
 
 ### Organization Event Flow
 
-![WorkOS organization backfill flow](images/org_create.png)
+```mermaid
+flowchart LR
+    start([Organization Created / Updated / Deleted]) --> exists{Exists locally or has external ID?}
+    exists -->|No| nothing[Do Nothing]
+    exists -->|Yes| apply[Create / Update / Soft delete org]
+```
 
 ### Membership Event Flow
 
-![WorkOS membership event flow](images/membership_create.png)
+```mermaid
+flowchart LR
+    start([Organization Membership Created / Updated]) --> org{Org exists locally?}
+    org -->|No| nothing[Do Nothing]
+    org -->|Yes| user{User exists locally by WorkOS ID?}
+
+    user -->|Yes| rel[Upsert user organization relationship with user ID]
+    rel --> roles[Upsert role assignments]
+
+    user -->|No| relNull[Upsert user organization relationship with null user ID]
+    relNull --> rolesNull[Upsert role assignments with null user ID]
+    userEvent[/User.* event/] -. update user ID .-> relNull
+```
 
 ### User Event Flow
 
-![WorkOS user event flow](images/user_create.png)
+```mermaid
+flowchart LR
+    start([User Created / Updated]) --> exists{Exists locally?}
+    exists -->|Yes| upsert[Upsert user]
+    exists -->|No| ext{WorkOS external_id present?}
+
+    ext -->|No| create[Create one, set predictable ID uuidv5 and update WorkOS external ID]
+    ext -->|Yes| use[Use external_id from WorkOS]
+
+    create --> upsert
+    use --> upsert
+
+    upsert --> rel[Update organisation user relationships if user ID is null]
+    rel --> roles[Update role assignments if user ID is null]
+```
 
 ## Local Tables
 
