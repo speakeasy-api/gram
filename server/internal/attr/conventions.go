@@ -342,10 +342,16 @@ const (
 	GenAIConversationDuration             = attribute.Key("gen_ai.conversation.duration")
 	GenAIUsageCacheReadInputTokensKey     = attribute.Key("gen_ai.usage.cache_read.input_tokens")
 	GenAIUsageCacheCreationInputTokensKey = attribute.Key("gen_ai.usage.cache_creation.input_tokens")
+	GenAIUsageReasoningTokensKey          = attribute.Key("gen_ai.usage.reasoning_tokens")
 	GenAIUsageCostKey                     = attribute.Key("gen_ai.usage.cost")
 
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
+
+	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
+	// fidelity. It equals input + output, so it is intentionally not summed
+	// into any total downstream.
+	CodexUsageToolTokensKey = attribute.Key("codex.usage.tool_tokens")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
