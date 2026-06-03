@@ -893,7 +893,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	if ac.ProjectSlug != nil {
 		projectSlug = *ac.ProjectSlug
 	}
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug)
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
 
 	files, err := GenerateSinglePluginPackage(*pluginInfo, cfg, payload.Platform)
 	if err != nil {
@@ -940,7 +940,7 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").Log(ctx, s.logger)
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug)
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID)
 	cfg.HooksAPIKey = candidate.fullKey
 
 	files, err := GenerateObservabilityPluginPackage(cfg, payload.Platform)
@@ -991,7 +991,7 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 
 	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""))
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
 
 	script, err := GenerateCodexInstallScript(marketplaceURL, cfg)
 	if err != nil {
@@ -1273,7 +1273,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		projectName = project.Name
 	}
 
-	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug)
+	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug, input.ProjectID)
 
 	// Compute the fingerprint up front from the resolved config so we can both
 	// short-circuit unchanged publishes (before minting keys or touching
@@ -1361,6 +1361,143 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	return &publishOutcome{RepoURL: repoURL, Skipped: false}, nil
+}
+
+// validMarketplaceName matches identifiers Claude Code, Cursor, and Codex
+// accept as the marketplace name in marketplace.json — lowercase alphanumerics
+// and hyphens, 1–64 chars, can't start or end with a hyphen.
+var validMarketplaceName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$`)
+
+func (s *Service) GetMarketplaceSettings(ctx context.Context, payload *gen.GetMarketplaceSettingsPayload) (*gen.MarketplaceSettingsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	var override string
+	settings, err := s.repo.GetMarketplaceSettings(ctx, *ac.ProjectID)
+	switch {
+	case err == nil:
+		override = conv.FromPGTextOrEmpty[string](settings.MarketplaceName)
+	case errors.Is(err, pgx.ErrNoRows):
+		// No row yet — leave override empty so the effective name is the default.
+	default:
+		return nil, oops.E(oops.CodeUnexpected, err, "get marketplace settings").Log(ctx, s.logger)
+	}
+
+	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+
+	effective := override
+	if effective == "" {
+		effective = defaultName
+	}
+
+	return &gen.MarketplaceSettingsResult{
+		MarketplaceName: conv.PtrEmpty(override),
+		DefaultName:     defaultName,
+		EffectiveName:   effective,
+	}, nil
+}
+
+func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.UpdateMarketplaceSettingsPayload) (*gen.UpdateMarketplaceSettingsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	// Empty / whitespace-only input clears the override. A non-empty value must
+	// be a valid marketplace slug for all three platforms.
+	override := strings.TrimSpace(conv.PtrValOr(payload.MarketplaceName, ""))
+	if override != "" && !validMarketplaceName.MatchString(override) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid marketplace name: must be 1-64 chars of lowercase letters, digits, or hyphens, and may not start or end with a hyphen")
+	}
+
+	if _, err := s.repo.UpsertMarketplaceSettings(ctx, repo.UpsertMarketplaceSettingsParams{
+		ProjectID:       *ac.ProjectID,
+		MarketplaceName: conv.ToPGTextEmpty(override),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "upsert marketplace settings").Log(ctx, s.logger)
+	}
+
+	// Republish only when GitHub is configured AND a connection already exists
+	// for this project. A first-time publish goes through PublishPlugins so the
+	// caller can supply collaborator usernames.
+	republished := false
+	if s.github != nil && ac.ProjectSlug != nil {
+		_, connErr := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
+		switch {
+		case connErr == nil:
+			if _, err := s.publishProject(ctx, publishProjectInput{
+				ProjectID:        *ac.ProjectID,
+				ProjectName:      "",
+				ProjectSlug:      *ac.ProjectSlug,
+				OrganizationID:   ac.ActiveOrganizationID,
+				OrganizationSlug: ac.OrganizationSlug,
+				Actor: publishActor{
+					Principal:       urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+					DisplayName:     ac.Email,
+					Slug:            nil,
+					CreatedByUserID: ac.UserID,
+				},
+				GitHubUsernames: nil,
+				CommitMessage:   "Update marketplace name",
+				// A human changed the marketplace name: always republish so the
+				// new name propagates to installed copies.
+				SkipIfUnchanged: false,
+			}); err != nil {
+				return nil, err
+			}
+			republished = true
+		case errors.Is(connErr, pgx.ErrNoRows):
+			// No published marketplace yet — settings saved, no republish.
+		default:
+			return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").Log(ctx, s.logger)
+		}
+	}
+
+	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+
+	effective := override
+	if effective == "" {
+		effective = defaultName
+	}
+
+	return &gen.UpdateMarketplaceSettingsResult{
+		Settings: &gen.MarketplaceSettingsResult{
+			MarketplaceName: conv.PtrEmpty(override),
+			DefaultName:     defaultName,
+			EffectiveName:   effective,
+		},
+		Republished: republished,
+	}, nil
+}
+
+// resolveDefaultMarketplaceName mirrors generateConfig's org-name resolution:
+// prefer the human-readable org name from organization_metadata so the
+// displayed default matches what the publish flow actually generates, falling
+// back to the org slug from the auth context if the lookup fails.
+func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgSlug string) string {
+	orgName := orgSlug
+	switch fetched, err := s.repo.GetOrganizationName(ctx, orgID); {
+	case err == nil:
+		orgName = fetched
+	case errors.Is(err, pgx.ErrNoRows):
+		// Use the slug from auth context.
+	default:
+		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	return DefaultMarketplaceName(orgName)
 }
 
 // pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key
@@ -1592,7 +1729,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	return pluginInfos, nil
 }
 
-func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string) GenerateConfig {
+func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID) GenerateConfig {
 	cfg := GenerateConfig{
 		OrgName:     orgSlug,
 		OrgEmail:    "",
@@ -1603,7 +1740,8 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// 0.1.{epoch} stays strictly above the historical 0.1.0 manifests
 		// already in users' Claude/Cursor/Codex caches, so a re-publish is
 		// always seen as a newer version and triggers a refresh.
-		Version: fmt.Sprintf("0.1.%d", time.Now().Unix()),
+		Version:         fmt.Sprintf("0.1.%d", time.Now().Unix()),
+		MarketplaceName: "",
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -1612,6 +1750,16 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 	case !errors.Is(err, pgx.ErrNoRows):
 		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
 			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	settings, err := s.repo.GetMarketplaceSettings(ctx, projectID)
+	switch {
+	case err == nil:
+		cfg.MarketplaceName = conv.FromPGTextOrEmpty[string](settings.MarketplaceName)
+	case !errors.Is(err, pgx.ErrNoRows):
+		s.logger.WarnContext(ctx, "failed to fetch marketplace settings, falling back to default",
+			attr.SlogProjectID(projectID.String()),
 			attr.SlogError(err),
 		)
 	}
