@@ -70,6 +70,10 @@ type Toolset struct {
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
 	UserSessionIssuerSlug *Slug
+	// The id of the tool variations group enabling MCP tool filtering for this
+	// toolset. Set via toolsets.setToolVariationsGroup; null when filtering is
+	// disabled.
+	ToolVariationsGroupID *string
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

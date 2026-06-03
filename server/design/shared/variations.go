@@ -27,3 +27,15 @@ var ToolVariation = Type("ToolVariation", func() {
 
 	Required("id", "group_id", "src_tool_name", "src_tool_urn", "created_at", "updated_at")
 })
+
+var ToolVariationGroup = Type("ToolVariationGroup", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The ID of the tool variation group")
+	Attribute("name", String, "The name of the tool variation group")
+	Attribute("description", String, "The description of the tool variation group")
+	Attribute("created_at", String, "The creation date of the tool variation group")
+	Attribute("updated_at", String, "The last update date of the tool variation group")
+
+	Required("id", "name", "created_at", "updated_at")
+})

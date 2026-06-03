@@ -147,6 +147,33 @@ func (q *Queries) FindGlobalVariationsForProjects(ctx context.Context, projectId
 	return items, nil
 }
 
+const getToolVariationsGroupByID = `-- name: GetToolVariationsGroupByID :one
+SELECT id, project_id, name, description, created_at, updated_at, deleted_at, deleted
+FROM tool_variations_groups
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type GetToolVariationsGroupByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetToolVariationsGroupByID(ctx context.Context, arg GetToolVariationsGroupByIDParams) (ToolVariationsGroup, error) {
+	row := q.db.QueryRow(ctx, getToolVariationsGroupByID, arg.ID, arg.ProjectID)
+	var i ToolVariationsGroup
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const initGlobalToolVariationsGroup = `-- name: InitGlobalToolVariationsGroup :one
 WITH created AS (
   INSERT INTO tool_variations_groups (
@@ -227,6 +254,44 @@ func (q *Queries) ListGlobalToolVariations(ctx context.Context, projectID uuid.U
 			&i.ToolVariation.UpdatedAt,
 			&i.ToolVariation.DeletedAt,
 			&i.ToolVariation.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolVariationsGroups = `-- name: ListToolVariationsGroups :many
+SELECT tool_variations_groups.id, tool_variations_groups.project_id, tool_variations_groups.name, tool_variations_groups.description, tool_variations_groups.created_at, tool_variations_groups.updated_at, tool_variations_groups.deleted_at, tool_variations_groups.deleted
+FROM tool_variations_groups
+INNER JOIN project_tool_variations ON tool_variations_groups.id = project_tool_variations.group_id
+WHERE project_tool_variations.project_id = $1
+  AND tool_variations_groups.deleted IS FALSE
+ORDER BY tool_variations_groups.id DESC
+`
+
+func (q *Queries) ListToolVariationsGroups(ctx context.Context, projectID uuid.UUID) ([]ToolVariationsGroup, error) {
+	rows, err := q.db.Query(ctx, listToolVariationsGroups, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ToolVariationsGroup
+	for rows.Next() {
+		var i ToolVariationsGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}

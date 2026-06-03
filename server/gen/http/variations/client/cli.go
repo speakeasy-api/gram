@@ -142,3 +142,61 @@ func BuildListGlobalPayload(variationsListGlobalSessionToken string, variationsL
 
 	return v, nil
 }
+
+// BuildListGroupsPayload builds the payload for the variations listGroups
+// endpoint from CLI flags.
+func BuildListGroupsPayload(variationsListGroupsSessionToken string, variationsListGroupsApikeyToken string, variationsListGroupsProjectSlugInput string) (*variations.ListGroupsPayload, error) {
+	var sessionToken *string
+	{
+		if variationsListGroupsSessionToken != "" {
+			sessionToken = &variationsListGroupsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if variationsListGroupsApikeyToken != "" {
+			apikeyToken = &variationsListGroupsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if variationsListGroupsProjectSlugInput != "" {
+			projectSlugInput = &variationsListGroupsProjectSlugInput
+		}
+	}
+	v := &variations.ListGroupsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateGlobalPayload builds the payload for the variations createGlobal
+// endpoint from CLI flags.
+func BuildCreateGlobalPayload(variationsCreateGlobalSessionToken string, variationsCreateGlobalApikeyToken string, variationsCreateGlobalProjectSlugInput string) (*variations.CreateGlobalPayload, error) {
+	var sessionToken *string
+	{
+		if variationsCreateGlobalSessionToken != "" {
+			sessionToken = &variationsCreateGlobalSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if variationsCreateGlobalApikeyToken != "" {
+			apikeyToken = &variationsCreateGlobalApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if variationsCreateGlobalProjectSlugInput != "" {
+			projectSlugInput = &variationsCreateGlobalProjectSlugInput
+		}
+	}
+	v := &variations.CreateGlobalPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

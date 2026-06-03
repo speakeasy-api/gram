@@ -44,6 +44,9 @@ type Service interface {
 	// Link a toolset to a user_session_issuer (or pass null to unlink). The
 	// user_session_issuer must already exist in the caller's project.
 	SetUserSessionIssuer(context.Context, *SetUserSessionIssuerPayload) (res *types.Toolset, err error)
+	// Assign a tool variations group to a toolset to enable MCP tool filtering (or
+	// pass null to disable). The group must already exist in the caller's project.
+	SetToolVariationsGroup(context.Context, *SetToolVariationsGroupPayload) (res *types.Toolset, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -66,7 +69,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer", "setUserSessionIssuer"}
+var MethodNames = [14]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer", "setUserSessionIssuer", "setToolVariationsGroup"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -189,6 +192,18 @@ type RemoveOAuthServerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// SetToolVariationsGroupPayload is the payload type of the toolsets service
+// setToolVariationsGroup method.
+type SetToolVariationsGroupPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The slug of the toolset to configure
+	Slug types.Slug
+	// The tool variations group id to assign, or null to disable filtering.
+	ToolVariationsGroupID *string
+	ProjectSlugInput      *string
 }
 
 // SetUserSessionIssuerPayload is the payload type of the toolsets service

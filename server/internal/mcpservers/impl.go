@@ -37,6 +37,7 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
 type Service struct {
@@ -107,6 +108,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.ToolsetID,
+		payload.ToolVariationsGroupID,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").Log(ctx, logger)
@@ -140,15 +142,16 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
-		ID:                  serverID,
-		ProjectID:           *authCtx.ProjectID,
-		Name:                conv.ToPGText(name),
-		Slug:                conv.ToPGText(slug),
-		EnvironmentID:       ids.EnvironmentID,
-		UserSessionIssuerID: ids.UserSessionIssuerID,
-		RemoteMcpServerID:   ids.RemoteMcpServerID,
-		ToolsetID:           ids.ToolsetID,
-		Visibility:          string(payload.Visibility),
+		ID:                    serverID,
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  conv.ToPGText(name),
+		Slug:                  conv.ToPGText(slug),
+		EnvironmentID:         ids.EnvironmentID,
+		UserSessionIssuerID:   ids.UserSessionIssuerID,
+		RemoteMcpServerID:     ids.RemoteMcpServerID,
+		ToolsetID:             ids.ToolsetID,
+		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		Visibility:            string(payload.Visibility),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -284,6 +287,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.ToolsetID,
+		payload.ToolVariationsGroupID,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").Log(ctx, logger)
@@ -335,15 +339,16 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                name,
-		Slug:                conv.ToPGText(slug),
-		EnvironmentID:       ids.EnvironmentID,
-		UserSessionIssuerID: ids.UserSessionIssuerID,
-		RemoteMcpServerID:   ids.RemoteMcpServerID,
-		ToolsetID:           ids.ToolsetID,
-		Visibility:          string(payload.Visibility),
-		ID:                  serverID,
-		ProjectID:           *authCtx.ProjectID,
+		Name:                  name,
+		Slug:                  conv.ToPGText(slug),
+		EnvironmentID:         ids.EnvironmentID,
+		UserSessionIssuerID:   ids.UserSessionIssuerID,
+		RemoteMcpServerID:     ids.RemoteMcpServerID,
+		ToolsetID:             ids.ToolsetID,
+		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		Visibility:            string(payload.Visibility),
+		ID:                    serverID,
+		ProjectID:             *authCtx.ProjectID,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -465,10 +470,11 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 // create/update payloads so they can be passed around without a long
 // positional argument list.
 type serverIDs struct {
-	EnvironmentID       uuid.NullUUID
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
-	ToolsetID           uuid.NullUUID
+	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
 }
 
 // parseServerIDs parses the optional UUID payload fields into a
@@ -478,6 +484,7 @@ func parseServerIDs(
 	userSessionIssuerIDStr *string,
 	remoteMcpServerIDStr *string,
 	toolsetIDStr *string,
+	toolVariationsGroupIDStr *string,
 ) (serverIDs, error) {
 	var (
 		ids serverIDs
@@ -495,6 +502,9 @@ func parseServerIDs(
 	}
 	if ids.ToolsetID, err = conv.PtrToNullUUID(toolsetIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid toolset_id: %w", err)
+	}
+	if ids.ToolVariationsGroupID, err = conv.PtrToNullUUID(toolVariationsGroupIDStr); err != nil {
+		return serverIDs{}, fmt.Errorf("invalid tool_variations_group_id: %w", err)
 	}
 
 	return ids, nil
@@ -567,6 +577,18 @@ func verifyServerReferenceOwnership(
 				return fmt.Errorf("toolset_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check toolset ownership: %w", err)
+		}
+	}
+
+	if ids.ToolVariationsGroupID.Valid {
+		if _, err := variationsrepo.New(dbtx).GetToolVariationsGroupByID(ctx, variationsrepo.GetToolVariationsGroupByIDParams{
+			ID:        ids.ToolVariationsGroupID.UUID,
+			ProjectID: projectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("tool_variations_group_id does not reference a resource in this project")
+			}
+			return fmt.Errorf("check tool variations group ownership: %w", err)
 		}
 	}
 

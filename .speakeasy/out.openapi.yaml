@@ -26737,6 +26737,121 @@ paths:
       x-speakeasy-name-override: removeOAuthServer
       x-speakeasy-react-hook:
         name: RemoveOAuthServer
+  /rpc/toolsets.setToolVariationsGroup:
+    post:
+      description: Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.
+      operationId: setToolsetToolVariationsGroup
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset to configure
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetToolVariationsGroupRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Toolset'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: setToolVariationsGroup toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: setToolVariationsGroup
+      x-speakeasy-react-hook:
+        name: SetToolsetToolVariationsGroup
   /rpc/toolsets.setUserSessionIssuer:
     post:
       description: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
@@ -29727,6 +29842,105 @@ paths:
       x-speakeasy-name-override: revoke
       x-speakeasy-react-hook:
         name: RevokeUserSession
+  /rpc/variations.createGlobal:
+    post:
+      description: 'Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.'
+      operationId: createGlobalToolVariationGroup
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolVariationGroupResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createGlobal variations
+      tags:
+        - variations
+      x-speakeasy-name-override: createGlobal
+      x-speakeasy-react-hook:
+        name: CreateGlobalToolVariationGroup
   /rpc/variations.deleteGlobal:
     delete:
       description: Create or update a globally defined tool variation.
@@ -29933,6 +30147,105 @@ paths:
       x-speakeasy-name-override: listGlobal
       x-speakeasy-react-hook:
         name: GlobalVariations
+  /rpc/variations.listGroups:
+    get:
+      description: List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.
+      operationId: listToolVariationGroups
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListToolVariationGroupsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listGroups variations
+      tags:
+        - variations
+      x-speakeasy-name-override: listGroups
+      x-speakeasy-react-hook:
+        name: ToolVariationGroups
   /rpc/variations.upsertGlobal:
     post:
       description: Create or update a globally defined tool variation.
@@ -32059,6 +32372,10 @@ components:
         remote_mcp_server_id:
           type: string
           description: The ID of the remote MCP server to use as the backend
+          format: uuid
+        tool_variations_group_id:
+          type: string
+          description: The ID of the tool variations group enabling MCP tool filtering for this server. Omit to leave filtering disabled.
           format: uuid
         toolset_id:
           type: string
@@ -35986,6 +36303,15 @@ components:
           description: List of Slack apps
       required:
         - items
+    ListToolVariationGroupsResult:
+      type: object
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolVariationGroup'
+      required:
+        - groups
     ListToolsResult:
       type: object
       properties:
@@ -36470,6 +36796,10 @@ components:
         slug:
           type: string
           description: A URL-safe, project-unique slug derived server-side from the name and ID
+        tool_variations_group_id:
+          type: string
+          description: The ID of the tool variations group enabling MCP tool filtering for this server, if any.
+          format: uuid
         toolset_id:
           type: string
           description: The ID of the toolset used as the backend
@@ -40065,6 +40395,29 @@ components:
         - source_kind
         - source_slug
         - environment_id
+    SetToolVariationsGroupForm:
+      type: object
+      properties:
+        project_slug_input:
+          type: string
+        slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        tool_variations_group_id:
+          type: string
+          description: The tool variations group id to assign, or null to disable filtering.
+          format: uuid
+      required:
+        - slug
+    SetToolVariationsGroupRequestBody:
+      type: object
+      properties:
+        tool_variations_group_id:
+          type: string
+          description: The tool variations group id to assign, or null to disable filtering.
+          format: uuid
     SetToolsetEnvironmentLinkRequestBody:
       type: object
       properties:
@@ -41012,6 +41365,36 @@ components:
         - src_tool_urn
         - created_at
         - updated_at
+    ToolVariationGroup:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: The creation date of the tool variation group
+        description:
+          type: string
+          description: The description of the tool variation group
+        id:
+          type: string
+          description: The ID of the tool variation group
+        name:
+          type: string
+          description: The name of the tool variation group
+        updated_at:
+          type: string
+          description: The last update date of the tool variation group
+      required:
+        - id
+        - name
+        - created_at
+        - updated_at
+    ToolVariationGroupResult:
+      type: object
+      properties:
+        group:
+          $ref: '#/components/schemas/ToolVariationGroup'
+      required:
+        - group
     Toolset:
       type: object
       properties:
@@ -41112,6 +41495,9 @@ components:
           items:
             type: string
           description: The tool URNs in this toolset
+        tool_variations_group_id:
+          type: string
+          description: The id of the tool variations group enabling MCP tool filtering for this toolset. Set via toolsets.setToolVariationsGroup; null when filtering is disabled.
         tools:
           type: array
           items:
@@ -41701,6 +42087,10 @@ components:
         remote_mcp_server_id:
           type: string
           description: The ID of the remote MCP server to use as the backend
+          format: uuid
+        tool_variations_group_id:
+          type: string
+          description: The ID of the tool variations group enabling MCP tool filtering for this server. Omit to disable filtering (cleared to null, consistent with the full-record replace semantics of the other UUID references).
           format: uuid
         toolset_id:
           type: string
