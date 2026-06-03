@@ -756,21 +756,14 @@ export default function DeviceAgent() {
         <RequireScope scope={["org:read", "org:admin"]} level="page">
           <Page.Section>
             <Page.Section.Title stage="preview">
-              Device Agent
+              Install the agent
             </Page.Section.Title>
             <Page.Section.Description>
               The Speakeasy device agent runs on developer laptops and enforces
               your org's required AI-tool plugins and MCP configuration, then
-              reports compliance back to Speakeasy.
-            </Page.Section.Description>
-          </Page.Section>
-
-          <Page.Section>
-            <Page.Section.Title>Install the agent</Page.Section.Title>
-            <Page.Section.Description>
-              Download the daemon + CLI and register the background service. The
-              same steps work whether you run them by hand or script them in
-              your MDM deployment.
+              reports compliance back to Speakeasy. Download the daemon + CLI
+              and register the background service — the same steps work whether
+              you run them by hand or script them in your MDM deployment.
             </Page.Section.Description>
             <Page.Section.Body>
               <InstallAgent />
