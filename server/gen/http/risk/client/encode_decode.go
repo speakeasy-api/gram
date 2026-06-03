@@ -1497,6 +1497,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.RuleID != nil {
 			values.Add("rule_id", *p.RuleID)
 		}
+		if p.UserID != nil {
+			values.Add("user_id", *p.UserID)
+		}
 		if p.UniqueMatch != nil {
 			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
 		}
@@ -1764,6 +1767,9 @@ func EncodeListRiskResultsForAgentRequest(encoder func(*http.Request) goahttp.En
 		}
 		if p.RuleID != nil {
 			values.Add("rule_id", *p.RuleID)
+		}
+		if p.UserID != nil {
+			values.Add("user_id", *p.UserID)
 		}
 		if p.UniqueMatch != nil {
 			values.Add("unique_match", fmt.Sprintf("%v", *p.UniqueMatch))
@@ -6120,6 +6126,12 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		res.CustomRuleIds = make([]string, len(v.CustomRuleIds))
 		for i, val := range v.CustomRuleIds {
 			res.CustomRuleIds[i] = val
+		}
+	}
+	if v.MessageTypes != nil {
+		res.MessageTypes = make([]string, len(v.MessageTypes))
+		for i, val := range v.MessageTypes {
+			res.MessageTypes[i] = val
 		}
 	}
 

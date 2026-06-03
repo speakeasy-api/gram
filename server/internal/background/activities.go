@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -95,6 +96,7 @@ type Activities struct {
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	pluginPublisher                 *activities.PluginPublisher
 }
 
 func NewActivities(
@@ -133,6 +135,7 @@ func NewActivities(
 	workosClient activities.WorkOSClient,
 	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
+	pluginPublisher activities.PluginPublishClient,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -188,6 +191,7 @@ func NewActivities(
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 	}
 }
 
@@ -444,4 +448,20 @@ func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time
 		return 0, fmt.Errorf("gc outbox processed rows: %w", err)
 	}
 	return n, nil
+}
+
+func (a *Activities) ListPluginPublishCandidates(ctx context.Context, input activities.ListPluginPublishCandidatesInput) (*activities.ListPluginPublishCandidatesResult, error) {
+	result, err := a.pluginPublisher.ListCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list plugin publish candidates: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+	result, err := a.pluginPublisher.PublishProject(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("publish plugin project: %w", err)
+	}
+	return result, nil
 }

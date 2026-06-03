@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+
+# cubic.yaml
+# This file configures AI review behavior, ignore patterns, PR descriptions, and custom rules.
+# Place this file in your repository root to version-control your AI review settings.
+# Settings defined here take precedence over UI-configured settings.
+# See https://docs.cubic.dev/configure/cubic-yaml for documentation.
+
+version: 1
+reviews:
+  enabled: true
+  sensitivity: high
+  incremental_commits: true
+  check_drafts: false
+  architecture_diagrams: false
+  external_contributors_require_manual_review: true
+  resolve_threads_when_addressed: true
+  merge_confidence_summary: false
+  auto_approve_behavior: disabled
+  auto_approve: disabled
+  ignore:
+    files:
+      - client/sdk/**/*
+      - server/gen/**/*
+      - "**/repo/*.go"
+      - .changesets/*
+      - .speakeasy/**/*
+      - "**/*.svg"
+      - "**/*_gen.go"
+      - "**/*_gen.yaml"
+      - "**/*_gen.yml"
+    head_branches:
+      - changeset-release/main
+      - dependabot/*
+    pr_titles:
+      - "chore: version packages"
+  custom_rules:
+    - name: Flag Security Vulnerabilities
+      description: |-
+        Scan for security flaws: hardcoded secrets, SQL injection, XSS, weak auth, exposed data, poor crypto, unsafe deserialization, insecure HTTP calls in production, and more. Ensure all network requests use HTTPS/TLS. Identify attack vectors and security violations to maintain robust defenses.
+        Insecure Direct Object Reference (IDOR) vulnerabilities are mitigated by explicitly scoping all queries to organization or project ids. Ensure this is the case whenever SQLc queries are added or updated.
+pr_descriptions:
+  generate: true
+  cubic_review_link: true
+issues:
+  fix_with_cubic_buttons: true
+  pr_comment_fixes: true
+  fix_commits_to_pr: true

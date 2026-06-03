@@ -27,6 +27,7 @@ var _ = Service("risk", func() {
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
+			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -147,6 +148,7 @@ var _ = Service("risk", func() {
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
+			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -213,6 +215,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
+			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
 			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
 			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
 				Format(FormatDateTime)
@@ -238,6 +241,7 @@ var _ = Service("risk", func() {
 			Param("chat_id")
 			Param("category")
 			Param("rule_id")
+			Param("user_id")
 			Param("unique_match")
 			Param("from")
 			Param("to")
@@ -267,6 +271,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
+			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
 			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
 			Attribute("from", String, "Filter results to messages created at or after this timestamp (ISO 8601).", func() {
 				Format(FormatDateTime)
@@ -292,6 +297,7 @@ var _ = Service("risk", func() {
 			Param("chat_id")
 			Param("category")
 			Param("rule_id")
+			Param("user_id")
 			Param("unique_match")
 			Param("from")
 			Param("to")

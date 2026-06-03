@@ -204,6 +204,14 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		attr.SlogProjectID(projectID),
 	)
 
+	// Codex reports token usage on its OTEL logs stream (codex.sse_event /
+	// response.completed) rather than as metrics like Claude Code. Route those
+	// payloads to the usage writer; they carry no Claude session to seed.
+	if isCodexLogsPayload(payload) {
+		s.writeCodexUsageToClickHouse(ctx, payload, orgID, projectID)
+		return nil
+	}
+
 	if claudeMetadata.SessionID == "" {
 		logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
 			attr.SlogEvent("claude_logs_no_session"),

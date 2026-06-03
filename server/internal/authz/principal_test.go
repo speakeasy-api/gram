@@ -13,7 +13,6 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -28,7 +27,7 @@ func TestResolveKnownUserPrincipals_resolvesUserAndRolesForOrgMember(t *testing.
 
 	seedOrganization(t, ctx, conn, organizationID)
 	seedActiveOrganizationUser(t, ctx, conn, organizationID, userID)
-	require.NoError(t, SeedSystemRoleGrants(ctx, testenv.NewLogger(t), conn, organizationID))
+	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
 	seedRoleAssignmentForUser(t, ctx, conn, organizationID, userID, SystemRoleMember)
 
 	principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)

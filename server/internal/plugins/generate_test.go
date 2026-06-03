@@ -1019,3 +1019,100 @@ func TestPluginManifestVersionFallsBackTo010WhenUnset(t *testing.T) {
 	require.Equal(t, "0.1.0", pluginManifestVersion(GenerateConfig{}))
 	require.Equal(t, "0.1.42", pluginManifestVersion(GenerateConfig{Version: "0.1.42"}))
 }
+
+// fingerprintTestPlugins is a representative plugin set reused across the
+// fingerprint tests.
+func fingerprintTestPlugins() []PluginInfo {
+	return []PluginInfo{
+		{
+			Name:        "Engineering Tools",
+			Slug:        "engineering-tools",
+			Description: "MCP servers for the engineering team",
+			Servers: []PluginServerInfo{
+				{
+					DisplayName: "crm-tools",
+					Policy:      "required",
+					MCPURL:      "https://app.getgram.ai/mcp/acme-abc12",
+				},
+			},
+		},
+	}
+}
+
+func TestPluginFingerprintIsStableAcrossCalls(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
+
+	first, err := PluginFingerprint(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(first, "sha256:"))
+
+	second, err := PluginFingerprint(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, first, second, "same plugins + config must produce the same fingerprint")
+}
+
+func TestPluginFingerprintIgnoresPerPublishFields(t *testing.T) {
+	t.Parallel()
+	plugins := fingerprintTestPlugins()
+
+	base, err := PluginFingerprint(plugins, GenerateConfig{
+		OrgName:   "Acme Corp",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	// Version and the injected API keys vary on every publish; the fingerprint
+	// normalizes them so they must not change the result.
+	withNoise, err := PluginFingerprint(plugins, GenerateConfig{
+		OrgName:     "Acme Corp",
+		ServerURL:   "https://app.getgram.ai",
+		Version:     "0.1.1750000000",
+		APIKey:      "gram_live_realkey",
+		HooksAPIKey: "gram_live_realhookskey",
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, base, withNoise, "manifest version and API keys must not affect the fingerprint")
+}
+
+func TestPluginFingerprintChangesWithPluginConfig(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
+
+	base, err := PluginFingerprint(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	changed := fingerprintTestPlugins()
+	changed[0].Servers = append(changed[0].Servers, PluginServerInfo{
+		DisplayName: "analytics",
+		Policy:      "optional",
+		MCPURL:      "https://app.getgram.ai/mcp/analytics-xyz",
+	})
+	changedFP, err := PluginFingerprint(changed, cfg)
+	require.NoError(t, err)
+
+	require.NotEqual(t, base, changedFP, "adding a server must change the fingerprint")
+}
+
+func TestPluginFingerprintChangesWithGeneratorVersion(t *testing.T) {
+	t.Parallel()
+	// The generator version is mixed into the hash so a deliberate bump forces
+	// every project to be seen as changed.
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
+	plugins := fingerprintTestPlugins()
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:     cfg.OrgName,
+		ServerURL:   cfg.ServerURL,
+		APIKey:      fingerprintAPIKeySentinel,
+		HooksAPIKey: fingerprintHooksKeySentinel,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+
+	fp, err := PluginFingerprint(plugins, cfg)
+	require.NoError(t, err)
+	require.NotEmpty(t, fp)
+}

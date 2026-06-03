@@ -21,6 +21,7 @@ type Endpoints struct {
 	CreateAssistant goa.Endpoint
 	UpdateAssistant goa.Endpoint
 	DeleteAssistant goa.Endpoint
+	SendMessage     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "assistants" service with endpoints.
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateAssistant: NewCreateAssistantEndpoint(s, a.APIKeyAuth),
 		UpdateAssistant: NewUpdateAssistantEndpoint(s, a.APIKeyAuth),
 		DeleteAssistant: NewDeleteAssistantEndpoint(s, a.APIKeyAuth),
+		SendMessage:     NewSendMessageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -43,6 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateAssistant = m(e.CreateAssistant)
 	e.UpdateAssistant = m(e.UpdateAssistant)
 	e.DeleteAssistant = m(e.DeleteAssistant)
+	e.SendMessage = m(e.SendMessage)
 }
 
 // NewListAssistantsEndpoint returns an endpoint function that calls the method
@@ -217,5 +220,40 @@ func NewDeleteAssistantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return nil, s.DeleteAssistant(ctx, p)
+	}
+}
+
+// NewSendMessageEndpoint returns an endpoint function that calls the method
+// "sendMessage" of service "assistants".
+func NewSendMessageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SendMessagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SendMessage(ctx, p)
 	}
 }

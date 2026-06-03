@@ -13,6 +13,90 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const createOrganizationRole = `-- name: CreateOrganizationRole :one
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_created_at = EXCLUDED.workos_created_at,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_roles.deleted_at IS NOT NULL
+RETURNING
+    id,
+    ('role:organization:' || id::text)::text AS role_urn,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    0::bigint AS member_count
+`
+
+type CreateOrganizationRoleParams struct {
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+type CreateOrganizationRoleRow struct {
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
+// Creates an org-scoped role, reactivating a soft-deleted row for the same slug.
+func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganizationRoleParams) (CreateOrganizationRoleRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationRole,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	var i CreateOrganizationRoleRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
+}
+
 const deletePrincipalGrant = `-- name: DeletePrincipalGrant :execrows
 DELETE FROM principal_grants
 WHERE id = $1
@@ -27,6 +111,38 @@ type DeletePrincipalGrantParams struct {
 // Removes a specific grant row by ID, scoped to the organization for safety.
 func (q *Queries) DeletePrincipalGrant(ctx context.Context, arg DeletePrincipalGrantParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrant, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePrincipalGrantByIdentity = `-- name: DeletePrincipalGrantByIdentity :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND COALESCE(effect, 'allow') = COALESCE($4::text, 'allow')
+  AND selectors = $5
+`
+
+type DeletePrincipalGrantByIdentityParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Effect         string
+	Selectors      []byte
+}
+
+// Removes a specific grant row by principal, scope, effect, and selector.
+func (q *Queries) DeletePrincipalGrantByIdentity(ctx context.Context, arg DeletePrincipalGrantByIdentityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalGrantByIdentity,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -458,6 +574,36 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 		return nil, err
 	}
 	return items, nil
+}
+
+const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :execrows
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
+DO NOTHING
+`
+
+type InsertPrincipalGrantIfAbsentParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Effect         pgtype.Text
+	Selectors      []byte
+}
+
+// Creates a single grant row and leaves existing identical rows untouched.
+func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listAccessMembers = `-- name: ListAccessMembers :many

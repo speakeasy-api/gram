@@ -9,6 +9,7 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
+  , message_types
   , enabled
   , action
   , auto_name
@@ -25,6 +26,7 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , sqlc.arg(message_types)::text[]
   , @enabled
   , @action
   , @auto_name
@@ -62,6 +64,7 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , message_types = sqlc.arg(message_types)::text[]
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
@@ -72,6 +75,7 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+        OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
       THEN version + 1
@@ -493,7 +497,7 @@ WHERE id = ANY(@message_ids::uuid[])
   AND project_id = @project_id;
 
 -- name: GetMessageContentBatch :many
-SELECT id, content, tool_calls
+SELECT id, role, content, tool_calls
 FROM chat_messages
 WHERE id = ANY(@ids::uuid[])
   AND project_id = @project_id;
@@ -587,6 +591,7 @@ FROM (
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
+    AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
     AND (@category::text = '' OR (
     CASE
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source

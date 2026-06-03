@@ -41,10 +41,10 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack      = "slack"
-	sourceKindCron       = "cron"
-	sourceKindWake       = "wake"
-	sourceKindDashboard  = "dashboard"
+	sourceKindSlack      = bgtriggers.DefinitionSlugSlack
+	sourceKindCron       = bgtriggers.DefinitionSlugCron
+	sourceKindWake       = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -287,20 +287,28 @@ type WakeCanceller interface {
 	CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error
 }
 
+// DashboardIngestor ingests a synchronous, app-invoked message against a direct
+// trigger instance, returning the dispatched task (nil when filtered/paused).
+// Implemented by the triggers App's IngestDirect.
+type DashboardIngestor interface {
+	IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []byte, receivedAt time.Time) (*bgtriggers.Task, error)
+}
+
 type ServiceCore struct {
-	logger           *slog.Logger
-	tracer           trace.Tracer
-	db               *pgxpool.Pool
-	guardianPolicy   *guardian.Policy
-	encryptionClient *encryption.Client
-	runtime          RuntimeBackend
-	slackClient      *slackclient.SlackClient
-	assistantTokens  *assistanttokens.Manager
-	serverURL        *url.URL
-	telemetryLogger  *telemetry.Logger
-	contextWindow    *openrouter.ContextWindowResolver
-	wakeCanceller    WakeCanceller
-	chatWriter       *chat.ChatMessageWriter
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	db                *pgxpool.Pool
+	guardianPolicy    *guardian.Policy
+	encryptionClient  *encryption.Client
+	runtime           RuntimeBackend
+	slackClient       *slackclient.SlackClient
+	assistantTokens   *assistanttokens.Manager
+	serverURL         *url.URL
+	telemetryLogger   *telemetry.Logger
+	contextWindow     *openrouter.ContextWindowResolver
+	wakeCanceller     WakeCanceller
+	chatWriter        *chat.ChatMessageWriter
+	dashboardIngestor DashboardIngestor
 }
 
 func NewServiceCore(
@@ -317,19 +325,20 @@ func NewServiceCore(
 	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
 	return &ServiceCore{
-		logger:           logger,
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:               db,
-		guardianPolicy:   guardianPolicy,
-		encryptionClient: encryptionClient,
-		runtime:          newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:      slackClient,
-		assistantTokens:  assistantTokens,
-		serverURL:        serverURL,
-		telemetryLogger:  telemetryLogger,
-		contextWindow:    contextWindow,
-		wakeCanceller:    nil,
-		chatWriter:       nil,
+		logger:            logger,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:                db,
+		guardianPolicy:    guardianPolicy,
+		encryptionClient:  encryptionClient,
+		runtime:           newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:       slackClient,
+		assistantTokens:   assistantTokens,
+		serverURL:         serverURL,
+		telemetryLogger:   telemetryLogger,
+		contextWindow:     contextWindow,
+		wakeCanceller:     nil,
+		chatWriter:        nil,
+		dashboardIngestor: nil,
 	}
 }
 
@@ -337,6 +346,13 @@ func NewServiceCore(
 // assistants must not import triggers.
 func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
 	s.wakeCanceller = c
+}
+
+// SetDashboardIngestor wires the trigger App used to ingest dashboard sidebar
+// messages. Set after construction to match the existing post-construction
+// injection pattern. SendDashboardMessage fails if the ingestor was never set.
+func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
+	s.dashboardIngestor = i
 }
 
 // SetChatMessageWriter wires the chat writer used by self-heal. Set after

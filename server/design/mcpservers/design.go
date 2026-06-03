@@ -177,6 +177,9 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
 		Format(FormatUUID)
 	})
+	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to leave filtering disabled.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 
 	Required("name", "visibility")
@@ -199,6 +202,9 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to disable filtering (cleared to null, consistent with the full-record replace semantics of the other UUID references).", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
@@ -229,6 +235,9 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset used as the backend", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")

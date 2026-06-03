@@ -99,6 +99,17 @@ type Assistant struct {
 	Deleted         bool
 }
 
+type AssistantDashboardMessage struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+	UserID    string
+	Role      string
+	Content   string
+	Seq       int64
+	CreatedAt pgtype.Timestamptz
+}
+
 type AssistantMemory struct {
 	ID             uuid.UUID
 	AssistantID    uuid.NullUUID
@@ -834,7 +845,8 @@ type OrganizationMcpCollectionServerAttachment struct {
 	PublishedBy  pgtype.Text
 	ID           uuid.UUID
 	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
+	ToolsetID    uuid.NullUUID
+	McpServerID  uuid.NullUUID
 	Deleted      bool
 }
 
@@ -1222,6 +1234,7 @@ type RiskPolicy struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
+	MessageTypes         []string
 	Action               string
 	AudienceType         string
 	AutoName             bool

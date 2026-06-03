@@ -23,8 +23,8 @@ func (c Check) selector() Selector {
 		kind = ResourceKindForScope(c.Scope)
 	}
 	s := Selector{
-		"resource_kind": kind,
-		"resource_id":   c.ResourceID,
+		SelectorKeyResourceKind: kind,
+		SelectorKeyResourceID:   c.ResourceID,
 	}
 	maps.Copy(s, c.Dimensions)
 	return s

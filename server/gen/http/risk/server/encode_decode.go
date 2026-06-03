@@ -1402,6 +1402,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 			chatID           *string
 			category         *string
 			ruleID           *string
+			userID           *string
 			uniqueMatch      *bool
 			from             *string
 			to               *string
@@ -1434,6 +1435,10 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		ruleIDRaw := qp.Get("rule_id")
 		if ruleIDRaw != "" {
 			ruleID = &ruleIDRaw
+		}
+		userIDRaw := qp.Get("user_id")
+		if userIDRaw != "" {
+			userID = &userIDRaw
 		}
 		{
 			uniqueMatchRaw := qp.Get("unique_match")
@@ -1499,7 +1504,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1704,6 +1709,7 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 			chatID           *string
 			category         *string
 			ruleID           *string
+			userID           *string
 			uniqueMatch      *bool
 			from             *string
 			to               *string
@@ -1736,6 +1742,10 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		ruleIDRaw := qp.Get("rule_id")
 		if ruleIDRaw != "" {
 			ruleID = &ruleIDRaw
+		}
+		userIDRaw := qp.Get("user_id")
+		if userIDRaw != "" {
+			userID = &userIDRaw
 		}
 		{
 			uniqueMatchRaw := qp.Get("unique_match")
@@ -1801,7 +1811,7 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsForAgentPayload(policyID, chatID, category, ruleID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsForAgentPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -6002,6 +6012,12 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		res.CustomRuleIds = make([]string, len(v.CustomRuleIds))
 		for i, val := range v.CustomRuleIds {
 			res.CustomRuleIds[i] = val
+		}
+	}
+	if v.MessageTypes != nil {
+		res.MessageTypes = make([]string, len(v.MessageTypes))
+		for i, val := range v.MessageTypes {
+			res.MessageTypes[i] = val
 		}
 	}
 

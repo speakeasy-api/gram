@@ -69,6 +69,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const secureActive = [
     orgRoutes.auditLogs,
     orgRoutes.identity,
+    orgRoutes.deviceAgent,
     orgRoutes.access,
   ].some((r) => r.active);
 
@@ -90,6 +91,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     orgRoutes.adminSettings,
     orgRoutes.auditLogs,
     orgRoutes.identity,
+    orgRoutes.deviceAgent,
     orgRoutes.access,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
@@ -160,6 +162,10 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               />
               <ScopeGatedNavItem
                 item={orgRoutes.identity}
+                scope={["org:read", "org:admin"]}
+              />
+              <ScopeGatedNavItem
+                item={orgRoutes.deviceAgent}
                 scope={["org:read", "org:admin"]}
               />
               {isRbacEnabled && (

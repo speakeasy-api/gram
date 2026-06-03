@@ -355,14 +355,15 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 }
 
 // loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug to a
-// ResolvedMcpEndpoint via the toolsets path and verifies its issuer FK
-// is still live. Returns CodeNotFound when either no toolset matches
-// the slug or the toolset is not issuer-gated. Used by the six
-// /mcp/{slug} OAuth handlers (Register, Authorize, Consent, Token,
-// Revoke); the well-known handlers keep their own toolset load so they
-// can fall through to the legacy non-issuer-gated metadata response
-// when user_session_issuer_id is unset.
-func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug string) (*ResolvedMcpEndpoint, error) {
+// ResolvedMcpEndpoint via the legacy toolsets path and verifies its
+// issuer FK is still live. Returns CodeNotFound when either no toolset
+// matches the slug or the toolset is not issuer-gated. routeBase ("mcp"
+// or "x/mcp") is the surface the request arrived under and propagates
+// into the resolved endpoint's URL building. Used as the fallback leaf
+// of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
+// mcp_server row yet (issuer-gated toolset-backed servers predating the
+// toolsets → mcp_servers migration).
+func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string) (*ResolvedMcpEndpoint, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
@@ -377,7 +378,7 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
-	endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
+	endpoint := newResolvedMcpEndpointFromToolset(toolset, routeBase)
 	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 		return nil, err
 	}

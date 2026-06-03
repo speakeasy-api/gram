@@ -3,8 +3,10 @@ package assistants
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -156,12 +158,7 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 	}
 
 	triggerQueries := triggerrepo.New(tx)
-	instances, err := triggerQueries.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
-		ProjectID:      projectID,
-		DefinitionSlug: sourceKindDashboard,
-		TargetKind:     bgtriggers.TargetKindAssistant,
-		TargetRef:      row.ID.String(),
-	})
+	instances, err := triggerQueries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, row.ID))
 	if err != nil {
 		return fmt.Errorf("list dashboard trigger instances: %w", err)
 	}
@@ -180,26 +177,24 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 	return nil
 }
 
+// dashboardTriggerTarget selects the managed assistant's dashboard direct-ingress
+// trigger instance. Provisioning and teardown must key on the same target, so the
+// selector lives in one place.
+func dashboardTriggerTarget(projectID, assistantID uuid.UUID) triggerrepo.ListActiveTriggerInstancesByTargetParams {
+	return triggerrepo.ListActiveTriggerInstancesByTargetParams{
+		ProjectID:      projectID,
+		DefinitionSlug: sourceKindDashboard,
+		TargetKind:     bgtriggers.TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+	}
+}
+
 // ensureDashboardTrigger provisions the direct-ingress trigger instance that
 // routes dashboard sidebar messages to the managed assistant, creating one only
 // when absent. Idempotent so the enable fast path can heal a managed assistant
 // that predates dashboard ingress without depending on a fresh create.
 func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo.DBTX, organizationID string, projectID, assistantID uuid.UUID, name string) error {
-	queries := triggerrepo.New(db)
-	existing, err := queries.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
-		ProjectID:      projectID,
-		DefinitionSlug: sourceKindDashboard,
-		TargetKind:     bgtriggers.TargetKindAssistant,
-		TargetRef:      assistantID.String(),
-	})
-	if err != nil {
-		return fmt.Errorf("list dashboard trigger instances: %w", err)
-	}
-	if len(existing) > 0 {
-		return nil
-	}
-
-	if _, err := queries.CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+	_, err := triggerrepo.New(db).CreateDashboardTriggerInstance(ctx, triggerrepo.CreateDashboardTriggerInstanceParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
 		DefinitionSlug: sourceKindDashboard,
@@ -210,7 +205,10 @@ func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo
 		TargetDisplay:  name,
 		ConfigJson:     []byte("{}"),
 		Status:         StatusActive,
-	}); err != nil {
+	})
+	// ON CONFLICT DO NOTHING returns no rows when an active trigger already
+	// exists for this project and target — the idempotent success path.
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("create dashboard trigger instance: %w", err)
 	}
 	return nil
@@ -311,4 +309,102 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		UpdatedAt:       row.UpdatedAt.Time,
 		DeletedAt:       row.DeletedAt,
 	}
+}
+
+// dashboardIngestPayload is the wire shape the dashboard trigger definition
+// decodes in BuildDirectEvent.
+type dashboardIngestPayload struct {
+	Text           string `json:"text"`
+	UserID         string `json:"user_id"`
+	CorrelationID  string `json:"correlation_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+// DashboardSendResult is what the sendMessage endpoint returns to the dashboard.
+type DashboardSendResult struct {
+	ChatID   uuid.UUID
+	ThreadID uuid.UUID
+	Accepted bool
+}
+
+// SendDashboardMessage ingests a message from a dashboard user as a turn on the
+// given assistant, routing through the dashboard trigger so it shares the
+// status/filter/delivery path with every other ingress source. Returns
+// pgx.ErrNoRows when the assistant does not exist in the project.
+//
+// userID is the calling user (attribution); correlationID keys the conversation
+// thread (pass a fresh value to start over). idempotencyKey may be empty — a
+// fresh one is minted so the ingest still succeeds, but callers that want
+// retry-safe dedupe should pass a stable key.
+func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID, correlationID, text, idempotencyKey string) (DashboardSendResult, error) {
+	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
+	if err != nil {
+		return DashboardSendResult{}, err
+	}
+
+	instanceID, err := s.resolveDashboardTriggerInstance(ctx, assistant.OrganizationID, projectID, assistant.ID, assistant.Name)
+	if err != nil {
+		return DashboardSendResult{}, err
+	}
+
+	if s.dashboardIngestor == nil {
+		return DashboardSendResult{}, fmt.Errorf("dashboard ingestor is not configured")
+	}
+
+	if idempotencyKey == "" {
+		idempotencyKey = uuid.NewString()
+	}
+	payload, err := json.Marshal(dashboardIngestPayload{Text: text, UserID: userID, CorrelationID: correlationID, IdempotencyKey: idempotencyKey})
+	if err != nil {
+		return DashboardSendResult{}, fmt.Errorf("marshal dashboard message: %w", err)
+	}
+
+	task, err := s.dashboardIngestor.IngestDirect(ctx, instanceID, payload, time.Now().UTC())
+	if err != nil {
+		return DashboardSendResult{}, fmt.Errorf("ingest dashboard message: %w", err)
+	}
+
+	result := DashboardSendResult{
+		ChatID:   deterministicChatID(assistant.ID, correlationID),
+		ThreadID: uuid.Nil,
+		Accepted: task != nil,
+	}
+	if task == nil {
+		return result, nil
+	}
+
+	threadID, err := assistantrepo.New(s.db).GetAssistantThreadIDByCorrelation(ctx, assistantrepo.GetAssistantThreadIDByCorrelationParams{
+		ProjectID:     projectID,
+		AssistantID:   assistant.ID,
+		CorrelationID: correlationID,
+	})
+	if err != nil {
+		return DashboardSendResult{}, fmt.Errorf("resolve dashboard thread: %w", err)
+	}
+	result.ThreadID = threadID
+	return result, nil
+}
+
+// resolveDashboardTriggerInstance returns the managed assistant's dashboard
+// trigger instance, provisioning one first to heal assistants that predate
+// dashboard ingress.
+func (s *ServiceCore) resolveDashboardTriggerInstance(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, name string) (uuid.UUID, error) {
+	queries := triggerrepo.New(s.db)
+	instances, err := queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("list dashboard trigger instances: %w", err)
+	}
+	if len(instances) == 0 {
+		if err := s.ensureDashboardTrigger(ctx, s.db, organizationID, projectID, assistantID, name); err != nil {
+			return uuid.Nil, err
+		}
+		instances, err = queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("list dashboard trigger instances: %w", err)
+		}
+	}
+	if len(instances) == 0 {
+		return uuid.Nil, fmt.Errorf("dashboard trigger instance not provisioned for assistant %s", assistantID)
+	}
+	return instances[0].ID, nil
 }

@@ -1,5 +1,37 @@
 # dashboard
 
+## 0.67.0
+
+### Minor Changes
+
+- 55a25ac: Add management APIs and dashboard UI for enabling and configuring MCP server tool filtering via tool variation groups.
+- 254158e: Add an org-level Device Agent page (`/<org>/device-agent`) under the Secure nav group: per-OS install instructions for the Speakeasy device agent, `managed.json` MDM configuration reference (schema, paths, example), and self-service `org_token` generation via the new `agent` API-key scope (mint/rotate from the page, with a ready-to-paste `managed.json` copied to the clipboard).
+
+  Also patches the CLI loopback callback (`CliCallback.tsx`) to append `&email=<userEmail>` to the redirect, which the device agent's one-shot OAuth-loopback enrollment requires.
+
+### Patch Changes
+
+- 1078e46: Add an optional `user_id` filter to the risk events list. The Risk Events page now exposes a "User contains..." search box that filters findings by the chat's external user id (case-insensitive substring match), alongside the existing policy and rule filters.
+- 1cb069e: Fix the audit logs page AI Insights setup so it no longer calls `toolsets.list` without a project slug from org-level routes.
+- a86651b: Fix the shared `Link` component so external links render inline with surrounding text. The external-link icon was wrapped in a block-level flex container, which stretched inline links to full width and pushed trailing punctuation to a new line; the icon now sits inline on the text baseline.
+
+## 0.66.0
+
+### Minor Changes
+
+- 0653bf4: Add `agent.getPlugins` management API method consumed by the Speakeasy device agent. The endpoint accepts an `email` query parameter, resolves plugin assignments for that email plus the `*` wildcard within the caller's org, and returns the published plugins as Claude Code marketplace + plugin references (drops directly into Claude Code's `extraKnownMarketplaces` and `enabledPlugins` settings). Authenticates with an org-scoped API key carrying the new `agent` scope.
+
+  Adds `agent` as a selectable scope on the existing API Keys page so admins can mint these tokens from the same place every other scope is minted.
+
+  Adds `email` as a first-class principal URN type (`urn.PrincipalTypeEmail`) so admins can assign plugins by email address. Existing `user:` and `role:` URNs are unchanged; the wildcard `*` is now exported as `urn.PrincipalWildcard`.
+
+- 598d0d8: Re-target AI Insights sidebar at project toolsets instead of hardcoded Speakeasy MCP. The sidebar now connects to all toolsets configured in the current project.
+
+### Patch Changes
+
+- 91e166d: Add an employee data-flow graph endpoint and dashboard visualization for workforce observability.
+- 9fde650: External MCP proxy servers (whose tools cannot be enumerated until a user authenticates) now appear in the "Specific MCP Servers" picker when creating an access role, and no longer display a misleading "No Tools" badge on the MCP list and table views.
+
 ## 0.65.1
 
 ### Patch Changes

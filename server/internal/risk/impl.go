@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -233,6 +234,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := validateCustomRuleIDs(payload.CustomRuleIds); err != nil {
 		return nil, err
 	}
+	if err := validateMessageTypes(payload.MessageTypes); err != nil {
+		return nil, err
+	}
 
 	enabled := true
 	if payload.Enabled != nil {
@@ -277,6 +281,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PromptInjectionRules: payload.PromptInjectionRules,
 		DisabledRules:        payload.DisabledRules,
 		CustomRuleIds:        payload.CustomRuleIds,
+		MessageTypes:         payload.MessageTypes,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -425,6 +430,14 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		customRuleIds = payload.CustomRuleIds
 	}
 
+	messageTypes := current.MessageTypes
+	if payload.MessageTypes != nil {
+		if err := validateMessageTypes(payload.MessageTypes); err != nil {
+			return nil, err
+		}
+		messageTypes = payload.MessageTypes
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -489,6 +502,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
+		MessageTypes:         messageTypes,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -678,6 +692,10 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	if payload.RuleID != nil {
 		ruleID = *payload.RuleID
 	}
+	userID := ""
+	if payload.UserID != nil {
+		userID = *payload.UserID
+	}
 	uniqueMatch := false
 	if payload.UniqueMatch != nil {
 		uniqueMatch = *payload.UniqueMatch
@@ -690,7 +708,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").Log(ctx, s.logger)
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, uniqueMatch, fromTime, toTime)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, userID, uniqueMatch, fromTime, toTime)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -723,6 +741,7 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		ChatID:           payload.ChatID,
 		Category:         payload.Category,
 		RuleID:           payload.RuleID,
+		UserID:           payload.UserID,
 		UniqueMatch:      payload.UniqueMatch,
 		From:             payload.From,
 		To:               payload.To,
@@ -1106,7 +1125,7 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, userID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
@@ -1114,6 +1133,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		ToTime:                 toTime,
 		Category:               category,
 		RuleID:                 ruleID,
+		UserID:                 userID,
 		UniqueMatch:            uniqueMatch,
 		CursorMessageCreatedAt: cursorCreatedAt,
 		CursorID:               cursorID,
@@ -1643,6 +1663,22 @@ func validateCustomRuleIDs(ids []string) error {
 	return nil
 }
 
+func validateMessageTypes(messageTypes []string) error {
+	for _, messageType := range messageTypes {
+		if message.IsTypeValid(messageType) {
+			continue
+		}
+		return oops.E(
+			oops.CodeInvalid,
+			nil,
+			"message_type %q must be one of: %s",
+			messageType,
+			strings.Join(message.AllTypes(), ", "),
+		)
+	}
+	return nil
+}
+
 func validateCustomDetectionRule(ruleID, title, regexPattern, severity string) error {
 	if !customRuleIDPattern.MatchString(ruleID) {
 		return oops.E(oops.CodeInvalid, nil, "rule_id must match custom.[a-z0-9_]+")
@@ -1970,6 +2006,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
 		CustomRuleIds:        row.CustomRuleIds,
+		MessageTypes:         row.MessageTypes,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,
@@ -1996,6 +2033,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
 		CustomRuleIds:        row.CustomRuleIds,
+		MessageTypes:         row.MessageTypes,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,

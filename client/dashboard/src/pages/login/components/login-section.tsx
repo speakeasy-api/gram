@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@speakeasy-api/moonshine";
-import { buildLoginRedirectURL } from "@/lib/utils";
+import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";
 import {
@@ -86,9 +86,11 @@ function DotBackground() {
 export function AuthLayout({
   children,
   topRight,
+  contentClassName = "max-w-sm",
 }: {
   children: React.ReactNode;
   topRight?: React.ReactNode;
+  contentClassName?: string;
 }) {
   return (
     <div className="login-right-pane relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#FAFAFA] p-8 md:w-1/2 md:p-16">
@@ -99,7 +101,12 @@ export function AuthLayout({
         <div className="absolute top-6 right-6 z-10">{topRight}</div>
       )}
 
-      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-8">
+      <div
+        className={cn(
+          "relative z-10 flex w-full flex-col items-center gap-8",
+          contentClassName,
+        )}
+      >
         <div className="flex flex-col items-center gap-4">
           <a
             href="https://www.speakeasy.com/product/mcp-platform"

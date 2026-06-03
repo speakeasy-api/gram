@@ -167,6 +167,9 @@ type CreateRiskPolicyPayload struct {
 	DisabledRules []string
 	// Custom detection rule ids to enable for this policy.
 	CustomRuleIds []string
+	// Message types this policy applies to. When empty or omitted, the policy
+	// scans all supported types.
+	MessageTypes []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -353,6 +356,9 @@ type ListRiskResultsForAgentPayload struct {
 	// Optional rule identifier substring to filter by (case-insensitive, e.g.
 	// 'secret' matches all 'secret.*' rules).
 	RuleID *string
+	// Optional user identifier substring to filter by (case-insensitive, matched
+	// against the chat's external user id).
+	UserID *string
 	// If true, collapse results to one row per (policy_id, rule_id, match),
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
@@ -393,6 +399,9 @@ type ListRiskResultsPayload struct {
 	// Optional rule identifier substring to filter by (case-insensitive, e.g.
 	// 'secret' matches all 'secret.*' rules).
 	RuleID *string
+	// Optional user identifier substring to filter by (case-insensitive, matched
+	// against the chat's external user id).
+	UserID *string
 	// If true, collapse results to one row per (policy_id, rule_id, match),
 	// keeping the most recent occurrence. Useful when the same secret is detected
 	// many times within a single message body.
@@ -708,6 +717,9 @@ type UpdateRiskPolicyPayload struct {
 	// Custom detection rule ids to enable for this policy. Omit to preserve the
 	// current selection.
 	CustomRuleIds []string
+	// Message types this policy applies to. Omit to preserve the current
+	// selection; send an empty array to apply to all types.
+	MessageTypes []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
