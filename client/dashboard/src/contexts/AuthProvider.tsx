@@ -37,6 +37,7 @@ import {
   useSessionData,
   useUser,
   usePylonInAppChat,
+  useFermatPixel,
 } from "./Auth";
 import type { ProjectEntry } from "@gram/client/models/components";
 
@@ -75,6 +76,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   useIdentifyUserForTelemetry(session?.user);
   usePylonInAppChat(session?.user);
+  useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
   isAdminRef.current = session?.user.isAdmin ?? false;
