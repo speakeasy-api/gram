@@ -828,7 +828,13 @@ function PolicySheetBody({
             const meta = RULE_CATEGORY_META[cat];
             const isAvailable = AVAILABLE_CATEGORIES.has(cat);
             const isExpanded = expandedCategory === cat;
-            const rules = DETECTION_RULES[cat];
+            // Hidden rules stay in the catalog so legacy risk_results keep
+            // resolving their title via risk-utils, but they are scrubbed
+            // from the form's display, counts, and bulk toggles. The
+            // underlying disabledRules/selectedCategories state is left
+            // untouched so existing policies that pin a hidden rule round-
+            // trip cleanly through edit.
+            const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
             const isExpandable = isAvailable && rules.length > 0;
             const categorySelected = selectedCategories.has(cat);
             const enabledRuleCount = categorySelected
