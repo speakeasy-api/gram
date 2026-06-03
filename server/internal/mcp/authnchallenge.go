@@ -24,12 +24,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -345,20 +347,51 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	return nil
 }
 
-// extractClientCredentials returns the client_id + client_secret + ok from
-// either the Authorization header (client_secret_basic) or the form body
-// (client_secret_post). HTTP Basic wins when both are present, per RFC 6749
-// §2.3.1 ("the client MAY use only one authentication method").
-func extractClientCredentials(r *http.Request) (string, string, bool) {
+// extractClientCredentials returns the client_id + client_secret + presented
+// auth method + ok from either the Authorization header (client_secret_basic)
+// or the form body (client_secret_post / none). HTTP Basic still wins when
+// both are present; callers log the "multiple" presentation to surface client
+// misconfiguration without changing current compatibility behavior.
+func extractClientCredentials(r *http.Request) (string, string, string, bool) {
+	formID := r.PostForm.Get("client_id")
+	formSecret := r.PostForm.Get("client_secret")
+	hasFormCredentials := formID != "" || formSecret != ""
+
 	if id, secret, ok := r.BasicAuth(); ok && id != "" {
-		return id, secret, true
+		presentedMethod := "client_secret_basic"
+		if hasFormCredentials {
+			presentedMethod = "multiple"
+		}
+		return id, secret, presentedMethod, true
 	}
-	id := r.PostForm.Get("client_id")
-	secret := r.PostForm.Get("client_secret")
-	if id == "" {
-		return "", "", false
+	if formID == "" {
+		return "", "", "none", false
 	}
-	return id, secret, true
+	presentedMethod := "none"
+	if formSecret != "" {
+		presentedMethod = "client_secret_post"
+	}
+	return formID, formSecret, presentedMethod, true
+}
+
+func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string) {
+	args := []any{
+		attr.SlogURLOriginal(r.URL.Path),
+		attr.SlogHTTPRequestHeaderUserAgent(r.UserAgent()),
+	}
+	if clientID != "" {
+		args = append(args, attr.SlogOAuthClientID(clientID))
+	}
+	if presentedMethod != "" {
+		args = append(args, attr.SlogOAuthPresentedAuthMethod(presentedMethod))
+	}
+	if grantType != "" {
+		args = append(args, attr.SlogOAuthGrant(grantType))
+	}
+	if failureReason != "" {
+		args = append(args, attr.SlogOAuthFailureReason(failureReason))
+	}
+	logger.InfoContext(ctx, message, args...)
 }
 
 // sha256Hex returns the base64url-encoded SHA-256 of the input. (The name
