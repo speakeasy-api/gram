@@ -9,7 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/messagetype"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
@@ -160,14 +160,14 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 	return result
 }
 
-func hookEventToMessageType(hookEvent HookEvent) (messagetype.MessageType, bool) {
+func hookEventToMessageType(hookEvent HookEvent) (message.Type, bool) {
 	switch hookEvent {
 	case HookEventUserPromptSubmit, HookEventBeforeSubmitPrompt:
-		return messagetype.UserMessage, true
+		return message.User, true
 	case HookEventPreToolUse, HookEventBeforeMCPExecution, HookEventPermissionRequest:
-		return messagetype.ToolRequest, true
+		return message.ToolRequest, true
 	case HookEventPostToolUse:
-		return messagetype.ToolResponse, true
+		return message.ToolResponse, true
 	default:
 		return "", false
 	}

@@ -24,7 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/messagetype"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -166,6 +166,9 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
 	scannedCount = len(messages)
 	if len(messages) == 0 {
+		if err := a.writeResults(ctx, args, nil); err != nil {
+			return nil, err
+		}
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
@@ -230,7 +233,7 @@ func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, mes
 		if !ok {
 			continue
 		}
-		if !messagetype.Allows(messageTypes, messageType) {
+		if len(messageTypes) > 0 && !slices.Contains(messageTypes, messageType) {
 			continue
 		}
 		filtered = append(filtered, msg)
@@ -238,17 +241,17 @@ func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, mes
 	return filtered
 }
 
-func messageRowMessageType(msg repo.GetMessageContentBatchRow) (messagetype.MessageType, bool) {
+func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bool) {
 	switch msg.Role {
 	case "user":
-		return messagetype.UserMessage, true
+		return message.User, true
 	case "tool":
-		return messagetype.ToolResponse, true
+		return message.ToolResponse, true
 	case "assistant":
 		if len(msg.ToolCalls) > 0 {
-			return messagetype.ToolRequest, true
+			return message.ToolRequest, true
 		}
-		return messagetype.AssistantMessage, true
+		return message.Assistant, true
 	default:
 		return "", false
 	}

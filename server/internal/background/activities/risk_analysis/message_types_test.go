@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/messagetype"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -26,7 +26,7 @@ func TestFilterMessagesByMessageTypes(t *testing.T) {
 		{ID: uuid.New(), Role: "system", Content: "ignore"},
 	}
 
-	filtered := filterMessagesByMessageTypes(messages, []string{messagetype.ToolRequest, messagetype.ToolResponse})
+	filtered := filterMessagesByMessageTypes(messages, []string{message.ToolRequest, message.ToolResponse})
 	require.Len(t, filtered, 2)
 	require.Equal(t, toolRequestID, filtered[0].ID)
 	require.Equal(t, toolResponseID, filtered[1].ID)

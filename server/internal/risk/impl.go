@@ -40,7 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/messagetype"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1665,7 +1665,7 @@ func validateCustomRuleIDs(ids []string) error {
 
 func validateMessageTypes(messageTypes []string) error {
 	for _, messageType := range messageTypes {
-		if messagetype.IsValid(messageType) {
+		if message.IsTypeValid(messageType) {
 			continue
 		}
 		return oops.E(
@@ -1673,7 +1673,7 @@ func validateMessageTypes(messageTypes []string) error {
 			nil,
 			"message_type %q must be one of: %s",
 			messageType,
-			strings.Join(messagetype.All(), ", "),
+			strings.Join(message.AllTypes(), ", "),
 		)
 	}
 	return nil
