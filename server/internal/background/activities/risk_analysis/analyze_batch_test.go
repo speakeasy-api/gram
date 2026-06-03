@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -123,6 +124,81 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		}
 	}
 	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
+}
+
+func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "hello",
+	})
+	require.NoError(t, err)
+
+	_, err = riskrepo.New(conn).InsertRiskResults(t.Context(), []riskrepo.InsertRiskResultsParams{{
+		ID:                uuid.New(),
+		ProjectID:         td.projectID,
+		OrganizationID:    td.orgID,
+		RiskPolicyID:      td.policyID,
+		RiskPolicyVersion: td.policyVersion,
+		ChatMessageID:     msgID,
+		Source:            "gitleaks",
+		Found:             true,
+		RuleID:            pgtype.Text{String: "secret.test", Valid: true},
+		Description:       pgtype.Text{String: "stale finding", Valid: true},
+		Match:             pgtype.Text{String: "match", Valid: true},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
+		EndPos:            pgtype.Int4{Int32: 5, Valid: true},
+		Confidence:        pgtype.Float8{Float64: 1, Valid: true},
+		Tags:              nil,
+		DeadLetterReason:  pgtype.Text{},
+	}})
+	require.NoError(t, err)
+
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+	)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:            td.projectID,
+		OrganizationID:       td.orgID,
+		RiskPolicyID:         td.policyID,
+		PolicyVersion:        td.policyVersion,
+		MessageIDs:           []uuid.UUID{msgID},
+		Sources:              []string{"gitleaks"},
+		MessageTypes:         []string{message.ToolRequest},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		CustomRuleIds:        nil,
+	})
+	require.NoError(t, err)
+
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Equal(t, 0, result.Processed)
+	require.Equal(t, 0, result.Findings)
+
+	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {

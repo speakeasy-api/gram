@@ -159,6 +159,44 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL
 ORDER BY workos_slug;
 
+-- name: CreateOrganizationRole :one
+-- Creates an org-scoped role, reactivating a soft-deleted row for the same slug.
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    @organization_id,
+    @workos_slug,
+    @workos_name,
+    @workos_description,
+    @workos_created_at,
+    @workos_updated_at,
+    @workos_last_event_id
+)
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_created_at = EXCLUDED.workos_created_at,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_roles.deleted_at IS NOT NULL
+RETURNING
+    id,
+    ('role:organization:' || id::text)::text AS role_urn,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    0::bigint AS member_count;
+
 -- name: UpsertOrganizationRole :one
 -- Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
 -- lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.

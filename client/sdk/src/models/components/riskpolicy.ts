@@ -51,6 +51,10 @@ export type RiskPolicy = {
    */
   id: string;
   /**
+   * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.
+   */
+  messageTypes?: Array<string> | undefined;
+  /**
    * The policy name.
    */
   name: string;
@@ -111,6 +115,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
+      message_types: z.optional(z.array(z.string())),
       name: z.string(),
       pending_messages: z.int(),
       presidio_entities: z.optional(z.array(z.string())),
@@ -131,6 +136,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "created_at": "createdAt",
         "custom_rule_ids": "customRuleIds",
         "disabled_rules": "disabledRules",
+        "message_types": "messageTypes",
         "pending_messages": "pendingMessages",
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",
