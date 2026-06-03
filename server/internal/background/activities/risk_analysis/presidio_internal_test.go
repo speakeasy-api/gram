@@ -129,6 +129,17 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"), "template placeholder without slash is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"), "presidio log-row wrapper is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@acme.co.uk"), "placeholder SLD under an out-of-list TLD is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@test.com"), "test.com is a real registered domain; only the .test TLD is RFC 6761 reserved")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@invalid.com"), "invalid.com is a real registered domain; only the .invalid TLD is RFC 6761 reserved")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@localhost.com"), "localhost.com is a real registered domain; only the .localhost TLD is RFC 6761 reserved")
+
+	// RFC 6761 reserved special-use TLDs (.example, .invalid,
+	// .localhost, .test) are guaranteed not to resolve to a public
+	// mailbox, regardless of SLD or subdomain depth.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@host.test"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@host.invalid"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@host.example"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@host.localhost"))
 
 	// Fixture / placeholder domains — the primary motivation for the
 	// filter. example.com / .org, asdf.com, fake.com, nowhere.com,

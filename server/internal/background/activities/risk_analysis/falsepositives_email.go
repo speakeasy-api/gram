@@ -10,22 +10,26 @@ import (
 //
 // Four layers, in order:
 //
-//  1. Placeholder / fixture domain — the primary reason this filter
-//     exists. Documentation, fixture data, seed data, sample SDK
-//     snippets, and policy authors' own examples overwhelmingly use a
-//     small set of fake corporate domains (`example.com`, `acme.com`,
-//     `acmecorp.com`, etc.). These are not PII the policy author cares
-//     about, regardless of the local-part.
+//  1. Reserved / placeholder domain — the primary reason this filter
+//     exists. Two sub-cases:
+//     a. RFC 6761 special-use TLDs (`.example`, `.invalid`,
+//     `.localhost`, `.test`). Anything under one of these is
+//     guaranteed not to be a real address.
+//     b. Widely-used fixture SLDs paired with a real-world TLD
+//     (`example.com`, `acme.com`, `acmecorp.com`, `asdf.com`, etc.).
+//     These are not PII the policy author cares about regardless of
+//     the local-part.
 //  2. Prefix table for KV / env / config wrappers where the match is
 //     fronted by a fixed non-email token (`DB_USERNAME=...`,
 //     `identity=...`, etc.). Matched against the lowercased input so
 //     the prefixes themselves stay lowercase.
-//  3. RFC-shape sanity: `/` is invalid in both the local-part and the
-//     domain of an addr-spec, so any candidate containing `/` is a URL
-//     or path fragment, not an email. This catches Medium `@user`
-//     URLs, GCP IAM API paths, CDN asset URLs, npm / Go / Deno module
-//     paths, and anything else that swept an `@` out of a longer
-//     string.
+//  3. Any `/` in the candidate. Per RFC 5322 §3.2.3 atext does include
+//     `/`, so `/` is technically permitted in the local-part of an
+//     addr-spec. In practice every `/`-containing match in our corpus
+//     is a URL fragment (`medium.com/@user`, GCP IAM API paths, CDN
+//     asset URLs, npm / Go / Deno module paths) rather than an email
+//     with a slash in the local-part. We accept the theoretical miss
+//     for the URL-noise drop.
 //  4. Two narrow domain checks that survive the slash filter:
 //     a `.gserviceaccount.com` suffix (GCP machine identity) and a
 //     trailing digit on the right-hand side of the final `@` (TLDs are
@@ -44,8 +48,8 @@ func nonPIIEmailReason(s string) string {
 	}
 	lower := strings.ToLower(trimmed)
 
-	if isPlaceholderDomain(lower) {
-		return "fixture / placeholder domain"
+	if r := placeholderDomainReason(lower); r != "" {
+		return r
 	}
 
 	for _, p := range nonPIIEmailPrefixes {
@@ -55,12 +59,10 @@ func nonPIIEmailReason(s string) string {
 	}
 
 	if strings.Contains(trimmed, "/") {
-		return "contains '/' (not valid in an addr-spec)"
+		return "contains '/' (URL or path fragment)"
 	}
 
-	if strings.HasSuffix(lower, ".gserviceaccount.com") ||
-	if strings.HasSuffix(lower, ".gserviceaccount.com") ||
-		strings.HasSuffix(lower, "@cloudservices.gserviceaccount.com") {
+	if strings.HasSuffix(lower, ".gserviceaccount.com") {
 		return "gcp service account"
 	}
 
@@ -73,37 +75,58 @@ func nonPIIEmailReason(s string) string {
 	return ""
 }
 
-// isPlaceholderDomain reports whether the right-hand side of the final
-// `@` looks like a well-known fixture / placeholder domain. lower is
-// the already-lowercased input.
+// placeholderDomainReason reports whether the right-hand side of the
+// final `@` is a reserved or fixture domain. lower is the
+// already-lowercased input. Returns the matching category or "".
 //
-// Matches when the second-level domain is in placeholderSLDs and the
-// top-level domain is in placeholderTLDs, accepting any number of
-// subdomains (so both `acme.com` and `mail.dev.acme.com` are caught).
-func isPlaceholderDomain(lower string) bool {
+// Two sub-checks, in order:
+//   - The trailing label is an RFC 6761 special-use TLD (`.example`,
+//     `.invalid`, `.localhost`, `.test`). This applies regardless of
+//     subdomain depth: both `user@test` and `user@host.test` match.
+//   - The second-level label is in placeholderSLDs and the top-level
+//     label is in placeholderTLDs. Subdomain depth is irrelevant.
+//
+// `test`, `invalid`, and `localhost` are NOT in placeholderSLDs because
+// `test.com`, `invalid.com`, etc. are real registered domains; only
+// their use as TLDs is reserved.
+func placeholderDomainReason(lower string) string {
 	at := strings.LastIndex(lower, "@")
 	if at < 0 || at >= len(lower)-1 {
-		return false
+		return ""
 	}
 	parts := strings.Split(lower[at+1:], ".")
+	tld := parts[len(parts)-1]
+	if reservedSpecialTLDs[tld] {
+		return "RFC 6761 reserved special-use TLD"
+	}
 	if len(parts) < 2 {
-		return false
+		return ""
 	}
 	sld := parts[len(parts)-2]
-	tld := parts[len(parts)-1]
-	return placeholderSLDs[sld] && placeholderTLDs[tld]
+	if placeholderSLDs[sld] && placeholderTLDs[tld] {
+		return "fixture / placeholder domain"
+	}
+	return ""
+}
+
+// reservedSpecialTLDs lists the top-level domains reserved by RFC 6761
+// for special use. Anything ending in one of these labels is
+// guaranteed not to resolve to a public mailbox.
+var reservedSpecialTLDs = map[string]bool{
+	"example":   true,
+	"invalid":   true,
+	"localhost": true,
+	"test":      true,
 }
 
 // placeholderSLDs is the set of second-level domains conventionally
-// reserved for documentation, fixtures, and "obviously fake" corporate
-// examples. `example`, `test`, `invalid`, and `localhost` are
-// RFC 6761 reserved special-use names; the rest are widely-used
-// community conventions.
+// used for fixtures and "obviously fake" corporate examples.
+// `example` is included because example.com / .org / .net are
+// specifically reserved by RFC 2606. The rest are widely-used
+// community conventions seen in Faker output, SDK docs, seed data, and
+// policy fixtures.
 var placeholderSLDs = map[string]bool{
 	"example":     true,
-	"test":        true,
-	"invalid":     true,
-	"localhost":   true,
 	"asdf":        true,
 	"fake":        true,
 	"nowhere":     true,
