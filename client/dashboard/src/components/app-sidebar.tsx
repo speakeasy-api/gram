@@ -147,7 +147,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent className="pt-5">
         <NavGroupProvider
           activeGroup={activeGroup}
-          defaultOpenGroups={!activeGroup ? ["Connect", "Build"] : undefined}
+          defaultOpenGroups={
+            !activeGroup ? ["Connect", "Build", "Observe", "Secure"] : undefined
+          }
           activeItem={activeItem}
         >
           <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
