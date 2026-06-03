@@ -22,11 +22,11 @@ SELECT id, $1, $2
 FROM org_collection
 ON CONFLICT (collection_id, toolset_id) WHERE deleted IS FALSE DO UPDATE
 SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
-RETURNING published_at, created_at, updated_at, deleted_at, published_by, id, collection_id, toolset_id, deleted
+RETURNING published_at, created_at, updated_at, deleted_at, published_by, id, collection_id, toolset_id, mcp_server_id, deleted
 `
 
 type AttachServerToOrganizationMcpCollectionParams struct {
-	ToolsetID      uuid.UUID
+	ToolsetID      uuid.NullUUID
 	PublishedBy    pgtype.Text
 	CollectionID   uuid.UUID
 	OrganizationID string
@@ -49,6 +49,7 @@ func (q *Queries) AttachServerToOrganizationMcpCollection(ctx context.Context, a
 		&i.ID,
 		&i.CollectionID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.Deleted,
 	)
 	return i, err
@@ -203,7 +204,7 @@ WHERE
 `
 
 type DetachServerFromOrganizationMcpCollectionParams struct {
-	ToolsetID      uuid.UUID
+	ToolsetID      uuid.NullUUID
 	CollectionID   uuid.UUID
 	OrganizationID string
 }
@@ -455,7 +456,7 @@ SELECT EXISTS (
 type IsServerAttachedToOrganizationMcpCollectionParams struct {
 	CollectionID   uuid.UUID
 	OrganizationID string
-	ToolsetID      uuid.UUID
+	ToolsetID      uuid.NullUUID
 }
 
 func (q *Queries) IsServerAttachedToOrganizationMcpCollection(ctx context.Context, arg IsServerAttachedToOrganizationMcpCollectionParams) (bool, error) {
@@ -466,7 +467,7 @@ func (q *Queries) IsServerAttachedToOrganizationMcpCollection(ctx context.Contex
 }
 
 const listOrganizationMcpCollectionServerAttachments = `-- name: ListOrganizationMcpCollectionServerAttachments :many
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 WHERE
@@ -509,6 +510,7 @@ func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Con
 			&i.ExternalOauthServerID,
 			&i.OauthProxyServerID,
 			&i.UserSessionIssuerID,
+			&i.ToolVariationsGroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

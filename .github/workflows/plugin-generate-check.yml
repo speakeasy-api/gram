@@ -4,13 +4,14 @@ on:
   pull_request:
     paths:
       - "hooks/**"
+      - "server/internal/plugins/generate.go"
 
 jobs:
   check-generate-updated:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -35,3 +36,28 @@ jobs:
           fi
 
           echo "✅ server/internal/plugins/generate.go was updated alongside hooks/ changes"
+
+      - name: Remind to consider a generator version bump
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # generate.go drives the plugin fingerprint that the automated rollout
+          # uses to skip unchanged projects. Output-affecting changes are caught
+          # automatically by the content hash, so we do NOT force a bump on every
+          # edit — that would invalidate every project's fingerprint and trigger
+          # a full republish (fresh keys + commits) for no reason. This is a
+          # non-blocking nudge for the rare case where generation BEHAVIOUR
+          # changes in a way the placeholder fingerprint pass can't observe.
+          GENERATE_DIFF=$(git diff "origin/$BASE_REF"...HEAD -- server/internal/plugins/generate.go)
+          if [ -z "$GENERATE_DIFF" ]; then
+            echo "generate.go unchanged; nothing to check."
+            exit 0
+          fi
+
+          VERSION_BUMPED=$(echo "$GENERATE_DIFF" | grep -E '^\+[[:space:]]*const pluginGeneratorVersion' || true)
+          if [ -n "$VERSION_BUMPED" ]; then
+            echo "✅ pluginGeneratorVersion was bumped."
+            exit 0
+          fi
+
+          echo "::notice file=server/internal/plugins/generate.go::generate.go changed without bumping pluginGeneratorVersion. If this change alters generation behaviour in a way the fingerprint's placeholder pass can't observe (and you want every project republished on the next rollout), bump the const. Output-visible changes are detected automatically and need no bump."

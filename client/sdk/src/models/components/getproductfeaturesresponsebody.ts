@@ -18,9 +18,17 @@ export type GetProductFeaturesResponseBody = {
    */
   logsEnabled: boolean;
   /**
+   * Whether SCIM/directory sync setup is enabled for the organization
+   */
+  scimEnabled: boolean;
+  /**
    * Whether Claude Code session capture is enabled
    */
   sessionCaptureEnabled: boolean;
+  /**
+   * Whether SSO setup is enabled for the organization
+   */
+  ssoEnabled: boolean;
   /**
    * Whether tool I/O logging is enabled
    */
@@ -39,7 +47,9 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
   z.object({
     authz_challenge_logging_enabled: z.boolean(),
     logs_enabled: z.boolean(),
+    scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
+    sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
     webhooks: z.boolean(),
   }),
@@ -47,7 +57,9 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "logs_enabled": "logsEnabled",
+      "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
+      "sso_enabled": "ssoEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
     });
   }),

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -59,29 +61,35 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *remotemcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
+	service         *remotemcp.Service
+	conn            *pgxpool.Pool
+	sessionManager  *sessions.Manager
+	shadowMCPClient *shadowmcp.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	// servicePolicy blocks loopback / private ranges so validateURL exercises
+	// the real production CIDR set, and uses a mock resolver so hostname-based
+	// test cases are deterministic.
+	servicePolicy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(newRemoteMCPMockResolver()),
+	)
+	return newTestServiceWithPolicy(t, servicePolicy)
+}
+
+// newTestServiceWithPolicy is the variant of [newTestService] that lets the
+// caller override the guardian.Policy. Discovery tests use this with an
+// unsafe policy so the service can dial httptest.NewServer on 127.0.0.1.
+func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-
-	// Two guardian policies are required because the test setup has two
-	// conflicting needs:
-	//
-	// servicePolicy blocks loopback / private ranges so validateURL
-	// exercises the real production CIDR set, and uses a mock resolver so
-	// hostname-based test cases are deterministic.
-	servicePolicy := guardian.NewDefaultPolicy(
-		tracerProvider,
-		guardian.WithResolver(newRemoteMCPMockResolver()),
-	)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -103,10 +111,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
 
+	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
+
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
+		service:         svc,
+		conn:            conn,
+		sessionManager:  sessionManager,
+		shadowMCPClient: shadowMCPClient,
 	}
 }
 

@@ -2,15 +2,15 @@ import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
 
 interface ChatLogsTableProps {
-  chats: ChatOverviewWithResolutions[];
+  chats: ChatOverview[];
   selectedChatId?: string;
-  onSelectChat: (chat: ChatOverviewWithResolutions) => void;
+  onSelectChat: (chat: ChatOverview) => void;
   onDeleteChat: (chatId: string) => void;
   isLoading: boolean;
   error: Error | null;
@@ -50,7 +50,7 @@ function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
   );
 }
 
-function formatDuration(chat: ChatOverviewWithResolutions): string {
+function formatDuration(chat: ChatOverview): string {
   // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const seconds = Math.round(
@@ -79,12 +79,11 @@ function CopyButton({
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't trigger row selection
-      // Copy with the label prefix
-      navigator.clipboard.writeText(`${label}: ${value}`);
+      navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     },
-    [value, label],
+    [value],
   );
 
   return (
@@ -194,7 +193,7 @@ export function ChatLogsTable({
                 "group w-full px-5 py-4 text-left transition-all duration-150",
                 "hover:bg-muted/50",
                 "focus-visible:bg-muted/50 focus:outline-none",
-                isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
+                isSelected && "bg-primary/3 hover:bg-primary/5",
               )}
             >
               <div className="flex items-center gap-5">

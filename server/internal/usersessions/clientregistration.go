@@ -158,9 +158,6 @@ func validateRedirectURI(raw string) error {
 		case "javascript", "data", "vbscript", "file", "blob", "view-source":
 			return &OAuthError{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uri scheme %q is not permitted", scheme)}
 		}
-		if !strings.Contains(scheme, ".") {
-			return &OAuthError{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uri custom scheme %q must be in reverse-DNS form (RFC 8252 §7.1)", scheme)}
-		}
 		return nil
 	}
 }

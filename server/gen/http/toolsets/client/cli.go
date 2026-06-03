@@ -694,3 +694,60 @@ func BuildSetUserSessionIssuerPayload(toolsetsSetUserSessionIssuerBody string, t
 
 	return v, nil
 }
+
+// BuildSetToolVariationsGroupPayload builds the payload for the toolsets
+// setToolVariationsGroup endpoint from CLI flags.
+func BuildSetToolVariationsGroupPayload(toolsetsSetToolVariationsGroupBody string, toolsetsSetToolVariationsGroupSlug string, toolsetsSetToolVariationsGroupSessionToken string, toolsetsSetToolVariationsGroupApikeyToken string, toolsetsSetToolVariationsGroupProjectSlugInput string) (*toolsets.SetToolVariationsGroupPayload, error) {
+	var err error
+	var body SetToolVariationsGroupRequestBody
+	{
+		err = json.Unmarshal([]byte(toolsetsSetToolVariationsGroupBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.ToolVariationsGroupID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var slug string
+	{
+		slug = toolsetsSetToolVariationsGroupSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsSetToolVariationsGroupSessionToken != "" {
+			sessionToken = &toolsetsSetToolVariationsGroupSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsSetToolVariationsGroupApikeyToken != "" {
+			apikeyToken = &toolsetsSetToolVariationsGroupApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsSetToolVariationsGroupProjectSlugInput != "" {
+			projectSlugInput = &toolsetsSetToolVariationsGroupProjectSlugInput
+		}
+	}
+	v := &toolsets.SetToolVariationsGroupPayload{
+		ToolVariationsGroupID: body.ToolVariationsGroupID,
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

@@ -8,14 +8,11 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type IsRBACEnabled func(ctx context.Context, organizationID string) (bool, error)
@@ -130,27 +127,19 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		}
 	}
 
-	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
-
-	rolePrincipals, err := e.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	principals, err := ResolveUserPrincipals(ctx, e.db, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
+		if errors.Is(err, ErrPrincipalNotFound) {
+			return GrantsToContext(ctx, nil), nil
+		}
 		e.logger.ErrorContext(
 			ctx,
-			"failed to resolve roles for authz grants",
+			"failed to resolve principals for authz grants",
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 			attr.SlogUserID(authCtx.UserID),
 			attr.SlogError(err),
 		)
-		return ctx, fmt.Errorf("resolve role slugs: %w", err)
-	}
-	for _, role := range rolePrincipals {
-		// Load grants for both canonical role:<kind>:<uuid> principals and
-		// legacy role:<slug> principals while existing grant rows are backfilled.
-		rolePrincipalURNs, err := RolePrincipals(role.RoleSlug, role.PrincipalUrn)
-		if err != nil {
-			return ctx, fmt.Errorf("build role principals: %w", err)
-		}
-		principals = append(principals, rolePrincipalURNs...)
+		return ctx, fmt.Errorf("resolve principals: %w", err)
 	}
 
 	grants, err := LoadGrants(ctx, e.db, authCtx.ActiveOrganizationID, principals)
@@ -166,29 +155,6 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	}
 
 	return GrantsToContext(ctx, grants), nil
-}
-
-func (e *Engine) resolveRolePrincipals(ctx context.Context, userID, orgID string) ([]accessrepo.ListMemberRolePrincipalsByWorkosUserRow, error) {
-	user, err := usersrepo.New(e.db).GetUser(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("get user: %w", err)
-	}
-	if !user.WorkosID.Valid || user.WorkosID.String == "" {
-		return nil, nil
-	}
-
-	// Role assignments are local source-of-truth records. They are written by
-	// the access write path and by WorkOS sync, so invitation/admin-console
-	// changes can lag until the sync job catches up.
-	rolePrincipals, err := accessrepo.New(e.db).ListMemberRolePrincipalsByWorkosUser(ctx, accessrepo.ListMemberRolePrincipalsByWorkosUserParams{
-		OrganizationID: orgID,
-		WorkosUserID:   user.WorkosID.String,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list member role slugs: %w", err)
-	}
-
-	return rolePrincipals, nil
 }
 
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
@@ -208,6 +174,10 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
+	return e.requireWithGrants(ctx, grants, checks...)
+}
+
+func (e *Engine) requireWithGrants(ctx context.Context, grants []Grant, checks ...Check) error {
 	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
 		if err := validateInput(check); err != nil {

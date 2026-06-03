@@ -22,9 +22,13 @@ export type GetMcpMetadataSecurity = {
 
 export type GetMcpMetadataRequest = {
   /**
-   * The slug of the toolset associated with this install page metadata
+   * The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
    */
-  toolsetSlug: string;
+  toolsetSlug?: string | undefined;
+  /**
+   * The ID of the MCP server associated with this install page metadata. Mutually exclusive with toolset_slug.
+   */
+  mcpServerId?: string | undefined;
   /**
    * API Key header
    */
@@ -142,7 +146,8 @@ export function getMcpMetadataSecurityToJSON(
 
 /** @internal */
 export type GetMcpMetadataRequest$Outbound = {
-  toolset_slug: string;
+  toolset_slug?: string | undefined;
+  mcp_server_id?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -154,7 +159,8 @@ export const GetMcpMetadataRequest$outboundSchema: z.ZodMiniType<
   GetMcpMetadataRequest
 > = z.pipe(
   z.object({
-    toolsetSlug: z.string(),
+    toolsetSlug: z.optional(z.string()),
+    mcpServerId: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
@@ -162,6 +168,7 @@ export const GetMcpMetadataRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       toolsetSlug: "toolset_slug",
+      mcpServerId: "mcp_server_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

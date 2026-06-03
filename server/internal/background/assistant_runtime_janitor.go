@@ -25,11 +25,23 @@ const (
 	// covering up to 4800 rows/day on the steady state.
 	AssistantRuntimeJanitorInterval = time.Hour
 
-	// AssistantRuntimeJanitorBatchSize caps rows reaped per sweep. The
-	// activity makes one external API call per row (e.g. Fly DeleteApp)
-	// so the bound also keeps the Temporal activity within its
-	// StartToCloseTimeout.
+	// AssistantRuntimeJanitorBatchSize caps rows reaped per sweep. Each row
+	// makes one or two Fly Machines API calls; per-call timeouts bound each
+	// call so the sweep can never wedge on a single row.
 	AssistantRuntimeJanitorBatchSize int32 = 200
+
+	// assistantRuntimeJanitorActivityTimeout is the upper bound on a single
+	// sweep, sized for the pathological case where every row in the batch
+	// hits the per-call Fly timeout on every call (Destroy + List +
+	// DeleteApp). Liveness is enforced by the heartbeat timeout, not this
+	// ceiling.
+	assistantRuntimeJanitorActivityTimeout = 6 * time.Hour
+
+	// assistantRuntimeJanitorHeartbeatTimeout must comfortably exceed the
+	// worst-case time the reap loop can spend on a single row. Each row
+	// makes up to three Fly calls (Destroy, List, DeleteApp), each
+	// bounded by flyRuntimeReapCallTimeout.
+	assistantRuntimeJanitorHeartbeatTimeout = 3 * time.Minute
 
 	// AssistantRuntimeJanitorInactivityThreshold is the quiet period an
 	// assistant must have before its backend resources become eligible
@@ -71,10 +83,16 @@ func AssistantRuntimeJanitorWorkflow(ctx workflow.Context, params AssistantRunti
 
 	logger := workflow.GetLogger(ctx)
 
+	// HeartbeatTimeout is the liveness signal; the reap loop beats after
+	// each row. StartToCloseTimeout is just a ceiling for the worst-case
+	// sweep wall time. MaximumAttempts is 2 so a transient DB error on the
+	// initial candidate list does not waste the hourly slot; per-row Fly
+	// failures are already swallowed inside the activity and do not retry.
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
+		StartToCloseTimeout: assistantRuntimeJanitorActivityTimeout,
+		HeartbeatTimeout:    assistantRuntimeJanitorHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
+			MaximumAttempts:    2,
 			InitialInterval:    5 * time.Second,
 			MaximumInterval:    1 * time.Minute,
 			BackoffCoefficient: 2,
@@ -110,7 +128,7 @@ func AddAssistantRuntimeJanitorSchedule(ctx context.Context, temporalEnv *tenv.E
 			ID:                 assistantRuntimeJanitorWorkflowID,
 			Workflow:           AssistantRuntimeJanitorWorkflow,
 			TaskQueue:          string(temporalEnv.Queue()),
-			WorkflowRunTimeout: 15 * time.Minute,
+			WorkflowRunTimeout: assistantRuntimeJanitorActivityTimeout + 15*time.Minute,
 			Args: []any{AssistantRuntimeJanitorWorkflowParams{
 				InactivityThreshold: 0,
 				BatchSize:           0,

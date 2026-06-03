@@ -20,6 +20,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -57,6 +58,8 @@ type Service struct {
 	roleMgr      *RoleManager
 	featureCache FeatureCacheWriter
 	audit        *audit.Logger
+	jwtSecret    string
+	accessStore  accesscontrol.Store
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -72,6 +75,8 @@ func NewService(
 	authz *authz.Engine,
 	featureCache FeatureCacheWriter,
 	auditLogger *audit.Logger,
+	jwtSecret string,
+	accessStore accesscontrol.Store,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -85,6 +90,8 @@ func NewService(
 		roleMgr:      roleMgr,
 		featureCache: featureCache,
 		audit:        auditLogger,
+		jwtSecret:    jwtSecret,
+		accessStore:  accessStore,
 	}
 }
 
@@ -240,6 +247,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
 		{Slug: string(authz.ScopeEnvironmentRead), Description: "View environments and their entries within the project.", ResourceType: "environment"},
 		{Slug: string(authz.ScopeEnvironmentWrite), Description: "Add, edit, clone, and remove environments within the project.", ResourceType: "environment"},
+		{Slug: string(authz.ScopeRiskPolicyEvaluate), Description: "Evaluate risk policies.", ResourceType: "risk_policy"},
 	}}, nil
 }
 
@@ -303,33 +311,12 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		attr.AccessMemberID(ac.UserID),
 	)
 
-	connectedUser, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
 	switch {
-	case errors.Is(err, errConnectedUserNotFound):
+	case errors.Is(err, authz.ErrPrincipalNotFound):
 		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").Log(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load connected user").Log(ctx, logger)
-	}
-
-	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)}
-	rolePrincipals, err := s.roleMgr.MemberRolePrincipals(ctx, ac.ActiveOrganizationID, connectedUser.WorkosID.String)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list member roles").Log(ctx, logger)
-	}
-	roleSlugs := make([]string, 0, len(rolePrincipals))
-	for _, role := range rolePrincipals {
-		// Effective-grant responses must include grants stored under either the
-		// canonical role URN or the legacy role slug during the migration.
-		rolePrincipalURNs, err := authz.RolePrincipals(role.RoleSlug, role.PrincipalUrn)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
-		}
-		principals = append(principals, rolePrincipalURNs...)
-		roleSlugs = append(roleSlugs, role.RoleSlug)
-	}
-	if len(roleSlugs) == 1 {
-		logger = logger.With(attr.SlogAccessRoleSlug(roleSlugs[0]))
-		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(roleSlugs[0]))
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").Log(ctx, logger)
 	}
 
 	grants, err := authz.LoadGrants(ctx, s.db, ac.ActiveOrganizationID, principals)
@@ -499,6 +486,7 @@ func allScopesGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 	}
 }
 
@@ -559,7 +547,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
 
-	if err := authz.SeedSystemRoleGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID); err != nil {
+	if err := authz.SeedSystemRoleGrants(ctx, s.db, ac.ActiveOrganizationID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "seed system role grants").Log(ctx, logger)
 	}
 

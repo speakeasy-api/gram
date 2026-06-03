@@ -742,6 +742,267 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 	}, nil
 }
 
+// GetEmployeeDataFlowGraph retrieves an employee's MCP data-flow graph.
+func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_gen.GetEmployeeDataFlowGraphPayload) (res *telem_gen.GetEmployeeDataFlowGraphResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+	}
+
+	userID := conv.PtrValOr(payload.UserID, "")
+	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	if userID == "" && externalUserID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "either user_id or external_user_id is required")
+	}
+	if userID != "" && externalUserID != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.chRepo.GetEmployeeDataFlowGraph(ctx, repo.GetEmployeeDataFlowGraphParams{
+		GramProjectID:  authCtx.ProjectID.String(),
+		TimeStart:      timeStart,
+		TimeEnd:        timeEnd,
+		UserID:         userID,
+		ExternalUserID: externalUserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving employee data flow graph")
+	}
+
+	nodes, edges := buildEmployeeDataFlowGraph(rows)
+	return &telem_gen.GetEmployeeDataFlowGraphResult{
+		Nodes: nodes,
+		Edges: edges,
+	}, nil
+}
+
+type employeeGraphTupleNode struct {
+	tier        string
+	label       string
+	serverClass string
+}
+
+type employeeGraphNodeAccumulator struct {
+	node       *telem_gen.EmployeeDataFlowNode
+	totalCalls uint64
+}
+
+type employeeGraphEdgeAccumulator struct {
+	edge         *telem_gen.EmployeeDataFlowEdge
+	callCount    uint64
+	successCount uint64
+	failureCount uint64
+}
+
+type employeeGraphEdgeKey struct {
+	sourceID string
+	targetID string
+}
+
+var employeeDataFlowTierOrder = map[string]int{
+	"origin": 0,
+	"client": 1,
+	"server": 2,
+	"tool":   3,
+}
+
+func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.EmployeeDataFlowNode, []*telem_gen.EmployeeDataFlowEdge) {
+	nodeAccs := make(map[string]*employeeGraphNodeAccumulator)
+	edgeAccs := make(map[employeeGraphEdgeKey]*employeeGraphEdgeAccumulator)
+
+	for _, row := range rows {
+		callCount := row.CallCount
+		if callCount == 0 {
+			continue
+		}
+
+		path := employeeDataFlowPath(row)
+		for _, pathNode := range path {
+			nodeID := employeeDataFlowNodeID(pathNode)
+			acc, ok := nodeAccs[nodeID]
+			if !ok {
+				acc = &employeeGraphNodeAccumulator{
+					node: &telem_gen.EmployeeDataFlowNode{
+						ID:          nodeID,
+						Tier:        pathNode.tier,
+						Label:       pathNode.label,
+						TotalCalls:  0,
+						ServerClass: nil,
+					},
+					totalCalls: 0,
+				}
+				if pathNode.tier == "server" && pathNode.serverClass != "" {
+					serverClass := pathNode.serverClass
+					acc.node.ServerClass = &serverClass
+				}
+				nodeAccs[nodeID] = acc
+			}
+			acc.totalCalls += callCount
+		}
+
+		for i := 0; i < len(path)-1; i++ {
+			sourceID := employeeDataFlowNodeID(path[i])
+			targetID := employeeDataFlowNodeID(path[i+1])
+			edgeKey := employeeGraphEdgeKey{sourceID: sourceID, targetID: targetID}
+			acc, ok := edgeAccs[edgeKey]
+			if !ok {
+				acc = &employeeGraphEdgeAccumulator{
+					edge: &telem_gen.EmployeeDataFlowEdge{
+						ID:           employeeDataFlowEdgeID(sourceID, targetID),
+						Source:       sourceID,
+						Target:       targetID,
+						CallCount:    0,
+						SuccessCount: 0,
+						FailureCount: 0,
+					},
+					callCount:    0,
+					successCount: 0,
+					failureCount: 0,
+				}
+				edgeAccs[edgeKey] = acc
+			}
+			acc.callCount += row.CallCount
+			acc.successCount += row.SuccessCount
+			acc.failureCount += row.FailureCount
+		}
+	}
+
+	nodes := make([]*telem_gen.EmployeeDataFlowNode, 0, len(nodeAccs))
+	for _, acc := range nodeAccs {
+		acc.node.TotalCalls = uint64ToInt64(acc.totalCalls)
+		nodes = append(nodes, acc.node)
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		leftTier := employeeDataFlowTierOrder[nodes[i].Tier]
+		rightTier := employeeDataFlowTierOrder[nodes[j].Tier]
+		if leftTier != rightTier {
+			return leftTier < rightTier
+		}
+		if nodes[i].TotalCalls != nodes[j].TotalCalls {
+			return nodes[i].TotalCalls > nodes[j].TotalCalls
+		}
+		return nodes[i].Label < nodes[j].Label
+	})
+
+	edges := make([]*telem_gen.EmployeeDataFlowEdge, 0, len(edgeAccs))
+	for _, acc := range edgeAccs {
+		acc.edge.CallCount = uint64ToInt64(acc.callCount)
+		acc.edge.SuccessCount = uint64ToInt64(acc.successCount)
+		acc.edge.FailureCount = uint64ToInt64(acc.failureCount)
+		edges = append(edges, acc.edge)
+	}
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].CallCount != edges[j].CallCount {
+			return edges[i].CallCount > edges[j].CallCount
+		}
+		return edges[i].ID < edges[j].ID
+	})
+
+	return pruneUnreachableEmployeeDataFlowGraph(nodes, edges)
+}
+
+// pruneUnreachableEmployeeDataFlowGraph keeps only the nodes reachable forward
+// from an origin-tier node (and the edges between them). This drops dangling
+// nodes such as an MCP client with no inbound connection, and anything that
+// hangs off them. When there are no origin nodes the result is empty.
+func pruneUnreachableEmployeeDataFlowGraph(nodes []*telem_gen.EmployeeDataFlowNode, edges []*telem_gen.EmployeeDataFlowEdge) ([]*telem_gen.EmployeeDataFlowNode, []*telem_gen.EmployeeDataFlowEdge) {
+	adjacency := make(map[string][]string)
+	for _, edge := range edges {
+		adjacency[edge.Source] = append(adjacency[edge.Source], edge.Target)
+	}
+
+	reachable := make(map[string]struct{})
+	queue := make([]string, 0)
+	for _, node := range nodes {
+		if node.Tier == "origin" {
+			reachable[node.ID] = struct{}{}
+			queue = append(queue, node.ID)
+		}
+	}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for _, target := range adjacency[id] {
+			if _, ok := reachable[target]; !ok {
+				reachable[target] = struct{}{}
+				queue = append(queue, target)
+			}
+		}
+	}
+
+	prunedNodes := make([]*telem_gen.EmployeeDataFlowNode, 0, len(nodes))
+	for _, node := range nodes {
+		if _, ok := reachable[node.ID]; ok {
+			prunedNodes = append(prunedNodes, node)
+		}
+	}
+
+	prunedEdges := make([]*telem_gen.EmployeeDataFlowEdge, 0, len(edges))
+	for _, edge := range edges {
+		_, sourceOK := reachable[edge.Source]
+		_, targetOK := reachable[edge.Target]
+		if sourceOK && targetOK {
+			prunedEdges = append(prunedEdges, edge)
+		}
+	}
+
+	return prunedNodes, prunedEdges
+}
+
+func employeeDataFlowPath(row repo.EmployeeDataFlowRow) []employeeGraphTupleNode {
+	candidates := []employeeGraphTupleNode{
+		{tier: "origin", label: strings.TrimSpace(row.Origin), serverClass: ""},
+		{tier: "client", label: strings.TrimSpace(row.Client), serverClass: ""},
+		{tier: "server", label: strings.TrimSpace(row.Server), serverClass: strings.TrimSpace(row.ServerClass)},
+		{tier: "tool", label: strings.TrimSpace(row.Tool), serverClass: ""},
+	}
+
+	path := make([]employeeGraphTupleNode, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.label == "" {
+			continue
+		}
+		path = append(path, candidate)
+	}
+	return path
+}
+
+func employeeDataFlowNodeID(node employeeGraphTupleNode) string {
+	if node.tier == "server" && node.serverClass != "" {
+		return node.tier + ":" + node.serverClass + ":" + node.label
+	}
+	return node.tier + ":" + node.label
+}
+
+func employeeDataFlowEdgeID(sourceID, targetID string) string {
+	return strconv.Itoa(len(sourceID)) + ":" + sourceID + "->" + strconv.Itoa(len(targetID)) + ":" + targetID
+}
+
+func uint64ToInt64(v uint64) int64 {
+	const maxInt64 = uint64(1<<63 - 1)
+	if v > maxInt64 {
+		return int64(maxInt64)
+	}
+	return int64(v)
+}
+
 // searchParams contains common validated parameters for telemetry search endpoints.
 type searchParams struct {
 	projectID      string

@@ -462,6 +462,24 @@ func (q *Queries) CreateAssistantRuntime(ctx context.Context, arg CreateAssistan
 	return err
 }
 
+const createProjectManagedAssistant = `-- name: CreateProjectManagedAssistant :exec
+INSERT INTO project_managed_assistants (project_id, assistant_id)
+VALUES ($1, $2)
+`
+
+type CreateProjectManagedAssistantParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+// Marks an assistant as the project's managed assistant. PRIMARY KEY(project_id)
+// enforces 0-or-1, so a concurrent enable raises a unique violation the caller
+// recovers from by re-reading.
+func (q *Queries) CreateProjectManagedAssistant(ctx context.Context, arg CreateProjectManagedAssistantParams) error {
+	_, err := q.db.Exec(ctx, createProjectManagedAssistant, arg.ProjectID, arg.AssistantID)
+	return err
+}
+
 const deleteAssistant = `-- name: DeleteAssistant :exec
 UPDATE assistants
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -477,6 +495,18 @@ type DeleteAssistantParams struct {
 
 func (q *Queries) DeleteAssistant(ctx context.Context, arg DeleteAssistantParams) error {
 	_, err := q.db.Exec(ctx, deleteAssistant, arg.AssistantID, arg.ProjectID)
+	return err
+}
+
+const deleteProjectManagedAssistant = `-- name: DeleteProjectManagedAssistant :exec
+DELETE FROM project_managed_assistants
+WHERE project_id = $1
+`
+
+// Toggles the managed assistant off for a project (the assistant row itself is
+// soft-deleted separately). Returns silently if no mapping exists.
+func (q *Queries) DeleteProjectManagedAssistant(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteProjectManagedAssistant, projectID)
 	return err
 }
 
@@ -751,6 +781,28 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 	return i, err
 }
 
+const getAssistantThreadIDByCorrelation = `-- name: GetAssistantThreadIDByCorrelation :one
+SELECT id
+FROM assistant_threads
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND correlation_id = $3
+  AND deleted IS FALSE
+`
+
+type GetAssistantThreadIDByCorrelationParams struct {
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	CorrelationID string
+}
+
+func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg GetAssistantThreadIDByCorrelationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getAssistantThreadIDByCorrelation, arg.ProjectID, arg.AssistantID, arg.CorrelationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
@@ -827,6 +879,70 @@ func (q *Queries) GetLatestAssistantThreadEventByThreadID(ctx context.Context, a
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getManagedAssistantByProject = `-- name: GetManagedAssistantByProject :one
+SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.status, a.created_at, a.updated_at, a.deleted_at
+FROM project_managed_assistants pma
+JOIN assistants a ON a.id = pma.assistant_id
+WHERE pma.project_id = $1
+  AND a.deleted IS FALSE
+`
+
+type GetManagedAssistantByProjectRow struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
+// Resolves a project's platform-managed assistant (powers the AI Insights
+// sidebar) through the project_managed_assistants mapping. Returns no rows
+// when the feature isn't toggled on for the project.
+func (q *Queries) GetManagedAssistantByProject(ctx context.Context, projectID uuid.UUID) (GetManagedAssistantByProjectRow, error) {
+	row := q.db.QueryRow(ctx, getManagedAssistantByProject, projectID)
+	var i GetManagedAssistantByProjectRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.Model,
+		&i.Instructions,
+		&i.WarmTtlSeconds,
+		&i.MaxConcurrency,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getProjectName = `-- name: GetProjectName :one
+SELECT name
+FROM projects
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+// Display name of a project, used to compose the managed assistant's name so
+// it's distinguishable from other projects' managed assistants in the same org.
+func (q *Queries) GetProjectName(ctx context.Context, projectID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getProjectName, projectID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const insertAssistantThreadEvent = `-- name: InsertAssistantThreadEvent :one
@@ -1212,6 +1328,39 @@ func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectMCPToolsetSlugs = `-- name: ListProjectMCPToolsetSlugs :many
+SELECT slug
+FROM toolsets
+WHERE project_id = $1
+  AND mcp_slug IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY created_at
+`
+
+// Slugs of every MCP-reachable toolset in a project, used to attach all of a
+// project's toolsets to its managed assistant at provisioning time. Toolsets
+// without an mcp_slug can't be addressed by the runtime, so they're excluded
+// (mirrors the guard in EnableMCPForToolsets).
+func (q *Queries) ListProjectMCPToolsetSlugs(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listProjectMCPToolsetSlugs, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		items = append(items, slug)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

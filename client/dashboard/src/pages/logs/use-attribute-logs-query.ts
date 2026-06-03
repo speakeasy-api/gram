@@ -99,10 +99,22 @@ export function logsToTraceSummaries(
         const urn = getNestedAttr(log.attributes, "gram.tool.urn");
         if (typeof urn === "string") gramUrn = urn;
       }
-      if (httpStatusCode === undefined) {
-        const code = getNestedAttr(log.attributes, "http.response.status_code");
-        if (typeof code === "number") httpStatusCode = code;
+      // Prefer the highest HTTP status code seen in the trace so a trace
+      // containing both a 200 (e.g. MCP handshake) and a 500 (failed tool
+      // call) surfaces as failed. Picking the first code latches onto
+      // whichever log iterates first and can mislead the row indicator green.
+      const rawCode = getNestedAttr(
+        log.attributes,
+        "http.response.status_code",
+      );
+
+      const code = typeof rawCode === "string" ? Number(rawCode) : rawCode;
+      if (typeof code === "number" && !Number.isNaN(code)) {
+        if (httpStatusCode === undefined || code > httpStatusCode) {
+          httpStatusCode = code;
+        }
       }
+
       if (!eventSource) {
         if (typeof src === "string") eventSource = src;
       }
@@ -138,6 +150,44 @@ export function logsToTraceSummaries(
     a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
   );
   return summaries;
+}
+
+/**
+ * Merges per-page trace summaries by traceId. Used by the filtered logs view,
+ * which paginates the raw log stream and may receive the same trace split
+ * across pages. Mirrors the within-page rule in logsToTraceSummaries: a
+ * trace's status is the highest code seen across all its logs.
+ */
+export function mergeTraceSummariesByTraceId(
+  raw: ToolCallSummary[],
+): ToolCallSummary[] {
+  const merged = new Map<string, ToolCallSummary>();
+  for (const trace of raw) {
+    const existing = merged.get(trace.traceId);
+
+    if (!existing) {
+      merged.set(trace.traceId, { ...trace });
+      continue;
+    }
+
+    existing.logCount += trace.logCount;
+    if (BigInt(trace.startTimeUnixNano) < BigInt(existing.startTimeUnixNano)) {
+      existing.startTimeUnixNano = trace.startTimeUnixNano;
+    }
+
+    if (trace.httpStatusCode === undefined) continue;
+
+    if (
+      existing.httpStatusCode === undefined ||
+      trace.httpStatusCode > existing.httpStatusCode
+    ) {
+      existing.httpStatusCode = trace.httpStatusCode;
+    }
+  }
+
+  return Array.from(merged.values()).sort((a, b) =>
+    a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
+  );
 }
 
 function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {

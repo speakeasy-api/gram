@@ -9,6 +9,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type RiskCustomDetectionRule struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RuleID         string
+	Title          string
+	Description    string
+	Regex          pgtype.Text
+	Severity       string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
@@ -18,7 +33,11 @@ type RiskPolicy struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	DisabledRules        []string
+	CustomRuleIds        []string
+	MessageTypes         []string
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Version              int64

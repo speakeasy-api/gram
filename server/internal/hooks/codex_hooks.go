@@ -60,7 +60,8 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, projectID)
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
-			if detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
+			evidence := codexShadowMCPEvidence(payload)
+			if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, authCtx.UserID, payload.ToolInput, toolName, evidence); denied {
 				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
 					attr.SlogHookBlockReason(detail),
@@ -68,7 +69,17 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 					attr.SlogRiskPolicyName(policy.Name),
 				)
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-				userReason = renderUserBlockReason(policy.UserMessage, blockReason)
+				userReason = s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+					OrganizationID:  orgID,
+					ProjectID:       projectID,
+					RequesterUserID: authCtx.UserID,
+					UserMessage:     policy.UserMessage,
+					AuditReason:     blockReason,
+					Evidence:        evidence,
+					ToolName:        toolName,
+					ToolInput:       payload.ToolInput,
+					RiskPolicyID:    policy.ID,
+				})
 			}
 		}
 	case "PermissionRequest":
@@ -105,18 +116,18 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 }
 
 func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, orgID, projectID, blockReason string) {
-	// Codex does not send user_email; events are attributed to org/project only.
-	metadata := &SessionMetadata{
-		SessionID:   conv.PtrValOr(payload.SessionID, ""),
-		ServiceName: "Codex",
-		UserEmail:   "",
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
+	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
+
+	if payload.HookEventName == "SessionStart" && metadata.SessionID != "" && metadata.UserEmail != "" {
+		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(metadata.SessionID),
+			)
+		}
 	}
 
-	s.writeCodexHookToClickHouse(ctx, payload, orgID, projectID, blockReason)
+	s.writeCodexHookToClickHouse(ctx, payload, metadata, blockReason)
 
 	switch payload.HookEventName {
 	case "PreToolUse":
@@ -134,14 +145,44 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	}
 }
 
-func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.CodexPayload, orgID, projectID, blockReason string) {
-	attrs := s.buildCodexTelemetryAttributes(ctx, payload, orgID, projectID)
+func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {
+	metadata := &SessionMetadata{
+		SessionID:   conv.PtrValOr(payload.SessionID, ""),
+		ServiceName: "Codex",
+		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   orgID,
+		ProjectID:   projectID,
+	}
+
+	if metadata.SessionID != "" {
+		cached, err := s.getSessionMetadata(ctx, metadata.SessionID)
+		if err == nil && cached.ServiceName == "Codex" && cached.GramOrgID == orgID && cached.ProjectID == projectID {
+			if metadata.UserEmail == "" {
+				metadata.UserEmail = cached.UserEmail
+			}
+			if metadata.UserID == "" {
+				metadata.UserID = cached.UserID
+			}
+		}
+	}
+
+	if metadata.UserID == "" {
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, orgID)
+	}
+
+	return metadata
+}
+
+func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
+	attrs := s.buildCodexTelemetryAttributes(ctx, payload, metadata)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
 	}
 	toolName, _ := attrs[attr.ToolNameKey].(string)
 
-	parsedProjectID, err := uuid.Parse(projectID)
+	parsedProjectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "invalid project ID for Codex hook", attr.SlogError(err))
 		return
@@ -149,7 +190,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 
 	toolInfo := telemetry.ToolInfo{
 		Name:           toolName,
-		OrganizationID: orgID,
+		OrganizationID: metadata.GramOrgID,
 		ProjectID:      parsedProjectID.String(),
 		ID:             "",
 		URN:            "",
@@ -170,7 +211,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 	}
 }
 
-func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) map[attr.Key]any {
+func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) map[attr.Key]any {
 	toolName := conv.PtrValOr(payload.ToolName, "")
 
 	attrs := map[attr.Key]any{
@@ -180,10 +221,13 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Hook: %s", payload.HookEventName),
-		attr.UserEmailKey:      "",
-		attr.ProjectIDKey:      projectID,
-		attr.OrganizationIDKey: orgID,
+		attr.UserEmailKey:      metadata.UserEmail,
+		attr.ProjectIDKey:      metadata.ProjectID,
+		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     "codex",
+	}
+	if metadata.UserID != "" {
+		attrs[attr.UserIDKey] = metadata.UserID
 	}
 
 	if payload.Model != nil && *payload.Model != "" {

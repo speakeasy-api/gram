@@ -8,9 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
+
+func requireRiskAccessRule(t *testing.T, ti *testInstance, organizationID, projectID, matchKind, matchValue string) {
+	t.Helper()
+	rule, err := ti.accessStore.GetRuleByMatch(t.Context(), organizationID, accesscontrol.ResourceTypeShadowMCP, accesscontrol.AccessScopeProject, projectID, matchKind, matchValue)
+	require.NoError(t, err)
+	require.Equal(t, accesscontrol.DispositionAllowed, rule.Disposition)
+}
 
 func TestApproveShadowMCP_HappyPath(t *testing.T) {
 	t.Parallel()
@@ -36,9 +44,10 @@ func TestApproveShadowMCP_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, approval)
 	assert.Equal(t, policy.ID, approval.PolicyID)
-	assert.Equal(t, "https://mcp.example.com/server", approval.Match, "match should be canonicalized on write")
+	assert.Equal(t, "https://mcp.example.com/server/", approval.Match, "match should be canonicalized on write")
 	require.NotNil(t, approval.ServerName)
 	assert.Equal(t, "Example", *approval.ServerName)
+	requireRiskAccessRule(t, ti, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), accesscontrol.MatchKindFullURL, "https://mcp.example.com/server/")
 }
 
 func TestApproveShadowMCP_CommandHappyPath(t *testing.T) {
@@ -65,6 +74,7 @@ func TestApproveShadowMCP_CommandHappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, approval)
 	assert.Equal(t, "mise mcp", approval.Match, "command-shaped match should be whitespace-canonicalized")
+	requireRiskAccessRule(t, ti, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), accesscontrol.MatchKindServerIdentity, "mise mcp")
 }
 
 // Server-prefix-keyed approvals (the form the batch scanner emits) round-trip
@@ -91,6 +101,7 @@ func TestApproveShadowMCP_ServerPrefix(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "mise", approval.Match)
+	requireRiskAccessRule(t, ti, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), accesscontrol.MatchKindServerIdentity, "mise")
 }
 
 func TestApproveShadowMCP_InvalidPolicyID(t *testing.T) {
@@ -231,6 +242,47 @@ func TestListShadowMCPApprovals_AfterApprove(t *testing.T) {
 	require.Len(t, result.Approvals, 2)
 	matches := []string{result.Approvals[0].Match, result.Approvals[1].Match}
 	assert.ElementsMatch(t, []string{"https://mcp.example.com/a", "https://mcp.example.com/b"}, matches)
+}
+
+func TestListShadowMCPApprovals_FiltersByPolicyMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policyA, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    new("Shadow MCP A"),
+		Sources: []string{"shadow_mcp"},
+	})
+	require.NoError(t, err)
+	policyB, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    new("Shadow MCP B"),
+		Sources: []string{"shadow_mcp"},
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.ApproveShadowMCP(ctx, &gen.ApproveShadowMCPPayload{
+		PolicyID: policyA.ID,
+		Match:    "https://mcp-a.example.com/server",
+	})
+	require.NoError(t, err)
+	_, err = ti.service.ApproveShadowMCP(ctx, &gen.ApproveShadowMCPPayload{
+		PolicyID: policyB.ID,
+		Match:    "https://mcp-b.example.com/server",
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListShadowMCPApprovals(ctx, &gen.ListShadowMCPApprovalsPayload{
+		PolicyID: policyA.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Approvals, 1)
+	assert.Equal(t, "https://mcp-a.example.com/server", result.Approvals[0].Match)
+	assert.Equal(t, policyA.ID, result.Approvals[0].PolicyID)
 }
 
 func TestRevokeShadowMCPApproval(t *testing.T) {

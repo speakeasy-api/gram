@@ -1171,6 +1171,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesCollectsOnlyInactive(t *testing
 	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
 		InactivityThreshold: 7 * 24 * time.Hour,
 		BatchSize:           10,
+		OnRowProcessed:      nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Reaped)
@@ -1205,6 +1206,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsAssistantWithRecentActivit
 	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
 		InactivityThreshold: 7 * 24 * time.Hour,
 		BatchSize:           10,
+		OnRowProcessed:      nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 0, result.Reaped)
@@ -1255,6 +1257,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *te
 	first, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
 		InactivityThreshold: 7 * 24 * time.Hour,
 		BatchSize:           1,
+		OnRowProcessed:      nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, first.Reaped)
@@ -1262,6 +1265,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *te
 	second, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
 		InactivityThreshold: 7 * 24 * time.Hour,
 		BatchSize:           10,
+		OnRowProcessed:      nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, second.Reaped, "sibling row must remain a candidate after the first reap")
@@ -1285,13 +1289,16 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsStaleRowsRegardlessOfState
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
+	rowProcessed := &atomic.Int64{}
 	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
 		InactivityThreshold: 7 * 24 * time.Hour,
 		BatchSize:           10,
+		OnRowProcessed:      func() { rowProcessed.Add(1) },
 	})
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Reaped)
 	require.EqualValues(t, 2, reapCalls.Load())
+	require.EqualValues(t, 2, rowProcessed.Load(), "OnRowProcessed must fire once per row so the activity can heartbeat")
 }
 
 type testRuntimeBackend struct {
@@ -1379,6 +1386,6 @@ func TestServiceCoreEnqueueTriggerTaskSkipsMissingAssistant(t *testing.T) {
 		EventJSON:         []byte(`{}`),
 	})
 	require.NoError(t, err)
-	require.False(t, result.EventCreated)
+	require.False(t, result.ShouldSignal)
 	require.Equal(t, uuid.Nil, result.AssistantID)
 }

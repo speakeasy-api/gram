@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/dns"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -63,10 +64,12 @@ func (d *VerifyCustomDomain) SetResolver(r dns.Resolver) {
 }
 
 type VerifyCustomDomainArgs struct {
-	OrgID         string
-	Domain        string
-	CreatedBy     urn.Principal
-	CreatedByName *string
+	OrgID           string
+	Domain          string
+	CreatedBy       urn.Principal
+	CreatedByName   *string
+	ProvisionerKind k8s.ProvisionerKind
+	IPAllowlist     []string
 }
 
 var prohibitedDomainRoots = []string{"getgram.ai", "speakeasy.com", "speakeasyapi.dev"}
@@ -98,11 +101,21 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		// Domain already exists, continue
 	case errors.Is(err, pgx.ErrNoRows):
 		// Create a new unverified domain entry
+		kind := args.ProvisionerKind
+		if kind == "" {
+			kind = k8s.ProvisionerKindIngress
+		}
+		ipAllowlist := args.IPAllowlist
+		if ipAllowlist == nil {
+			ipAllowlist = []string{}
+		}
 		domain, err = cdr.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
-			OrganizationID: args.OrgID,
-			Domain:         args.Domain,
-			IngressName:    conv.PtrToPGText(nil),
-			CertSecretName: conv.PtrToPGText(nil),
+			OrganizationID:  args.OrgID,
+			Domain:          args.Domain,
+			IngressName:     conv.PtrToPGText(nil),
+			CertSecretName:  conv.PtrToPGText(nil),
+			ProvisionerKind: string(kind),
+			IpAllowlist:     ipAllowlist,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "error creating custom domain").Log(ctx, d.logger)

@@ -3151,6 +3151,252 @@ func DecodeSetUserSessionIssuerResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildSetToolVariationsGroupRequest instantiates a HTTP request object with
+// method and path set to call the "toolsets" service "setToolVariationsGroup"
+// endpoint
+func (c *Client) BuildSetToolVariationsGroupRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetToolVariationsGroupToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "setToolVariationsGroup", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetToolVariationsGroupRequest returns an encoder for requests sent to
+// the toolsets setToolVariationsGroup server.
+func EncodeSetToolVariationsGroupRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.SetToolVariationsGroupPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "setToolVariationsGroup", "*toolsets.SetToolVariationsGroupPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		body := NewSetToolVariationsGroupRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "setToolVariationsGroup", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetToolVariationsGroupResponse returns a decoder for responses
+// returned by the toolsets setToolVariationsGroup endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetToolVariationsGroupResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetToolVariationsGroupResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetToolVariationsGroupResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			res := NewSetToolVariationsGroupToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetToolVariationsGroupUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			return nil, NewSetToolVariationsGroupUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetToolVariationsGroupForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			return nil, NewSetToolVariationsGroupForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetToolVariationsGroupBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			return nil, NewSetToolVariationsGroupBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetToolVariationsGroupNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			return nil, NewSetToolVariationsGroupNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetToolVariationsGroupConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			return nil, NewSetToolVariationsGroupConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetToolVariationsGroupUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			return nil, NewSetToolVariationsGroupUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetToolVariationsGroupInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			return nil, NewSetToolVariationsGroupInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetToolVariationsGroupInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+				}
+				err = ValidateSetToolVariationsGroupInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+				}
+				return nil, NewSetToolVariationsGroupInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetToolVariationsGroupUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+				}
+				err = ValidateSetToolVariationsGroupUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+				}
+				return nil, NewSetToolVariationsGroupUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "setToolVariationsGroup", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetToolVariationsGroupGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setToolVariationsGroup", err)
+			}
+			err = ValidateSetToolVariationsGroupGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setToolVariationsGroup", err)
+			}
+			return nil, NewSetToolVariationsGroupGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "setToolVariationsGroup", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalTypesToolsetOriginToToolsetOriginRequestBody builds a value of type
 // *ToolsetOriginRequestBody from a value of type *types.ToolsetOrigin.
 func marshalTypesToolsetOriginToToolsetOriginRequestBody(v *types.ToolsetOrigin) *ToolsetOriginRequestBody {
@@ -3410,6 +3656,12 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
 	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
 
 	return res
 }
@@ -3458,6 +3710,10 @@ func unmarshalFunctionToolDefinitionResponseBodyToTypesFunctionToolDefinition(v 
 		Summarizer:    v.Summarizer,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
+	}
+	res.Tags = make([]string, len(v.Tags))
+	for i, val := range v.Tags {
+		res.Tags[i] = val
 	}
 	if v.Meta != nil {
 		res.Meta = make(map[string]any, len(v.Meta))

@@ -89,7 +89,8 @@ func (c *countingBlobStore) PresignRead(ctx context.Context, p string, ttl time.
 func TestStoreMessages_DeduplicatesContentAddressableWrites(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 
 	counting := newCountingBlobStore(t)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, counting)

@@ -440,7 +440,7 @@ export const InitialChoiceStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Get Started with Gram</span>
+        <span className="text-heading-md">Get Started with the platform</span>
         <span className="text-body-sm">What would you like to do?</span>
       </Stack>
       <div className="grid grid-cols-1 gap-4">
@@ -518,7 +518,7 @@ const ChoiceStep = ({
             onClick={() => handleChoice("cli")}
             icon={SquareFunction}
             title="Start from Code"
-            description="Deploy custom functions using the Gram CLI"
+            description="Deploy custom functions using the CLI"
           />
         )}
       </div>
@@ -599,7 +599,7 @@ const CliSetupStep = ({
       command: `${installCommandPrefix} build`,
     },
     {
-      label: "Push your functions to Gram",
+      label: "Push your functions to the platform",
       command: `${installCommandPrefix} push`,
     },
   ];
@@ -616,7 +616,7 @@ const CliSetupStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Get Started with Gram Functions</span>
+        <span className="text-heading-md">Get Started with Functions</span>
         <span className="text-body-sm">
           Run these commands in your terminal
         </span>
@@ -887,8 +887,8 @@ const ToolsetStep = ({
       <Stack gap={1}>
         <span className="text-heading-md">Name Your MCP Server</span>
         <span className="text-body-sm">
-          This MCP server will hold the tools you've added to Gram. We'll make
-          it available in the next step.
+          This MCP server will hold the tools you've added to the platform.
+          We'll make it available in the next step.
         </span>
       </Stack>
       <InputField

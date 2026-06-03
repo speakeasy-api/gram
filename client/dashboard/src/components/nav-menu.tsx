@@ -9,7 +9,7 @@ import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Type } from "./ui/type";
 
-const NAV_LOADING_DURATION_MS = 600;
+export const NAV_LOADING_DURATION_MS = 600;
 
 export function NavMenu({
   items,
@@ -235,7 +235,11 @@ export function NavGroupProvider({
 
   return (
     <NavGroupContext.Provider value={value}>
-      <div ref={containerRef} className="relative">
+      <div
+        ref={containerRef}
+        className="relative"
+        onMouseLeave={() => setHoveredItem(null)}
+      >
         {highlightRect && (
           <motion.div
             className="bg-card ring-border/50 pointer-events-none absolute rounded-lg ring-1"
@@ -261,12 +265,23 @@ export function NavGroupProvider({
 // Hook for registering item ref + hover handlers
 // ---------------------------------------------------------------------------
 
-// Settle-based hover intent: only triggers when the mouse slows down
-// inside the centre vertical zone of the element, ignoring edge hovers
-// and fast drive-by movements.
-const SETTLE_INTERVAL_MS = 100;
-const SETTLE_THRESHOLD_PX = 4;
-const CENTER_ZONE = 0.3; // fraction of height from each edge to exclude
+// Settle-based hover intent — fires setHoveredItem only when the mouse has
+// genuinely paused on an element, filtering out fast drive-by movements.
+//
+// Every SETTLE_INTERVAL_MS the interval compares current vs previous mouse Y.
+// If the delta is below SETTLE_THRESHOLD_PX the mouse is considered settled.
+// While the mouse is still moving (dy !== 0) an additional CENTER_ZONE guard
+// rejects triggers near the top/bottom edge, preventing false fires when
+// passing through item boundaries at low speed. Once the mouse is fully stopped
+// (dy === 0) the edge guard is skipped so a mouse parked at any position
+// within the element still triggers correctly.
+//
+// hoveredItem is cleared at the container level (onMouseLeave on the wrapper
+// div), not here, so the highlight stays on the last item while moving between
+// items rather than snapping back to the active route on every item exit.
+const SETTLE_INTERVAL_MS = 50; // ms between settle checks; lower = more responsive
+const SETTLE_THRESHOLD_PX = 4; // max Y movement per interval to count as settled
+const CENTER_ZONE = 0.3; // fraction of height from each edge excluded while moving
 
 function useNavItem(id: string) {
   const { registerRef, setHoveredItem } = React.useContext(NavGroupContext);
@@ -304,14 +319,17 @@ function useNavItem(id: string) {
       s.intervalId = setInterval(() => {
         const dy = s.curY - s.prevY;
         if (Math.abs(dy) < SETTLE_THRESHOLD_PX) {
-          // Check mouse is in centre vertical zone of the element
-          const el = elRef.current;
-          if (el) {
-            const rect = el.getBoundingClientRect();
-            const margin = rect.height * CENTER_ZONE;
-            if (s.curY < rect.top + margin || s.curY > rect.bottom - margin) {
-              s.prevY = s.curY;
-              return; // too close to edge — keep waiting
+          // Only apply edge exclusion while mouse is still moving — a stopped
+          // mouse at the edge should still trigger.
+          if (dy !== 0) {
+            const el = elRef.current;
+            if (el) {
+              const rect = el.getBoundingClientRect();
+              const margin = rect.height * CENTER_ZONE;
+              if (s.curY < rect.top + margin || s.curY > rect.bottom - margin) {
+                s.prevY = s.curY;
+                return; // too close to edge — keep waiting
+              }
             }
           }
           if (s.intervalId) clearInterval(s.intervalId);
@@ -331,8 +349,7 @@ function useNavItem(id: string) {
       clearInterval(s.intervalId);
       s.intervalId = null;
     }
-    setHoveredItem(null);
-  }, [setHoveredItem]);
+  }, []);
 
   React.useEffect(() => {
     const s = stateRef.current;
@@ -397,6 +414,7 @@ export function NavButton({
       onMouseEnter={navItem.onMouseEnter}
       onMouseLeave={navItem.onMouseLeave}
       onMouseMove={navItem.onMouseMove}
+      className="group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
     >
       <Link
         to={href ?? "#"}
@@ -404,7 +422,7 @@ export function NavButton({
         onClick={handleClick}
         className={cn(
           "relative z-[1] flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
-          "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2!",
+          "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
           active
             ? "text-foreground font-semibold"
             : "text-muted-foreground hover:text-foreground font-medium",
@@ -421,7 +439,7 @@ export function NavButton({
         <Type
           variant="small"
           className={cn(
-            "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
+            "transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0",
             active && "font-semibold",
             isLoading && "nav-shimmer",
           )}
@@ -450,11 +468,13 @@ export function CollapsibleNavGroup({
   label,
   Icon,
   defaultHref,
+  stage,
   children,
 }: {
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   defaultHref?: string;
+  stage?: ReleaseStage;
   children: React.ReactNode;
 }) {
   const { openGroups, toggleGroup, openGroup } =
@@ -476,13 +496,14 @@ export function CollapsibleNavGroup({
           onMouseEnter={navItem.onMouseEnter}
           onMouseLeave={navItem.onMouseLeave}
           onMouseMove={navItem.onMouseMove}
+          className="group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-fit"
         >
           <Link
             to={defaultHref ?? "#"}
             onClick={handleClick}
             className={cn(
               "relative z-[1] flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
-              "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2!",
+              "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
               "cursor-pointer outline-hidden",
               isOpen
                 ? "text-foreground font-semibold"
@@ -498,6 +519,13 @@ export function CollapsibleNavGroup({
             <span className="flex-1 truncate transition-[opacity,transform] duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:-translate-x-2 group-data-[collapsible=icon]:opacity-0">
               {label}
             </span>
+            {stage && isOpen && (
+              <ReleaseStageBadge
+                stage={stage}
+                noTooltip
+                className="-my-1 origin-left scale-75 transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
+              />
+            )}
           </Link>
         </div>
 

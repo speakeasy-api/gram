@@ -117,7 +117,8 @@ func listAllMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chat
 func TestMatcher_CleanAppend(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -148,7 +149,8 @@ func TestMatcher_CleanAppend(t *testing.T) {
 func TestMatcher_CompactionBumpsGeneration(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -187,7 +189,8 @@ func TestMatcher_CompactionBumpsGeneration(t *testing.T) {
 func TestMatcher_EditBumpsGeneration(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -209,7 +212,8 @@ func TestMatcher_EditBumpsGeneration(t *testing.T) {
 func TestMatcher_ToolCallsMatchAcrossIndexAndOrderVariations(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -285,7 +289,8 @@ func TestMatcher_ToolCallsMatchAcrossIndexAndOrderVariations(t *testing.T) {
 func TestMatcher_ToolCallArgumentMutationDoesNotBumpGeneration(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -338,7 +343,8 @@ func TestMatcher_ToolCallArgumentMutationDoesNotBumpGeneration(t *testing.T) {
 func TestMatcher_ToolResultBodyDriftDoesNotBumpGeneration(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -418,7 +424,8 @@ func TestMatcher_ToolResultBodyDriftDoesNotBumpGeneration(t *testing.T) {
 func TestMatcher_StoredEmptyAssistantSkippedOnFollowUp(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -458,7 +465,8 @@ func TestMatcher_StoredEmptyAssistantSkippedOnFollowUp(t *testing.T) {
 func TestMatcher_IncomingEmptyAssistantSkipped(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -493,7 +501,8 @@ func TestMatcher_IncomingEmptyAssistantSkipped(t *testing.T) {
 func TestMatcher_StoredEmptyAssistantInMiddleSkipped(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -535,7 +544,8 @@ func TestMatcher_StoredEmptyAssistantInMiddleSkipped(t *testing.T) {
 func TestMatcher_EmptyAssistantOnBothSides(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -564,7 +574,8 @@ func TestMatcher_EmptyAssistantOnBothSides(t *testing.T) {
 func TestMatcher_MismatchAfterEmptyStillDiverges(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -614,7 +625,8 @@ func roles(rows []repo.ChatMessage) []string {
 func TestCaptureMessage_StoresAssistantResponseWithBothTextAndToolCallsInSingleRow(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -658,7 +670,8 @@ func TestCaptureMessage_StoresAssistantResponseWithBothTextAndToolCallsInSingleR
 func TestCaptureMessage_WhitespaceOnlyContentWithToolCallsStoresSingleRow(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 

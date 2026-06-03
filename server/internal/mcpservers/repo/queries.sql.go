@@ -22,6 +22,7 @@ INSERT INTO mcp_servers (
     user_session_issuer_id,
     remote_mcp_server_id,
     toolset_id,
+    tool_variations_group_id,
     visibility
 )
 VALUES (
@@ -33,21 +34,23 @@ VALUES (
     $6,
     $7,
     $8,
-    $9
+    $9,
+    $10
 )
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	EnvironmentID       uuid.NullUUID
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
-	ToolsetID           uuid.NullUUID
-	Visibility          string
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	Visibility            string
 }
 
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
@@ -60,6 +63,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
+		arg.ToolVariationsGroupID,
 		arg.Visibility,
 	)
 	var i McpServer
@@ -72,6 +76,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
+		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -85,7 +90,7 @@ const deleteMCPServer = `-- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMCPServerParams struct {
@@ -105,6 +110,7 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
+		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -115,7 +121,7 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 }
 
 const getMCPServerByID = `-- name: GetMCPServerByID :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -137,6 +143,7 @@ func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDPara
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
+		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -147,7 +154,7 @@ func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDPara
 }
 
 const getMCPServerBySlug = `-- name: GetMCPServerBySlug :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -169,6 +176,7 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
+		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -179,7 +187,7 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 }
 
 const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -212,6 +220,7 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 			&i.UserSessionIssuerID,
 			&i.RemoteMcpServerID,
 			&i.ToolsetID,
+			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -237,22 +246,24 @@ SET
     user_session_issuer_id = $4,
     remote_mcp_server_id = $5,
     toolset_id = $6,
-    visibility = $7,
+    tool_variations_group_id = $7,
+    visibility = $8,
     updated_at = clock_timestamp()
-WHERE id = $8 AND project_id = $9 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+WHERE id = $9 AND project_id = $10 AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	EnvironmentID       uuid.NullUUID
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
-	ToolsetID           uuid.NullUUID
-	Visibility          string
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	Visibility            string
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
 }
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
@@ -263,6 +274,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
+		arg.ToolVariationsGroupID,
 		arg.Visibility,
 		arg.ID,
 		arg.ProjectID,
@@ -277,6 +289,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
+		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.CreatedAt,
 		&i.UpdatedAt,

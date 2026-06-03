@@ -227,6 +227,24 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 	return i, err
 }
 
+const deleteRemoteSessionClientAttachmentsForUserSessionIssuer = `-- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING user_session_issuers AS usi
+WHERE link.user_session_issuer_id = usi.id
+  AND usi.id = $1
+  AND usi.project_id = $2
+`
+
+type DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx context.Context, arg DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, deleteRemoteSessionClientAttachmentsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID)
+	return err
+}
+
 const deleteUserSessionIssuer = `-- name: DeleteUserSessionIssuer :one
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()

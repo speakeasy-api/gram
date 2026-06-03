@@ -113,6 +113,7 @@ var CodexHookPayload = Type("CodexHookPayload", func() {
 		Enum("SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop")
 	})
 	Attribute("session_id", String, "The Codex session ID")
+	Attribute("user_email", String, "Email of the authenticated Codex user, if available")
 	Attribute("transcript_path", String, "Path to the conversation transcript file")
 	Attribute("cwd", String, "The working directory when the event fired")
 	Attribute("model", String, "The model identifier")
@@ -162,12 +163,14 @@ var _ = Service("hooks", func() {
 			Extend(ClaudeHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
 		})
 		Result(ClaudeHookResult)
 		HTTP(func() {
 			POST("/rpc/hooks.claude")
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
+			Header("hook_hostname:X-Gram-Hook-Hostname")
 		})
 	})
 
@@ -182,6 +185,7 @@ var _ = Service("hooks", func() {
 			Extend(CursorHookPayload)
 			security.ByKeyPayload()
 			security.ProjectPayload()
+			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
 		})
 
 		Result(CursorHookResult)
@@ -190,6 +194,7 @@ var _ = Service("hooks", func() {
 			POST("/rpc/hooks.cursor")
 			security.ByKeyHeader()
 			security.ProjectHeader()
+			Header("hook_hostname:X-Gram-Hook-Hostname")
 		})
 	})
 
@@ -204,6 +209,7 @@ var _ = Service("hooks", func() {
 			Extend(CodexHookPayload)
 			security.ByKeyPayload()
 			security.ProjectPayload()
+			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
 		})
 
 		Result(CodexHookResult)
@@ -212,6 +218,7 @@ var _ = Service("hooks", func() {
 			POST("/rpc/hooks.codex")
 			security.ByKeyHeader()
 			security.ProjectHeader()
+			Header("hook_hostname:X-Gram-Hook-Hostname")
 		})
 	})
 

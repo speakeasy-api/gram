@@ -28,9 +28,21 @@ export type CreateRiskPolicyRequestBody = {
    */
   autoName?: boolean | undefined;
   /**
+   * Custom detection rule ids to enable for this policy.
+   */
+  customRuleIds?: Array<string> | undefined;
+  /**
+   * Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.
+   */
+  disabledRules?: Array<string> | undefined;
+  /**
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
+  /**
+   * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
+   */
+  messageTypes?: Array<string> | undefined;
   /**
    * The policy name. If omitted, a name will be auto-generated.
    */
@@ -62,7 +74,10 @@ export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
   auto_name?: boolean | undefined;
+  custom_rule_ids?: Array<string> | undefined;
+  disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
+  message_types?: Array<string> | undefined;
   name?: string | undefined;
   presidio_entities?: Array<string> | undefined;
   prompt_injection_rules?: Array<string> | undefined;
@@ -78,7 +93,10 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     action: z._default(Action$outboundSchema, "flag"),
     autoName: z.optional(z.boolean()),
+    customRuleIds: z.optional(z.array(z.string())),
+    disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
+    messageTypes: z.optional(z.array(z.string())),
     name: z.optional(z.string()),
     presidioEntities: z.optional(z.array(z.string())),
     promptInjectionRules: z.optional(z.array(z.string())),
@@ -88,6 +106,9 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       autoName: "auto_name",
+      customRuleIds: "custom_rule_ids",
+      disabledRules: "disabled_rules",
+      messageTypes: "message_types",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
       userMessage: "user_message",

@@ -99,6 +99,17 @@ type Assistant struct {
 	Deleted         bool
 }
 
+type AssistantDashboardMessage struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+	UserID    string
+	Role      string
+	Content   string
+	Seq       int64
+	CreatedAt pgtype.Timestamptz
+}
+
 type AssistantMemory struct {
 	ID             uuid.UUID
 	AssistantID    uuid.NullUUID
@@ -267,6 +278,7 @@ type ChatMessage struct {
 	ContentHash      []byte
 	Generation       int32
 	CreatedAt        pgtype.Timestamptz
+	RiskAnalyzedAt   pgtype.Timestamptz
 }
 
 type ChatResolution struct {
@@ -297,17 +309,19 @@ type ChatUserFeedback struct {
 }
 
 type CustomDomain struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Domain         string
-	Verified       bool
-	Activated      bool
-	IngressName    pgtype.Text
-	CertSecretName pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	OrganizationID  string
+	Domain          string
+	Verified        bool
+	Activated       bool
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	IpAllowlist     []string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type Deployment struct {
@@ -673,7 +687,8 @@ type McpEnvironmentConfig struct {
 
 type McpMetadatum struct {
 	ID                        uuid.UUID
-	ToolsetID                 uuid.UUID
+	ToolsetID                 uuid.NullUUID
+	McpServerID               uuid.NullUUID
 	ProjectID                 uuid.UUID
 	ExternalDocumentationUrl  pgtype.Text
 	ExternalDocumentationText pgtype.Text
@@ -697,19 +712,20 @@ type McpRegistry struct {
 }
 
 type McpServer struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	EnvironmentID       uuid.NullUUID
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
-	ToolsetID           uuid.NullUUID
-	Visibility          string
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	Visibility            string
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
 
 type OauthProxyClientInfo struct {
@@ -829,7 +845,8 @@ type OrganizationMcpCollectionServerAttachment struct {
 	PublishedBy  pgtype.Text
 	ID           uuid.UUID
 	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
+	ToolsetID    uuid.NullUUID
+	McpServerID  uuid.NullUUID
 	Deleted      bool
 }
 
@@ -847,6 +864,8 @@ type OrganizationMetadatum struct {
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -989,14 +1008,15 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	InstallationID   int64
-	RepoOwner        string
-	RepoName         string
-	MarketplaceToken pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	InstallationID       int64
+	RepoOwner            string
+	RepoName             string
+	MarketplaceToken     pgtype.Text
+	PublishedFingerprint pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type PluginServer struct {
@@ -1055,6 +1075,13 @@ type ProjectAllowedOrigin struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type ProjectManagedAssistant struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
 
 type ProjectMarketplaceSetting struct {
@@ -1136,7 +1163,7 @@ type RemoteSession struct {
 
 type RemoteSessionClient struct {
 	ID                      uuid.UUID
-	ProjectID               uuid.UUID
+	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	ClientID                string
@@ -1153,9 +1180,16 @@ type RemoteSessionClient struct {
 	Deleted                 bool
 }
 
+type RemoteSessionClientUserSessionIssuer struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	CreatedAt             pgtype.Timestamptz
+}
+
 type RemoteSessionIssuer struct {
 	ID                                uuid.UUID
-	ProjectID                         uuid.UUID
+	ProjectID                         uuid.NullUUID
+	OrganizationID                    pgtype.Text
 	Slug                              string
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
@@ -1174,6 +1208,21 @@ type RemoteSessionIssuer struct {
 	Deleted                           bool
 }
 
+type RiskCustomDetectionRule struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RuleID         string
+	Title          string
+	Description    string
+	Regex          pgtype.Text
+	Severity       string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
@@ -1183,7 +1232,11 @@ type RiskPolicy struct {
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	DisabledRules        []string
+	CustomRuleIds        []string
+	MessageTypes         []string
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Version              int64
@@ -1310,6 +1363,7 @@ type Toolset struct {
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
 	UserSessionIssuerID    uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

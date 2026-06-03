@@ -35,6 +35,14 @@ export type RiskPolicy = {
    */
   createdAt: Date;
   /**
+   * Custom detection rule ids enabled for this policy.
+   */
+  customRuleIds?: Array<string> | undefined;
+  /**
+   * Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.
+   */
+  disabledRules?: Array<string> | undefined;
+  /**
    * Whether the policy is active.
    */
   enabled: boolean;
@@ -42,6 +50,10 @@ export type RiskPolicy = {
    * The risk policy ID.
    */
   id: string;
+  /**
+   * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.
+   */
+  messageTypes?: Array<string> | undefined;
   /**
    * The policy name.
    */
@@ -99,8 +111,11 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      custom_rule_ids: z.optional(z.array(z.string())),
+      disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
+      message_types: z.optional(z.array(z.string())),
       name: z.string(),
       pending_messages: z.int(),
       presidio_entities: z.optional(z.array(z.string())),
@@ -119,6 +134,9 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       return remap$(v, {
         "auto_name": "autoName",
         "created_at": "createdAt",
+        "custom_rule_ids": "customRuleIds",
+        "disabled_rules": "disabledRules",
+        "message_types": "messageTypes",
         "pending_messages": "pendingMessages",
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",

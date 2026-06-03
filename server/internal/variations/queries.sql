@@ -23,6 +23,19 @@ attached AS (
 )
 SELECT id FROM created;
 
+-- name: ListToolVariationsGroups :many
+SELECT tool_variations_groups.*
+FROM tool_variations_groups
+INNER JOIN project_tool_variations ON tool_variations_groups.id = project_tool_variations.group_id
+WHERE project_tool_variations.project_id = @project_id
+  AND tool_variations_groups.deleted IS FALSE
+ORDER BY tool_variations_groups.id DESC;
+
+-- name: GetToolVariationsGroupByID :one
+SELECT *
+FROM tool_variations_groups
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: UpsertToolVariation :one
 INSERT INTO tool_variations (
   group_id,

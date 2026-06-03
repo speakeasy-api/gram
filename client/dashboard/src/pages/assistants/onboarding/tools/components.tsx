@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -8,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Icon } from "@speakeasy-api/moonshine";
 import {
+  AlertTriangle,
   Check,
   Copy,
   ExternalLink,
@@ -24,6 +26,10 @@ import {
   getPersonality,
 } from "../personalities";
 import { buildSlackManifest } from "../slackManifest";
+import {
+  SLACK_CAPABILITY_GROUPS,
+  SLACK_EVENT_GROUPS,
+} from "../slackCapabilities";
 
 type Status = ToolCallMessagePartProps["status"];
 
@@ -308,7 +314,7 @@ export function ShowSlackAppGuideComponent({
   const manifestResult = useMemo(
     () =>
       buildSlackManifest({
-        appName: a.app_name ?? assistantName ?? "Gram Assistant",
+        appName: a.app_name ?? assistantName ?? "Platform Assistant",
         webhookUrl: a.webhook_url,
         extraScopes: a.bot_scopes,
         extraBotEvents: a.bot_events,
@@ -858,6 +864,244 @@ export function ProposePersonalityComponent({
           Skip
         </Button>
         <Button onClick={submit} disabled={!canSubmit}>
+          Save
+        </Button>
+      </div>
+    </ToolCard>
+  );
+}
+
+type SlackSetupArgs = {
+  preselected_capabilities?: string[];
+  preselected_events?: string[];
+};
+
+type SlackSetupSubmit = {
+  success: boolean;
+  cancelled?: boolean;
+  capabilities?: string[];
+  events?: string[];
+};
+
+type SlackSetupResult = {
+  ok?: boolean;
+  cancelled?: boolean;
+  toolset_slug?: string;
+  trigger_id?: string;
+  webhook_url?: string;
+  error?: string;
+};
+
+export function ProposeSlackSetupComponent({
+  args,
+  status,
+  result,
+  toolCallId,
+}: ToolCallMessagePartProps) {
+  const draft = useAssistantDraft();
+  const a = (args ?? {}) as Partial<SlackSetupArgs>;
+  const assistantName = draft.assistant?.name ?? "this assistant";
+
+  const [caps, setCaps] = useState<Set<string>>(
+    () =>
+      new Set(
+        Array.isArray(a.preselected_capabilities)
+          ? a.preselected_capabilities
+          : [],
+      ),
+  );
+  const [events, setEvents] = useState<Set<string>>(
+    () =>
+      new Set(Array.isArray(a.preselected_events) ? a.preselected_events : []),
+  );
+
+  const isPending = isExecuting(status);
+  const settled = !isPending;
+  const r = result as SlackSetupResult | undefined;
+
+  useEffect(() => {
+    if (!isPending) return;
+    return () => {
+      draft.resolvePending(toolCallId, {
+        success: false,
+        cancelled: true,
+      } satisfies SlackSetupSubmit);
+    };
+  }, [draft, toolCallId, isPending]);
+
+  if (settled && r?.ok) {
+    return (
+      <ToolCard
+        title="Slack setup saved"
+        tone="success"
+        icon={<Check className="text-emerald-600" size={16} />}
+      >
+        <Type small muted>
+          {`Created a Slack toolset for ${assistantName} and wired up its triggers.`}
+        </Type>
+      </ToolCard>
+    );
+  }
+
+  if (settled && r?.cancelled) {
+    return (
+      <ToolCard title="Slack setup — skipped">
+        <Type small muted>
+          You can come back to this anytime — just ask me to set up Slack.
+        </Type>
+      </ToolCard>
+    );
+  }
+
+  if (settled) {
+    return (
+      <ToolCard title="Slack setup — error">
+        <Type small className="text-red-600">
+          {r?.error ?? "Setup did not complete."}
+        </Type>
+      </ToolCard>
+    );
+  }
+
+  const toggleCap = (slug: string) =>
+    setCaps((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+  const toggleEvent = (slug: string) =>
+    setEvents((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
+
+  const anySelected = caps.size > 0 || events.size > 0;
+  const anyEvent = events.size > 0;
+
+  const submit = () =>
+    draft.resolvePending(toolCallId, {
+      success: true,
+      capabilities: Array.from(caps),
+      events: Array.from(events),
+    } satisfies SlackSetupSubmit);
+
+  const cancel = () =>
+    draft.resolvePending(toolCallId, {
+      success: false,
+      cancelled: true,
+    } satisfies SlackSetupSubmit);
+
+  return (
+    <ToolCard
+      title="Set up Slack"
+      icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
+    >
+      <Type small muted className="mb-3">
+        Pick what {assistantName} can do in Slack and what wakes it up. You can
+        adjust this later from the assistant's settings.
+      </Type>
+
+      <div className="space-y-4">
+        <section>
+          <Label className="mb-2 block text-xs font-medium tracking-wide uppercase">
+            What can {assistantName} do?
+          </Label>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {SLACK_CAPABILITY_GROUPS.map((g) => {
+              const id = `slack-cap-${g.slug}`;
+              const checked = caps.has(g.slug);
+              return (
+                <label
+                  key={g.slug}
+                  htmlFor={id}
+                  className={cn(
+                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    checked && "border-primary bg-primary/5",
+                  )}
+                >
+                  <Checkbox
+                    id={id}
+                    checked={checked}
+                    onCheckedChange={() => toggleCap(g.slug)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <Type small className="font-medium">
+                      {g.label}
+                    </Type>
+                    <Type small muted className="mt-0.5">
+                      {g.description}
+                    </Type>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </section>
+
+        <section>
+          <Label className="mb-2 block text-xs font-medium tracking-wide uppercase">
+            When should {assistantName} wake up?
+          </Label>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {SLACK_EVENT_GROUPS.map((g) => {
+              const id = `slack-event-${g.slug}`;
+              const checked = events.has(g.slug);
+              return (
+                <label
+                  key={g.slug}
+                  htmlFor={id}
+                  className={cn(
+                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    checked && "border-primary bg-primary/5",
+                  )}
+                >
+                  <Checkbox
+                    id={id}
+                    checked={checked}
+                    onCheckedChange={() => toggleEvent(g.slug)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <Type small className="font-medium">
+                      {g.label}
+                    </Type>
+                    <Type small muted className="mt-0.5">
+                      {g.description}
+                    </Type>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </section>
+
+        {anyEvent && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300/40 bg-amber-50/40 px-3 py-2 dark:bg-amber-950/20">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="flex-1">
+              <Type small className="font-medium">
+                Heads up: {assistantName} will be always on
+              </Type>
+              <Type small muted className="mt-0.5">
+                It reacts every time one of these happens, in every channel it's
+                in. If that's too much, we can narrow it down together after —
+                just say things like &ldquo;only when @-mentioned&rdquo; or
+                &ldquo;only in #support&rdquo;.
+              </Type>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={cancel}>
+          Skip
+        </Button>
+        <Button onClick={submit} disabled={!anySelected}>
           Save
         </Button>
       </div>

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"slices"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
@@ -16,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -42,8 +42,9 @@ type Service struct {
 
 type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
-	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string) (client.WorkflowRun, error)
-	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string) (client.WorkflowRun, error)
+	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
+	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
+	ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -105,16 +106,7 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
 	}
 
-	return &gen.CustomDomain{
-		ID:             domain.ID.String(),
-		OrganizationID: domain.OrganizationID,
-		Domain:         domain.Domain,
-		Verified:       domain.Verified,
-		Activated:      domain.Activated,
-		CreatedAt:      domain.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      domain.UpdatedAt.Time.Format(time.RFC3339),
-		IsUpdating:     isUpdating,
-	}, nil
+	return buildCustomDomainView(domain, isUpdating), nil
 }
 
 func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPayload) (err error) {
@@ -130,18 +122,84 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		return oops.E(oops.CodeUnauthorized, err, "custom domain registration is not supported for free account").Log(ctx, s.logger)
 	}
 
+	ipAllowlist := payload.IPAllowlist
+	if ipAllowlist == nil {
+		ipAllowlist = []string{}
+	}
+	if err := validateIPAllowlist(ipAllowlist); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").Log(ctx, s.logger)
+	}
+
 	_, err = s.temporalClient.ExecuteCustomDomainRegistration(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		payload.Domain,
 		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		authCtx.Email,
+		k8s.ProvisionerKindIngress,
+		ipAllowlist,
 	)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error executing custom domain registration").Log(ctx, s.logger)
 	}
 
 	return nil
+}
+
+func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPayload) (res *gen.CustomDomain, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	ipAllowlist := payload.IPAllowlist
+	if ipAllowlist == nil {
+		ipAllowlist = []string{}
+	}
+	if err := validateIPAllowlist(ipAllowlist); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").Log(ctx, s.logger)
+	}
+
+	repository := repo.New(s.db)
+
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+	}
+
+	// Reconcile the live k8s resource BEFORE persisting so a reconcile failure
+	// leaves no partial state: the request errors and the stored allowlist is
+	// unchanged, so a retry is safe. The allowlist is threaded through the
+	// workflow rather than read from the DB, which is why it can run first.
+	// Only meaningful once provisioned; otherwise the registration workflow
+	// picks up the persisted allowlist when it runs Setup.
+	if domain.Activated && domain.IngressName.Valid {
+		run, err := s.temporalClient.ExecuteCustomDomainUpdate(ctx, authCtx.ActiveOrganizationID, domain.Domain, k8s.ProvisionerKind(domain.ProvisionerKind), ipAllowlist)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to start custom domain update workflow").Log(ctx, s.logger)
+		}
+		if err := run.Get(ctx, nil); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "custom domain update workflow failed").Log(ctx, s.logger)
+		}
+	}
+
+	domain, err = repository.UpdateCustomDomainIPAllowlist(ctx, repo.UpdateCustomDomainIPAllowlistParams{
+		IpAllowlist:    ipAllowlist,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update custom domain ip allowlist").Log(ctx, s.logger)
+	}
+
+	isUpdating := false
+	if workflowInfo, _ := s.temporalClient.GetWorkflowInfo(ctx, authCtx.ActiveOrganizationID, domain.Domain); workflowInfo != nil {
+		isUpdating = workflowInfo.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}
+
+	return buildCustomDomainView(domain, isUpdating), nil
 }
 
 func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) (err error) {
@@ -158,8 +216,8 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
 	}
 
-	if domain.Activated && domain.IngressName.Valid && domain.CertSecretName.Valid {
-		run, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String)
+	if domain.Activated && domain.IngressName.Valid {
+		run, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String, k8s.ProvisionerKind(domain.ProvisionerKind))
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").Log(ctx, s.logger)
 		}

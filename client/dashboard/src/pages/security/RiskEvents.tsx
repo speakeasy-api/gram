@@ -1,6 +1,5 @@
 import { LogWorkbench } from "@/components/log-workbench";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   Select,
   SelectContent,
@@ -10,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
-import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import type { RiskResult } from "@gram/client/models/components";
 import {
   invalidateAllRiskListResults,
@@ -52,6 +51,7 @@ export default function RiskEvents() {
   const selectedChatId = searchParams.get("chat_id");
   const policyFilter = searchParams.get("policy_id") ?? "";
   const ruleFilter = searchParams.get("rule_id") ?? "";
+  const userFilter = searchParams.get("user_id") ?? "";
   const uniqueOnly = searchParams.get("unique") === "1";
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -111,6 +111,25 @@ export default function RiskEvents() {
     [setSearchParams],
   );
 
+  const setUserFilter = useCallback(
+    (userId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (userId) {
+            next.set("user_id", userId);
+          } else {
+            next.delete("user_id");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+      containerRef.current?.scrollTo({ top: 0 });
+    },
+    [setSearchParams],
+  );
+
   const setUniqueOnly = useCallback(
     (next: boolean) => {
       setSearchParams(
@@ -156,13 +175,22 @@ export default function RiskEvents() {
   }, [policies]);
 
   const resultsQuery = useInfiniteQuery({
-    queryKey: ["risk", "results", "list", policyFilter, ruleFilter, uniqueOnly],
+    queryKey: [
+      "risk",
+      "results",
+      "list",
+      policyFilter,
+      ruleFilter,
+      userFilter,
+      uniqueOnly,
+    ],
     queryFn: async ({ pageParam }) => {
       return client.risk.results.list({
         cursor: pageParam,
         limit: 50,
         policyId: policyFilter || undefined,
         ruleId: ruleFilter || undefined,
+        userId: userFilter || undefined,
         uniqueMatch: uniqueOnly || undefined,
       });
     },
@@ -271,10 +299,18 @@ export default function RiskEvents() {
                 ))}
               </SelectContent>
             </Select>
-            <RuleIdFilter
+            <DebouncedTextFilter
               value={ruleFilter}
               onChange={setRuleFilter}
+              placeholder="Rule ID contains..."
+              ariaLabel="Filter by rule ID"
               suggestions={ruleSuggestions}
+            />
+            <DebouncedTextFilter
+              value={userFilter}
+              onChange={setUserFilter}
+              placeholder="User contains..."
+              ariaLabel="Filter by user"
             />
             <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
               <Checkbox
@@ -310,22 +346,13 @@ export default function RiskEvents() {
           ) : null
         }
         detail={
-          <Drawer
-            open={!!selectedChatId}
-            onOpenChange={(open) => !open && setSelectedChatId(null)}
-            direction="right"
-          >
-            <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
-              {selectedChatId && (
-                <ChatDetailPanel
-                  chatId={selectedChatId}
-                  onClose={() => setSelectedChatId(null)}
-                  onDelete={() => setSelectedChatId(null)}
-                  collapseNonRisk
-                />
-              )}
-            </DrawerContent>
-          </Drawer>
+          <ChatDetailSheet
+            chatId={selectedChatId}
+            onClose={() => setSelectedChatId(null)}
+            onDelete={() => setSelectedChatId(null)}
+            collapseNonRisk
+            initialRiskOnly
+          />
         }
         scrollRef={containerRef}
         onScroll={handleScroll}
@@ -347,13 +374,20 @@ export default function RiskEvents() {
   );
 }
 
-function RuleIdFilter({
+// A debounced free-text filter input with optional <datalist> autocomplete.
+// Used for both the rule_id and user_id risk-event filters; both do
+// case-insensitive substring matching server-side.
+function DebouncedTextFilter({
   value,
   onChange,
+  placeholder,
+  ariaLabel,
   suggestions,
 }: {
   value: string;
   onChange: (next: string) => void;
+  placeholder: string;
+  ariaLabel: string;
   suggestions?: string[];
 }) {
   const [local, setLocal] = useState(value);
@@ -381,9 +415,9 @@ function RuleIdFilter({
         type="text"
         value={local}
         onChange={(e) => setLocal(e.target.value)}
-        placeholder="Rule ID contains..."
+        placeholder={placeholder}
         className="placeholder:text-muted-foreground w-[200px] bg-transparent text-sm outline-none"
-        aria-label="Filter by rule ID"
+        aria-label={ariaLabel}
         list={options.length > 0 ? listId : undefined}
         autoComplete="off"
       />
@@ -399,7 +433,7 @@ function RuleIdFilter({
           type="button"
           onClick={() => setLocal("")}
           className="text-muted-foreground hover:text-foreground"
-          aria-label="Clear rule filter"
+          aria-label="Clear filter"
         >
           <Icon name="x" className="size-3.5" />
         </button>

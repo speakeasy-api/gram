@@ -652,7 +652,7 @@ func filterOmittedEnvVars(
 	repo *mcpmetadata_repo.Queries,
 	toolsetID uuid.UUID,
 ) error {
-	rawMetadata, err := repo.GetMetadataForToolset(ctx, toolsetID)
+	rawMetadata, err := repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
 	if err != nil {
 		// Fallback behavior for backwards compatibility
 		if errors.Is(err, pgx.ErrNoRows) {

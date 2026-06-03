@@ -425,6 +425,12 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 		CreatedAt:       v.CreatedAt,
 		UpdatedAt:       v.UpdatedAt,
 	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
 
 	return res
 }
@@ -473,6 +479,14 @@ func marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v *t
 		Summarizer:    v.Summarizer,
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	} else {
+		res.Tags = []string{}
 	}
 	if v.Meta != nil {
 		res.Meta = make(map[string]any, len(v.Meta))

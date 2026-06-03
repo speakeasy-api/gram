@@ -82,7 +82,7 @@ func fetchInstructions(ctx context.Context, logger *slog.Logger, toolsetsRepo *t
 		return ""
 	}
 
-	metadata, err := metadataRepo.GetMetadataForToolset(ctx, toolset.ID)
+	metadata, err := metadataRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.WarnContext(ctx, "failed to fetch MCP metadata for instructions", attr.SlogError(err))

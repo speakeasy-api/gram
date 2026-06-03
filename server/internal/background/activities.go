@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -49,10 +50,10 @@ type Activities struct {
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollCursorUsageMetrics          *activities.PollCursorUsageMetrics
 	customDomainIngress             *activities.CustomDomainIngress
+	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
-	freeTierReportingUsageMetrics   *activities.FreeTierReportingUsageMetrics
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
 	getSlackProjectContext          *activities.GetSlackProjectContext
@@ -77,6 +78,7 @@ type Activities struct {
 	getUserFeedbackForChat          *resolution_activities.GetUserFeedbackForChat
 	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
+	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
@@ -94,6 +96,7 @@ type Activities struct {
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	pluginPublisher                 *activities.PluginPublisher
 }
 
 func NewActivities(
@@ -109,6 +112,7 @@ func NewActivities(
 	openrouterProvisioner openrouter.Provisioner,
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
+	defaultCustomDomainProvisioner k8s.ProvisionerKind,
 	expectedTargetCNAME string,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
@@ -131,6 +135,7 @@ func NewActivities(
 	workosClient activities.WorkOSClient,
 	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
+	pluginPublisher activities.PluginPublishClient,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -139,11 +144,11 @@ func NewActivities(
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger, guardianPolicy),
-		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
+		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
+		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		freeTierReportingUsageMetrics:   activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:          activities.NewSlackProjectContextActivity(logger, db, slackClient),
@@ -168,6 +173,7 @@ func NewActivities(
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn)),
+		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
@@ -185,6 +191,7 @@ func NewActivities(
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 	}
 }
 
@@ -258,10 +265,6 @@ func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args a
 
 func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
 	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
-}
-
-func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs []string) error {
-	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
 }
 
 func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
@@ -373,6 +376,13 @@ func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.Analy
 	return result, nil
 }
 
+func (a *Activities) MarkMessagesAnalyzed(ctx context.Context, input risk_analysis.MarkMessagesAnalyzedArgs) error {
+	if err := a.markMessagesAnalyzed.Do(ctx, input); err != nil {
+		return fmt.Errorf("mark messages analyzed: %w", err)
+	}
+	return nil
+}
+
 func (a *Activities) AdmitAssistantThreads(ctx context.Context, input activities.AdmitAssistantThreadsInput) (*activities.AdmitAssistantThreadsResult, error) {
 	return a.admitAssistantThreads.Do(ctx, input)
 }
@@ -438,4 +448,20 @@ func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time
 		return 0, fmt.Errorf("gc outbox processed rows: %w", err)
 	}
 	return n, nil
+}
+
+func (a *Activities) ListPluginPublishCandidates(ctx context.Context, input activities.ListPluginPublishCandidatesInput) (*activities.ListPluginPublishCandidatesResult, error) {
+	result, err := a.pluginPublisher.ListCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list plugin publish candidates: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
+	result, err := a.pluginPublisher.PublishProject(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("publish plugin project: %w", err)
+	}
+	return result, nil
 }

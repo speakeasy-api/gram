@@ -81,7 +81,7 @@ func NewCreateRemoteSessionClientEndpoint(s Service, authAPIKeyFn security.AuthA
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -141,7 +141,7 @@ func NewCloneClientFromOAuthProxyProviderEndpoint(s Service, authAPIKeyFn securi
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -200,7 +200,7 @@ func NewUpdateRemoteSessionClientEndpoint(s Service, authAPIKeyFn security.AuthA
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -259,7 +259,7 @@ func NewListRemoteSessionClientsEndpoint(s Service, authAPIKeyFn security.AuthAP
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -318,7 +318,7 @@ func NewGetRemoteSessionClientEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -377,7 +377,7 @@ func NewDeleteRemoteSessionClientEndpoint(s Service, authAPIKeyFn security.AuthA
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

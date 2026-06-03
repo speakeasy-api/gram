@@ -21,12 +21,53 @@ var _ = Service("chat", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
+			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
+			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
+				Format(FormatUUID)
+			})
+			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
+				Enum("", "true", "false")
+			})
+			Attribute("from", String, "Filter chats created after this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Filter chats created before this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("limit", Int, "Number of results per page", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(100)
+			})
+			Attribute("offset", Int, "Pagination offset", func() {
+				Default(0)
+				Minimum(0)
+			})
+			Attribute("sort_by", String, "Field to sort by", func() {
+				Enum("created_at", "num_messages")
+				Default("created_at")
+			})
+			Attribute("sort_order", String, "Sort order", func() {
+				Enum("asc", "desc")
+				Default("desc")
+			})
 		})
 
 		Result(ListChatsResult)
 
 		HTTP(func() {
 			GET("/rpc/chat.list")
+			Param("search")
+			Param("external_user_id")
+			Param("assistant_id")
+			Param("has_risk")
+			Param("from")
+			Param("to")
+			Param("limit")
+			Param("offset")
+			Param("sort_by")
+			Param("sort_order")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -35,7 +76,7 @@ var _ = Service("chat", func() {
 
 		Meta("openapi:operationId", "listChats")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChats"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChats", "type": "query"}`)
 	})
 
 	Method("loadChat", func() {
@@ -124,74 +165,6 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetCreditUsage"}`)
 	})
 
-	Method("listChatsWithResolutions", func() {
-		Description("List all chats for a project with their resolutions")
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ProjectPayload()
-			security.ChatSessionsTokenPayload()
-
-			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
-			Attribute("external_user_id", String, "Filter by external user ID")
-			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
-				Format(FormatUUID)
-			})
-			Attribute("resolution_status", String, "Filter by resolution status")
-			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
-				Enum("", "true", "false")
-			})
-			Attribute("from", String, "Filter chats created after this timestamp (ISO 8601)", func() {
-				Format(FormatDateTime)
-			})
-			Attribute("to", String, "Filter chats created before this timestamp (ISO 8601)", func() {
-				Format(FormatDateTime)
-			})
-			Attribute("limit", Int, "Number of results per page", func() {
-				Default(50)
-				Minimum(1)
-				Maximum(100)
-			})
-			Attribute("offset", Int, "Pagination offset", func() {
-				Default(0)
-				Minimum(0)
-			})
-			Attribute("sort_by", String, "Field to sort by", func() {
-				Enum("created_at", "num_messages", "score")
-				Default("created_at")
-			})
-			Attribute("sort_order", String, "Sort order", func() {
-				Enum("asc", "desc")
-				Default("desc")
-			})
-		})
-
-		Result(ListChatsWithResolutionsResult)
-
-		HTTP(func() {
-			GET("/rpc/chat.listChatsWithResolutions")
-			Param("search")
-			Param("external_user_id")
-			Param("assistant_id")
-			Param("resolution_status")
-			Param("has_risk")
-			Param("from")
-			Param("to")
-			Param("limit")
-			Param("offset")
-			Param("sort_by")
-			Param("sort_order")
-			security.SessionHeader()
-			security.ProjectHeader()
-			security.ChatSessionsTokenHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "listChatsWithResolutions")
-		Meta("openapi:extension:x-speakeasy-name-override", "listChatsWithResolutions")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatsWithResolutions", "type": "query"}`)
-	})
-
 	Method("deleteChat", func() {
 		Description("Soft-delete a chat by its ID")
 		Security(security.Session, security.ProjectSlug)
@@ -249,7 +222,8 @@ var _ = Service("chat", func() {
 
 var ListChatsResult = Type("ListChatsResult", func() {
 	Attribute("chats", ArrayOf(ChatOverview), "The list of chats")
-	Required("chats")
+	Attribute("total", Int, "Total number of chats (before pagination)")
+	Required("chats", "total")
 })
 
 var ChatOverview = Type("ChatOverview", func() {
@@ -308,43 +282,4 @@ var ChatMessage = Type("ChatMessage", func() {
 	Attribute("generation", Int, "Conversation generation — bumps on compaction or edit divergence")
 
 	Required("id", "role", "model", "created_at", "generation")
-})
-
-var ChatResolution = Type("ChatResolution", func() {
-	Description("Resolution information for a chat")
-
-	Attribute("id", String, "Resolution ID", func() {
-		Format(FormatUUID)
-	})
-	Attribute("user_goal", String, "User's intended goal")
-	Attribute("resolution", String, "Resolution status")
-	Attribute("resolution_notes", String, "Notes about the resolution")
-	Attribute("score", Int, "Score 0-100")
-	Attribute("created_at", String, "When resolution was created", func() {
-		Format(FormatDateTime)
-	})
-	Attribute("message_ids", ArrayOf(String), "Message IDs associated with this resolution", func() {
-		Example([]string{"abc-123", "def-456"})
-	})
-
-	Required("id", "user_goal", "resolution", "resolution_notes", "score", "created_at", "message_ids")
-})
-
-var ChatOverviewWithResolutions = Type("ChatOverviewWithResolutions", func() {
-	Description("Chat overview with embedded resolution data")
-
-	Extend(ChatOverview)
-
-	Attribute("resolutions", ArrayOf(ChatResolution), "List of resolutions for this chat")
-
-	Required("resolutions")
-})
-
-var ListChatsWithResolutionsResult = Type("ListChatsWithResolutionsResult", func() {
-	Description("Result of listing chats with resolutions")
-
-	Attribute("chats", ArrayOf(ChatOverviewWithResolutions), "List of chats with resolutions")
-	Attribute("total", Int, "Total number of chats (before pagination)")
-
-	Required("chats", "total")
 })

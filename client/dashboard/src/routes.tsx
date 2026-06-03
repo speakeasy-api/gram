@@ -21,6 +21,7 @@ import ChatSessions from "./pages/chatLogs/ChatLogs";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import DeviceAgent from "./pages/device-agent/DeviceAgent";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -79,12 +80,14 @@ import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
+import ApprovalRequests from "./pages/security/ApprovalRequests";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
 import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter from "./pages/security/PolicyCenter";
+import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
 import {
@@ -349,8 +352,8 @@ const ROUTE_STRUCTURE = {
       // MCP data moves to mcp_servers/mcp_endpoints. Until then this route is
       // distinct so the new mcp_servers-backed details page renders against
       // mcp_servers without disturbing the existing toolset-backed path. The
-      // `x/` prefix is the generic experimental namespace shared with the
-      // `/x/mcp/{slug}` runtime path that already serves these servers.
+      // `x/` prefix is the dashboard's generic experimental namespace; the
+      // runtime path for these servers is `/mcp/{slug}` (see AGE-2555).
       x: {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",
@@ -467,7 +470,6 @@ const ROUTE_STRUCTURE = {
     title: "Risk Overview",
     url: "risk-overview",
     icon: "shield",
-    stage: "beta",
     component: RiskOverviewRoot,
     indexComponent: SecurityOverview,
     subPages: {
@@ -498,11 +500,22 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  detectionRules: {
+    title: "Detection Rules",
+    url: "detection-rules",
+    icon: "scan-search",
+    component: DetectionRules,
+  },
+  approvalRequests: {
+    title: "Approval Requests",
+    url: "approval-requests",
+    icon: "inbox",
+    component: ApprovalRequests,
+  },
   policyCenter: {
     title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
-    stage: "beta",
     component: PolicyCenter,
   },
   sdks: {
@@ -782,6 +795,13 @@ const ORG_ROUTE_STRUCTURE = {
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
+  },
+  deviceAgent: {
+    title: "Device Agent",
+    url: "device-agent",
+    icon: "laptop",
+    stage: "preview",
+    component: DeviceAgent,
   },
   access: {
     title: "Roles & Permissions",

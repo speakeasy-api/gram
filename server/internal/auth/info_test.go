@@ -87,6 +87,9 @@ func TestService_Info(t *testing.T) {
 		t.Parallel()
 
 		userInfo := adminMockUserInfo()
+		// Use a unique ID to avoid Redis cache collisions with other parallel admin tests.
+		userInfo.UserID = "admin-multiorg-test-user"
+		userInfo.Email = "admin-multiorg@speakeasyapi.dev"
 		// Add additional organizations to test filtering
 		userInfo.Organizations = append(userInfo.Organizations, MockOrganizationEntry{
 			ID:                 "other-org-456",
@@ -137,9 +140,12 @@ func TestService_Info(t *testing.T) {
 		require.NotNil(t, result)
 
 		require.True(t, result.IsAdmin)
-		// Admin should only see the active organization
-		require.Len(t, result.Organizations, 1)
-		require.Equal(t, userInfo.Organizations[0].ID, result.Organizations[0].ID)
+		// Admin in their own org sees all real memberships so the org-switcher works.
+		// Only when overriding into a foreign org is the list collapsed to 1.
+		require.Len(t, result.Organizations, 2)
+		orgIDs := []string{result.Organizations[0].ID, result.Organizations[1].ID}
+		require.Contains(t, orgIDs, userInfo.Organizations[0].ID)
+		require.Contains(t, orgIDs, userInfo.Organizations[1].ID)
 	})
 
 	t.Run("info returns non-member org for admin override", func(t *testing.T) {

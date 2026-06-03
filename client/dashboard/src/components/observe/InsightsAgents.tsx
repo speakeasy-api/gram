@@ -2,6 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { formatCompact } from "@/lib/format";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
@@ -10,14 +11,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { ErrorAlert } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
@@ -33,11 +26,8 @@ import type {
 } from "@gram/client/models/components";
 import { useGramContext, useMembers } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import {
-  TimeRangePicker,
-  type DateRangePreset,
-  getPresetRange,
-} from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   BarElement,
@@ -51,7 +41,13 @@ import {
   Tooltip,
   type ChartOptions,
 } from "chart.js";
-import { Button } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  type Column,
+  type SortDescriptor,
+  Table,
+  sortTableData,
+} from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 import { Bar } from "react-chartjs-2";
 import { toast } from "sonner";
@@ -102,14 +98,8 @@ function formatCost(value: number): string {
   return "$0.00";
 }
 
-function formatTokens(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toLocaleString();
-}
-
 function formatValue(value: number, mode: ValueMode): string {
-  return mode === "cost" ? formatCost(value) : formatTokens(value);
+  return mode === "cost" ? formatCost(value) : formatCompact(value);
 }
 
 function formatPlatform(value: string): string {
@@ -199,6 +189,17 @@ export function InsightsAgentsContent() {
     () => new Map((membersData?.members ?? []).map((m) => [m.id, m])),
     [membersData],
   );
+  const memberIdentifiers = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of membersData?.members ?? []) {
+      ids.add(m.id);
+      ids.add(m.email.toLowerCase());
+    }
+    return ids;
+  }, [membersData]);
+  const isOrgMember = (userId: string) =>
+    memberIdentifiers.has(userId) ||
+    memberIdentifiers.has(userId.toLowerCase());
 
   const usersQuery = useQuery({
     queryKey: [
@@ -272,7 +273,9 @@ export function InsightsAgentsContent() {
 
   const totalTokens = users.reduce((s, u) => s + effectiveTokens(u), 0);
   const totalCost = users.reduce((s, u) => s + u.totalCost, 0);
-  const activeUsers = users.filter((u) => effectiveTokens(u) > 0).length;
+  const activeUsers = users.filter(
+    (u) => effectiveTokens(u) > 0 && isOrgMember(u.userId),
+  ).length;
 
   const clientBreakdown = useMemo(() => {
     const map = new Map<
@@ -413,7 +416,7 @@ export function InsightsAgentsContent() {
     0,
   );
   const filteredActiveUsers = filteredUserRows.filter(
-    (u) => u.totalTokens > 0,
+    (u) => u.totalTokens > 0 && isOrgMember(u.userId),
   ).length;
 
   const isLoading =
@@ -444,7 +447,7 @@ export function InsightsAgentsContent() {
         mcpConfig={mcpConfig}
         title="What would you like to know about AI agent costs?"
         subtitle="Ask about token spend, model costs, and usage by team or client"
-        contextInfo={`Agents tab: ${activeUsers} active users, ${formatTokens(totalTokens)} tokens, ${formatCost(totalCost)} total cost in ${rangeLabel}. ${clientBreakdown.length} client types, ${modelBreakdown.length} models.`}
+        contextInfo={`Agents tab: ${activeUsers} active users, ${formatCompact(totalTokens)} tokens, ${formatCost(totalCost)} total cost in ${rangeLabel}. ${clientBreakdown.length} client types, ${modelBreakdown.length} models.`}
         suggestions={[
           {
             title: "Cost Summary",
@@ -542,12 +545,12 @@ export function InsightsAgentsContent() {
                   value={filteredTotalTokens}
                   icon="gauge"
                   accentColor="blue"
-                  subtext={`${formatTokens(filteredTotalTokens)} across ${filteredTotalSessions.toLocaleString()} sessions`}
+                  subtext={`${formatCompact(filteredTotalTokens)} across ${formatCompact(filteredTotalSessions)} sessions`}
                 />
                 <MetricCard
                   title="Total Cost"
                   value={filteredTotalCost}
-                  format="number"
+                  format="currency"
                   icon="credit-card"
                   accentColor="purple"
                   subtext={
@@ -952,50 +955,6 @@ type EmployeeRow = UserSummary & {
   tokenShare: number;
 };
 
-type SortField =
-  | "employee"
-  | "input"
-  | "output"
-  | "totalTokens"
-  | "cost"
-  | "costPerSession"
-  | "sessions"
-  | "share"
-  | "role"
-  | "userCount"
-  | "costPerUser";
-
-function SortableHead({
-  field,
-  activeField,
-  direction,
-  onSort,
-  className,
-  children,
-}: {
-  field: SortField;
-  activeField: SortField | null;
-  direction: "asc" | "desc";
-  onSort: (field: SortField) => void;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  const isActive = activeField === field;
-  return (
-    <TableHead
-      className={cn("cursor-pointer select-none", className)}
-      onClick={() => onSort(field)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {children}
-        <span className="text-muted-foreground text-[10px]">
-          {isActive ? (direction === "asc" ? "▲" : "▼") : "⇅"}
-        </span>
-      </span>
-    </TableHead>
-  );
-}
-
 function EmployeeCostTable({
   users,
   roleUsage,
@@ -1017,103 +976,294 @@ function EmployeeCostTable({
   const [page, setPage] = useState(0);
   const isCost = valueMode === "cost";
   const isRoleView = groupByDimension === "role";
-
-  // Default sort follows the value mode; clicking a column overrides
-  const [sortField, setSortField] = useState<SortField | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection((d) => (d === "desc" ? "asc" : "desc"));
-    } else {
-      setSortField(field);
-      setSortDirection("desc");
-    }
-    setPage(0);
-  };
+  const [sort, setSort] = useState<SortDescriptor | null>(null);
 
   // Reset sort + page when switching views
   const handleGroupByChange = (dim: "employee" | "role") => {
-    setSortField(null);
+    setSort(null);
     setPage(0);
     onGroupByChange(dim);
   };
 
-  const effectiveSortField = sortField ?? (isCost ? "cost" : "totalTokens");
-  const effectiveSortDir = sortField ? sortDirection : "desc";
-
-  const sortedUsers = useMemo(() => {
-    const getValue = (u: EmployeeRow): number | string => {
-      switch (effectiveSortField) {
-        case "employee":
-          return u.displayName.toLowerCase();
-        case "input":
-          return u.totalInputTokens;
-        case "output":
-          return u.totalOutputTokens;
-        case "totalTokens":
-          return u.totalTokens;
-        case "cost":
-          return u.totalCost;
-        case "costPerSession":
-          return u.costPerSession;
-        case "sessions":
-          return u.totalChats;
-        case "share":
-          return isCost ? u.costShare : u.tokenShare;
-        default:
-          return 0;
-      }
-    };
-    return users.slice().sort((a, b) => {
-      const va = getValue(a);
-      const vb = getValue(b);
-      const cmp =
-        typeof va === "string" && typeof vb === "string"
-          ? va.localeCompare(vb)
-          : (va as number) - (vb as number);
-      return effectiveSortDir === "asc" ? cmp : -cmp;
-    });
-  }, [users, effectiveSortField, effectiveSortDir, isCost]);
+  const defaultSort = useMemo<SortDescriptor>(
+    () => ({
+      id: isCost ? "cost" : "totalTokens",
+      direction: "desc",
+    }),
+    [isCost],
+  );
+  const effectiveSort = sort ?? defaultSort;
 
   const totalRoleCost = useMemo(
     () => roleUsage.reduce((sum, r) => sum + r.totalCost, 0),
     [roleUsage],
   );
 
+  const roleColumns = useMemo<Column<RoleSummary>[]>(
+    () => [
+      {
+        key: "roleName",
+        id: "role",
+        header: "Role",
+        sortable: true,
+        sortValue: (role) => role.roleName.toLowerCase(),
+        width: "1.4fr",
+        render: (role) => (
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{role.roleName}</span>
+            {role.roleId === "unassigned" && (
+              <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
+                no role
+              </span>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "userCount",
+        header: "Users",
+        sortable: true,
+        sortValue: (role) => role.userCount,
+        width: "0.8fr",
+        render: (role) => (
+          <span className="font-mono tabular-nums">
+            {role.userCount.toLocaleString()}
+          </span>
+        ),
+      },
+      {
+        key: "totalCost",
+        id: "cost",
+        header: "Total Cost",
+        sortable: true,
+        sortValue: (role) => role.totalCost,
+        width: "1fr",
+        render: (role) => {
+          const costShare =
+            totalRoleCost > 0 ? (role.totalCost / totalRoleCost) * 100 : 0;
+          return (
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-medium tabular-nums">
+                {formatCost(role.totalCost)}
+              </span>
+              <span className="text-muted-foreground font-mono text-[10px] tabular-nums">
+                {costShare.toFixed(1)}%
+              </span>
+            </div>
+          );
+        },
+      },
+      {
+        key: "costPerUser",
+        header: "Avg Cost/User",
+        sortable: true,
+        sortValue: (role) => role.costPerUser,
+        width: "1fr",
+        render: (role) => (
+          <span className="text-muted-foreground font-mono tabular-nums">
+            {formatCost(role.costPerUser)}
+          </span>
+        ),
+      },
+      {
+        key: "totalInputTokens",
+        id: "input",
+        header: "Input Tokens",
+        sortable: true,
+        sortValue: (role) => role.totalInputTokens,
+        width: "1fr",
+        render: (role) => (
+          <span className="font-mono tabular-nums">
+            {formatCompact(role.totalInputTokens)}
+          </span>
+        ),
+      },
+      {
+        key: "totalOutputTokens",
+        id: "output",
+        header: "Output Tokens",
+        sortable: true,
+        sortValue: (role) => role.totalOutputTokens,
+        width: "1fr",
+        render: (role) => (
+          <span className="font-mono tabular-nums">
+            {formatCompact(role.totalOutputTokens)}
+          </span>
+        ),
+      },
+      {
+        key: "totalChats",
+        id: "sessions",
+        header: "Sessions",
+        sortable: true,
+        sortValue: (role) => role.totalChats,
+        width: "0.8fr",
+        render: (role) => (
+          <span className="font-mono tabular-nums">
+            {role.totalChats.toLocaleString()}
+          </span>
+        ),
+      },
+    ],
+    [totalRoleCost],
+  );
+
+  const employeeColumns = useMemo<Column<EmployeeRow>[]>(
+    () => [
+      {
+        key: "displayName",
+        id: "employee",
+        header: "Employee",
+        sortable: true,
+        sortValue: (user) => user.displayName.toLowerCase(),
+        width: "2fr",
+        render: (user) => (
+          <div className="flex min-w-[200px] items-center gap-3">
+            <Avatar className="size-8 shrink-0">
+              {user.photoUrl ? (
+                <AvatarImage src={user.photoUrl} alt={user.displayName} />
+              ) : null}
+              <AvatarFallback className="text-xs">
+                {initials(user.displayName)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{user.displayName}</p>
+              {user.email ? (
+                <p className="text-muted-foreground truncate text-xs">
+                  {user.email}
+                </p>
+              ) : null}
+              {clientFilter === "all" && user.clients.length > 0 && (
+                <p className="text-muted-foreground/70 mt-0.5 text-[10px]">
+                  {user.clients.join(", ")}
+                </p>
+              )}
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "totalInputTokens",
+        id: "input",
+        header: "Input",
+        sortable: true,
+        sortValue: (user) => user.totalInputTokens,
+        width: "0.8fr",
+        render: (user) => (
+          <span className="font-mono tabular-nums">
+            {formatCompact(user.totalInputTokens)}
+          </span>
+        ),
+      },
+      {
+        key: "totalOutputTokens",
+        id: "output",
+        header: "Output",
+        sortable: true,
+        sortValue: (user) => user.totalOutputTokens,
+        width: "0.8fr",
+        render: (user) => (
+          <span className="font-mono tabular-nums">
+            {formatCompact(user.totalOutputTokens)}
+          </span>
+        ),
+      },
+      {
+        key: "totalTokens",
+        header: "Total Tokens",
+        sortable: true,
+        sortValue: (user) => user.totalTokens,
+        width: "1fr",
+        render: (user) => (
+          <span
+            className={cn("font-mono tabular-nums", !isCost && "font-semibold")}
+          >
+            {formatCompact(user.totalTokens)}
+          </span>
+        ),
+      },
+      {
+        key: "totalCost",
+        id: "cost",
+        header: "Cost",
+        sortable: true,
+        sortValue: (user) => user.totalCost,
+        width: "0.8fr",
+        render: (user) => (
+          <span
+            className={cn("font-mono tabular-nums", isCost && "font-semibold")}
+          >
+            {formatCost(user.totalCost)}
+          </span>
+        ),
+      },
+      {
+        key: "costPerSession",
+        header: "$/Session",
+        sortable: true,
+        sortValue: (user) => user.costPerSession,
+        width: "0.8fr",
+        render: (user) => (
+          <span className="text-muted-foreground font-mono tabular-nums">
+            {formatCost(user.costPerSession)}
+          </span>
+        ),
+      },
+      {
+        key: "totalChats",
+        id: "sessions",
+        header: "Sessions",
+        sortable: true,
+        sortValue: (user) => user.totalChats,
+        width: "0.8fr",
+        render: (user) => (
+          <span className="font-mono tabular-nums">
+            {user.totalChats.toLocaleString()}
+          </span>
+        ),
+      },
+      {
+        key: "share",
+        header: "Share",
+        sortable: true,
+        sortValue: (user) => (isCost ? user.costShare : user.tokenShare),
+        width: "1fr",
+        render: (user) => (
+          <div className="flex items-center gap-2">
+            <div className="bg-muted h-1.5 w-12 overflow-hidden rounded-full">
+              <div
+                className="bg-primary h-full rounded-full"
+                style={{
+                  width: `${Math.max(isCost ? user.costShare : user.tokenShare, 3)}%`,
+                }}
+              />
+            </div>
+            <span className="text-muted-foreground font-mono tabular-nums">
+              {(isCost ? user.costShare : user.tokenShare).toFixed(1)}%
+            </span>
+          </div>
+        ),
+      },
+    ],
+    [clientFilter, isCost],
+  );
+
+  const sortedUsers = useMemo(
+    () => sortTableData(users, employeeColumns, effectiveSort) as EmployeeRow[],
+    [effectiveSort, employeeColumns, users],
+  );
   const sortedRoles = useMemo(() => {
-    const getValue = (r: RoleSummary): number | string => {
-      switch (effectiveSortField) {
-        case "role":
-          return r.roleName.toLowerCase();
-        case "userCount":
-          return r.userCount;
-        case "cost":
-          return r.totalCost;
-        case "costPerUser":
-          return r.costPerUser;
-        case "input":
-          return r.totalInputTokens;
-        case "output":
-          return r.totalOutputTokens;
-        case "totalTokens":
-          return r.totalTokens;
-        case "sessions":
-          return r.totalChats;
-        default:
-          return r.totalCost;
-      }
-    };
-    return roleUsage.slice().sort((a, b) => {
-      const va = getValue(a);
-      const vb = getValue(b);
-      const cmp =
-        typeof va === "string" && typeof vb === "string"
-          ? va.localeCompare(vb)
-          : (va as number) - (vb as number);
-      return effectiveSortDir === "asc" ? cmp : -cmp;
-    });
-  }, [roleUsage, effectiveSortField, effectiveSortDir]);
+    if (sort == null && !isCost) {
+      return roleUsage.slice().sort((a, b) => b.totalTokens - a.totalTokens);
+    }
+
+    return sortTableData(
+      roleUsage,
+      roleColumns,
+      effectiveSort,
+    ) as RoleSummary[];
+  }, [effectiveSort, isCost, roleColumns, roleUsage, sort]);
 
   const items = isRoleView ? sortedRoles : sortedUsers;
   const totalPages = Math.ceil(items.length / PAGE_SIZE);
@@ -1124,7 +1274,7 @@ function EmployeeCostTable({
   );
 
   return (
-    <section className="bg-card flex flex-col gap-4 rounded-xl border p-4">
+    <section className="bg-card flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-semibold">
@@ -1155,337 +1305,62 @@ function EmployeeCostTable({
           ))}
         </div>
       </div>
-      <div className="overflow-x-auto rounded-md border">
-        {isRoleView ? (
-          roleUsageLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Skeleton className="h-4 w-32" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableHead
-                    field="role"
-                    activeField={sortField}
-                    direction={effectiveSortDir}
-                    onSort={handleSort}
-                    className="pl-6"
-                  >
-                    Role
-                  </SortableHead>
-                  <SortableHead
-                    field="userCount"
-                    activeField={sortField}
-                    direction={effectiveSortDir}
-                    onSort={handleSort}
-                  >
-                    Users
-                  </SortableHead>
-                  <SortableHead
-                    field="cost"
-                    activeField={sortField}
-                    direction={effectiveSortDir}
-                    onSort={handleSort}
-                  >
-                    Total Cost
-                  </SortableHead>
-                  <SortableHead
-                    field="costPerUser"
-                    activeField={sortField}
-                    direction={effectiveSortDir}
-                    onSort={handleSort}
-                  >
-                    Avg Cost/User
-                  </SortableHead>
-                  <SortableHead
-                    field="input"
-                    activeField={sortField}
-                    direction={effectiveSortDir}
-                    onSort={handleSort}
-                  >
-                    Input Tokens
-                  </SortableHead>
-                  <SortableHead
-                    field="output"
-                    activeField={sortField}
-                    direction={effectiveSortDir}
-                    onSort={handleSort}
-                  >
-                    Output Tokens
-                  </SortableHead>
-                  <SortableHead
-                    field="sessions"
-                    activeField={sortField}
-                    direction={effectiveSortDir}
-                    onSort={handleSort}
-                    className="pr-6"
-                  >
-                    Sessions
-                  </SortableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(pageItems as RoleSummary[]).length > 0 ? (
-                  (pageItems as RoleSummary[]).map((role) => {
-                    const roleName = role.roleName;
-                    const costShare =
-                      totalRoleCost > 0
-                        ? (role.totalCost / totalRoleCost) * 100
-                        : 0;
-                    return (
-                      <TableRow key={role.roleId}>
-                        <TableCell className="pl-6">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {roleName}
-                            </span>
-                            {role.roleId === "unassigned" && (
-                              <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
-                                no role
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-sm tabular-nums">
-                          {role.userCount.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm font-semibold tabular-nums">
-                              {formatCost(role.totalCost)}
-                            </span>
-                            <span className="text-muted-foreground font-mono text-[10px] tabular-nums">
-                              {costShare.toFixed(1)}%
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground font-mono text-xs tabular-nums">
-                          {formatCost(role.costPerUser)}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs tabular-nums">
-                          {formatTokens(role.totalInputTokens)}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs tabular-nums">
-                          {formatTokens(role.totalOutputTokens)}
-                        </TableCell>
-                        <TableCell className="pr-6 font-mono text-sm tabular-nums">
-                          {role.totalChats.toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-muted-foreground py-10 text-center text-sm"
-                    >
-                      No role usage data found for this time range.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHead
-                  field="employee"
-                  activeField={sortField}
-                  direction={effectiveSortDir}
-                  onSort={handleSort}
-                  className="pl-6"
-                >
-                  Employee
-                </SortableHead>
-                <SortableHead
-                  field="input"
-                  activeField={sortField}
-                  direction={effectiveSortDir}
-                  onSort={handleSort}
-                >
-                  Input
-                </SortableHead>
-                <SortableHead
-                  field="output"
-                  activeField={sortField}
-                  direction={effectiveSortDir}
-                  onSort={handleSort}
-                >
-                  Output
-                </SortableHead>
-                <SortableHead
-                  field="totalTokens"
-                  activeField={sortField}
-                  direction={effectiveSortDir}
-                  onSort={handleSort}
-                >
-                  Total Tokens
-                </SortableHead>
-                <SortableHead
-                  field="cost"
-                  activeField={sortField}
-                  direction={effectiveSortDir}
-                  onSort={handleSort}
-                >
-                  Cost
-                </SortableHead>
-                <SortableHead
-                  field="costPerSession"
-                  activeField={sortField}
-                  direction={effectiveSortDir}
-                  onSort={handleSort}
-                >
-                  $/Session
-                </SortableHead>
-                <SortableHead
-                  field="sessions"
-                  activeField={sortField}
-                  direction={effectiveSortDir}
-                  onSort={handleSort}
-                >
-                  Sessions
-                </SortableHead>
-                <SortableHead
-                  field="share"
-                  activeField={sortField}
-                  direction={effectiveSortDir}
-                  onSort={handleSort}
-                  className="pr-6"
-                >
-                  Share
-                </SortableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(pageItems as EmployeeRow[]).length > 0 ? (
-                (pageItems as EmployeeRow[]).map((user) => (
-                  <TableRow key={user.userId}>
-                    <TableCell className="pl-6">
-                      <div className="flex min-w-[200px] items-center gap-3">
-                        <Avatar className="size-8 shrink-0">
-                          {user.photoUrl ? (
-                            <AvatarImage
-                              src={user.photoUrl}
-                              alt={user.displayName}
-                            />
-                          ) : null}
-                          <AvatarFallback className="text-xs">
-                            {initials(user.displayName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {user.displayName}
-                          </p>
-                          {user.email ? (
-                            <p className="text-muted-foreground truncate text-xs">
-                              {user.email}
-                            </p>
-                          ) : null}
-                          {clientFilter === "all" &&
-                            user.clients.length > 0 && (
-                              <p className="text-muted-foreground/70 mt-0.5 text-[10px]">
-                                {user.clients.join(", ")}
-                              </p>
-                            )}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs tabular-nums">
-                      {formatTokens(user.totalInputTokens)}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs tabular-nums">
-                      {formatTokens(user.totalOutputTokens)}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          "font-mono text-sm tabular-nums",
-                          !isCost && "font-semibold",
-                        )}
-                      >
-                        {formatTokens(user.totalTokens)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          "font-mono text-sm tabular-nums",
-                          isCost && "font-semibold",
-                        )}
-                      >
-                        {formatCost(user.totalCost)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-xs tabular-nums">
-                      {formatCost(user.costPerSession)}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm tabular-nums">
-                      {user.totalChats.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="pr-6">
-                      <div className="flex items-center gap-2">
-                        <div className="bg-muted h-1.5 w-12 overflow-hidden rounded-full">
-                          <div
-                            className="bg-primary h-full rounded-full"
-                            style={{
-                              width: `${Math.max(isCost ? user.costShare : user.tokenShare, 3)}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-muted-foreground font-mono text-xs tabular-nums">
-                          {(isCost ? user.costShare : user.tokenShare).toFixed(
-                            1,
-                          )}
-                          %
-                        </span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-muted-foreground py-10 text-center text-sm"
-                  >
-                    No employee activity found for this time range.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        )}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t px-4 py-3">
-            <p className="text-muted-foreground text-sm">
-              {safePage * PAGE_SIZE + 1}–
-              {Math.min((safePage + 1) * PAGE_SIZE, items.length)} of{" "}
-              {items.length}
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
-                onClick={() => setPage((p) => p - 1)}
-                disabled={safePage === 0}
-              >
-                Prev
-              </button>
-              <button
-                className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={safePage >= totalPages - 1}
-              >
-                Next
-              </button>
-            </div>
+      {isRoleView ? (
+        roleUsageLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Skeleton className="h-4 w-32" />
           </div>
-        )}
-      </div>
+        ) : (
+          <Table
+            columns={roleColumns}
+            data={pageItems as RoleSummary[]}
+            rowKey={(role) => role.roleId}
+            sort={sort}
+            onSortChange={(nextSort) => {
+              setSort(nextSort);
+              setPage(0);
+            }}
+            noResultsMessage="No role usage data found for this time range."
+          />
+        )
+      ) : (
+        <Table
+          columns={employeeColumns}
+          data={pageItems as EmployeeRow[]}
+          rowKey={(user) => user.userId}
+          sort={sort}
+          onSortChange={(nextSort) => {
+            setSort(nextSort);
+            setPage(0);
+          }}
+          noResultsMessage="No employee activity found for this time range."
+        />
+      )}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <p className="text-muted-foreground text-sm">
+            {safePage * PAGE_SIZE + 1}–
+            {Math.min((safePage + 1) * PAGE_SIZE, items.length)} of{" "}
+            {items.length}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
+              onClick={() => setPage((p) => p - 1)}
+              disabled={safePage === 0}
+            >
+              Prev
+            </button>
+            <button
+              className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={safePage >= totalPages - 1}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

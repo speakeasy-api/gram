@@ -24,6 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -93,8 +94,10 @@ type AnalyzeBatchArgs struct {
 	PolicyVersion        int64
 	MessageIDs           []uuid.UUID
 	Sources              []string
+	MessageTypes         []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
+	CustomRuleIds        []string
 }
 
 type AnalyzeBatchResult struct {
@@ -160,11 +163,34 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
+	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
 	scannedCount = len(messages)
+	if len(messages) == 0 {
+		if err := a.writeResults(ctx, args, nil); err != nil {
+			return nil, err
+		}
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
 
-	findings, err := a.scan(ctx, args, messages)
+	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds)
 	if err != nil {
 		return nil, err
+	}
+
+	findings, err := a.scan(ctx, args, messages, customRules)
+	if err != nil {
+		return nil, err
+	}
+
+	// Drop findings whose canonical rule_id has been unchecked by the policy
+	// author. Done after the dedup pass so an enabled secret finding still
+	// suppresses an overlapping disabled presidio finding, instead of letting
+	// the disabled rule win the overlap and then disappear (leaving the
+	// region unflagged).
+	if disabled := NewDisabledRuleSet(policy.DisabledRules); !disabled.Empty() {
+		for i, batch := range findings {
+			findings[i] = disabled.FilterFindings(batch)
+		}
 	}
 
 	rows, findingsCount := a.buildRows(ctx, args, messages, findings)
@@ -200,6 +226,37 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 	return messages, nil
 }
 
+func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, messageTypes []string) []repo.GetMessageContentBatchRow {
+	filtered := make([]repo.GetMessageContentBatchRow, 0, len(messages))
+	for _, msg := range messages {
+		messageType, ok := messageRowMessageType(msg)
+		if !ok {
+			continue
+		}
+		if len(messageTypes) > 0 && !slices.Contains(messageTypes, messageType) {
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+	return filtered
+}
+
+func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bool) {
+	switch msg.Role {
+	case "user":
+		return message.User, true
+	case "tool":
+		return message.ToolResponse, true
+	case "assistant":
+		if len(msg.ToolCalls) > 0 {
+			return message.ToolRequest, true
+		}
+		return message.Assistant, true
+	default:
+		return "", false
+	}
+}
+
 // scan runs enabled scanners concurrently. Gitleaks (CPU-bound), presidio
 // (IO-bound), and prompt-injection (CPU-bound, regex-only) all run in
 // parallel — folding the cheap prompt-injection pass under presidio's
@@ -207,7 +264,7 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 // destructive_tool, cli_destructive) run serially after the parallel scans
 // — shadow_mcp/destructive_tool make per-message DB calls; cli_destructive
 // is purely in-memory regex but kept in the same lane for consistency.
-func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow) ([][]Finding, error) {
+func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -224,6 +281,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	destructiveToolFindings := make([][]Finding, n)
 	cliDestructiveFindings := make([][]Finding, n)
 	promptInjectionFindings := make([][]Finding, n)
+	customFindings := make([][]Finding, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
@@ -270,6 +328,15 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 			}
 			promptInjectionFindings = results
 			activity.RecordHeartbeat(ctx, "prompt_injection")
+		})
+	}
+
+	if len(customRules) > 0 {
+		wg.Go(func() {
+			for i, content := range contents {
+				customFindings[i] = ScanCustomDetectionRules(content, customRules)
+			}
+			activity.RecordHeartbeat(ctx, "custom")
 		})
 	}
 
@@ -320,10 +387,45 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		// Gitleaks findings come first so they take priority over presidio
 		// when both scanners match the same text region. Tool-call findings are
 		// non-overlapping with content scanners, so they pass through dedup.
-		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i], cliDestructiveFindings[i], promptInjectionFindings[i])
+		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i], cliDestructiveFindings[i], promptInjectionFindings[i], customFindings[i])
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
+}
+
+func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string) ([]CompiledCustomDetectionRule, error) {
+	if len(ruleIDs) == 0 {
+		return nil, nil
+	}
+
+	rules, err := repo.New(a.db).ListCustomDetectionRules(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list custom detection rules: %w", err)
+	}
+
+	selected := make(map[string]struct{}, len(ruleIDs))
+	for _, id := range ruleIDs {
+		selected[id] = struct{}{}
+	}
+
+	customRules := make([]CustomDetectionRule, 0, len(ruleIDs))
+	for _, rule := range rules {
+		if _, ok := selected[rule.RuleID]; !ok {
+			continue
+		}
+		customRules = append(customRules, CustomDetectionRule{
+			RuleID:      rule.RuleID,
+			Title:       rule.Title,
+			Description: rule.Description,
+			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
+		})
+	}
+
+	compiled, err := CompileCustomDetectionRules(customRules)
+	if err != nil {
+		return nil, err
+	}
+	return compiled, nil
 }
 
 // scanShadowMCP validates each message's tool_calls against the shadow-MCP

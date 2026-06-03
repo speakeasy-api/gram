@@ -118,7 +118,7 @@ export function ToolsetEnvironmentForm({
           <h2 className="text-heading-xs">Environment Variables</h2>
           <p className="text-muted-foreground text-sm">
             Configure required API credentials for this toolset to use in the
-            Gram dashboard
+            platform dashboard
           </p>
           <p className="text-muted-foreground text-sm">
             View the MCP page for options on how to provide relevant credentials

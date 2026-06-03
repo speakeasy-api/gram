@@ -269,6 +269,30 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 	assert.Equal(t, userID, metadata.UserID)
 }
 
+func TestBuildTelemetryAttributesWithMetadata_SetsHookHostname(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	metadata := &SessionMetadata{
+		SessionID: uuid.NewString(),
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	hostname := " subomi-mbp "
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &metadata.SessionID,
+		HookHostname:  &hostname,
+	}, metadata)
+
+	assert.Equal(t, "subomi-mbp", attrs[attr.HookHostnameKey])
+}
+
 var (
 	toolName   = "test_tool"
 	toolUseID  = "toolu_123"

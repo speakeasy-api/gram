@@ -40,7 +40,7 @@ import {
   Chart as ChartJS,
 } from "chart.js";
 import { Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { perPage } from "@/components/observe/observeFilterUtils";
@@ -78,11 +78,9 @@ export function LogsTools() {
     logFilters,
     selectedHookTypes,
     activeFilters,
-    addKnownServers,
     serverOptions,
     handleServerSelectionChange,
     userEmailOptions,
-    addKnownUserEmails,
     handleUserEmailSelectionChange,
     addFilter,
     handleHookTypesChange,
@@ -151,22 +149,6 @@ export function LogsTools() {
     return tracesData?.pages.flatMap((page) => page.traces) ?? [];
   }, [tracesData]);
 
-  useEffect(() => {
-    addKnownServers(
-      groupedTraces
-        .map((t) => t.toolSource)
-        .filter((s): s is string => Boolean(s)),
-    );
-  }, [groupedTraces, addKnownServers]);
-
-  useEffect(() => {
-    addKnownUserEmails(
-      groupedTraces
-        .map((t) => t.userEmail)
-        .filter((e): e is string => Boolean(e)),
-    );
-  }, [groupedTraces, addKnownUserEmails]);
-
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
     const scrollTop = container.scrollTop;
@@ -202,7 +184,7 @@ export function LogsTools() {
       <InsightsConfig
         mcpConfig={mcpConfig}
         title="Explore Tool Logs"
-        subtitle="Ask me about your tool logs! Powered by Elements + Gram MCP"
+        subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
         hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (

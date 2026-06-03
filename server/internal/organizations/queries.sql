@@ -69,6 +69,19 @@ SELECT EXISTS(
     AND deleted_at IS NULL
 ) AS exists;
 
+-- name: HasActiveOrganizationUser :one
+-- Returns whether a Gram user is an active member of the organization.
+SELECT EXISTS(
+  SELECT 1
+  FROM users
+  JOIN organization_user_relationships
+    ON organization_user_relationships.user_id = users.id
+  WHERE users.id = @user_id
+    AND users.deleted_at IS NULL
+    AND organization_user_relationships.organization_id = @organization_id
+    AND organization_user_relationships.deleted_at IS NULL
+) AS exists;
+
 -- name: GetOrganizationUserRelationship :one
 SELECT *
 FROM organization_user_relationships
@@ -581,7 +594,7 @@ WHERE id = @id
 RETURNING *;
 
 -- name: ListOrganizationsForUser :many
-SELECT om.id, om.name, om.slug, om.workos_id
+SELECT om.id, om.name, om.slug, om.workos_id, om.sso_enabled, om.scim_enabled
 FROM organization_user_relationships our
 JOIN organization_metadata om ON om.id = our.organization_id
 WHERE our.user_id = @user_id
@@ -633,6 +646,24 @@ RETURNING id, svix_app_id, webhooks_enabled;
 SELECT svix_app_id
 FROM organization_metadata
 WHERE id = @id AND svix_app_id IS NOT NULL;
+
+-- name: SetSSOEnabled :exec
+-- Update the SSO enabled flag on an organization. Called when a WorkOS
+-- connection.activated or connection.deactivated/deleted event is processed.
+UPDATE organization_metadata
+SET sso_enabled = @enabled,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
+
+-- name: SetSCIMEnabled :exec
+-- Update the SCIM/directory sync enabled flag on an organization. Called when
+-- a WorkOS dsync.activated or dsync.deleted event is processed.
+UPDATE organization_metadata
+SET scim_enabled = @enabled,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
 
 -- name: ListActiveRoleAssignmentsByOrganization :many
 SELECT

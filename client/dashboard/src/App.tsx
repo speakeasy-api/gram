@@ -28,21 +28,15 @@ import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
 import { RBACDevToolbar } from "./components/dev-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
+import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
+import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
+import SwitchOrg from "./pages/demo/SwitchOrg";
 import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
-
-  // Initialize Pylon widget in production only
-  useEffect(() => {
-    if (import.meta.env.PROD) {
-      import("./lib/pylon").then((module) => {
-        module.initializePylon();
-      });
-    }
-  }, []);
 
   const applyTheme = (theme: "light" | "dark") => {
     const root = document.documentElement;
@@ -64,13 +58,13 @@ export default function App() {
       faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
     }
 
-    localStorage.setItem("preferred-theme", theme);
+    localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
 
     setTheme(theme);
   };
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("preferred-theme") as
+    const savedTheme = localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) as
       | "light"
       | "dark"
       | null;
@@ -245,6 +239,13 @@ const RouteProvider = () => {
         <Route path="/slack/register" element={<LoginCheck />}>
           <Route index element={<SlackRegister />} />
         </Route>
+        <Route path="/switch-org" element={<LoginCheck />}>
+          <Route index element={<SwitchOrg />} />
+        </Route>
+        <Route
+          path="/shadow-mcp/request"
+          element={<ShadowMCPRequestAccess />}
+        />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}

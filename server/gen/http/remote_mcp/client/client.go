@@ -33,6 +33,10 @@ type Client struct {
 	// updateServer endpoint.
 	UpdateServerDoer goahttp.Doer
 
+	// DiscoverProtectedResourceMetadata Doer is the HTTP client used to make
+	// requests to the discoverProtectedResourceMetadata endpoint.
+	DiscoverProtectedResourceMetadataDoer goahttp.Doer
+
 	// VerifyURL Doer is the HTTP client used to make requests to the verifyURL
 	// endpoint.
 	VerifyURLDoer goahttp.Doer
@@ -61,17 +65,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateServerDoer:    doer,
-		ListServersDoer:     doer,
-		GetServerDoer:       doer,
-		UpdateServerDoer:    doer,
-		VerifyURLDoer:       doer,
-		DeleteServerDoer:    doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		CreateServerDoer:                      doer,
+		ListServersDoer:                       doer,
+		GetServerDoer:                         doer,
+		UpdateServerDoer:                      doer,
+		DiscoverProtectedResourceMetadataDoer: doer,
+		VerifyURLDoer:                         doer,
+		DeleteServerDoer:                      doer,
+		RestoreResponseBody:                   restoreBody,
+		scheme:                                scheme,
+		host:                                  host,
+		decoder:                               dec,
+		encoder:                               enc,
 	}
 }
 
@@ -166,6 +171,30 @@ func (c *Client) UpdateServer() goa.Endpoint {
 		resp, err := c.UpdateServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteMcp", "updateServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DiscoverProtectedResourceMetadata returns an endpoint that makes HTTP
+// requests to the remoteMcp service discoverProtectedResourceMetadata server.
+func (c *Client) DiscoverProtectedResourceMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDiscoverProtectedResourceMetadataRequest(c.encoder)
+		decodeResponse = DecodeDiscoverProtectedResourceMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDiscoverProtectedResourceMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DiscoverProtectedResourceMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "discoverProtectedResourceMetadata", err)
 		}
 		return decodeResponse(resp)
 	}

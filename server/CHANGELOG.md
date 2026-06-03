@@ -1,5 +1,122 @@
 # server
 
+## 0.64.0
+
+### Minor Changes
+
+- 55a25ac: Add management APIs and dashboard UI for enabling and configuring MCP server tool filtering via tool variation groups.
+
+### Patch Changes
+
+- 8f3591d: resolve /mcp/<slug> OAuth flow handlers via mcp_endpoints with toolset fallback
+- a1f25dc: Prepare RBAC grants for issuer-gated private remote MCP servers so `tools/list` and `tools/call` no longer fail for RBAC-enforced callers. Previously the issuer-gated path skipped grant preparation, causing the proxy's `mcp:connect` interceptors to reject the request with a missing-grants error and return zero tools.
+- 13551ec: Add the `assistant_dashboard_messages` table — the user-visible conversation log for the AI Insights sidebar (user messages + the assistant's delivered replies), kept separate from the raw `chat_messages` transcript. Keyed by chat with a monotonic `seq` for incremental polling. Foundation for AGE-2631.
+- 3011492: Add an endpoint for a dashboard user to send a message to an assistant. The reply is delivered asynchronously — the response returns the chat to poll for it. The caller chooses the conversation thread via a correlation key (send the user id for one continuing thread per user, or a fresh value to start over), and can pass an idempotency key so a retried send doesn't enqueue the message twice.
+- 1078e46: Add an optional `user_id` filter to the risk events list. The Risk Events page now exposes a "User contains..." search box that filters findings by the chat's external user id (case-insensitive substring match), alongside the existing policy and rule filters.
+- 3eaa1cf: Add `message_types` to risk policies so admins can target enforcement and batch scanning to user messages, tool requests, tool responses, or assistant text.
+
+## 0.63.0
+
+### Minor Changes
+
+- b20bb88: Wire `organization_id` into remote session issuers and expose a new `organizationRemoteSessionIssuers` service to manage organization-level remote session issuers
+- 0653bf4: Add `agent.getPlugins` management API method consumed by the Speakeasy device agent. The endpoint accepts an `email` query parameter, resolves plugin assignments for that email plus the `*` wildcard within the caller's org, and returns the published plugins as Claude Code marketplace + plugin references (drops directly into Claude Code's `extraKnownMarketplaces` and `enabledPlugins` settings). Authenticates with an org-scoped API key carrying the new `agent` scope.
+
+  Adds `agent` as a selectable scope on the existing API Keys page so admins can mint these tokens from the same place every other scope is minted.
+
+  Adds `email` as a first-class principal URN type (`urn.PrincipalTypeEmail`) so admins can assign plugins by email address. Existing `user:` and `role:` URNs are unchanged; the wildcard `*` is now exported as `urn.PrincipalWildcard`.
+
+### Patch Changes
+
+- 91e166d: Add an employee data-flow graph endpoint and dashboard visualization for workforce observability.
+- 2ca1372: MCP install pages no longer ask for a GRAM API key on private servers whose identity is delegated to a `user_session_issuer` (the newer OAuth scheme). Previously `resolveSecurityMode` only recognized the legacy `oauth_proxy_server_id` / `external_oauth_server_id` fields, so an issuer-gated private server fell through to the Gram-key prompt even though OAuth handles authentication. The check now also honors the `user_session_issuer` on the toolset and on the bridging `mcp_server`, matching the public serve path.
+- 827615b: Add managed-assistant provisioning: `EnableManagedAssistant` / `DisableManagedAssistant` / `GetManagedAssistant` toggle a project's platform-managed assistant (AI Insights sidebar). Enabling creates the assistant with the ported Insights prompt and all MCP-reachable project toolsets attached and records the `project_managed_assistants` mapping; disabling tears both down. Idempotent and race-safe. Foundation for AGE-2631.
+
+## 0.62.2
+
+### Patch Changes
+
+- 50cfe28: Remote OAuth client lookups no longer surface clients whose bound user session issuer lives in a different project or has been soft-deleted. The legacy `user_session_issuer_id` fallback path now scopes both the client and its user session issuer to the request's project and excludes soft-deleted clients, remote issuers, and user session issuers — matching the join-table read path. In practice this is a no-op for existing data (no production rows are in that state); it closes the gap going forward.
+- 9b8f59a: resolve /mcp well-known OAuth metadata via mcp_endpoints with toolset fallback
+- 585578b: Retry chat completions when the upstream model returns an empty response, and report the upstream details when it still fails, reducing transient playground and chat errors.
+
+## 0.62.1
+
+### Patch Changes
+
+- d7c9904: New assistants default to 5 concurrent warm runtimes (was 1) and a 60-second warm TTL (was 300s) so they handle bursts without queueing while letting idle runtimes reclaim resources faster. Existing assistants keep their saved values.
+- e8f7b31: Route telemetry-only Codex observability hooks through a shell background wrapper instead of Codex's unsupported async hook flag.
+- ce35930: Removed the FreeTierReportingUsageMetrics activity from the CollectPlatformUsageMetricsWorkflow workflow since it is no longer a requirement to report on free tier usage.
+
+## 0.62.0
+
+### Minor Changes
+
+- a00e7aa: serve mcp_endpoints/mcp_servers from /mcp/{slug} with fallback to the legacy toolsets lookup
+- 6039fe5: Add `risk.customRules.suggest` endpoint that calls OpenRouter to turn a one-line description ("what do you want to detect?") into a prefilled custom detection rule. The dashboard's New Custom Detection Rule sheet now opens on a single textarea, calls the new endpoint, and lands the operator in the editable review form with the suggested rule_id, title, description, regex, and severity.
+- 6039fe5: Add a rule playground: from the Detection Rules detail sheet, the operator pastes a sample into a textarea and the dashboard calls the new `risk.rules.test` endpoint which dispatches to the same scanner code (gitleaks, Presidio, prompt-injection, regex) the worker uses. The response is a list of `TestDetectionRuleMatch`es mirroring the runtime risk_result shape.
+
+  Drop the severity-override UI from the rule detail sheet. The override edit / reset affordances will return in a follow-up PR; default severity continues to render as a row badge for context.
+
+- 05805bb: Add management APIs for Shadow MCP approval requests and access rules.
+
+### Patch Changes
+
+- 7fe4787: Svix app portal now correctly grants full capabilities to org admins and read-only access to non-admin members.
+- e60b876: Updated the create portal session endpoint for svix webhooks to request all capabilities for admins explicitly. Previously it was specifying an empty slice of capabilities, which appeared to result in a read only session.
+- 72ccf7b: Fixes login journey for allowed orgs
+- 1c428e4: Enforce Shadow MCP Access Rules at runtime, allowing approved Access Rule exceptions while preserving existing block policy behavior.
+
+## 0.61.0
+
+### Minor Changes
+
+- 37158f0: ingest tags declared on Gram Function tools (top-level `tags` on the manifest and `tags?: string[]` on the TS framework `ToolDefinition`) and expose them through the management API; the playground tool editor now opens for function tools the same way it does for HTTP tools
+- 50ab453: Add SSO and SCIM feature flags with WorkOS event sync. Admin settings now includes product feature toggles for SSO and SCIM. The Identity page shows connection status and gates configure buttons on these flags. Team page invite button is disabled when SSO is active. WorkOS event processing now handles all SSO connection and SCIM directory sync lifecycle events.
+
+### Patch Changes
+
+- 4a65626: Tag the assistant runtime image with a content hash so deploys that don't change the runtime image sources reuse the existing fly machines instead of recycling them on every commit.
+- 1871808: Fix the triggers page failing to load whenever a wake trigger has fired or been cancelled. The triggers list response advertised a status enum of `active | paused`, but wake triggers transition through `fired` and `cancelled` too, so the dashboard's response validation rejected the payload and surfaced a generic "Response validation failed" error. The status enum now includes all four states, and the triggers page renders distinct badges for fired and cancelled triggers instead of mislabelling them as "Paused".
+
+## 0.60.0
+
+### Minor Changes
+
+- 95a8f12: add `remoteMcp.discoverProtectedResourceMetadata` endpoint that probes a remote MCP server for an RFC 9728 OAuth Protected Resource Metadata document server-side under `guardian.Policy`, since external resource servers are unlikely to allowlist the Gram dashboard origin via CORS; follows RFC 9728 §3.1 path-style + origin-style discovery and returns typed unavailability codes with backend-composed user messages
+
+### Patch Changes
+
+- 23d2150: expose tags on tool variations and add a tags row to the playground tool editor for HTTP tools, with chip input, base-source quick-add, override indicator, and reset-to-source affordance
+- 9afce8d: Derive org IDs as deterministic UUIDv5 from WorkOS org ID during Register and auto-provisioning, replacing the previous `"org_" + random UUID` format which was not a valid UUID.
+
+## 0.59.0
+
+### Minor Changes
+
+- 5f4c259: Add admin API endpoints for managing organizations and OAuth/OIDC configuration, protected by a dedicated admin security middleware. Includes a mock OIDC server for local development and testing.
+- 0c431a0: initial MCP resource method interceptors
+- 8e247f9: Chat loading is now paginated by generation, returning one generation per request. The chat detail panel fetches older generations in parallel until the full transcript is assembled, so long-running sessions no longer stall on the initial fetch.
+- b58bf0f: Adds an org-level AI Integrations product surface with Cursor as the first provider. Organization admins can connect a Cursor Admin API key from org settings, and an hourly Temporal workflow polls Cursor for token and cost usage events and writes them into ClickHouse `telemetry_logs` so the dashboard shows Cursor usage and cost alongside Claude Code data. The dashboard cost copy is updated to reflect Cursor and Claude Code coverage, and the employee detail page now shows cost beside total tokens.
+- ed12a35: Add multiple role support to the RBAC system. Users can now be assigned multiple roles simultaneously, replacing the previous single-role assignment model.
+- 3b8bfb4: Adds `risk.results.listForAgent` — a redacted variant of `risk.results.list` for AI assistant / MCP consumption. The new endpoint returns the same fields as `listRiskResults` but replaces the `match` field with `match_redacted`, an opaque token of the form `<redacted len=N sha=XXXXXXXX>` where `N` is the byte length and `XXXXXXXX` is the first 8 hex characters of `sha256(match)`. Identical secrets produce identical fingerprints so agents can dedupe leak counts without ever seeing secret content.
+
+  `shadow_mcp` findings pass `match` through verbatim because the value is a server URL or stdio command identifier (already shown unmasked in the dashboard), and exact byte positions are coarsened to a single `position_known` boolean to remove reconstruction signals.
+
+  The dashboard's AI Insights sidebar gains risk-aware suggestions on the Security Overview and Policy Center pages, plus a system-prompt rule that bars the assistant from echoing `match_redacted` values verbatim.
+
+### Patch Changes
+
+- 9d6ba7b: `/rpc/telemetry.getObservabilityOverview` now accepts an optional `remote_mcp_server_id` filter so callers can scope summary, time-series, and per-tool breakdown metrics to a single Remote MCP source. Combinable with the existing `toolset_slug` filter.
+- 9d6ba7b: `/x/mcp` tools/call traffic now writes a structured row to ClickHouse `telemetry_logs` per invocation, mirroring the existing `/mcp` emit. The row carries `gram.remote_mcp_server.id` and `gram.tool.name` attributes so the Source Activity panel for a Remote MCP source can filter telemetry by the originating remote server. Emission is fire-and-forget so ClickHouse latency does not appear in tool-call tail latency.
+- fae81e1: Public-MCP `/authorize` accepts a new `requireUserIdentity=1` query parameter that forces the caller through the IDP so the resulting session is bound to a user subject rather than an anonymous one. Without the parameter, public-toolset `/authorize` continues to mint an anonymous subject regardless of ambient cookies or Bearer tokens. Callers from outside the endpoint's organization receive a 403 from the IDP callback — public toolsets that need cross-organization access should omit the parameter and use anonymous sessions.
+
+  The assistant runtime sets the parameter when initiating MCP authorization flows against Gram-served endpoints so subsequent tool calls can be attributed to the user. Foreign (non-Gram) authorization endpoints discovered via `.well-known/oauth-authorization-server` do not receive the parameter.
+
+- d4ab97a: Assistants are now instructed to treat OAuth/MCP authentication as owner-only and to avoid pre-emptively prompting for auth on toolsets they have not yet needed.
+- 508aef1: Always emit the `result` field in JSON-RPC success responses from the MCP server. Empty-result handlers (notably `ping`) previously sent `{"jsonrpc":"2.0","id":N}`, which violates JSON-RPC 2.0 and the MCP spec. Cursor's MCP SDK rejected those frames with `invalid_union` zod errors and dropped the transport to a failed state after each keep-alive ping.
+- 20706f4: Make the assistant-runtime reaper resilient to Fly Machines API calls that hang on missing machines. Each Destroy/List call is now bounded by its own timeout, and the Temporal janitor activity uses a heartbeat for liveness rather than relying on a short overall timeout that turned tombstone-machine hangs into elevated workflow-failure alerts.
+
 ## 0.58.0
 
 ### Minor Changes

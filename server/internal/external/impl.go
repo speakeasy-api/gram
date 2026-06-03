@@ -129,7 +129,12 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		string(workos.EventKindOrganizationRoleDeleted),
 		string(workos.EventKindOrganizationMembershipCreated),
 		string(workos.EventKindOrganizationMembershipUpdated),
-		string(workos.EventKindOrganizationMembershipDeleted):
+		string(workos.EventKindOrganizationMembershipDeleted),
+		string(workos.EventKindConnectionActivated),
+		string(workos.EventKindConnectionDeactivated),
+		string(workos.EventKindConnectionDeleted),
+		string(workos.EventKindDirectorySyncActivated),
+		string(workos.EventKindDirectorySyncDeleted):
 
 		orgID := parseOrganizationID(event)
 		if _, err := background.ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSEventsParams{
@@ -158,8 +163,8 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		return nil
 
 	default:
-		// dsync.* and any new event types are accepted so WorkOS stops
-		// retrying, but they are not processed yet.
+		// Remaining dsync.* sub-events and any new event types are accepted
+		// so WorkOS stops retrying, but they are not processed yet.
 		return nil
 	}
 }

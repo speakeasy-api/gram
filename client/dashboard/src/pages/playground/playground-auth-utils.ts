@@ -4,8 +4,6 @@ import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod/v4";
 
-export { getToolsetOAuthMode, type OAuthMode } from "./playgroundOAuthMode";
-
 const ExternalMcpOAuthStatusResponseSchema = z.object({
   status: z.enum(["authenticated", "needs_auth", "disconnected"]),
   provider_name: z.string().optional(),

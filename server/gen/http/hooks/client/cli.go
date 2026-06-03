@@ -17,7 +17,7 @@ import (
 
 // BuildClaudePayload builds the payload for the hooks claude endpoint from CLI
 // flags.
-func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string) (*hooks.ClaudePayload, error) {
+func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string, hooksClaudeHookHostname string) (*hooks.ClaudePayload, error) {
 	var err error
 	var body ClaudeRequestBody
 	{
@@ -42,6 +42,12 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 	{
 		if hooksClaudeProjectSlugInput != "" {
 			projectSlugInput = &hooksClaudeProjectSlugInput
+		}
+	}
+	var hookHostname *string
+	{
+		if hooksClaudeHookHostname != "" {
+			hookHostname = &hooksClaudeHookHostname
 		}
 	}
 	v := &hooks.ClaudePayload{
@@ -75,13 +81,14 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v, nil
 }
 
 // BuildCursorPayload builds the payload for the hooks cursor endpoint from CLI
 // flags.
-func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string) (*hooks.CursorPayload, error) {
+func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string, hooksCursorHookHostname string) (*hooks.CursorPayload, error) {
 	var err error
 	var body CursorRequestBody
 	{
@@ -100,6 +107,12 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	{
 		if hooksCursorProjectSlugInput != "" {
 			projectSlugInput = &hooksCursorProjectSlugInput
+		}
+	}
+	var hookHostname *string
+	{
+		if hooksCursorHookHostname != "" {
+			hookHostname = &hooksCursorHookHostname
 		}
 	}
 	v := &hooks.CursorPayload{
@@ -142,19 +155,20 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v, nil
 }
 
 // BuildCodexPayload builds the payload for the hooks codex endpoint from CLI
 // flags.
-func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string) (*hooks.CodexPayload, error) {
+func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string, hooksCodexHookHostname string) (*hooks.CodexPayload, error) {
 	var err error
 	var body CodexRequestBody
 	{
 		err = json.Unmarshal([]byte(hooksCodexBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
 		}
 		if !(body.HookEventName == "SessionStart" || body.HookEventName == "PreToolUse" || body.HookEventName == "PermissionRequest" || body.HookEventName == "PostToolUse" || body.HookEventName == "UserPromptSubmit" || body.HookEventName == "Stop") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop"}))
@@ -175,9 +189,16 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 			projectSlugInput = &hooksCodexProjectSlugInput
 		}
 	}
+	var hookHostname *string
+	{
+		if hooksCodexHookHostname != "" {
+			hookHostname = &hooksCodexHookHostname
+		}
+	}
 	v := &hooks.CodexPayload{
 		HookEventName:  body.HookEventName,
 		SessionID:      body.SessionID,
+		UserEmail:      body.UserEmail,
 		TranscriptPath: body.TranscriptPath,
 		Cwd:            body.Cwd,
 		Model:          body.Model,
@@ -189,6 +210,7 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v, nil
 }

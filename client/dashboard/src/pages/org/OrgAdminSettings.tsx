@@ -1,4 +1,10 @@
 import { Page } from "@/components/page-layout";
+import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+} from "@/components/ui/tabs";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -21,10 +27,94 @@ import {
   ArrowRightLeft,
   Building2,
   FileSearch,
+  FolderSync,
+  KeyRound,
   Loader2,
   ShieldCheck,
+  Webhook,
 } from "lucide-react";
 import { useState } from "react";
+
+function FeatureToggle({
+  label,
+  description,
+  icon: Icon,
+  featureName,
+  enabled,
+  isPending,
+  onToggle,
+  error,
+}: {
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  featureName: FeatureName;
+  enabled: boolean;
+  isPending: boolean;
+  onToggle: (featureName: FeatureName, enabled: boolean) => void;
+  error?: string;
+}) {
+  return (
+    <div className="border-border bg-card rounded-lg border p-4">
+      <Stack direction="horizontal" align="center" gap={2} className="mb-1">
+        <Icon className="text-muted-foreground h-4 w-4" />
+        <Type variant="body" className="font-medium">
+          {label}
+        </Type>
+      </Stack>
+      <Type muted small className="mb-4 ml-6">
+        {description}
+      </Type>
+      <div className="ml-6 space-y-3">
+        <div className="flex items-center gap-3">
+          <Type variant="body" className="font-medium">
+            Status:
+          </Type>
+          {enabled ? (
+            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500">
+              Enabled
+            </span>
+          ) : (
+            <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Disabled
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          {enabled ? (
+            <Button
+              variant="destructive-primary"
+              onClick={() => onToggle(featureName, false)}
+              disabled={isPending}
+            >
+              {isPending && (
+                <Button.LeftIcon>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>Disable</Button.Text>
+            </Button>
+          ) : (
+            <Button
+              onClick={() => onToggle(featureName, true)}
+              disabled={isPending}
+            >
+              {isPending && (
+                <Button.LeftIcon>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>Enable</Button.Text>
+            </Button>
+          )}
+        </div>
+
+        {error && <Type className="text-destructive text-sm">{error}</Type>}
+      </div>
+    </div>
+  );
+}
 
 function RBACManagementSection() {
   const queryClient = useQueryClient();
@@ -168,7 +258,7 @@ function RBACManagementSection() {
   );
 }
 
-function AuthzChallengeLoggingSection() {
+function ProductFeaturesTab() {
   const queryClient = useQueryClient();
   const { data: features, isLoading, error } = useProductFeatures();
 
@@ -176,6 +266,7 @@ function AuthzChallengeLoggingSection() {
     mutate,
     isPending,
     error: mutError,
+    variables,
   } = useFeaturesSetMutation({
     onSuccess: () => {
       invalidateAllProductFeatures(queryClient);
@@ -196,80 +287,97 @@ function AuthzChallengeLoggingSection() {
   if (error || !features) {
     return (
       <Type className="text-destructive py-2 text-sm">
-        Failed to load feature status: {error?.message ?? "unknown error"}
+        Failed to load feature flags: {error?.message ?? "unknown error"}
       </Type>
     );
   }
 
-  const enabled = features.authzChallengeLoggingEnabled;
+  const pendingFeature =
+    variables?.request?.setProductFeatureRequestBody?.featureName;
+
+  const handleToggle = (featureName: FeatureName, enabled: boolean) => {
+    mutate({
+      request: {
+        setProductFeatureRequestBody: { featureName, enabled },
+      },
+    });
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Type variant="body" className="font-medium">
-          Status:
+      <div className="border-border bg-card rounded-lg border p-4">
+        <Stack direction="horizontal" align="center" gap={2} className="mb-1">
+          <ShieldCheck className="text-muted-foreground h-4 w-4" />
+          <Type variant="body" className="font-medium">
+            RBAC
+          </Type>
+        </Stack>
+        <Type muted small className="mb-4 ml-6">
+          Role-based access control enforcement. Ensure all members have roles
+          assigned before enabling.
         </Type>
-        {enabled ? (
-          <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500">
-            Enabled
-          </span>
-        ) : (
-          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
-            Disabled
-          </span>
-        )}
+        <div className="ml-6">
+          <RBACManagementSection />
+        </div>
       </div>
 
-      <div className="flex gap-2 pt-2">
-        {enabled ? (
-          <Button
-            variant="destructive-primary"
-            onClick={() =>
-              mutate({
-                request: {
-                  setProductFeatureRequestBody: {
-                    featureName: FeatureName.AuthzChallengeLogging,
-                    enabled: false,
-                  },
-                },
-              })
-            }
-            disabled={isPending}
-          >
-            {isPending && (
-              <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>Disable Challenge Logging</Button.Text>
-          </Button>
-        ) : (
-          <Button
-            onClick={() =>
-              mutate({
-                request: {
-                  setProductFeatureRequestBody: {
-                    featureName: FeatureName.AuthzChallengeLogging,
-                    enabled: true,
-                  },
-                },
-              })
-            }
-            disabled={isPending}
-          >
-            {isPending && (
-              <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>Enable Challenge Logging</Button.Text>
-          </Button>
-        )}
-      </div>
+      <FeatureToggle
+        label="Authz Challenge Logging"
+        description='Log every authorization decision (allow/deny) to ClickHouse. Powers auditing of "why did X have access to Y?"'
+        icon={FileSearch}
+        featureName={FeatureName.AuthzChallengeLogging}
+        enabled={features.authzChallengeLoggingEnabled}
+        isPending={
+          isPending && pendingFeature === FeatureName.AuthzChallengeLogging
+        }
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.AuthzChallengeLogging
+            ? mutError?.message
+            : undefined
+        }
+      />
 
-      {mutError && (
-        <Type className="text-destructive text-sm">{mutError.message}</Type>
-      )}
+      <FeatureToggle
+        label="Webhooks"
+        description="Unlocks the Webhooks page for this organization (Svix-backed event delivery). While disabled, members see the preview gate."
+        icon={Webhook}
+        featureName={FeatureName.Webhooks}
+        enabled={features.webhooks}
+        isPending={isPending && pendingFeature === FeatureName.Webhooks}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.Webhooks
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="SSO"
+        description="Enables WorkOS portal link creation for managing SSO."
+        icon={KeyRound}
+        featureName={FeatureName.Sso}
+        enabled={features.ssoEnabled}
+        isPending={isPending && pendingFeature === FeatureName.Sso}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.Sso ? mutError?.message : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="SCIM"
+        description="Enables WorkOS portal link creation for managing SCIM."
+        icon={FolderSync}
+        featureName={FeatureName.Scim}
+        enabled={features.scimEnabled}
+        isPending={isPending && pendingFeature === FeatureName.Scim}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.Scim ? mutError?.message : undefined
+        }
+      />
     </div>
   );
 }
@@ -307,127 +415,102 @@ export function OrgAdminSettingsInner() {
   const client = useSdkClient();
 
   return (
-    <>
-      <Heading variant="h4" className="mb-2">
-        Organization Info
-      </Heading>
-      <Type muted small className="mb-4">
-        Details about the current organization.
-      </Type>
-      <div className="border-border bg-card mb-8 rounded-lg border p-4">
-        <Stack direction="horizontal" align="center" gap={2} className="mb-3">
-          <Building2 className="text-muted-foreground h-4 w-4" />
-          <Type variant="body" className="font-medium">
-            Organization
-          </Type>
-        </Stack>
-        <div className="ml-6 space-y-1">
-          <div className="flex gap-3">
-            <Type variant="body" className="text-muted-foreground text-sm">
-              Slug
-            </Type>
-            <Type variant="body" className="font-mono text-sm">
-              {organization.slug}
-            </Type>
-          </div>
-          <div className="flex gap-3">
-            <Type variant="body" className="text-muted-foreground text-sm">
-              ID
-            </Type>
-            <Type variant="body" className="font-mono text-sm">
-              {organization.id}
-            </Type>
-          </div>
-        </div>
+    <Tabs defaultValue="info">
+      <div className="border-border -mx-8 border-b px-8">
+        <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+          <PageTabsTrigger value="info">Info</PageTabsTrigger>
+          <PageTabsTrigger value="features">Product Features</PageTabsTrigger>
+        </TabsList>
       </div>
 
-      <Heading variant="h4" className="mb-2">
-        Organization Override
-      </Heading>
-      <Type muted small className="mb-4">
-        Impersonate a different organization by switching to its slug. This will
-        log you out and redirect you to the target organization.
-      </Type>
-      <div className="border-border bg-card mb-8 rounded-lg border p-4">
-        <Stack direction="horizontal" align="center" gap={2} className="mb-4">
-          <ArrowRightLeft className="text-muted-foreground h-4 w-4" />
-          <Type variant="body" className="font-medium">
-            Switch Organization
-          </Type>
-        </Stack>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.currentTarget);
-            const val = formData.get("gram_admin_override");
-            if (typeof val !== "string" || !val.trim()) {
-              return;
-            }
+      <TabsContent value="info" className="mt-6">
+        <Heading variant="h4" className="mb-2">
+          Organization Info
+        </Heading>
+        <Type muted small className="mb-4">
+          Details about the current organization.
+        </Type>
+        <div className="border-border bg-card mb-8 rounded-lg border p-4">
+          <Stack direction="horizontal" align="center" gap={2} className="mb-3">
+            <Building2 className="text-muted-foreground h-4 w-4" />
+            <Type variant="body" className="font-medium">
+              Organization
+            </Type>
+          </Stack>
+          <div className="ml-6 space-y-1">
+            <div className="flex gap-3">
+              <Type variant="body" className="text-muted-foreground text-sm">
+                Slug
+              </Type>
+              <Type variant="body" className="font-mono text-sm">
+                {organization.slug}
+              </Type>
+            </div>
+            <div className="flex gap-3">
+              <Type variant="body" className="text-muted-foreground text-sm">
+                ID
+              </Type>
+              <Type variant="body" className="font-mono text-sm">
+                {organization.id}
+              </Type>
+            </div>
+          </div>
+        </div>
 
-            await client.auth.logout();
-            document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
-            window.location.href = "/login";
-          }}
-          className="ml-6 flex max-w-md gap-2"
-        >
-          <Input
-            placeholder="organization-slug"
-            name="gram_admin_override"
-            className="flex-1"
-            required
-          />
-          <Button type="submit">Go to Org</Button>
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={async () => {
-              document.cookie = `gram_admin_override=; path=/; max-age=0;`;
+        <Heading variant="h4" className="mb-2">
+          Organization Override
+        </Heading>
+        <Type muted small className="mb-4">
+          Impersonate a different organization by switching to its slug. This
+          will log you out and redirect you to the target organization.
+        </Type>
+        <div className="border-border bg-card rounded-lg border p-4">
+          <Stack direction="horizontal" align="center" gap={2} className="mb-4">
+            <ArrowRightLeft className="text-muted-foreground h-4 w-4" />
+            <Type variant="body" className="font-medium">
+              Switch Organization
+            </Type>
+          </Stack>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const val = formData.get("gram_admin_override");
+              if (typeof val !== "string" || !val.trim()) {
+                return;
+              }
+
               await client.auth.logout();
+              document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
               window.location.href = "/login";
             }}
+            className="ml-6 flex max-w-md gap-2"
           >
-            Clear override
-          </Button>
-        </form>
-      </div>
-
-      <Heading variant="h4" className="mb-2">
-        RBAC Management
-      </Heading>
-      <Type muted small className="mb-4">
-        Manage role-based access control for this organization. Ensure all
-        members have roles assigned before enabling.
-      </Type>
-      <div className="border-border bg-card mb-8 rounded-lg border p-4">
-        <Stack direction="horizontal" align="center" gap={2} className="mb-4">
-          <ShieldCheck className="text-muted-foreground h-4 w-4" />
-          <Type variant="body" className="font-medium">
-            Access Control
-          </Type>
-        </Stack>
-        <div className="ml-6">
-          <RBACManagementSection />
+            <Input
+              placeholder="organization-slug"
+              name="gram_admin_override"
+              className="flex-1"
+              required
+            />
+            <Button type="submit">Go to Org</Button>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={async () => {
+                document.cookie = `gram_admin_override=; path=/; max-age=0;`;
+                await client.auth.logout();
+                window.location.href = "/login";
+              }}
+            >
+              Clear override
+            </Button>
+          </form>
         </div>
-      </div>
+      </TabsContent>
 
-      <Heading variant="h4" className="mb-2">
-        Authz Challenge Logging
-      </Heading>
-      <Type muted small className="mb-4">
-        Log every authorization decision (allow/deny) to ClickHouse. Powers the
-        challenge UI for auditing &ldquo;why did X have access to Y?&rdquo;
-      </Type>
-      <div className="border-border bg-card rounded-lg border p-4">
-        <Stack direction="horizontal" align="center" gap={2} className="mb-4">
-          <FileSearch className="text-muted-foreground h-4 w-4" />
-          <Type variant="body" className="font-medium">
-            Challenge Logging
-          </Type>
-        </Stack>
-        <div className="ml-6">
-          <AuthzChallengeLoggingSection />
-        </div>
-      </div>
-    </>
+      <TabsContent value="features" className="mt-6">
+        <ProductFeaturesTab />
+      </TabsContent>
+    </Tabs>
   );
 }

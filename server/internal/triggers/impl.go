@@ -106,6 +106,11 @@ func (s *Service) ListTriggerInstances(ctx context.Context, _ *gen.ListTriggerIn
 
 	result := make([]*types.TriggerInstance, 0, len(items))
 	for _, item := range items {
+		// Direct-ingress triggers (e.g. the dashboard assistant sidebar) are
+		// system-managed plumbing, not user-configured triggers — hide them.
+		if def, ok := bgtriggers.GetDefinition(item.DefinitionSlug); ok && def.Kind == bgtriggers.KindDirect {
+			continue
+		}
 		view, err := buildTriggerView(item, s.app.WebhookURL(item))
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)

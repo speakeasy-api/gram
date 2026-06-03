@@ -5,9 +5,12 @@ import { InsightsConfig } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/index.js";
+import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router";
@@ -198,8 +201,11 @@ function SecurityOverviewContent() {
       onClearCustomRange={clearCustomRange}
     />
   );
-  const overviewQuery = useRiskOverview({ from, to });
+  const overviewQuery = useRiskOverview({ from, to }, undefined, {
+    placeholderData: keepPreviousData,
+  });
   const overview = overviewQuery.data;
+  const isOverviewLoading = overviewQuery.isLoading;
 
   const categoriesIndexHref = useMemo(() => {
     const r = (
@@ -292,16 +298,6 @@ function SecurityOverviewContent() {
     });
   }, [overview?.topUsers, routes.riskOverview, location.search]);
 
-  if (overviewQuery.isLoading) {
-    return (
-      <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
-        <div className="flex items-center justify-center py-20">
-          <p className="text-muted-foreground text-sm">Loading...</p>
-        </div>
-      </RiskOverviewShell>
-    );
-  }
-
   if (overviewQuery.error) {
     return (
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
@@ -323,30 +319,40 @@ function SecurityOverviewContent() {
     );
   }
 
-  if (!overview) {
-    return null;
-  }
+  const hasHistoricActivity =
+    (overview?.messagesScanned ?? 0) > 0 || (overview?.findings ?? 0) > 0;
 
-  if (overview.activePolicies === 0) {
+  // Only collapse to the empty state once data has actually arrived —
+  // during the first fetch we render the full shell with skeletons so the
+  // layout never blinks between "Loading…" and the real page. Also keep the
+  // full overview visible whenever the selected range contains historic
+  // activity, so disabling every policy doesn't hide prior scans and
+  // findings.
+  if (overview && overview.activePolicies === 0 && !hasHistoricActivity) {
     return <NoPoliciesEmptyState />;
   }
 
-  const hasFindings = overview.findings > 0;
+  const hasFindings = (overview?.findings ?? 0) > 0;
+  const policiesDisabledWithHistory =
+    !!overview && overview.activePolicies === 0 && hasHistoricActivity;
 
   // Brief security-flavoured context for the AI Insights sidebar. Numbers are
   // pulled from the current risk overview query so the assistant can reason
   // about "this period" without re-fetching, but it must still call the risk
-  // tools for anything that isn't a top-line metric.
-  const insightsContext = [
-    "Page: Security Overview.",
-    `Selected date range: ${rangeLabel}.`,
-    `Active risk policies: ${overview.activePolicies}.`,
-    `Findings in current range: ${overview.findings}.`,
-    `Messages scanned: ${overview.messagesScanned}.`,
-    `Flagged sessions: ${overview.flaggedSessions}.`,
-    "Available risk tools: listRiskResultsForAgent (finding-level, match is redacted to <redacted len=N sha=XXXXXXXX>), listRiskResultsByChat (chat-level rollups), listRiskPolicies, getRiskPolicyStatus, listShadowMCPApprovals.",
-    "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
-  ].join(" ");
+  // tools for anything that isn't a top-line metric. Only mount once `overview`
+  // is populated so the contextInfo never embeds stale or undefined counts.
+  const insightsContext = overview
+    ? [
+        "Page: Security Overview.",
+        `Selected date range: ${rangeLabel}.`,
+        `Active risk policies: ${overview.activePolicies}.`,
+        `Findings in current range: ${overview.findings}.`,
+        `Messages scanned: ${overview.messagesScanned}.`,
+        `Flagged sessions: ${overview.flaggedSessions}.`,
+        "Available risk tools: listRiskResultsForAgent (finding-level, match is redacted to <redacted len=N sha=XXXXXXXX>), listRiskResultsByChat (chat-level rollups), listRiskPolicies, getRiskPolicyStatus, listShadowMCPApprovals.",
+        "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
+      ].join(" ")
+    : null;
 
   const insightsSuggestions = [
     {
@@ -377,76 +383,124 @@ function SecurityOverviewContent() {
 
   return (
     <>
-      <InsightsConfig
-        contextInfo={insightsContext}
-        suggestions={insightsSuggestions}
-        title="Risk insights"
-        subtitle="Ask about policies, findings, and shadow MCP activity. Match content is redacted before it reaches the assistant."
-      />
+      {insightsContext && (
+        <InsightsConfig
+          contextInfo={insightsContext}
+          suggestions={insightsSuggestions}
+          title="Risk insights"
+          subtitle="Ask about policies, findings, and shadow MCP activity. Match content is redacted before it reaches the assistant."
+        />
+      )}
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
+        {policiesDisabledWithHistory && (
+          <div className="bg-muted/30 flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
+            <Icon
+              name="circle-alert"
+              className="text-muted-foreground mt-0.5 size-4 shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <Type small className="font-medium">
+                All risk policies are disabled
+              </Type>
+              <Type small muted>
+                Showing historic findings only — new chat messages will not be
+                scanned until a policy is re-enabled.
+              </Type>
+            </div>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={routes.policyCenter.href()}>
+                <Button.Text>Manage Policies</Button.Text>
+                <Button.RightIcon>
+                  <Icon name="arrow-right" />
+                </Button.RightIcon>
+              </Link>
+            </Button>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <MetricCard
-            title="Events Scanned"
-            value={overview.messagesScanned}
-            format="number"
-            icon="scan-search"
-          />
-          <MetricCard
-            title="Findings"
-            value={overview.findings}
-            format="number"
-            icon="flag"
-          />
-          <MetricCard
-            title="Flagged Sessions"
-            value={overview.flaggedSessions}
-            format="number"
-            icon="message-square"
-          />
-          <MetricCard
-            title="Active Policies"
-            value={overview.activePolicies}
-            format="number"
-            icon="shield-check"
-          />
+          {isOverviewLoading ? (
+            <Skeleton className="h-[100px] rounded-lg" />
+          ) : (
+            <MetricCard
+              title="Events Scanned"
+              value={overview?.messagesScanned ?? 0}
+              format="compact"
+              icon="scan-search"
+            />
+          )}
+          {isOverviewLoading ? (
+            <Skeleton className="h-[100px] rounded-lg" />
+          ) : (
+            <MetricCard
+              title="Findings"
+              value={overview?.findings ?? 0}
+              format="compact"
+              icon="flag"
+            />
+          )}
+          {isOverviewLoading ? (
+            <Skeleton className="h-[100px] rounded-lg" />
+          ) : (
+            <MetricCard
+              title="Flagged Sessions"
+              value={overview?.flaggedSessions ?? 0}
+              format="compact"
+              icon="message-square"
+            />
+          )}
+          {isOverviewLoading ? (
+            <Skeleton className="h-[100px] rounded-lg" />
+          ) : (
+            <MetricCard
+              title="Active Policies"
+              value={overview?.activePolicies ?? 0}
+              format="compact"
+              icon="shield-check"
+            />
+          )}
         </div>
       </RiskOverviewShell>
 
-      {overview.activePolicies > 0 && (
-        <RiskActivitySection>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            <DashboardChartCard
-              title="Top Risk Events by Category"
-              empty={!hasFindings || topCategories.length === 0}
-              action={
-                <ViewAllLink
-                  href={categoriesIndexHref}
-                  label="View all categories"
-                />
-              }
-            >
-              <RankedBarList items={topCategories} />
-            </DashboardChartCard>
-            <DashboardChartCard
-              title="Top Risk Events by Rule"
-              empty={!hasFindings || topRules.length === 0}
-              action={
-                <ViewAllLink href={rulesIndexHref} label="View all rules" />
-              }
-            >
-              <RankedBarList items={topRules} />
-            </DashboardChartCard>
-            <DashboardChartCard
-              title="Users with Most Findings"
-              empty={!hasFindings || topUsers.length === 0}
-              action={
-                <ViewAllLink href={usersIndexHref} label="View all users" />
-              }
-            >
-              <RankedBarList items={topUsers} />
-            </DashboardChartCard>
-          </div>
+      <RiskActivitySection>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <DashboardChartCard
+            title="Top Risk Events by Category"
+            loading={isOverviewLoading}
+            empty={!hasFindings || topCategories.length === 0}
+            action={
+              <ViewAllLink
+                href={categoriesIndexHref}
+                label="View all categories"
+              />
+            }
+          >
+            <RankedBarList items={topCategories} />
+          </DashboardChartCard>
+          <DashboardChartCard
+            title="Top Risk Events by Rule"
+            loading={isOverviewLoading}
+            empty={!hasFindings || topRules.length === 0}
+            action={
+              <ViewAllLink href={rulesIndexHref} label="View all rules" />
+            }
+          >
+            <RankedBarList items={topRules} />
+          </DashboardChartCard>
+          <DashboardChartCard
+            title="Users with Most Findings"
+            loading={isOverviewLoading}
+            empty={!hasFindings || topUsers.length === 0}
+            action={
+              <ViewAllLink href={usersIndexHref} label="View all users" />
+            }
+          >
+            <RankedBarList items={topUsers} />
+          </DashboardChartCard>
+        </div>
 
+        {isOverviewLoading || !overview ? (
+          <Skeleton className="h-[250px] w-full rounded-lg" />
+        ) : (
           <ChartCard
             title="Risk Events over Time"
             chartId={RISK_TREND_CHART_ID}
@@ -464,8 +518,8 @@ function SecurityOverviewContent() {
               height={250}
             />
           </ChartCard>
-        </RiskActivitySection>
-      )}
+        )}
+      </RiskActivitySection>
     </>
   );
 }
@@ -529,18 +583,30 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
 function DashboardChartCard({
   title,
   empty,
+  loading,
   children,
   action,
 }: {
   title: string;
   empty: boolean;
+  loading?: boolean;
   children: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <DashboardCard title={title} action={action}>
-      {empty ? <ChartEmptyState /> : children}
+      {loading ? <SkeletonList /> : empty ? <ChartEmptyState /> : children}
     </DashboardCard>
+  );
+}
+
+function SkeletonList() {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Skeleton key={i} className="h-6 w-full" />
+      ))}
+    </div>
   );
 }
 

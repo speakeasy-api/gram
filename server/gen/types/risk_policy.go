@@ -22,6 +22,17 @@ type RiskPolicy struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
 	PromptInjectionRules []string
+	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
+	// policy author has unchecked within an otherwise-enabled category. Empty
+	// means every rule in the selected categories runs; matching findings are
+	// dropped at scan time.
+	DisabledRules []string
+	// Custom detection rule ids enabled for this policy.
+	CustomRuleIds []string
+	// Message types this policy applies to. When empty or omitted, applies to all
+	// types. Valid values: user_message, tool_request, tool_response,
+	// assistant_message.
+	MessageTypes []string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).

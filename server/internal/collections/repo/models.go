@@ -27,7 +27,8 @@ type OrganizationMcpCollectionServerAttachment struct {
 	PublishedBy  pgtype.Text
 	ID           uuid.UUID
 	CollectionID uuid.UUID
-	ToolsetID    uuid.UUID
+	ToolsetID    uuid.NullUUID
+	McpServerID  uuid.NullUUID
 	Deleted      bool
 }
 
@@ -47,6 +48,7 @@ type Toolset struct {
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
 	UserSessionIssuerID    uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

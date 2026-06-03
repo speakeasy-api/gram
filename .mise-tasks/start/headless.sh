@@ -17,11 +17,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Logs: $LOG_DIR/{mock-idp,server,worker,dashboard}.log"
+echo "Logs: $LOG_DIR/{dev-idp,server,worker,dashboard}.log"
 echo ""
 
-echo "Starting mock-idp..."
-mise run start:mock-idp > "$LOG_DIR/mock-idp.log" 2>&1 &
+echo "Starting dev-idp..."
+mise run start:dev-idp > "$LOG_DIR/dev-idp.log" 2>&1 &
 
 echo "Starting server..."
 mise run start:server > "$LOG_DIR/server.log" 2>&1 &

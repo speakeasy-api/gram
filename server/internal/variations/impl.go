@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -103,6 +105,7 @@ func (s *Service) ListGlobal(ctx context.Context, payload *gen.ListGlobalPayload
 			ConfirmPrompt:   conv.FromPGText[string](row.ToolVariation.ConfirmPrompt),
 			Name:            conv.FromPGText[string](row.ToolVariation.Name),
 			Description:     conv.FromPGText[string](row.ToolVariation.Description),
+			Tags:            row.ToolVariation.Tags,
 			Summarizer:      conv.FromPGText[string](row.ToolVariation.Summarizer),
 			Title:           conv.FromPGText[string](row.ToolVariation.Title),
 			ReadOnlyHint:    conv.FromPGBool[bool](row.ToolVariation.ReadOnlyHint),
@@ -117,6 +120,82 @@ func (s *Service) ListGlobal(ctx context.Context, payload *gen.ListGlobalPayload
 	return &gen.ListVariationsResult{
 		Variations: variations,
 	}, nil
+}
+
+func (s *Service) ListGroups(ctx context.Context, payload *gen.ListGroupsPayload) (res *gen.ListToolVariationGroupsResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.ListToolVariationsGroups(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing tool variation groups").Log(ctx, s.logger)
+	}
+
+	groups := make([]*types.ToolVariationGroup, 0, len(rows))
+	for _, row := range rows {
+		groups = append(groups, toGroup(row))
+	}
+
+	return &gen.ListToolVariationGroupsResult{Groups: groups}, nil
+}
+
+func (s *Service) CreateGlobal(ctx context.Context, payload *gen.CreateGlobalPayload) (res *gen.ToolVariationGroupResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// The tool variations group backs MCP tool filtering, so this write is
+	// gated on mcp:write to stay consistent with the assign paths
+	// (toolsets.setToolVariationsGroup and mcpServers.update) and the
+	// dashboard controls.
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger
+	projectID := *authCtx.ProjectID
+
+	// No transaction: InitGlobalToolVariationsGroup is a single atomic CTE and
+	// the read-back is independent. Running on the pool also lets us recover
+	// from a failed Init without poisoning a surrounding transaction.
+	groupID, err := s.repo.PokeGlobalToolVariationsGroup(ctx, projectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows) || (err == nil && groupID == uuid.Nil):
+		groupID, err = s.repo.InitGlobalToolVariationsGroup(ctx, repo.InitGlobalToolVariationsGroupParams{
+			ProjectID:   projectID,
+			Name:        "Global tool variations",
+			Description: conv.ToPGTextEmpty(""),
+		})
+		// Two concurrent first-time callers can both miss on Poke and race to
+		// Init; the loser violates the project_tool_variations unique index.
+		// Treat that as "already created" and re-poke for the winner's group.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			groupID, err = s.repo.PokeGlobalToolVariationsGroup(ctx, projectID)
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error initializing global tool variations group").Log(ctx, logger)
+		}
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error poking global tool variations group").Log(ctx, logger)
+	}
+
+	group, err := s.repo.GetToolVariationsGroupByID(ctx, repo.GetToolVariationsGroupByIDParams{
+		ID:        groupID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading tool variations group").Log(ctx, logger)
+	}
+
+	return &gen.ToolVariationGroupResult{Group: toGroup(group)}, nil
 }
 
 func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPayload) (res *gen.UpsertGlobalToolVariationResult, err error) {
@@ -288,6 +367,16 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 	}, nil
 }
 
+func toGroup(row repo.ToolVariationsGroup) *types.ToolVariationGroup {
+	return &types.ToolVariationGroup{
+		ID:          row.ID.String(),
+		Name:        row.Name,
+		Description: conv.FromPGText[string](row.Description),
+		CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:   row.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
 func toVariation(row repo.ToolVariation) *types.ToolVariation {
 	return &types.ToolVariation{
 		ID:              row.ID.String(),
@@ -298,6 +387,7 @@ func toVariation(row repo.ToolVariation) *types.ToolVariation {
 		ConfirmPrompt:   conv.FromPGText[string](row.ConfirmPrompt),
 		Name:            conv.FromPGText[string](row.Name),
 		Description:     conv.FromPGText[string](row.Description),
+		Tags:            row.Tags,
 		Summarizer:      conv.FromPGText[string](row.Summarizer),
 		Title:           conv.FromPGText[string](row.Title),
 		ReadOnlyHint:    conv.FromPGBool[bool](row.ReadOnlyHint),

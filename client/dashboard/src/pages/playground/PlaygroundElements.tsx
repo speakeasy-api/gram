@@ -9,6 +9,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
 import type { Toolset } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -23,16 +24,14 @@ import {
   useGetMcpMetadata,
   useListEnvironments,
 } from "@gram/client/react-query/index.js";
+import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, HistoryIcon, ShieldAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import {
-  getToolsetOAuthMode,
-  useExternalMcpOAuthStatus,
-} from "./playground-auth-utils";
+import { useExternalMcpOAuthStatus } from "./playground-auth-utils";
 import { GramThreadWelcome } from "./PlaygroundElementsOverrides";
 import {
   PlaygroundMcpAppsProvider,
@@ -101,16 +100,12 @@ export function PlaygroundElements({
     mcpMetadata,
   );
 
-  // Check if this toolset requires OAuth at the toolset level
-  const oauthMode = useMemo(
-    () => (toolset ? getToolsetOAuthMode(toolset) : "none"),
-    [toolset],
-  );
-  const hasOAuth = oauthMode !== "none";
+  // Standard OAuth discovery against the MCP URL — no toolset-field sniffing.
+  const { oauthRequired } = useMcpOAuthRequired(mcpUrl);
 
   const { data: oauthStatus, isLoading: oauthStatusLoading } =
     useExternalMcpOAuthStatus(toolset?.id, {
-      enabled: hasOAuth,
+      enabled: oauthRequired,
     });
 
   // Create getSession function using SDK mutation with session auth
@@ -158,6 +153,44 @@ export function PlaygroundElements({
     staleTime: 1000 * 60 * 30,
   });
 
+  // Mint a user-session JWT scoped to the toolset for issuer-gated toolsets.
+  // This is what the elements MCP client will send as `Authorization: Bearer`
+  // on /mcp/{slug} requests, so the runtime gateway resolves the dashboard
+  // user's stored upstream credentials via the same path a real MCP client
+  // would after an OAuth dance — no special-casing in ApplyIssuerGate.
+  const mintUserSessionMutation = useMintUserSessionMutation();
+  const gatewayTokenQuery = useQuery({
+    queryKey: [
+      "playground-gateway-token",
+      project.id,
+      toolset?.id,
+      session.user.id,
+    ],
+    queryFn: async () => {
+      if (!toolset?.id) return null;
+      const result = await mintUserSessionMutation.mutateAsync({
+        request: {
+          gramProject: project.id,
+          mintUserSessionRequestBody: { toolsetId: toolset.id },
+        },
+        security: {
+          sessionHeaderGramSession: session.session,
+          projectSlugHeaderGramProject: project.slug,
+        },
+      });
+      return result;
+    },
+    // Only mint for issuer-gated toolsets — the mint RPC 400s otherwise.
+    enabled: !!toolset?.id && !!toolset?.userSessionIssuerSlug,
+    // The minted JWT is good for ~1h; refetch every 45 minutes so we always
+    // have headroom before expiry.
+    staleTime: 1000 * 60 * 45,
+    refetchInterval: 1000 * 60 * 45,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const gatewayToken = gatewayTokenQuery.data?.accessToken;
+
   const effectiveEnvironmentSlug = playgroundEnvironmentSlug ?? environmentSlug;
 
   const mcpAppHeaders = useMemo(() => {
@@ -185,16 +218,11 @@ export function PlaygroundElements({
 
   // Block rendering if OAuth is required but user is not authenticated
   if (
-    hasOAuth &&
+    oauthRequired &&
     !oauthStatusLoading &&
     oauthStatus?.status !== "authenticated"
   ) {
-    const providerName =
-      toolset?.oauthProxyServer?.oauthProxyProviders?.[0]?.slug ??
-      toolset?.externalOauthServer?.slug ??
-      toolset?.name ??
-      "provider";
-    return <OAuthRequiredNotice providerName={providerName} />;
+    return <OAuthRequiredNotice providerName={toolset?.name ?? "provider"} />;
   }
 
   return (
@@ -206,6 +234,13 @@ export function PlaygroundElements({
           session: getSession,
           headers: {
             "X-Gram-Source": "playground",
+            // Forwarded to /mcp/{slug} so the issuer-gated runtime gate can
+            // resolve the dashboard user's stored upstream credentials.
+            // Requires the elements library to propagate api.headers to MCP
+            // requests (useAuth merges them into the headers it returns).
+            ...(gatewayToken
+              ? { Authorization: `Bearer ${gatewayToken}` }
+              : {}),
           },
         },
         history: {

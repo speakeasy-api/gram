@@ -77,6 +77,9 @@ type CreateMcpServerPayload struct {
 	RemoteMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server. Omit to leave filtering disabled.
+	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 }
@@ -141,6 +144,10 @@ type UpdateMcpServerPayload struct {
 	RemoteMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server. Omit to disable filtering (cleared to null, consistent with the
+	// full-record replace semantics of the other UUID references).
+	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 }

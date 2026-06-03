@@ -179,11 +179,9 @@ export function InsightsToolsContent() {
     logFilters,
     selectedHookTypes,
     activeFilters,
-    addKnownServers,
     serverOptions,
     handleServerSelectionChange,
     userEmailOptions,
-    addKnownUserEmails,
     handleUserEmailSelectionChange,
     addFilter,
     handleHookTypesChange,
@@ -275,19 +273,6 @@ export function InsightsToolsContent() {
     throwOnError: false,
   });
 
-  useEffect(() => {
-    if (!summaryData) return;
-    addKnownServers(summaryData.breakdown.map((r) => r.serverName));
-  }, [summaryData, addKnownServers]);
-
-  useEffect(() => {
-    addKnownUserEmails(
-      groupedTraces
-        .map((t) => t.userEmail)
-        .filter((e): e is string => Boolean(e)),
-    );
-  }, [groupedTraces, addKnownUserEmails]);
-
   const refetch = useCallback(() => {
     refetchLogs();
   }, [refetchLogs]);
@@ -300,7 +285,7 @@ export function InsightsToolsContent() {
       <InsightsConfig
         mcpConfig={mcpConfig}
         title="Explore Tools"
-        subtitle="Ask me about your tools! Powered by Elements + Gram MCP"
+        subtitle="Ask me about your tools! Powered by Elements + platform MCP"
         hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (

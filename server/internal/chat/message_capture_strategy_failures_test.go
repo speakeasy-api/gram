@@ -19,7 +19,8 @@ import (
 func TestCaptureMessage_FlushesPendingRowsAtomically(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -85,7 +86,8 @@ func TestCaptureMessage_FlushesPendingRowsAtomically(t *testing.T) {
 func TestCaptureMessage_AssistantWriteFailure_SelfHealsOnNextTurn(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -125,7 +127,8 @@ func TestCaptureMessage_AssistantWriteFailure_SelfHealsOnNextTurn(t *testing.T) 
 func TestCaptureMessage_BothWritesFailed_SelfHealsOnNextTurn(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 
@@ -163,7 +166,8 @@ func TestCaptureMessage_BothWritesFailed_SelfHealsOnNextTurn(t *testing.T) {
 func TestCaptureMessage_NilSessionFallsBackToCurrentGeneration(t *testing.T) {
 	t.Parallel()
 
-	ctx, conn, projectID, orgID := newTestChatContext(t)
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 	s := newCaptureStrategy(t, conn)
 	chatID := uuid.New()
 

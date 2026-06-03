@@ -4,3 +4,4 @@ server/gen/** linguist-generated
 server/internal/**/*.sql.go linguist-generated
 openrouter/** linguist-generated
 .speakeasy/*.lock linguist-generated
+.speakeasy/out.openapi.yaml linguist-generated

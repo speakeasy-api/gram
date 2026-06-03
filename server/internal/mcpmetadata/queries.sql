@@ -1,6 +1,7 @@
 -- name: GetMetadataForToolset :one
 SELECT id,
        toolset_id,
+       mcp_server_id,
        project_id,
        external_documentation_url,
        external_documentation_text,
@@ -16,6 +17,25 @@ WHERE toolset_id = @toolset_id
 ORDER BY updated_at DESC
 LIMIT 1;
 
+-- name: GetMetadataByMcpServerID :one
+SELECT id,
+       toolset_id,
+       mcp_server_id,
+       project_id,
+       external_documentation_url,
+       external_documentation_text,
+       logo_id,
+       instructions,
+       header_display_names,
+       default_environment_id,
+       installation_override_url,
+       created_at,
+       updated_at
+FROM mcp_metadata
+WHERE mcp_server_id = @mcp_server_id
+ORDER BY updated_at DESC
+LIMIT 1;
+
 -- name: UpsertMetadata :one
 INSERT INTO mcp_metadata (
     toolset_id,
@@ -27,7 +47,7 @@ INSERT INTO mcp_metadata (
     default_environment_id,
     installation_override_url
 ) VALUES (@toolset_id, @project_id, @external_documentation_url, @external_documentation_text, @logo_id, @instructions, @default_environment_id, @installation_override_url)
-ON CONFLICT (toolset_id)
+ON CONFLICT (toolset_id) WHERE toolset_id IS NOT NULL
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               external_documentation_text = EXCLUDED.external_documentation_text,
@@ -38,6 +58,41 @@ DO UPDATE SET project_id = EXCLUDED.project_id,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at;
+
+-- name: UpsertMetadataByMcpServerID :one
+INSERT INTO mcp_metadata (
+    mcp_server_id,
+    project_id,
+    external_documentation_url,
+    external_documentation_text,
+    logo_id,
+    instructions,
+    default_environment_id,
+    installation_override_url
+) VALUES (@mcp_server_id, @project_id, @external_documentation_url, @external_documentation_text, @logo_id, @instructions, @default_environment_id, @installation_override_url)
+ON CONFLICT (mcp_server_id) WHERE mcp_server_id IS NOT NULL
+DO UPDATE SET project_id = EXCLUDED.project_id,
+              external_documentation_url = EXCLUDED.external_documentation_url,
+              external_documentation_text = EXCLUDED.external_documentation_text,
+              logo_id = EXCLUDED.logo_id,
+              instructions = EXCLUDED.instructions,
+              default_environment_id = EXCLUDED.default_environment_id,
+              installation_override_url = EXCLUDED.installation_override_url,
+              updated_at = clock_timestamp()
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
           project_id,
           external_documentation_url,
           external_documentation_text,
@@ -53,6 +108,11 @@ RETURNING id,
 SELECT header_display_names
 FROM mcp_metadata
 WHERE toolset_id = @toolset_id;
+
+-- name: GetHeaderDisplayNamesByMcpServerID :one
+SELECT header_display_names
+FROM mcp_metadata
+WHERE mcp_server_id = @mcp_server_id;
 
 -- name: ListEnvironmentConfigs :many
 SELECT id,

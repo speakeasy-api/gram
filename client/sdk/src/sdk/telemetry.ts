@@ -3,6 +3,7 @@
  */
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
+import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
@@ -33,6 +34,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getEmployeeDataFlowGraph telemetry
+   *
+   * @remarks
+   * Get an employee's MCP data flow graph across origins, clients, servers, and tools
+   */
+  async getEmployeeDataFlowGraph(
+    request: operations.GetEmployeeDataFlowGraphRequest,
+    security?: operations.GetEmployeeDataFlowGraphSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetEmployeeDataFlowGraphResult> {
+    return unwrapAsync(telemetryGetEmployeeDataFlowGraph(
       this,
       request,
       security,

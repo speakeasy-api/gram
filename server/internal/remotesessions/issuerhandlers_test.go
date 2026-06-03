@@ -62,6 +62,12 @@ func TestCreateRemoteSessionIssuer(t *testing.T) {
 	require.Equal(t, "https://idp.example.com/authorize", *result.AuthorizationEndpoint)
 	require.False(t, result.Oidc)
 
+	// The project's organization id is populated from the auth context.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotEmpty(t, result.ProjectID)
+	require.Equal(t, authCtx.ActiveOrganizationID, result.OrganizationID)
+
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
@@ -321,6 +327,145 @@ func TestUpdateRemoteSessionIssuer_NotFound(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// An explicit empty string on any of the four nullable endpoint fields
+// clears the column to NULL. registration_endpoint clearing is the
+// operator-facing path for disabling DCR on a saved issuer.
+func TestUpdateRemoteSessionIssuer_ClearsNullableEndpoints(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-clear"))
+	require.NoError(t, err)
+	require.NotNil(t, created.AuthorizationEndpoint)
+	require.NotNil(t, created.TokenEndpoint)
+	require.NotNil(t, created.RegistrationEndpoint)
+	require.NotNil(t, created.JwksURI)
+
+	empty := ""
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		SessionToken:                      nil,
+		ApikeyToken:                       nil,
+		ProjectSlugInput:                  nil,
+		ID:                                created.ID,
+		Slug:                              nil,
+		Issuer:                            nil,
+		AuthorizationEndpoint:             &empty,
+		TokenEndpoint:                     &empty,
+		RegistrationEndpoint:              &empty,
+		JwksURI:                           &empty,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.AuthorizationEndpoint)
+	require.Nil(t, updated.TokenEndpoint)
+	require.Nil(t, updated.RegistrationEndpoint)
+	require.Nil(t, updated.JwksURI)
+}
+
+// Omitting a nullable endpoint field keeps the existing value rather than
+// clearing it. Guards against future regressions in the three-state
+// COALESCE/CASE shape of UpdateRemoteSessionIssuer.
+func TestUpdateRemoteSessionIssuer_OmittedKeepsExisting(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-keep"))
+	require.NoError(t, err)
+	require.NotNil(t, created.RegistrationEndpoint)
+
+	newSlug := "idp-keep-renamed"
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		SessionToken:                      nil,
+		ApikeyToken:                       nil,
+		ProjectSlugInput:                  nil,
+		ID:                                created.ID,
+		Slug:                              &newSlug,
+		Issuer:                            nil,
+		AuthorizationEndpoint:             nil,
+		TokenEndpoint:                     nil,
+		RegistrationEndpoint:              nil,
+		JwksURI:                           nil,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.RegistrationEndpoint)
+	require.Equal(t, *created.RegistrationEndpoint, *updated.RegistrationEndpoint)
+}
+
+func TestUpdateRemoteSessionIssuer_BadRequestEmptySlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-empty-slug"))
+	require.NoError(t, err)
+
+	empty := ""
+	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		SessionToken:                      nil,
+		ApikeyToken:                       nil,
+		ProjectSlugInput:                  nil,
+		ID:                                created.ID,
+		Slug:                              &empty,
+		Issuer:                            nil,
+		AuthorizationEndpoint:             nil,
+		TokenEndpoint:                     nil,
+		RegistrationEndpoint:              nil,
+		JwksURI:                           nil,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestUpdateRemoteSessionIssuer_BadRequestEmptyIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-empty-issuer"))
+	require.NoError(t, err)
+
+	empty := ""
+	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		SessionToken:                      nil,
+		ApikeyToken:                       nil,
+		ProjectSlugInput:                  nil,
+		ID:                                created.ID,
+		Slug:                              nil,
+		Issuer:                            &empty,
+		AuthorizationEndpoint:             nil,
+		TokenEndpoint:                     nil,
+		RegistrationEndpoint:              nil,
+		JwksURI:                           nil,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestDeleteRemoteSessionIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -490,4 +635,56 @@ func TestDiscoverRemoteSessionIssuer_BadURL(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// statusOnlyServer returns an httptest.Server that responds to the well-known
+// path with the supplied HTTP status and no body. Use it to exercise the
+// discoveryFailure → UserMessage path in DiscoverRemoteSessionIssuer.
+func statusOnlyServer(t *testing.T, status int) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/.well-known/oauth-authorization-server") {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestDiscoverRemoteSessionIssuer_NotFoundSurfacesWellKnownURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := statusOnlyServer(t, http.StatusNotFound)
+
+	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Contains(t, err.Error(), "OAuth metadata not found at")
+	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
+}
+
+func TestDiscoverRemoteSessionIssuer_UnexpectedStatusSurfacesCode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := statusOnlyServer(t, http.StatusServiceUnavailable)
+
+	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Contains(t, err.Error(), "Unexpected HTTP 503")
+	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
 }

@@ -615,6 +615,7 @@ func DescribeToolset(
 		OauthProxyServer:             oauthProxyServer,
 		UserSessionIssuerID:          userSessionIssuerID,
 		UserSessionIssuerSlug:        userSessionIssuerSlug,
+		ToolVariationsGroupID:        conv.FromNullableUUID(toolset.ToolVariationsGroupID),
 		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
 			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
 		},
@@ -1075,6 +1076,7 @@ func readToolsetTools(
 				UpdatedAt:     def.FunctionToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:     nil,
 				Variation:     nil,
+				Tags:          def.FunctionToolDefinition.Tags,
 				Meta:          meta,
 				Annotations: conv.AnnotationsFromColumns(
 					def.FunctionToolDefinition.ReadOnlyHint,
@@ -1290,6 +1292,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 			ConfirmPrompt:   conv.FromPGText[string](variation.ConfirmPrompt),
 			Name:            conv.FromPGText[string](variation.Name),
 			Description:     conv.FromPGText[string](variation.Description),
+			Tags:            variation.Tags,
 			Summarizer:      conv.FromPGText[string](variation.Summarizer),
 			Title:           conv.FromPGText[string](variation.Title),
 			ReadOnlyHint:    conv.FromPGBool[bool](variation.ReadOnlyHint),
@@ -1421,7 +1424,7 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 	// Fetch header display names from MCP metadata (if available)
 	headerDisplayNames := make(map[string]string)
 	if toolsetID != uuid.Nil {
-		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, toolsetID)
+		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
 		if err == nil && len(displayNamesJSON) > 0 {
 			// Parse the JSONB data into a map
 			_ = json.Unmarshal(displayNamesJSON, &headerDisplayNames)

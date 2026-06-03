@@ -1,8 +1,13 @@
-import { CodeBlock } from "@/components/code";
+import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
+import {
+  useMcpMetadataMetadataForm,
+  type UseMcpMetadataMetadataFormResult,
+} from "@/components/mcp_install_page/useMcpMetadataForm";
 import { DotCard } from "@/components/ui/dot-card";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useMcpEndpointUrl } from "@/hooks/useToolsetUrl";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   formatRemoteMcpUrlForDisplay,
   remoteMcpRouteParam,
@@ -14,11 +19,20 @@ import type {
   ToolsetEntry,
 } from "@gram/client/models/components";
 import {
+  useGetMcpMetadata,
   useGetRemoteMcpServer,
   useListToolsets,
+  useRemoteSessionClients,
 } from "@gram/client/react-query/index.js";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
-import { ArrowRight, Network, Plus, Wrench } from "lucide-react";
+import {
+  ArrowRight,
+  Lock,
+  Network,
+  Plus,
+  ShieldCheck,
+  Wrench,
+} from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 
 export function OverviewTab({
@@ -26,32 +40,44 @@ export function OverviewTab({
   endpoints,
   isLoadingEndpoints,
   onShowEndpoints,
+  showAuthentication,
+  onShowAuthentication,
 }: {
   mcpServer: McpServer | undefined;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
   onShowEndpoints: () => void;
+  showAuthentication: boolean;
+  onShowAuthentication: () => void;
 }) {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      <InstallPagesSection
-        endpoints={endpoints}
-        isLoading={isLoadingEndpoints}
-        onShowEndpoints={onShowEndpoints}
-      />
+      {mcpServer ? (
+        <InstallPagesSection
+          mcpServer={mcpServer}
+          endpoints={endpoints}
+          isLoading={isLoadingEndpoints}
+          onShowEndpoints={onShowEndpoints}
+        />
+      ) : null}
+      {showAuthentication && mcpServer && (
+        <AuthenticationOverviewSection
+          mcpServer={mcpServer}
+          onNavigate={onShowAuthentication}
+        />
+      )}
       {mcpServer && <SourcesSection mcpServer={mcpServer} />}
-
-      {/* TODO(AGE-2239): wire the install-page branding affordance in once
-          mcp_metadata learns about mcp_server_id. */}
     </div>
   );
 }
 
 function InstallPagesSection({
+  mcpServer,
   endpoints,
   isLoading,
   onShowEndpoints,
 }: {
+  mcpServer: McpServer;
   endpoints: McpEndpoint[];
   isLoading: boolean;
   onShowEndpoints: () => void;
@@ -67,6 +93,29 @@ function InstallPagesSection({
       }),
     [endpoints],
   );
+
+  // Metadata lives at the mcp_server level, not the endpoint level — branding
+  // edits made from any row's dialog persist to the same row. The 404 path is
+  // load-bearing because servers without metadata yet return ErrNoRows from
+  // mcp_metadata.GetMetadataByMcpServerID.
+  const metadataResult = useGetMcpMetadata(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    {
+      retry: (_, err) => {
+        if (err instanceof GramError && err.statusCode === 404) {
+          return false;
+        }
+        return true;
+      },
+      throwOnError: false,
+    },
+  );
+  const form = useMcpMetadataMetadataForm(
+    { kind: "mcp_server", mcpServerId: mcpServer.id },
+    metadataResult.data?.metadata,
+  );
+  const formIsLoading = metadataResult.isLoading || form.isLoading;
 
   return (
     <section>
@@ -98,7 +147,12 @@ function InstallPagesSection({
       ) : (
         <Stack gap={3}>
           {sortedEndpoints.map((endpoint) => (
-            <InstallPageRow key={endpoint.id} endpoint={endpoint} />
+            <InstallPageRow
+              key={endpoint.id}
+              endpoint={endpoint}
+              form={form}
+              isLoading={formIsLoading}
+            />
           ))}
         </Stack>
       )}
@@ -106,15 +160,132 @@ function InstallPagesSection({
   );
 }
 
-function InstallPageRow({ endpoint }: { endpoint: McpEndpoint }) {
+function InstallPageRow({
+  endpoint,
+  form,
+  isLoading,
+}: {
+  endpoint: McpEndpoint;
+  form: UseMcpMetadataMetadataFormResult;
+  isLoading: boolean;
+}) {
   const { installPageUrl } = useMcpEndpointUrl(endpoint);
 
-  return installPageUrl ? (
-    <CodeBlock copyable>{installPageUrl}</CodeBlock>
-  ) : (
-    <Type muted small>
-      URL unavailable (custom domain still resolving).
-    </Type>
+  if (!installPageUrl) {
+    return (
+      <Type muted small>
+        URL unavailable (custom domain still resolving).
+      </Type>
+    );
+  }
+
+  return (
+    <InstallPageConfigForm
+      installPageUrl={installPageUrl}
+      form={form}
+      isLoading={isLoading}
+    />
+  );
+}
+
+function AuthenticationOverviewSection({
+  mcpServer,
+  onNavigate,
+}: {
+  mcpServer: McpServer;
+  onNavigate: () => void;
+}) {
+  const userSessionIssuerId = mcpServer.userSessionIssuerId;
+  const { data: clientsResult, isLoading } = useRemoteSessionClients(
+    { userSessionIssuerId },
+    undefined,
+    { enabled: !!userSessionIssuerId },
+  );
+
+  // Count distinct upstream identity providers (one user_session_issuer can be
+  // paired with the same remote_session_issuer through multiple clients).
+  const providerCount = clientsResult
+    ? new Set(
+        clientsResult.result.items.map(
+          (client) => client.remoteSessionIssuerId,
+        ),
+      ).size
+    : 0;
+
+  return (
+    <section>
+      <Heading variant="h4" className="mb-3">
+        Authentication
+      </Heading>
+      <Type muted small className="mb-4">
+        Manage security for MCP Clients
+      </Type>
+      {!userSessionIssuerId ? (
+        <Stack gap={3}>
+          <Stack direction="horizontal" gap={2} align="center">
+            <Lock className="text-muted-foreground size-4" />
+            <Type className="font-medium">
+              No remote identity providers configured yet.
+            </Type>
+          </Stack>
+          <div>
+            <Button variant="secondary" onClick={onNavigate}>
+              <Button.LeftIcon>
+                <Plus className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text>Configure Authentication</Button.Text>
+            </Button>
+          </div>
+        </Stack>
+      ) : (
+        <button
+          type="button"
+          onClick={onNavigate}
+          className="block w-full cursor-pointer text-left hover:no-underline"
+        >
+          <DotCard
+            icon={<ShieldCheck className="text-muted-foreground h-8 w-8" />}
+          >
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <Type
+                variant="subheading"
+                as="div"
+                className="text-md group-hover:text-primary transition-colors"
+              >
+                Platform authentication enabled
+              </Type>
+            </div>
+            {isLoading ? (
+              <Type muted small>
+                Loading identity providers…
+              </Type>
+            ) : providerCount === 0 ? (
+              <Stack direction="horizontal" gap={2} align="center">
+                <Lock className="text-muted-foreground size-4" />
+                <Type className="font-medium">
+                  No remote identity providers configured yet.
+                </Type>
+              </Stack>
+            ) : (
+              <Type muted small>
+                {providerCount === 1
+                  ? "1 remote identity provider configured."
+                  : `${providerCount} remote identity providers configured.`}
+              </Type>
+            )}
+            <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+              <Badge variant="success">
+                <Badge.Text>OAuth-gated</Badge.Text>
+              </Badge>
+              <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+                <span>Open</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </div>
+            </div>
+          </DotCard>
+        </button>
+      )}
+    </section>
   );
 }
 

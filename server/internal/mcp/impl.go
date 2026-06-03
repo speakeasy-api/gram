@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -63,6 +64,7 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -125,6 +127,12 @@ type Service struct {
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
+	// remoteProxyManager builds configured remotemcp proxies wired with the
+	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
+	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
+	// Temporal worker, which constructs *Service for its programmatic
+	// helpers but never serves a runtime request).
+	remoteProxyManager *remotemcp.ProxyManager
 }
 
 type oauthTokenInputs struct {
@@ -179,6 +187,7 @@ func NewService(
 	identityResolver IdentityResolver,
 	userSessionSigner *usersessions.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
+	remoteProxyManager *remotemcp.ProxyManager,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -252,6 +261,7 @@ func NewService(
 		identityResolver:   identityResolver,
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
+		remoteProxyManager: remoteProxyManager,
 	}
 }
 
@@ -259,8 +269,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
@@ -297,6 +307,11 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	// Check if this is a browser request (HTML Accept header)
 	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
 		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
+			// Intentionally NOT gated by enforceCustomDomainLockdown: the
+			// install page must remain reachable on the platform host even
+			// when the org's custom domain has an IP allowlist (private MCP
+			// install pages rely on the platform-host session cookie). Only
+			// the runtime POST path (ServePublic) is locked down.
 			if err := metadataService.ServeInstallPage(w, r); err != nil {
 				return fmt.Errorf("failed to serve install page: %w", err)
 			}
@@ -304,27 +319,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 		}
 	}
 
-	body, err := json.Marshal(rpcError{
-		ID:      msgID{format: 0, String: "", Number: 0},
-		Code:    methodNotAllowed,
-		Message: "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.",
-		Data:    nil,
-	})
-	if err != nil {
-		s.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return fmt.Errorf("failed to marshal MCP 405 response: %w", err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		s.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
-		return fmt.Errorf("failed to write response body: %w", writeErr)
-	}
-
-	return nil
+	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
 }
 
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
@@ -375,6 +370,24 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 	return nil
 }
 
+// ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
+// first — a slug bound to a custom-domain request resolves only against
+// that domain; a slug arriving on the platform domain resolves only
+// against (custom_domain_id IS NULL) endpoints. On a hit, dispatch
+// matches /x/mcp: issuer-gated mcp_servers run the JWT gate before
+// backend dispatch, then RemoteMcpServerID-backed rows proxy via
+// remotemcp and ToolsetID-backed rows delegate to ServeToolsetResolved.
+//
+// On any not-found from endpoint resolution — no matching mcp_endpoint,
+// dangling mcp_endpoint.mcp_server_id FK, or an mcp_server with
+// visibility="disabled" — ServePublic falls back to the legacy
+// toolsets.mcp_slug lookup. The fallback's loadToolset has
+// platform/custom-domain handling distinct from mcp_endpoints'
+// scoping: a platform-context lookup may resolve a toolset bound to a
+// custom domain when no platform-scoped row exists. This asymmetry is
+// load-bearing for customers that attached a custom domain to a
+// pre-existing toolset without retiring the platform URL — see
+// loadToolset's docstring and TestServePublic_CustomDomain_PlatformDomainStillWorks.
 func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
@@ -384,6 +397,25 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
+	}
+
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+
+	// Try mcp_endpoints → mcp_servers first. On hit, dispatch through the
+	// unified backend switch (remote proxy / toolset). On 404, fall through
+	// to the legacy toolset-by-slug path below.
+	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+			return err
+		}
+		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		// Fall through to legacy toolset lookup.
+	default:
+		return err
 	}
 
 	var customDomainID uuid.NullUUID
@@ -396,6 +428,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+	}
+
+	if err := s.enforceCustomDomainLockdown(ctx, logger, toolset.ProjectID); err != nil {
+		return err
 	}
 
 	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, "")
@@ -430,6 +466,19 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	baseURL := s.serverURL.String()
 	if customDomainCtx := customdomains.FromContext(ctx); customDomainCtx != nil {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
+	if bodyReadErr == nil {
+		var req struct {
+			ID mcpjsonrpc.ID `json:"id"`
+		}
+		if err := json.Unmarshal(bodyBytes, &req); err == nil {
+			if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && req.ID.IsSet() {
+				rpcCtx.ID = req.ID
+			}
+		}
 	}
 
 	// Extract tokens from headers separately:
@@ -628,12 +677,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	// Decode the raw body first to check for batch requests
-	bodyBytes, err := io.ReadAll(r.Body)
 	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
+	case errors.Is(bodyReadErr, io.EOF) || len(bodyBytes) == 0:
 		return nil
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
+	case bodyReadErr != nil:
+		return oops.E(oops.CodeBadRequest, bodyReadErr, "failed to read request body").Log(ctx, s.logger)
 	}
 
 	// Reject batch (array) requests — batch is deprecated in the MCP spec
@@ -701,7 +749,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
+		mcpID := mcpjsonrpc.NullID()
+		if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && rpcCtx.ID.IsSet() {
+			mcpID = rpcCtx.ID
+		}
+		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(mcpID, err))
 		if merr != nil {
 			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
 		}
@@ -849,7 +901,7 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID) map[string]string {
 	result := make(map[string]string)
 
-	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, toolsetID)
+	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
 	if err != nil {
 		// Not found or error - return empty map, this is non-critical
 		return result
@@ -950,12 +1002,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras)
 	default:
-		return nil, &rpcError{
-			ID:      req.ID,
-			Code:    methodNotFound,
-			Message: fmt.Sprintf("%s: %s", req.Method, methodNotFound.UserMessage()),
-			Data:    nil,
-		}
+		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
 	}
 }
 
@@ -1143,7 +1190,7 @@ func (s *Service) HandleToolsList(
 	// Create a dummy rawRequest for the internal handler
 	req := &rawRequest{
 		JSONRPC: "2.0",
-		ID:      msgID{format: 1, Number: 1, String: ""},
+		ID:      mcpjsonrpc.NumberID(1),
 		Method:  "tools/list",
 		Params:  json.RawMessage("{}"),
 	}
@@ -1214,7 +1261,7 @@ func (s *Service) HandleToolsCall(
 
 	req := &rawRequest{
 		JSONRPC: "2.0",
-		ID:      msgID{format: 1, Number: 1, String: ""},
+		ID:      mcpjsonrpc.NumberID(1),
 		Method:  "tools/call",
 		Params:  params,
 	}

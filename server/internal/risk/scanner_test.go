@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -95,6 +97,25 @@ func insertPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 	require.NoError(t, err)
 }
 
+func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx context.Context, name string, entities, messageTypes []string) {
+	t.Helper()
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:               uuid.New(),
+		ProjectID:        *authCtx.ProjectID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Name:             name,
+		Sources:          []string{"presidio"},
+		PresidioEntities: entities,
+		MessageTypes:     messageTypes,
+		Enabled:          true,
+		Action:           "block",
+		AutoName:         false,
+	})
+	require.NoError(t, err)
+}
+
 // TestScanner_FanOutAcrossPoliciesIsConcurrent verifies that
 // ScanForEnforcement runs Presidio scans for distinct policies in parallel
 // rather than serially. With N policies each adding `delay` of latency, a
@@ -121,7 +142,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text")
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -165,7 +186,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text")
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -180,4 +201,85 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	require.GreaterOrEqual(t, pii.cancellations.Load(), int32(1),
 		"expected at least one slow policy to observe ctx cancellation")
+}
+
+func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	_, err := riskrepo.New(ti.conn).CreateCustomDetectionRule(ctx, riskrepo.CreateCustomDetectionRuleParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RuleID:         "custom.acme_token",
+		Title:          "ACME token",
+		Description:    "ACME token",
+		Regex:          pgtype.Text{String: `ACME-[A-Z0-9]{8}`, Valid: true},
+		Severity:       "high",
+	})
+	require.NoError(t, err)
+
+	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   uuid.New(),
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "custom block",
+		Sources:              []string{},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        []string{"custom.acme_token"},
+		Enabled:              true,
+		Action:               "block",
+		AutoName:             false,
+		UserMessage:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		nil,
+		nil,
+		testenv.NewMeterProvider(t),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "deploy ACME-ABC12345 now", message.User)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "custom block", result.PolicyName)
+	require.Equal(t, risk_analysis.SourceCustom, result.Source)
+	require.Equal(t, "custom.acme_token", result.RuleID)
+	require.Equal(t, "ACME token", result.Description)
+}
+
+func TestScanner_RespectsMessageTypes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	insertPresidioBlockPolicyWithTypes(t, ti, ctx, "tool only", []string{"FAST"}, []string{message.ToolRequest})
+
+	pii := &instrumentedPIIScanner{findOnEntity: "FAST"}
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		pii,
+		nil,
+		testenv.NewMeterProvider(t),
+	)
+	require.NoError(t, err)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	userResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
+	require.NoError(t, err)
+	require.Nil(t, userResult)
+
+	toolResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.ToolRequest)
+	require.NoError(t, err)
+	require.NotNil(t, toolResult)
+	require.Equal(t, "tool only", toolResult.PolicyName)
+	require.Equal(t, message.ToolRequest, toolResult.MessageType)
 }

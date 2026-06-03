@@ -110,7 +110,7 @@ func CreateIssuerGatedToolset(
 	require.NoError(t, err)
 
 	rsi, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         *authCtx.ProjectID,
+		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Slug:                              "rsi-" + suffix,
 		Issuer:                            meta.Issuer,
 		AuthorizationEndpoint:             conv.ToPGText(meta.AuthorizationEndpoint),
@@ -139,7 +139,7 @@ func CreateIssuerGatedToolset(
 	require.NoError(t, err)
 
 	rsc, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
-		ProjectID:             *authCtx.ProjectID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID: rsi.ID,
 		UserSessionIssuerID:   usi.ID,
 		ClientID:              clientID,

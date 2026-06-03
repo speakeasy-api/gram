@@ -2,6 +2,7 @@ import {
   useIsAdmin,
   useOrganization,
   useProject,
+  useSession,
   useUser,
 } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
@@ -18,6 +19,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import {
   BugIcon,
+  BuildingIcon,
   CheckIcon,
   ChevronsUpDown,
   ArrowRightLeftIcon,
@@ -29,7 +31,7 @@ import {
   SettingsIcon,
 } from "lucide-react";
 import { useCallback, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
 import { GramLogo } from "./gram-logo";
 import { InputDialog } from "./input-dialog";
@@ -52,11 +54,14 @@ export function TopHeader() {
   const organization = useOrganization();
   const project = useProject();
   const user = useUser();
+  const session = useSession();
+  const navigate = useNavigate();
   const { projectSlug } = useSlugs();
   const [open, setOpen] = useState(false);
   const isAdmin = useIsAdmin();
   const { hasAnyScope } = useRBAC();
   const canAccessOrgRoutes = hasAnyScope(["org:read", "org:admin"]);
+  const isMultiOrg = session.organizations.length > 1;
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [pylonOpen, setPylonOpen] = useState(false);
   const togglePylon = useCallback(() => {
@@ -281,6 +286,12 @@ export function TopHeader() {
                   >
                     <ArrowRightLeftIcon className="mr-2 h-4 w-4" />
                     Organization Override
+                  </DropdownMenuItem>
+                )}
+                {isMultiOrg && (
+                  <DropdownMenuItem onClick={() => navigate("/switch-org")}>
+                    <BuildingIcon className="mr-2 h-4 w-4" />
+                    Switch Organization
                   </DropdownMenuItem>
                 )}
               </DropdownMenuGroup>

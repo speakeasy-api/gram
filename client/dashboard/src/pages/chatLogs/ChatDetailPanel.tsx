@@ -22,7 +22,12 @@ import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
-import { DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Popover,
   PopoverContent,
@@ -43,9 +48,9 @@ import {
   type ToolCall,
   type TraceEntryType,
   getEntryTypeCounts,
+  getRiskEntryCount,
   getTraceEntryType,
-  getVisibleMessageCount,
-  isMessageVisible,
+  getVisibleMessages,
   parseToolCalls,
 } from "./traceEntries";
 
@@ -55,6 +60,11 @@ interface ChatDetailPanelProps {
   onDelete: (chatId: string) => void;
   /** When true, messages without risk findings are collapsed to a single line. */
   collapseNonRisk?: boolean;
+  initialRiskOnly?: boolean;
+}
+
+interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
+  chatId: string | null;
 }
 
 function getTraceId(chatId: string): string {
@@ -62,6 +72,38 @@ function getTraceId(chatId: string): string {
 }
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
+export function ChatDetailSheet({
+  chatId,
+  onClose,
+  onDelete,
+  collapseNonRisk,
+  initialRiskOnly,
+}: ChatDetailSheetProps) {
+  return (
+    <Sheet
+      open={Boolean(chatId)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent
+        className="w-[min(720px,calc(100vw-2rem))] sm:max-w-[720px]"
+        showCloseButton={false}
+      >
+        {chatId && (
+          <ChatDetailPanel
+            chatId={chatId}
+            onClose={onClose}
+            onDelete={onDelete}
+            collapseNonRisk={collapseNonRisk}
+            initialRiskOnly={initialRiskOnly}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 function downloadJsonFile(filename: string, data: unknown) {
   const json = JSON.stringify(data, null, 2);
@@ -146,18 +188,23 @@ function ChatMessagesList({
   riskResultsByMessage,
   collapseNonRisk,
   enabledEntryTypes,
+  riskOnly,
 }: {
   messages: ChatMessage[];
   riskResultsByMessage: Map<string, RiskResult[]>;
   collapseNonRisk?: boolean;
   enabledEntryTypes: FilterableTraceEntryType[];
+  riskOnly: boolean;
 }) {
   const visibleMessages = useMemo(
     () =>
-      messages.filter((message) =>
-        isMessageVisible(message, enabledEntryTypes),
-      ),
-    [enabledEntryTypes, messages],
+      getVisibleMessages({
+        messages,
+        enabledEntryTypes,
+        riskOnly,
+        riskResultsByMessage,
+      }),
+    [enabledEntryTypes, messages, riskOnly, riskResultsByMessage],
   );
 
   const groups = useMemo(() => {
@@ -944,6 +991,7 @@ export function ChatDetailPanel({
   onClose,
   onDelete,
   collapseNonRisk,
+  initialRiskOnly = false,
 }: ChatDetailPanelProps) {
   const isSuperAdmin = useIsAdmin();
   const { hasScope } = useRBAC();
@@ -956,6 +1004,7 @@ export function ChatDetailPanel({
   const [enabledEntryTypes, setEnabledEntryTypes] = useState<
     FilterableTraceEntryType[]
   >([...DEFAULT_ENABLED_ENTRY_TYPES]);
+  const [riskOnly, setRiskOnly] = useState(initialRiskOnly);
   const {
     chat,
     messages: chatMessages,
@@ -986,6 +1035,10 @@ export function ChatDetailPanel({
     });
   }, [chatId, searchLogs]);
 
+  useEffect(() => {
+    setRiskOnly(initialRiskOnly);
+  }, [chatId, initialRiskOnly]);
+
   const logs = useMemo(() => logsData?.logs || [], [logsData?.logs]);
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
@@ -1011,8 +1064,8 @@ export function ChatDetailPanel({
   if (chatLoading) {
     return (
       <div className="p-8">
-        <DrawerTitle>Loading</DrawerTitle>
-        <DrawerDescription>Fetching chat session details...</DrawerDescription>
+        <SheetTitle>Loading</SheetTitle>
+        <SheetDescription>Fetching chat session details...</SheetDescription>
       </div>
     );
   }
@@ -1020,10 +1073,10 @@ export function ChatDetailPanel({
   if (!chat) {
     return (
       <div className="p-8">
-        <DrawerTitle>Not found</DrawerTitle>
-        <DrawerDescription>
+        <SheetTitle>Not found</SheetTitle>
+        <SheetDescription>
           The selected chat session could not be found.
-        </DrawerDescription>
+        </SheetDescription>
       </div>
     );
   }
@@ -1034,10 +1087,13 @@ export function ChatDetailPanel({
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
   const entryTypeCounts = getEntryTypeCounts(chatMessages);
-  const visibleEntryCount = getVisibleMessageCount(
-    chatMessages,
+  const visibleEntryCount = getVisibleMessages({
+    messages: chatMessages,
     enabledEntryTypes,
-  );
+    riskOnly,
+    riskResultsByMessage,
+  }).length;
+  const riskEntryCount = getRiskEntryCount(chatMessages, riskResultsByMessage);
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -1045,7 +1101,7 @@ export function ChatDetailPanel({
       <div className="border-b p-6">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <DrawerTitle className="text-xl">{getTraceId(chatId)}</DrawerTitle>
+            <SheetTitle className="text-xl">{getTraceId(chatId)}</SheetTitle>
             {status !== "unresolved" && (
               <Badge
                 variant={
@@ -1106,7 +1162,7 @@ export function ChatDetailPanel({
         <div className="text-muted-foreground mb-3 font-mono text-sm">
           {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
         </div>
-        <DrawerDescription className="text-sm">{chat.title}</DrawerDescription>
+        <SheetDescription className="text-sm">{chat.title}</SheetDescription>
       </div>
 
       {/* Tabs */}
@@ -1262,6 +1318,9 @@ export function ChatDetailPanel({
             totalCount={chatMessages.length}
             visibleCount={visibleEntryCount}
             onChange={setEnabledEntryTypes}
+            riskOnly={riskOnly}
+            riskCount={riskEntryCount}
+            onRiskOnlyChange={setRiskOnly}
           />
 
           {/* Chat Messages */}
@@ -1270,6 +1329,7 @@ export function ChatDetailPanel({
             riskResultsByMessage={riskResultsByMessage}
             collapseNonRisk={collapseNonRisk}
             enabledEntryTypes={enabledEntryTypes}
+            riskOnly={riskOnly}
           />
         </TabsContent>
 

@@ -1,5 +1,122 @@
 # dashboard
 
+## 0.67.0
+
+### Minor Changes
+
+- 55a25ac: Add management APIs and dashboard UI for enabling and configuring MCP server tool filtering via tool variation groups.
+- 254158e: Add an org-level Device Agent page (`/<org>/device-agent`) under the Secure nav group: per-OS install instructions for the Speakeasy device agent, `managed.json` MDM configuration reference (schema, paths, example), and self-service `org_token` generation via the new `agent` API-key scope (mint/rotate from the page, with a ready-to-paste `managed.json` copied to the clipboard).
+
+  Also patches the CLI loopback callback (`CliCallback.tsx`) to append `&email=<userEmail>` to the redirect, which the device agent's one-shot OAuth-loopback enrollment requires.
+
+### Patch Changes
+
+- 1078e46: Add an optional `user_id` filter to the risk events list. The Risk Events page now exposes a "User contains..." search box that filters findings by the chat's external user id (case-insensitive substring match), alongside the existing policy and rule filters.
+- 1cb069e: Fix the audit logs page AI Insights setup so it no longer calls `toolsets.list` without a project slug from org-level routes.
+- a86651b: Fix the shared `Link` component so external links render inline with surrounding text. The external-link icon was wrapped in a block-level flex container, which stretched inline links to full width and pushed trailing punctuation to a new line; the icon now sits inline on the text baseline.
+
+## 0.66.0
+
+### Minor Changes
+
+- 0653bf4: Add `agent.getPlugins` management API method consumed by the Speakeasy device agent. The endpoint accepts an `email` query parameter, resolves plugin assignments for that email plus the `*` wildcard within the caller's org, and returns the published plugins as Claude Code marketplace + plugin references (drops directly into Claude Code's `extraKnownMarketplaces` and `enabledPlugins` settings). Authenticates with an org-scoped API key carrying the new `agent` scope.
+
+  Adds `agent` as a selectable scope on the existing API Keys page so admins can mint these tokens from the same place every other scope is minted.
+
+  Adds `email` as a first-class principal URN type (`urn.PrincipalTypeEmail`) so admins can assign plugins by email address. Existing `user:` and `role:` URNs are unchanged; the wildcard `*` is now exported as `urn.PrincipalWildcard`.
+
+- 598d0d8: Re-target AI Insights sidebar at project toolsets instead of hardcoded Speakeasy MCP. The sidebar now connects to all toolsets configured in the current project.
+
+### Patch Changes
+
+- 91e166d: Add an employee data-flow graph endpoint and dashboard visualization for workforce observability.
+- 9fde650: External MCP proxy servers (whose tools cannot be enumerated until a user authenticates) now appear in the "Specific MCP Servers" picker when creating an access role, and no longer display a misleading "No Tools" badge on the MCP list and table views.
+
+## 0.65.1
+
+### Patch Changes
+
+- 3d2afcf: Added a risk-only toggle to trace panels and deep-linked Risk Events to open with risk filtering enabled
+
+## 0.65.0
+
+### Minor Changes
+
+- d7c9904: Assistant onboarding: new Slack setup card lets you pick capabilities (send, read, react, etc.) and which events wake the assistant up, then provisions a dedicated per-assistant Slack toolset instead of reusing a shared one. The card warns about "always-on" event firehoses, and the onboarding agent now offers plain-English filter narrowing after Slack install.
+
+## 0.64.0
+
+### Minor Changes
+
+- 67be909: add tool variations menu to source detail Tools tab
+- 6039fe5: Add `risk.customRules.suggest` endpoint that calls OpenRouter to turn a one-line description ("what do you want to detect?") into a prefilled custom detection rule. The dashboard's New Custom Detection Rule sheet now opens on a single textarea, calls the new endpoint, and lands the operator in the editable review form with the suggested rule_id, title, description, regex, and severity.
+- 6f176bb: Add dashboard UI for reviewing Shadow MCP requests and managing project-scoped access rules.
+- 6039fe5: Add a rule playground: from the Detection Rules detail sheet, the operator pastes a sample into a textarea and the dashboard calls the new `risk.rules.test` endpoint which dispatches to the same scanner code (gitleaks, Presidio, prompt-injection, regex) the worker uses. The response is a list of `TestDetectionRuleMatch`es mirroring the runtime risk_result shape.
+
+  Drop the severity-override UI from the rule detail sheet. The override edit / reset affordances will return in a follow-up PR; default severity continues to render as a row badge for context.
+
+### Patch Changes
+
+- e4c2bfb: Logs filter search bars can now be cleared with the Escape key or by emptying the box, not just the × button. This applies to the MCP Server Logs filter bar and the shared SearchBar (Agent Sessions, etc.). Escape only clears when there is text to clear, so an empty box lets the key bubble to close a surrounding popover.
+- 649a7cb: Fixed sidebar nav hover highlight snapping back to active route when moving between items.
+- 72ccf7b: Fixes login journey for allowed orgs
+- Updated dependencies [faaab73]
+  - @gram-ai/elements@1.33.2
+
+## 0.63.0
+
+### Minor Changes
+
+- 37158f0: ingest tags declared on Gram Function tools (top-level `tags` on the manifest and `tags?: string[]` on the TS framework `ToolDefinition`) and expose them through the management API; the playground tool editor now opens for function tools the same way it does for HTTP tools
+- 7e4501e: Metric cards now display abbreviated numbers (1.5K, 2.3M) instead of raw comma-separated values.
+- 5875739: Added remote-based MCP server authentication UI
+- 50ab453: Add SSO and SCIM feature flags with WorkOS event sync. Admin settings now includes product feature toggles for SSO and SCIM. The Identity page shows connection status and gates configure buttons on these flags. Team page invite button is disabled when SSO is active. WorkOS event processing now handles all SSO connection and SCIM directory sync lifecycle events.
+
+### Patch Changes
+
+- 1871808: Fix the triggers page failing to load whenever a wake trigger has fired or been cancelled. The triggers list response advertised a status enum of `active | paused`, but wake triggers transition through `fired` and `cancelled` too, so the dashboard's response validation rejected the payload and surfaced a generic "Response validation failed" error. The status enum now includes all four states, and the triggers page renders distinct badges for fired and cancelled triggers instead of mislabelling them as "Paused".
+
+## 0.62.0
+
+### Minor Changes
+
+- 5b5dc6d: Replace Vaul drawers with Radix sheets for chat detail panels, restoring text selection in trace/log views and removing the unused drawer dependency.
+
+### Patch Changes
+
+- 5a9c1f4: expose the Destructive CLI Commands category in the risk policy form so customers can opt into `cli_destructive` scanning, and stop silently stripping the source when editing policies that had it set via the API
+- 217b173: Fix the empty "Logs" panel on a source's Deployments tab. The embedded panel was comparing a kind string (e.g. `"function"`) against log events' `attachmentId` (a UUID) and was also sending the wrong type token (`"function"` instead of the backend's `"functions"`). Now filters on `event.attachmentType` with the correct backend constants (`functions`, `openapi`, `external_mcp`), so per-source deployment logs render as expected.
+
+## 0.61.0
+
+### Minor Changes
+
+- 23d2150: expose tags on tool variations and add a tags row to the playground tool editor for HTTP tools, with chip input, base-source quick-add, override indicator, and reset-to-source affordance
+- 46e00ac: Migrate dashboard tables to Moonshine Table with sortable insights columns and remove the legacy table wrapper.
+
+### Patch Changes
+
+- 821f4a2: Redesign the org home page with a two-column layout. Left rail shows compressed Recent challenges (color-coded deny pills, sidebar-friendly width) and Recent activity (sharing the audit-log action color scheme). Right column shows projects as a thin rectangular stack (list view) or a 1/2/3-column card grid (grid view, toggle persisted in localStorage). Each project row/card shows the most recent audit-log action with a hover tooltip for full UTC + local timestamps, a facepile of active contributors (up to 10, sourced from audit-log actors with a deterministic earliest-by-joinedAt fallback), a star to favorite/unfavorite (stored client-side per org), and a kebab menu (favorite toggle, project settings, view audit logs, copy slug). New "Add New" dropdown next to the search bar offers Project / Team member / Role, gated by `org:admin`. Favorites surface in their own section above an "All projects" divider when present.
+- 5ded32c: Preserve theme and saved project favorites when logging out.
+
+## 0.60.0
+
+### Minor Changes
+
+- b58bf0f: Adds an org-level AI Integrations product surface with Cursor as the first provider. Organization admins can connect a Cursor Admin API key from org settings, and an hourly Temporal workflow polls Cursor for token and cost usage events and writes them into ClickHouse `telemetry_logs` so the dashboard shows Cursor usage and cost alongside Claude Code data. The dashboard cost copy is updated to reflect Cursor and Claude Code coverage, and the employee detail page now shows cost beside total tokens.
+- ed12a35: Add multiple role support to the RBAC system. Users can now be assigned multiple roles simultaneously, replacing the previous single-role assignment model.
+- 3b8bfb4: Adds `risk.results.listForAgent` — a redacted variant of `risk.results.list` for AI assistant / MCP consumption. The new endpoint returns the same fields as `listRiskResults` but replaces the `match` field with `match_redacted`, an opaque token of the form `<redacted len=N sha=XXXXXXXX>` where `N` is the byte length and `XXXXXXXX` is the first 8 hex characters of `sha256(match)`. Identical secrets produce identical fingerprints so agents can dedupe leak counts without ever seeing secret content.
+
+  `shadow_mcp` findings pass `match` through verbatim because the value is a server URL or stdio command identifier (already shown unmasked in the dashboard), and exact byte positions are coarsened to a single `position_known` boolean to remove reconstruction signals.
+
+  The dashboard's AI Insights sidebar gains risk-aware suggestions on the Security Overview and Policy Center pages, plus a system-prompt rule that bars the assistant from echoing `match_redacted` values verbatim.
+
+### Patch Changes
+
+- 9d6ba7b: The Source Activity panel on the Remote MCP source overview now shows real telemetry for the last 7 days, scoped to that remote server via the new `remote_mcp_server_id` filter. `TelemetrySummaryRow` and `ToolBarList` are extracted into a shared `SourceActivityPanel` component consumed by both the OpenAPI and Remote MCP source overview tabs.
+- 4b49beb: Expand the assistant onboarding personality picker with Brad and Walker, rebalance Quinn against Nolan and Daniel, and group team voices into a compact chip row above the generic preset cards (Friendly / Professional / Playful / Analytical / Teacher).
+- 8e247f9: Chat loading is now paginated by generation, returning one generation per request. The chat detail panel fetches older generations in parallel until the full transcript is assembled, so long-running sessions no longer stall on the initial fetch.
+
 ## 0.59.0
 
 ### Minor Changes

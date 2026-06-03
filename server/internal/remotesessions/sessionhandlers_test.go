@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -31,7 +32,7 @@ func TestListRemoteSessions(t *testing.T) {
 	// Soft-delete one row directly so it must be excluded from the listing.
 	_, err := repo.New(ti.conn).RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{
 		ID:        soft.ID,
-		ProjectID: liveProjectID(t, ctx),
+		ProjectID: conv.ToNullUUID(liveProjectID(t, ctx)),
 	})
 	require.NoError(t, err)
 
@@ -90,12 +91,13 @@ func TestListRemoteSessions_FilteredByClient(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rs-list-client", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client").String()
-	clientA := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "rs-list-client-a")
-	clientB := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "rs-list-client-b")
+	userIssuerAID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client-a").String()
+	userIssuerBID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client-b").String()
+	clientA := createRemoteClient(t, ctx, ti, issuerID, userIssuerAID, "rs-list-client-a")
+	clientB := createRemoteClient(t, ctx, ti, issuerID, userIssuerBID, "rs-list-client-b")
 
-	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_a"), userIssuerID, clientA)
-	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_b"), userIssuerID, clientB)
+	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_a"), userIssuerAID, clientA)
+	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_b"), userIssuerBID, clientB)
 
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
 		SubjectUrn:            nil,
