@@ -9,11 +9,12 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
 
-func sp(s string) *string { return &s }
+//go:fix inline
+func sp(s string) *string { return new(s) }
 
 // strAttr builds an OTLP string-valued log attribute, the shape Codex emits.
 func strAttr(key, val string) *gen.OTELAttribute {
-	return &gen.OTELAttribute{Key: key, Value: &gen.OTELAttributeValue{StringValue: sp(val)}}
+	return &gen.OTELAttribute{Key: key, Value: &gen.OTELAttributeValue{StringValue: new(val)}}
 }
 
 // codexLogsPayload wraps records under the Codex resource (service.name).
@@ -23,7 +24,7 @@ func codexLogsPayload(records ...*gen.OTELLogRecord) *gen.LogsPayload {
 			Resource: &gen.OTELResource{
 				Attributes: []*gen.OTELResourceAttribute{{
 					Key:   "service.name",
-					Value: &gen.OTELAttributeValue{StringValue: sp(codexServiceName)},
+					Value: &gen.OTELAttributeValue{StringValue: new(codexServiceName)},
 				}},
 			},
 			ScopeLogs: []*gen.OTELScopeLog{{LogRecords: records}},
@@ -34,7 +35,7 @@ func codexLogsPayload(records ...*gen.OTELLogRecord) *gen.LogsPayload {
 // tokenBearingRecord mirrors a real response.completed SSE event with usage.
 func tokenBearingRecord() *gen.OTELLogRecord {
 	return &gen.OTELLogRecord{
-		ObservedTimeUnixNano: sp("1780468942284000000"),
+		ObservedTimeUnixNano: new("1780468942284000000"),
 		Attributes: []*gen.OTELAttribute{
 			strAttr("event.name", codexSSEEventName),
 			strAttr("event.kind", codexResponseCompletedKind),
@@ -61,7 +62,7 @@ func TestIsCodexLogsPayload(t *testing.T) {
 			Resource: &gen.OTELResource{
 				Attributes: []*gen.OTELResourceAttribute{{
 					Key:   "service.name",
-					Value: &gen.OTELAttributeValue{StringValue: sp("claude-code")},
+					Value: &gen.OTELAttributeValue{StringValue: new("claude-code")},
 				}},
 			},
 		}},

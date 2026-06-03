@@ -2,7 +2,6 @@ package hooks
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -138,10 +137,6 @@ func codexUsageFromRecord(rec *gen.OTELLogRecord) (codexUsageDataPoint, bool) {
 // gram.hook.source ("codex") and gram.resource.urn ("codex:usage:metrics"),
 // so existing per-user and time-series queries pick them up unchanged.
 func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.LogsPayload, orgID, projectID string) {
-	if s.telemetryLogger == nil {
-		return
-	}
-
 	points := extractCodexUsage(payload)
 	if len(points) == 0 {
 		return
@@ -229,10 +224,6 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 			Attributes: attrs,
 		})
 	}
-
-	s.logger.DebugContext(ctx, fmt.Sprintf("Wrote %d Codex usage metrics to ClickHouse", len(points)),
-		attr.SlogEvent("codex_usage_written"),
-	)
 }
 
 // indexLogAttributes builds a key->value lookup over a log record's attributes.
