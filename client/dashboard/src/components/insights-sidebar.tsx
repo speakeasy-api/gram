@@ -22,7 +22,7 @@ export const INSIGHTS_AI_RAINBOW_CLASS = "insights-ai-rainbow";
 /**
  * Reveals a full-spectrum Speakeasy brand gradient border on hover — same
  * 9-stop palette as the login page's BrandGradientBar. Used for the nav-bar
- * AI Insights trigger where the button shape can host a real border.
+ * Project Assistant trigger where the button shape can host a real border.
  * Requires <InsightsRainbowStyles /> in the tree. Works best on elements
  * with a 1px border and a border-radius.
  */
@@ -102,7 +102,7 @@ function isMacPlatform(): boolean {
 }
 
 /**
- * Header-bar trigger for opening the AI Insights sidebar. Renders only
+ * Header-bar trigger for opening the Project Assistant sidebar. Renders only
  * when inside an InsightsProvider so it can be slotted globally (e.g. into
  * PageHeaderBreadcrumbs) without appearing on pages that opt out via
  * hideTrigger.
@@ -166,10 +166,12 @@ export function InsightsTrigger({ className }: { className?: string }) {
         startSpin();
         setIsExpanded(!isExpanded);
       }}
-      aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
+      aria-label={
+        isExpanded ? "Close Project Assistant" : "Open Project Assistant"
+      }
       aria-keyshortcuts={shortcutAria}
       aria-pressed={isExpanded}
-      title={`AI Insights (${shortcutKeys.join("+")})`}
+      title={`Project Assistant (${shortcutKeys.join("+")})`}
       className={cn(
         "group border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
@@ -180,7 +182,7 @@ export function InsightsTrigger({ className }: { className?: string }) {
       <Wand2
         className={cn("size-3.5", spinning && "insights-trigger-spinning")}
       />
-      <span className="font-medium">AI Insights</span>
+      <span className="font-medium">Project Assistant</span>
       {/* Hover-revealed shortcut hint. The outer wrapper animates between
           0fr and 1fr grid columns so the contents transition cleanly from
           width 0 to their natural width without us hardcoding a pixel value.
@@ -458,12 +460,12 @@ When the user asks about "current period", "selected period", "this timeframe", 
           <div className="border-border bg-muted/30 flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-2">
               <Sparkles className="text-primary size-5" />
-              <span className="font-semibold">AI Insights</span>
+              <span className="font-semibold">Project Assistant</span>
             </div>
             <button
               onClick={() => setIsExpanded(false)}
               className="hover:bg-muted rounded p-1.5 transition-colors"
-              aria-label="Close AI Insights"
+              aria-label="Close Project Assistant"
             >
               <ChevronRight className="size-5" />
             </button>

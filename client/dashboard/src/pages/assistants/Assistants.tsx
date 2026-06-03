@@ -1,6 +1,8 @@
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
+import { useInsightsState } from "@/components/insights-context";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Badge } from "@/components/ui/badge";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,7 +26,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Info, Plus } from "lucide-react";
+import { Info, Plus, Sparkles } from "lucide-react";
 import { MouseEvent } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
@@ -81,32 +83,40 @@ function StatusToggle({ assistant }: { assistant: Assistant }) {
   );
 }
 
-function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
+// BuiltInAssistantCard is the pinned, out-of-the-box "Project Assistant".
+// Unlike user-created assistants it isn't a row the user manages — it's the
+// project's built-in assistant, so the card opens the assistant sidebar instead
+// of navigating to a detail/edit page, and it can't be deleted.
+function BuiltInAssistantCard() {
+  const { setIsExpanded } = useInsightsState();
+
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="bot" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        No assistants yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
-        Create an assistant to wire a model up to your MCP servers.
-      </Type>
-      <RequireScope
-        scope={["project:write", "mcp:write"]}
-        all
-        level="component"
-        reason="You don't have permission to create assistants."
-      >
-        <Button onClick={onCreate}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Create Assistant</Button.Text>
-        </Button>
-      </RequireScope>
-    </div>
+    <button
+      type="button"
+      onClick={() => setIsExpanded(true)}
+      className="w-full text-left hover:no-underline"
+    >
+      <Card>
+        <Card.Header>
+          <Stack direction="horizontal" gap={2} align="center">
+            <Sparkles className="text-primary size-4" />
+            <Card.Title className="normal-case">Project Assistant</Card.Title>
+          </Stack>
+          <Badge variant="secondary">Built-in</Badge>
+        </Card.Header>
+        <Card.Content>
+          <Card.Description>
+            Your project's built-in assistant for exploring logs, traces, MCP
+            servers, and security findings — always on, right from the sidebar.
+          </Card.Description>
+        </Card.Content>
+        <Card.Footer>
+          <Type muted small>
+            Opens in the sidebar
+          </Type>
+        </Card.Footer>
+      </Card>
+    </button>
   );
 }
 
@@ -119,52 +129,51 @@ export default function AssistantsIndex() {
 
   const assistants = data?.assistants ?? [];
 
-  const content =
-    !isLoading && assistants.length === 0 ? (
-      <AssistantsEmptyState
-        onCreate={() => routes.assistants.newAssistant.goTo()}
-      />
-    ) : (
-      <Page.Section>
-        <Page.Section.Title stage="preview">Assistants</Page.Section.Title>
-        <Page.Section.Description>
-          Claude Code-inspired secure Assistants. Every assistant connects
-          through the MCPs and Skills your org already uses, with identity,
-          guardrails, and audit built in. Deployed to Slack.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          <RequireScope
-            scope={["project:write", "mcp:write"]}
-            all
-            level="component"
-            reason="You don't have permission to create assistants."
-          >
-            <Button onClick={() => routes.assistants.newAssistant.goTo()}>
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>New Assistant</Button.Text>
-            </Button>
-          </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {isLoading ? (
-            <Stack align="center" justify="center" className="py-16">
-              <Icon
-                name="loader-circle"
-                className="text-muted-foreground h-6 w-6 animate-spin"
-              />
-            </Stack>
-          ) : (
-            <Cards>
-              {assistants.map((assistant) => (
-                <AssistantCard key={assistant.id} assistant={assistant} />
-              ))}
-            </Cards>
-          )}
-        </Page.Section.Body>
-      </Page.Section>
-    );
+  // The built-in Project Assistant is always pinned first — it ships out of the
+  // box, so the page is never truly empty even before a user creates their own
+  // assistant.
+  const content = (
+    <Page.Section>
+      <Page.Section.Title stage="preview">Assistants</Page.Section.Title>
+      <Page.Section.Description>
+        Claude Code-inspired secure Assistants. Every assistant connects through
+        the MCPs and Skills your org already uses, with identity, guardrails,
+        and audit built in. Deployed to Slack.
+      </Page.Section.Description>
+      <Page.Section.CTA>
+        <RequireScope
+          scope={["project:write", "mcp:write"]}
+          all
+          level="component"
+          reason="You don't have permission to create assistants."
+        >
+          <Button onClick={() => routes.assistants.newAssistant.goTo()}>
+            <Button.LeftIcon>
+              <Plus className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New Assistant</Button.Text>
+          </Button>
+        </RequireScope>
+      </Page.Section.CTA>
+      <Page.Section.Body>
+        {isLoading ? (
+          <Stack align="center" justify="center" className="py-16">
+            <Icon
+              name="loader-circle"
+              className="text-muted-foreground h-6 w-6 animate-spin"
+            />
+          </Stack>
+        ) : (
+          <Cards>
+            <BuiltInAssistantCard />
+            {assistants.map((assistant) => (
+              <AssistantCard key={assistant.id} assistant={assistant} />
+            ))}
+          </Cards>
+        )}
+      </Page.Section.Body>
+    </Page.Section>
+  );
 
   return (
     <Page>
