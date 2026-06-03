@@ -803,6 +803,34 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
+const getDashboardThreadTarget = `-- name: GetDashboardThreadTarget :one
+SELECT chat_id, COALESCE(source_ref_json->>'user_id', '')::TEXT AS user_id
+FROM assistant_threads
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type GetDashboardThreadTargetParams struct {
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetDashboardThreadTargetRow struct {
+	ChatID uuid.UUID
+	UserID string
+}
+
+// Resolves where a dashboard egress reply goes: the thread's chat id (the log
+// key) and the conversation's owner user id (stamped on every log row). The
+// egress tool knows only its thread id, from the assistant principal.
+func (q *Queries) GetDashboardThreadTarget(ctx context.Context, arg GetDashboardThreadTargetParams) (GetDashboardThreadTargetRow, error) {
+	row := q.db.QueryRow(ctx, getDashboardThreadTarget, arg.ThreadID, arg.ProjectID)
+	var i GetDashboardThreadTargetRow
+	err := row.Scan(&i.ChatID, &i.UserID)
+	return i, err
+}
+
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
@@ -998,6 +1026,42 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertDashboardMessage = `-- name: InsertDashboardMessage :one
+INSERT INTO assistant_dashboard_messages (project_id, chat_id, user_id, role, content)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, seq, created_at
+`
+
+type InsertDashboardMessageParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+	UserID    string
+	Role      string
+	Content   string
+}
+
+type InsertDashboardMessageRow struct {
+	ID        uuid.UUID
+	Seq       int64
+	CreatedAt pgtype.Timestamptz
+}
+
+// Appends a message to a dashboard assistant chat's conversation log. role is
+// 'user' (recorded at ingest) or 'assistant' (written by the egress tool).
+// user_id is the conversation owner, stamped on every row so reads scope to it.
+func (q *Queries) InsertDashboardMessage(ctx context.Context, arg InsertDashboardMessageParams) (InsertDashboardMessageRow, error) {
+	row := q.db.QueryRow(ctx, insertDashboardMessage,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.UserID,
+		arg.Role,
+		arg.Content,
+	)
+	var i InsertDashboardMessageRow
+	err := row.Scan(&i.ID, &i.Seq, &i.CreatedAt)
+	return i, err
 }
 
 const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
@@ -1261,6 +1325,59 @@ func (q *Queries) ListColdPendingThreadsForAdmit(ctx context.Context, arg ListCo
 	for rows.Next() {
 		var i ListColdPendingThreadsForAdmitRow
 		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDashboardMessages = `-- name: ListDashboardMessages :many
+SELECT id, chat_id, role, content, seq, created_at
+FROM assistant_dashboard_messages
+WHERE chat_id = $1
+  AND project_id = $2
+  AND seq > $3
+ORDER BY seq
+`
+
+type ListDashboardMessagesParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	AfterSeq  int64
+}
+
+type ListDashboardMessagesRow struct {
+	ID        uuid.UUID
+	ChatID    uuid.UUID
+	Role      string
+	Content   string
+	Seq       int64
+	CreatedAt pgtype.Timestamptz
+}
+
+// Reads a dashboard chat's conversation log in send order, optionally only
+// messages newer than a cursor (after_seq) for incremental polling.
+func (q *Queries) ListDashboardMessages(ctx context.Context, arg ListDashboardMessagesParams) ([]ListDashboardMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardMessages, arg.ChatID, arg.ProjectID, arg.AfterSeq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDashboardMessagesRow
+	for rows.Next() {
+		var i ListDashboardMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Role,
+			&i.Content,
+			&i.Seq,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

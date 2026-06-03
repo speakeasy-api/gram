@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -657,6 +658,9 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 			)
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			dashboardTools := platformtoolsruntime.DashboardExternalTools(db)
+			// Runner-callable platform tools the runtime must be able to execute.
+			assistantPlatformExtras := append(append([]platformtools.ExternalTool{}, memoryTools...), dashboardTools...)
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(
@@ -694,7 +698,7 @@ func newWorkerCommand() *cli.Command {
 				assistantTokenManager,
 				shadowMCPClient,
 				auditLogger,
-				memoryTools,
+				assistantPlatformExtras,
 				platformFeatureChecker,
 				nil,
 				identityResolver,

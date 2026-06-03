@@ -85,6 +85,34 @@ WHERE project_id = @project_id
   AND correlation_id = @correlation_id
   AND deleted IS FALSE;
 
+-- name: GetDashboardThreadTarget :one
+-- Resolves where a dashboard egress reply goes: the thread's chat id (the log
+-- key) and the conversation's owner user id (stamped on every log row). The
+-- egress tool knows only its thread id, from the assistant principal.
+SELECT chat_id, COALESCE(source_ref_json->>'user_id', '')::TEXT AS user_id
+FROM assistant_threads
+WHERE id = @thread_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: InsertDashboardMessage :one
+-- Appends a message to a dashboard assistant chat's conversation log. role is
+-- 'user' (recorded at ingest) or 'assistant' (written by the egress tool).
+-- user_id is the conversation owner, stamped on every row so reads scope to it.
+INSERT INTO assistant_dashboard_messages (project_id, chat_id, user_id, role, content)
+VALUES (@project_id, @chat_id, @user_id, @role, @content)
+RETURNING id, seq, created_at;
+
+-- name: ListDashboardMessages :many
+-- Reads a dashboard chat's conversation log in send order, optionally only
+-- messages newer than a cursor (after_seq) for incremental polling.
+SELECT id, chat_id, role, content, seq, created_at
+FROM assistant_dashboard_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id
+  AND seq > @after_seq
+ORDER BY seq;
+
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
 FROM toolsets

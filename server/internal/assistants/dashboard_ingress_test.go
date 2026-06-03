@@ -14,7 +14,7 @@ func TestDashboardAdapterThreadContext(t *testing.T) {
 
 	got, err := dashboardAdapter{}.ThreadContext([]byte(`{"user_id":"user-1"}`))
 	require.NoError(t, err)
-	require.Contains(t, got, "AI Insights sidebar")
+	require.Contains(t, got, "Gram dashboard")
 	require.Contains(t, got, "user-1")
 }
 

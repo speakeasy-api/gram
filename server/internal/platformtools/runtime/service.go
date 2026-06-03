@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformdashboard "github.com/speakeasy-api/gram/server/internal/platformtools/dashboard"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -118,6 +119,14 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 	return []platformtools.ExternalTool{
 		{Executor: platformtriggers.NewAssistantListTriggersTool(db, app), RequiredFeature: ""},
 		{Executor: platformtriggers.NewAssistantConfigureTriggerTool(db, app, auditLogger), RequiredFeature: ""},
+	}
+}
+
+// DashboardExternalTools returns the dashboard egress tool, which delivers an
+// assistant's reply to the dashboard conversation log.
+func DashboardExternalTools(db *pgxpool.Pool) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformdashboard.NewSendMessageTool(db), RequiredFeature: ""},
 	}
 }
 

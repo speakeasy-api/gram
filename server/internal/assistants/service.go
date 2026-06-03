@@ -45,6 +45,7 @@ const (
 	sourceKindCron       = bgtriggers.DefinitionSlugCron
 	sourceKindWake       = bgtriggers.DefinitionSlugWake
 	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
+	dashboardRoleUser    = "user"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -1189,8 +1190,30 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	// pgx.ErrNoRows means the event was already enqueued by an earlier attempt
 	// (idempotent retry). We still signal: a turn whose earlier coordinator
 	// signal failed must be picked up when the client retries.
+	eventCreated := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("insert assistant thread event: %w", err)
+	}
+
+	// Record the user's turn in the dashboard conversation log, in the same tx
+	// as the event so the log and the processing queue can't diverge. Guarded
+	// by eventCreated so an idempotent retry doesn't duplicate the row.
+	if eventCreated && sourceKind == sourceKindDashboard {
+		var dash dashboardEventPayload
+		if err := json.Unmarshal(normalizedPayloadJSON, &dash); err != nil {
+			return EnqueueResult{}, fmt.Errorf("decode dashboard payload for log: %w", err)
+		}
+		if dash.Text != "" {
+			if _, err := queries.InsertDashboardMessage(ctx, assistantrepo.InsertDashboardMessageParams{
+				ProjectID: assistant.ProjectID,
+				ChatID:    chatID,
+				UserID:    dash.UserID,
+				Role:      dashboardRoleUser,
+				Content:   dash.Text,
+			}); err != nil {
+				return EnqueueResult{}, fmt.Errorf("record dashboard user message: %w", err)
+			}
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
