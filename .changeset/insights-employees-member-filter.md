@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Insights → Employees now only lists workspace members, hiding activity from impersonating superadmins that previously showed as a raw UUID.
+Insights now only counts workspace members across the Employees and Role views, excluding activity from impersonating superadmins that previously showed up as a raw UUID.
