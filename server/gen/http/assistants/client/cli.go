@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	assistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -213,6 +214,62 @@ func BuildDeleteAssistantPayload(assistantsDeleteAssistantID string, assistantsD
 	}
 	v := &assistants.DeleteAssistantPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSendMessagePayload builds the payload for the assistants sendMessage
+// endpoint from CLI flags.
+func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMessageSessionToken string, assistantsSendMessageProjectSlugInput string) (*assistants.SendMessagePayload, error) {
+	var err error
+	var body SendMessageRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantsSendMessageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"correlation_id\": \"aa\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", body.AssistantID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Message) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", body.Message, utf8.RuneCountInString(body.Message), 1, true))
+		}
+		if utf8.RuneCountInString(body.Message) > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", body.Message, utf8.RuneCountInString(body.Message), 10000, false))
+		}
+		if utf8.RuneCountInString(body.CorrelationID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.correlation_id", body.CorrelationID, utf8.RuneCountInString(body.CorrelationID), 1, true))
+		}
+		if utf8.RuneCountInString(body.CorrelationID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.correlation_id", body.CorrelationID, utf8.RuneCountInString(body.CorrelationID), 255, false))
+		}
+		if body.IdempotencyKey != nil {
+			if utf8.RuneCountInString(*body.IdempotencyKey) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 255, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsSendMessageSessionToken != "" {
+			sessionToken = &assistantsSendMessageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsSendMessageProjectSlugInput != "" {
+			projectSlugInput = &assistantsSendMessageProjectSlugInput
+		}
+	}
+	v := &assistants.SendMessagePayload{
+		AssistantID:    body.AssistantID,
+		Message:        body.Message,
+		CorrelationID:  body.CorrelationID,
+		IdempotencyKey: body.IdempotencyKey,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

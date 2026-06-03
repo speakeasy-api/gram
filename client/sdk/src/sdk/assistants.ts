@@ -6,6 +6,7 @@ import { assistantsCreate } from "../funcs/assistantsCreate.js";
 import { assistantsDelete } from "../funcs/assistantsDelete.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsList } from "../funcs/assistantsList.js";
+import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -82,6 +83,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListAssistantsResult> {
     return unwrapAsync(assistantsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * sendMessage assistants
+   *
+   * @remarks
+   * Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.
+   */
+  async sendMessage(
+    request: operations.SendAssistantMessageRequest,
+    security?: operations.SendAssistantMessageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SendMessageResult> {
+    return unwrapAsync(assistantsSendMessage(
       this,
       request,
       security,

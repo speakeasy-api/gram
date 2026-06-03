@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 342f13662f54fdb4f4465ecedac3368e
+  docChecksum: a511bb943ce954d373a1050c4346f345
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -864,6 +864,10 @@ trackedFiles:
     last_write_checksum: sha1:c8d3fdbdb79801acc981d10b05dc72494794f9d0
   docs/models/components/sendinviterequestbody.md:
     last_write_checksum: sha1:e433f2544bc88fdc779ca174ecf2b7ea969d6e9f
+  docs/models/components/sendmessagerequestbody.md:
+    last_write_checksum: sha1:a9bac7deea95dd3c780760b1de5a6a2b006669d8
+  docs/models/components/sendmessageresult.md:
+    last_write_checksum: sha1:6c767c6fd27391c57d7aa75757bd00e419020dbb
   docs/models/components/serveimageform.md:
     last_write_checksum: sha1:530060f0cc468c392b1fd32052fc990c4a5c17c5
   docs/models/components/serverclass.md:
@@ -2614,6 +2618,10 @@ trackedFiles:
     last_write_checksum: sha1:cfb2803d0ea5da660c1e5d7f62f1555eff125eb3
   docs/models/operations/searchuserssecurityoption2.md:
     last_write_checksum: sha1:0b76a2a1d256a669c500a2845b41755f9fbfd195
+  docs/models/operations/sendassistantmessagerequest.md:
+    last_write_checksum: sha1:ae727d6d896ce5994e5c241817de675504317c75
+  docs/models/operations/sendassistantmessagesecurity.md:
+    last_write_checksum: sha1:7c43bf5d8bf25c592be0c4b652dc325242609aec
   docs/models/operations/sendinviterequest.md:
     last_write_checksum: sha1:73372bdb9e63c9d912761855f2b97fb001f66e4f
   docs/models/operations/sendinvitesecurity.md:
@@ -2983,7 +2991,7 @@ trackedFiles:
   docs/sdks/assistantmemories/README.md:
     last_write_checksum: sha1:5f2d9d10074617110479871148d92fd118f1cefa
   docs/sdks/assistants/README.md:
-    last_write_checksum: sha1:5a9c4cd5a3bf6725085f64311f3d5d2a35517505
+    last_write_checksum: sha1:d6878a31806162f13cd59bc6de6ba6c6c9a648f1
   docs/sdks/auditlogs/README.md:
     last_write_checksum: sha1:7caf64a8e89202447bef36b378db3eec3e55821b
   docs/sdks/auth/README.md:
@@ -3190,6 +3198,8 @@ trackedFiles:
     last_write_checksum: sha1:6ca81dcfb983d0954b2181566e707a8dfca52c0c
   src/funcs/assistantsList.ts:
     last_write_checksum: sha1:0eef1ce8687ff64f5589fe7886de0357532ee2ac
+  src/funcs/assistantsSendMessage.ts:
+    last_write_checksum: sha1:33bfdec8bf247b2db6111fc6e53832eea9ae0a11
   src/funcs/assistantsUpdate.ts:
     last_write_checksum: sha1:8c6a96b7a83a911923bfd545c892310af8590711
   src/funcs/auditlogsList.ts:
@@ -4023,7 +4033,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:e92b6272d615f469fdbb0e45602b17487e9a3d3e
+    last_write_checksum: sha1:b1c74b002d05d2557152a421bb344e3f9ff51d94
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4402,6 +4412,10 @@ trackedFiles:
     last_write_checksum: sha1:6121febd6ff326d1b1431cb8f8fbeb6c690212ef
   src/models/components/sendinviterequestbody.ts:
     last_write_checksum: sha1:4db10ad0000eeaf1021650d75cbb16501a3eeb42
+  src/models/components/sendmessagerequestbody.ts:
+    last_write_checksum: sha1:f20badc7852122344d9e0fa63de3a536624c8a66
+  src/models/components/sendmessageresult.ts:
+    last_write_checksum: sha1:4182cf0fcfda5059fd6295528769d4ac7456491e
   src/models/components/serveimageform.ts:
     last_write_checksum: sha1:02556f1de78b6d7b643c4bee99807bd701536d2a
   src/models/components/servernameoverride.ts:
@@ -4902,7 +4916,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:9d4ebffbb78e9b4802642ff11317b9f47c8ca303
+    last_write_checksum: sha1:89866537a7cb82671fd82ea48d285b78fc38f7a9
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5086,6 +5100,8 @@ trackedFiles:
     last_write_checksum: sha1:50aa906a1142808e7f895973e1d827f6f7d47eed
   src/models/operations/searchusers.ts:
     last_write_checksum: sha1:ccc538d2d9c78bf1adb52afcb0e2323af5896e51
+  src/models/operations/sendassistantmessage.ts:
+    last_write_checksum: sha1:be9b03d4bac0a58ae52d2cb2c0eb927ede591fad
   src/models/operations/sendinvite.ts:
     last_write_checksum: sha1:65f16d139e14830c560dbde697b99945ed48f79d
   src/models/operations/servechatattachment.ts:
@@ -5524,7 +5540,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:075f9c9fe58abacbb83b1817981f4645e3254c67
+    last_write_checksum: sha1:f4da57bf4fbc13ec1d8b1649c1309723f263fadd
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -5884,6 +5900,8 @@ trackedFiles:
     last_write_checksum: sha1:304a0d48442ce9848580dd96427992f4037e8578
   src/react-query/searchUsers.ts:
     last_write_checksum: sha1:1aed86190eb13de376440fc48529c7a208791c2f
+  src/react-query/sendAssistantMessage.ts:
+    last_write_checksum: sha1:c634ee48bb1662040f275313a6b88f61fb1bc8ec
   src/react-query/sendInvite.ts:
     last_write_checksum: sha1:e8ddaa87274318dee9be969d0c320125e8897f5f
   src/react-query/serveChatAttachment.core.ts:
@@ -6057,7 +6075,7 @@ trackedFiles:
   src/sdk/assistantmemories.ts:
     last_write_checksum: sha1:40c6f4887e1a7715160ab9f35cb2aadb55c0c5f5
   src/sdk/assistants.ts:
-    last_write_checksum: sha1:56342cfa348c3a7007d11973d00ece96f86ef25a
+    last_write_checksum: sha1:7950ea4da7cd6582554a598f586118249b24cd7a
   src/sdk/auditlogs.ts:
     last_write_checksum: sha1:7a7107003acbf2d60125e0777974a9d270328eeb
   src/sdk/auth.ts:
@@ -9253,6 +9271,17 @@ examples:
       responses:
         "200":
           application/json: {"edges": [], "nodes": [{"id": "<id>", "label": "<value>", "tier": "tool", "total_calls": 265317}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  sendAssistantMessage:
+    speakeasy-default-send-assistant-message:
+      requestBody:
+        application/json: {"assistant_id": "6c62bf37-7865-4440-8031-71e7336013d5", "correlation_id": "<id>", "message": "<value>"}
+      responses:
+        "200":
+          application/json: {"accepted": true, "chat_id": "c62bf377-8654-4400-b317-1e7336013d52", "thread_id": "5983913b-3bda-425c-9952-35f5a2c7cf12"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -33,7 +33,10 @@ const (
 	StatusFired         = "fired"
 	StatusCancelled     = "cancelled"
 
-	DefinitionSlugWake = "wake"
+	DefinitionSlugSlack     = "slack"
+	DefinitionSlugCron      = "cron"
+	DefinitionSlugWake      = "wake"
+	DefinitionSlugDashboard = "dashboard"
 )
 
 var (

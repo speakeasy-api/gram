@@ -77,6 +77,14 @@ WHERE id = @thread_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetAssistantThreadIDByCorrelation :one
+SELECT id
+FROM assistant_threads
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND correlation_id = @correlation_id
+  AND deleted IS FALSE;
+
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
 FROM toolsets
