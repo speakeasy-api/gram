@@ -26,22 +26,22 @@ import (
 func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
 	t.Parallel()
 
-	text := ":: and ::0 and 2001:db8::1"
+	text := ":: and ::0 and dead::beef"
 	results := []presidioResult{
 		{EntityType: "IP_ADDRESS", Start: 0, End: 2, Score: 0.9},   // "::"
 		{EntityType: "IP_ADDRESS", Start: 7, End: 10, Score: 0.9},  // "::0"
-		{EntityType: "IP_ADDRESS", Start: 15, End: 26, Score: 0.9}, // "2001:db8::1"
+		{EntityType: "IP_ADDRESS", Start: 15, End: 25, Score: 0.9}, // "dead::beef"
 	}
 
 	findings := convertPresidioFindings(text, results)
 	require.Len(t, findings, 1, "only the real IPv6 address should survive the filter")
-	assert.Equal(t, "2001:db8::1", findings[0].Match)
+	assert.Equal(t, "dead::beef", findings[0].Match)
 }
 
 func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
 	t.Parallel()
 
-	// Unspecified addresses are filtered, IPv6 and IPv4.
+	// Unspecified addresses are filtered, IPv6 and IPv4 (0.0.0.0/8).
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::"))
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::0"))
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0::0"))
@@ -61,13 +61,48 @@ func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1::"))
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "DEAF::"), "case-insensitive")
 
-	// Real addresses are not filtered.
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "8.8.8.8"))
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "2001:db8::1"))
+	// Other IANA-reserved space.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "10.0.0.5"), "RFC1918 private")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "192.168.1.1"), "RFC1918 private")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "172.16.5.5"), "RFC1918 private")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "100.64.1.1"), "CGNAT RFC6598")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "169.254.1.1"), "link-local")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "224.0.0.1"), "multicast")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "192.0.2.1"), "RFC5737 documentation")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "198.51.100.1"), "RFC5737 documentation")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "203.0.113.7"), "RFC5737 documentation")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2001:db8::1"), "RFC5737 documentation IPv6")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "192.88.99.1"), "6to4 deprecated")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "240.1.2.3"), "class E reserved")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "198.18.0.0"), "RFC2544 benchmarking")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "255.255.255.255"), "limited broadcast")
+
+	// Well-known public DNS resolvers are not personal data.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "8.8.8.8"), "Google public DNS")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1.1.1.1"), "Cloudflare 1.1.1.1")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "9.9.9.9"), "Quad9")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "208.67.222.222"), "OpenDNS")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700::1111"), "Cloudflare IPv6")
+
+	// Common placeholder IPs.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1.2.3.4"), "placeholder")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2.2.2.2"), "placeholder")
+
+	// Heuristic: /8 network address.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "148.0.0.0"), "network address of /8")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "147.0.0.0"), "network address of /8")
+
+	// Real addresses still flow through. Use a routable address that is
+	// not in the curated DNS resolver set, not in any reserved range,
+	// and IPv6 with enough non-zero bytes to clear the heuristic.
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "71.126.87.167"), "residential Verizon")
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "82.15.226.61"), "residential Virgin Media")
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "2607:f8b0:4002:c0e::200e"), "real IPv6 anycast")
 
 	// Other entity types are never filtered by this rule.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "8.8.8.8"))
 }
 
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
