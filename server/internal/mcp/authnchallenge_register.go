@@ -144,7 +144,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	logger.InfoContext(ctx, "user session client registered",
 		attr.SlogOAuthClientID(clientID),
 		attr.SlogOAuthClientName(req.ClientName),
-		attr.SlogToolsetMCPSlug(mcpSlug),
+		attr.SlogToolsetMCPSlug(endpoint.Slug),
 		attr.SlogOAuthRegisteredAuthMethod(req.TokenEndpointAuthMethod),
 		attr.SlogOAuthClientSecretGenerated(clientSecretHash.Valid),
 		attr.SlogOAuthRedirectURICount(len(req.RedirectURIs)),
