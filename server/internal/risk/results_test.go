@@ -140,6 +140,64 @@ func TestListRiskResults_ExcludesNotFound(t *testing.T) {
 	require.Empty(t, result.Results)
 }
 
+// seedChatMessageWithUser is like seedChatMessage but stamps the chat with an
+// external user id so user_id filtering can be exercised.
+func seedChatMessageWithUser(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, externalUserID string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+
+	chatID, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	_, err = ti.chatRepo.UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             chatID,
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		ExternalUserID: pgtype.Text{String: externalUserID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	msgID, err := testrepo.New(ti.conn).InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+		Role:      "user",
+		Content:   "test message with a secret",
+	})
+	require.NoError(t, err)
+
+	return chatID, msgID
+}
+
+func TestListRiskResults_ByUserID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("User Filter Test")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+
+	_, aliceMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alice@example.com")
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, aliceMsg, true)
+
+	_, bobMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "bob@example.com")
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, bobMsg, true)
+
+	// Case-insensitive substring match against the chat's external user id, on
+	// the project-level path (no policy/chat filter).
+	userID := "ALICE"
+	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		UserID: &userID,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	require.Equal(t, "alice@example.com", *result.Results[0].UserID)
+}
+
 func TestGetRiskPolicyStatus_WithAnalyzedMessages(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
