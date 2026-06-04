@@ -47,7 +47,11 @@ import {
   OverridesFields,
   TokenEndpointAuthMethodField,
 } from "./IssuerFormFields";
-import { narrowTokenEndpointAuthMethod, parseScopes } from "./issuerFormUtils";
+import {
+  narrowTokenEndpointAuthMethod,
+  parseScopes,
+  pickPreferredAuthMethod,
+} from "./issuerFormUtils";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 
 type Mode = "select" | "new";
@@ -357,6 +361,18 @@ export function AttachRemoteIdentityProviderSheet({
     if (!open || !initialIssuerUrl) return;
     void runDiscover(initialIssuerUrl);
   }, [open, initialIssuerUrl, runDiscover]);
+
+  // When discovery completes, auto-select the best supported auth method.
+  // Preference: client_secret_basic > client_secret_post > none.
+  // Only fires on a fresh snapshot (non-null); the URL-change reset that
+  // clears tokenEndpointAuthMethod to "" handles the "stale discovery" case.
+  useEffect(() => {
+    if (!discoveredSnapshot) return;
+    const preferred = pickPreferredAuthMethod(
+      discoveredSnapshot.tokenEndpointAuthMethodsSupported,
+    );
+    if (preferred) setTokenEndpointAuthMethod(preferred);
+  }, [discoveredSnapshot]);
 
   // Resolve the issuer record the operator picked in Select-existing mode.
   // We need it to know whether the picked issuer supports DCR and to pull
