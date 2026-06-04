@@ -36,6 +36,7 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 		h.UpdateToolset(),
 		h.DeleteToolset(),
 		h.GetToolset(),
+		h.ListToolFilters(),
 		h.CheckMCPSlugAvailability(),
 		h.CloneToolset(),
 		h.AddExternalOAuthServer(),

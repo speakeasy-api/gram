@@ -13573,6 +13573,119 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: McpServers
+    /rpc/mcpServers.listToolFilters:
+        get:
+            description: List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
+            operationId: listMcpServerToolFilters
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the MCP server. Mutually exclusive with slug.
+                  in: query
+                  name: id
+                  schema:
+                    description: The ID of the MCP server. Mutually exclusive with slug.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The slug of the MCP server. Mutually exclusive with id.
+                  in: query
+                  name: slug
+                  schema:
+                    description: The slug of the MCP server. Mutually exclusive with id.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListToolFiltersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listToolFilters mcpServers
+            tags:
+                - mcpServers
+            x-speakeasy-name-override: listToolFilters
+            x-speakeasy-react-hook:
+                name: ListMcpServerToolFilters
     /rpc/mcpServers.update:
         post:
             description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.'
@@ -27660,6 +27773,114 @@ paths:
             x-speakeasy-name-override: listForOrg
             x-speakeasy-react-hook:
                 name: ListToolsetsForOrg
+    /rpc/toolsets.listToolFilters:
+        get:
+            description: List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
+            operationId: listToolsetToolFilters
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListToolFiltersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listToolFilters toolsets
+            tags:
+                - toolsets
+            x-speakeasy-name-override: listToolFilters
+            x-speakeasy-react-hook:
+                name: ListToolsetToolFilters
     /rpc/toolsets.removeOAuthServer:
         post:
             description: Remove OAuth server association from a toolset
@@ -37324,6 +37545,34 @@ components:
                     description: List of Slack apps
             required:
                 - items
+        ListToolFiltersResult:
+            type: object
+            properties:
+                excluded:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolFilterTool'
+                    description: 'Tools whose effective tag set is empty: reachable only without a ?tags= filter.'
+                filtering_enabled:
+                    type: boolean
+                    description: Whether tool filtering is enabled, i.e. the resolution chain (mcp_servers then toolsets) yields a non-null tool variations group. When false, scopes and excluded are empty. A project-default (source-level) variations group is not treated as filtering here.
+                scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolFilterScope'
+                    description: The available filter scopes (tags), each with its member tools. Union of effective tags across the server's tools.
+                tool_variations_group_id:
+                    type: string
+                    description: The ID of the resolved tool variations group, if filtering is enabled.
+                    format: uuid
+                tool_variations_group_name:
+                    type: string
+                    description: The name of the resolved tool variations group, if filtering is enabled.
+            description: 'The tool filtering configuration in effect for an MCP server: the resolved tool variations group, the available filter scopes (tags), and the tools excluded from all filters. Read-only. Filtering is reported as enabled only when an explicit tool variations group is configured on the MCP server or its toolset; the per-group effective-tag derivation matches the runtime ?tags= filter for that group.'
+            required:
+                - filtering_enabled
+                - scopes
+                - excluded
         ListToolVariationGroupsResult:
             type: object
             properties:
@@ -42358,6 +42607,39 @@ components:
                 - id
                 - name
                 - tool_urn
+        ToolFilterScope:
+            type: object
+            properties:
+                tag:
+                    type: string
+                    description: The filter tag
+                tool_count:
+                    type: integer
+                    description: The number of tools under this scope
+                    format: int64
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolFilterTool'
+                    description: The tools under this scope
+            description: A filter tag ("scope") and the tools reachable when filtering by it via the runtime ?tags= parameter.
+            required:
+                - tag
+                - tool_count
+                - tools
+        ToolFilterTool:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: The display name of the tool, with any variation rename from the resolved group applied (matching the runtime wire)
+                tool_urn:
+                    type: string
+                    description: The URN of the tool
+            description: A tool referenced by a tool filter scope, identified by URN and display name.
+            required:
+                - tool_urn
+                - name
         ToolMetric:
             type: object
             properties:

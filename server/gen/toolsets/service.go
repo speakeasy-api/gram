@@ -29,6 +29,12 @@ type Service interface {
 	DeleteToolset(context.Context, *DeleteToolsetPayload) (err error)
 	// Get detailed information about a toolset including full HTTP tool definitions
 	GetToolset(context.Context, *GetToolsetPayload) (res *types.Toolset, err error)
+	// List the tool filter scopes (tags) available on a toolset-backed MCP server
+	// and the tools under each, including tools excluded from all filters.
+	// Read-only; reflects the explicit tool variations group configured on the
+	// toolset, deriving effective tags with the same logic as the runtime ?tags=
+	// filter. Returns filtering disabled when no explicit group is set.
+	ListToolFilters(context.Context, *ListToolFiltersPayload) (res *types.ListToolFiltersResult, err error)
 	// Check if a MCP slug is available
 	CheckMCPSlugAvailability(context.Context, *CheckMCPSlugAvailabilityPayload) (res bool, err error)
 	// Clone an existing toolset with a new name
@@ -69,7 +75,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer", "setUserSessionIssuer", "setToolVariationsGroup"}
+var MethodNames = [15]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer", "setUserSessionIssuer", "setToolVariationsGroup"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -148,6 +154,16 @@ type DeleteToolsetPayload struct {
 // GetToolsetPayload is the payload type of the toolsets service getToolset
 // method.
 type GetToolsetPayload struct {
+	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListToolFiltersPayload is the payload type of the toolsets service
+// listToolFilters method.
+type ListToolFiltersPayload struct {
 	// The slug of the toolset
 	Slug             types.Slug
 	SessionToken     *string
