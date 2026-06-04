@@ -33120,6 +33120,7 @@ components:
                     enum:
                         - client_secret_basic
                         - client_secret_post
+                        - none
                 user_session_issuer_id:
                     type: string
                     description: The user_session_issuer the new client is paired with.
@@ -33692,6 +33693,7 @@ components:
                     enum:
                         - client_secret_basic
                         - client_secret_post
+                        - none
                 user_session_issuer_id:
                     type: string
                     description: The user_session_issuer this client is paired with.
@@ -39820,6 +39822,7 @@ components:
                     enum:
                         - client_secret_basic
                         - client_secret_post
+                        - none
                 updated_at:
                     type: string
                     format: date-time
@@ -43603,6 +43606,7 @@ components:
                     enum:
                         - client_secret_basic
                         - client_secret_post
+                        - none
                 user_session_issuer_id:
                     type: string
                     description: Re-pair with a different user_session_issuer.
