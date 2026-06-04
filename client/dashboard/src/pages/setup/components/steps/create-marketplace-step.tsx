@@ -75,7 +75,7 @@ export function CreateMarketplaceStep({
         </div>
       }
       title="Create plugin marketplace"
-      description="Gram publishes a private GitHub repo that acts as your team's plugin marketplace for Claude Code, Cursor, and Codex. It ships with our core observability plugin, required for us to collect usage metrics and enforce authorization, and is also where any plugins you build in Gram later get published — so this only needs to be set up once per project."
+      description="Speakeasy publishes a private GitHub repo that acts as your team's plugin marketplace for Claude Code, Cursor, and Codex. It ships with our core observability plugin, required for us to collect usage metrics and enforce authorization, and is also where any plugins you build in Speakeasy later get published — so this only needs to be set up once per project."
       onContinue={primaryAction}
       continueLabel={primaryLabel}
       isLoading={publishMutation.isPending || isLoading}
@@ -123,7 +123,7 @@ export function CreateMarketplaceStep({
             </div>
             <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
               This repo is your team's plugin marketplace. The observability
-              plugins are already inside, and any plugins you build in Gram
+              plugins are already inside, and any plugins you build in Speakeasy
               later will be published here too.
             </p>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -178,7 +178,7 @@ export function CreateMarketplaceStep({
           </div>
         )}
         {isConnected && (
-          <p className="text-muted-foreground text-sm leading-relaxed">
+          <p className="text-muted-foreground text-sm">
             At least one of your organization's users needs to be attached to
             the repository as a collaborator so that the repository is
             discoverable by Agent Platforms.

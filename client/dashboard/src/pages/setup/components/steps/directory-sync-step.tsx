@@ -83,7 +83,7 @@ export function DirectorySyncStep({
         </div>
       }
       title="Directory sync"
-      description="Connect your identity provider's directory to automatically sync users, groups, and roles. Changes in your IdP will be reflected in Gram."
+      description="Connect your identity provider's directory to automatically sync users, groups, and roles. Changes in your IdP will be reflected in Speakeasy."
       onContinue={continueAction}
       continueLabel={continueLabel}
       isLoading={isLoading}

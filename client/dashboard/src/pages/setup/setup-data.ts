@@ -43,7 +43,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
       {
         title: "Update Managed settings on Claude.ai",
         description:
-          "Add your private marketplace to managed settings so every developer in your org gets the observability plugin automatically. The OTEL env block also pushes a Gram API key to every install so tool traffic lands in your dashboard. If you already have managed settings, merge this block into the existing JSON.",
+          "Add your private marketplace to managed settings so every developer in your org gets the observability plugin automatically. The OTEL env block also pushes a Speakeasy API key to every install so tool traffic lands in your dashboard. If you already have managed settings, merge this block into the existing JSON.",
         screenshot: {
           src: "/setup/claude-managed-settings-editor.png",
           alt: "Claude Code Managed settings JSON editor dialog with Update settings button",
@@ -124,7 +124,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
       {
         title: "Mark the observability plugin as Required",
         description:
-          "After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Gram without per-user opt-in.",
+          "After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in.",
         screenshot: {
           src: "/setup/claude-cowork-set-required.png",
           alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
@@ -144,9 +144,9 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
     connected: false,
     setupSteps: [
       {
-        title: "Register the Gram plugin marketplace",
+        title: "Register the Speakeasy plugin marketplace",
         description:
-          "Register your org's private marketplace with Codex. The repo URL points at the GitHub repository Gram just published for you.",
+          "Register your org's private marketplace with Codex. The repo URL points at the GitHub repository Speakeasy just published for you.",
         code: `codex plugin marketplace add {{GRAM_MARKETPLACE_URL}}`,
         language: "bash",
         helpLink: {
@@ -196,7 +196,7 @@ enabled = true`,
         },
       },
       {
-        title: "Import the Gram marketplace",
+        title: "Import the Speakeasy marketplace",
         description:
           "In the Cursor team dashboard, navigate to Settings → Plugins → Import and paste your private marketplace repo URL below. Cursor reads the plugin manifest from the repo and makes its plugins available to your team.",
         code: `{{GRAM_REPO_URL}}`,
@@ -205,7 +205,7 @@ enabled = true`,
       {
         title: "Mark the observability plugin as required",
         description:
-          "In Cursor's team marketplace settings, mark the observability plugin (slug below) as required so tool events flow to Gram for every team member without per-user setup.",
+          "In Cursor's team marketplace settings, mark the observability plugin (slug below) as required so tool events flow to Speakeasy for every team member without per-user setup.",
         code: `{{GRAM_CURSOR_PLUGIN_NAME}}`,
         language: "text",
       },
