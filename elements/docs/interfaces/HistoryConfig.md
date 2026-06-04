@@ -37,6 +37,28 @@ false
 
 ***
 
+### threadListFilters?
+
+> `optional` **threadListFilters**: `Record`\<`string`, `string`\>
+
+Extra query parameters forwarded to the thread-list request, used to
+filter which conversations are shown. Opaque to Elements — the consumer
+decides the keys (e.g. a search term, or a backend-specific scope). When
+omitted, all of the caller's chats are listed.
+
+***
+
+### deferThreadIdMinting?
+
+> `optional` **deferThreadIdMinting**: `boolean`
+
+Let the backend own chat-id creation. When true, a brand-new thread does not
+get a client-generated id; instead the transport assigns the id (e.g. one
+the server minted on the first send, reported via the transport context's
+`adoptChatId`). Use with a server-backed `transport`.
+
+***
+
 ### showThreadList?
 
 > `optional` **showThreadList**: `boolean`
