@@ -24,6 +24,7 @@ const ROW_HEIGHT = 32;
 const SOURCE_ICONS: Record<string, string> = {
   "claude-code": "/icons/platforms/claude.svg",
   "claude-code-desktop": "/icons/platforms/claude.svg",
+  cowork: "/icons/platforms/claude.svg",
   cursor: "/icons/platforms/cursor.svg",
   codex: "/icons/platforms/openai.svg",
 };
