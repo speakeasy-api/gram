@@ -19,6 +19,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// The managed assistant must expose the full observability catalog the old
+// client-side AI Insights copilot had — not just search_logs. This guards
+// against the gap silently reopening if a tool is dropped from the bundle.
+func TestManagedAssistantLogsToolsExposesObservabilityCatalog(t *testing.T) {
+	t.Parallel()
+
+	tools := ManagedAssistantLogsTools(nil)
+
+	got := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		got = append(got, tool.Executor.Descriptor().Name)
+	}
+
+	require.ElementsMatch(t, []string{
+		"platform_search_logs",
+		"platform_search_tool_calls",
+		"platform_search_chats",
+		"platform_search_users",
+		"platform_get_project_metrics_summary",
+		"platform_get_user_metrics_summary",
+		"platform_get_observability_overview",
+		"platform_list_attribute_keys",
+	}, got)
+}
+
 type stubDirectExecutor struct {
 	response string
 	err      error
