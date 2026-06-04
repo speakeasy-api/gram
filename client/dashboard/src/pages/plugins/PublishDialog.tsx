@@ -10,6 +10,7 @@ interface PublishDialogProps {
   onOpenChange: (open: boolean) => void;
   onPublish: (githubUsernames: string[]) => void;
   isPending: boolean;
+  mode?: "publish" | "manage";
 }
 
 interface GithubUserResult {
@@ -44,7 +45,9 @@ export const PublishDialog = memo(function PublishDialog({
   onOpenChange,
   onPublish,
   isPending,
+  mode = "publish",
 }: PublishDialogProps) {
+  const isManage = mode === "manage";
   const [usernames, setUsernames] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -229,15 +232,35 @@ export const PublishDialog = memo(function PublishDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Publish Plugins</Dialog.Title>
-          <Dialog.Description>
-            Publish all plugins to a GitHub repository. Optionally add
-            collaborators who will receive read access to the repo.
-          </Dialog.Description>
-          <Dialog.Description>
-            At least one user in your organization will need to be given access
-            to connect the generated repository with Claude, Cursor, or Codex.
-          </Dialog.Description>
+          <Dialog.Title>
+            {isManage ? "Add collaborators" : "Publish Plugins"}
+          </Dialog.Title>
+          {isManage ? (
+            <>
+              <Dialog.Description>
+                Add new GitHub users as collaborators on the marketplace repo.
+                Existing collaborators are not shown here — anyone you add below
+                is granted access in addition to those already attached to the
+                repo.
+              </Dialog.Description>
+              <Dialog.Description>
+                To view or remove existing collaborators, open the repository on
+                GitHub.
+              </Dialog.Description>
+            </>
+          ) : (
+            <>
+              <Dialog.Description>
+                Publish all plugins to a GitHub repository. Optionally add
+                collaborators who will receive read access to the repo.
+              </Dialog.Description>
+              <Dialog.Description>
+                At least one user in your organization will need to be given
+                access to connect the generated repository with Claude, Cursor,
+                or Codex.
+              </Dialog.Description>
+            </>
+          )}
         </Dialog.Header>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
@@ -353,7 +376,13 @@ export const PublishDialog = memo(function PublishDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Publishing..." : "Publish"}
+              {isPending
+                ? isManage
+                  ? "Adding..."
+                  : "Publishing..."
+                : isManage
+                  ? "Add collaborators"
+                  : "Publish"}
             </Button>
           </Dialog.Footer>
         </form>

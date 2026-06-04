@@ -180,7 +180,7 @@ export function ConfirmTrafficStep({
         </div>
       }
       title="Confirm traffic"
-      description="We're polling Gram for new hook events. Trigger any action in Claude Code, Cursor, or Codex on a managed machine to confirm the instrumentation works."
+      description="We're listening for events from your agent platforms. Trigger any action in Claude Code, Cursor, or Codex on a managed machine to confirm the instrumentation works."
       onContinue={onComplete}
       continueLabel="Complete setup"
       showBack

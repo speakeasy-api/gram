@@ -27,7 +27,7 @@ const STEPS: Step[] = [
   {
     id: "create-marketplace",
     title: "Create plugin marketplace",
-    description: "Publish observability plugins to GitHub",
+    description: "For distributing servers to your users",
   },
   {
     id: "instrument-agents",
@@ -151,7 +151,12 @@ export function SetupWizard() {
   const renderStep = () => {
     switch (currentStep) {
       case 0:
-        return <ConnectIdpStep onSkip={completeCurrentStep} />;
+        return (
+          <ConnectIdpStep
+            onSkip={completeCurrentStep}
+            onComplete={completeCurrentStep}
+          />
+        );
       case 1:
         return (
           <DirectorySyncStep onComplete={completeCurrentStep} onBack={goBack} />

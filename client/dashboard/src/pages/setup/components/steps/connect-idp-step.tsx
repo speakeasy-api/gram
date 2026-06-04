@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query";
+import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
 import { IDP_PROVIDERS } from "../../providers";
@@ -35,14 +36,18 @@ function ProviderIcon({
 
 interface ConnectIdpStepProps {
   onSkip: () => void;
+  onComplete: () => void;
 }
 
 const INITIAL_VISIBLE = 6;
 
-export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
+export function ConnectIdpStep({ onSkip, onComplete }: ConnectIdpStepProps) {
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
+  const [portalOpened, setPortalOpened] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus();
 
   const filteredProviders = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -82,6 +87,7 @@ export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
           generateWorkOSAdminPortalLinkRequestBody: {
             intent: "sso",
             successUrl: `${getServerURL()}/v1/setup/callback?intent=sso`,
+            returnUrl: window.location.href,
             intentOptions: {
               sso: {
                 providerType: provider.providerType,
@@ -92,11 +98,38 @@ export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
       },
       {
         onSuccess: (data) => {
-          window.location.href = data.url;
+          window.open(data.url, "_blank", "noopener,noreferrer");
+          setPortalOpened(true);
         },
       },
     );
   };
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    try {
+      const result = await refetchOnboardingStatus();
+      if (result.data?.ssoConfigured) {
+        onComplete();
+      } else {
+        toast.error(
+          "SSO connection not detected yet. Finish setup in the WorkOS tab, then try again.",
+        );
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const continueAction = portalOpened ? handleVerify : handleConnect;
+  const continueLabel = portalOpened
+    ? verifying
+      ? "Verifying..."
+      : "Continue"
+    : generatePortalLink.isPending
+      ? "Opening..."
+      : "Connect";
+  const isLoading = generatePortalLink.isPending || verifying;
 
   return (
     <StepContainer
@@ -107,11 +140,11 @@ export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
       }
       title="Connect identity provider"
       description="Connect your SSO provider to enable secure authentication for your team. This allows employees to sign in with their existing credentials."
-      onContinue={handleConnect}
+      onContinue={continueAction}
       onSkip={onSkip}
       skipLabel="Skip for now"
-      continueLabel={generatePortalLink.isPending ? "Opening..." : "Connect"}
-      isLoading={generatePortalLink.isPending}
+      continueLabel={continueLabel}
+      isLoading={isLoading}
       canContinue={!!selectedProvider}
     >
       <div className="space-y-6">
@@ -193,12 +226,12 @@ export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
               </div>
               <div>
                 <p className="text-foreground text-sm font-medium">
-                  {"You'll"} be redirected to complete setup
+                  Setup opens in a new tab
                 </p>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  After clicking Connect, you will be redirected to configure
-                  your {provider?.name} SSO connection. Once complete, you will
-                  be returned to the next step automatically.
+                  After clicking Connect, the WorkOS portal opens in a new
+                  browser tab to configure your {provider?.name} SSO connection.
+                  Finish setup there, then return here and click Continue.
                 </p>
               </div>
             </div>

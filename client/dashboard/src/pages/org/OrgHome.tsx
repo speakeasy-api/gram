@@ -1005,7 +1005,7 @@ function OnboardingShortcutCard({ orgSlug }: { orgSlug: string | undefined }) {
             as="div"
             className="text-foreground text-sm font-semibold"
           >
-            Finish setting up your workspace
+            Finish setting up your organization
           </Type>
           <Type small muted className="mt-0.5 text-xs">
             Configure SSO, directory sync, your plugin marketplace, and agent
