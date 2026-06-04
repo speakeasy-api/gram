@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/netip"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/semaphore"
+	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -400,6 +402,16 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		onProgress()
 	}
 
+	// Reformat JSON payloads as YAML with literal block scalars for
+	// strings containing newlines. Presidio's recognizers (notably
+	// US_DRIVER_LICENSE, IBAN) trip on JSON-escaped multiline content
+	// where `\n`, `\uXXXX`, etc. produce digit-and-letter runs that look
+	// like license numbers or codes. The YAML literal form keeps the
+	// underlying characters but emits real newlines, so the surrounding
+	// markup no longer fabricates matches. Non-JSON payloads pass
+	// through unchanged.
+	text = reformatJSONAsYAML(text)
+
 	if originalSize := len(text); originalSize > presidioMaxMessageBytes {
 		text = truncateAtRuneBoundary(text, presidioMaxMessageBytes)
 		p.logger.WarnContext(ctx, "presidio: truncating oversized message",
@@ -668,6 +680,88 @@ func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
 		}
 	}
 	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+}
+
+// reformatJSONAsYAML tries to parse text as a JSON value and re-emit it as
+// YAML where any string containing a newline is written as a literal block
+// scalar (`|`). The resulting text carries the same semantic content but
+// drops the JSON `\n` / `\uXXXX` escapes that lead Presidio's regex- and
+// pattern-based recognizers (US_DRIVER_LICENSE in particular) to fabricate
+// matches inside multiline string bodies.
+//
+// Returns text unchanged whenever it does not parse as a JSON value or
+// whenever YAML encoding fails, so non-JSON payloads continue to flow
+// through to Presidio as-is. Any bytes after the first JSON value (mixed
+// prefix-JSON-then-prose inputs) are appended verbatim so Presidio still
+// scans them.
+func reformatJSONAsYAML(text string) string {
+	if text == "" {
+		return text
+	}
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	var data any
+	if err := dec.Decode(&data); err != nil {
+		return text
+	}
+
+	node := jsonValueToYAMLNode(data)
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(node); err != nil {
+		return text
+	}
+	if err := enc.Close(); err != nil {
+		return text
+	}
+	return buf.String() + text[dec.InputOffset():]
+}
+
+func jsonValueToYAMLNode(v any) *yaml.Node {
+	switch x := v.(type) {
+	case nil:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+	case bool:
+		val := "false"
+		if x {
+			val = "true"
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: val}
+	case json.Number:
+		return &yaml.Node{Kind: yaml.ScalarNode, Value: x.String()}
+	case string:
+		return jsonStringToYAMLNode(x)
+	case []any:
+		seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		for _, item := range x {
+			seq.Content = append(seq.Content, jsonValueToYAMLNode(item))
+		}
+		return seq
+	case map[string]any:
+		m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			m.Content = append(m.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k},
+				jsonValueToYAMLNode(x[k]),
+			)
+		}
+		return m
+	}
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(v)}
+}
+
+func jsonStringToYAMLNode(s string) *yaml.Node {
+	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
+	if strings.Contains(s, "\n") {
+		n.Style = yaml.LiteralStyle
+	}
+	return n
 }
 
 // truncateAtRuneBoundary returns the longest prefix of s whose byte length is

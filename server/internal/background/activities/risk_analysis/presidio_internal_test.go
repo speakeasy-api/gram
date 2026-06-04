@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/semaphore"
+	"gopkg.in/yaml.v3"
 )
 
 // TestConvertPresidioFindings_FiltersIPv6Unspecified verifies that the
@@ -462,6 +463,123 @@ func TestIsCancelErrClassifiesContextErrors(t *testing.T) {
 	assert.True(t, isCancelErr(fmt.Errorf("wrapped: %w", context.DeadlineExceeded)))
 	assert.False(t, isCancelErr(nil))
 	assert.False(t, isCancelErr(errors.New("presidio returned status 500")))
+}
+
+// TestReformatJSONAsYAML_LeavesNonJSONUntouched documents the safety
+// fallback: anything we cannot decode as a JSON value flows through to
+// Presidio verbatim so plain prose and pre-formatted snippets are still
+// scanned.
+func TestReformatJSONAsYAML_LeavesNonJSONUntouched(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"",
+		"hello world",
+		"not { json",
+		"  leading whitespace and trailing garbage }",
+	}
+	for _, in := range cases {
+		assert.Equal(t, in, reformatJSONAsYAML(in))
+	}
+}
+
+// TestReformatJSONAsYAML_EscapedNewlinesBecomeLiteralBlock is the
+// regression test for POC-58: JSON-encoded multiline strings produce
+// `\n` and similar escapes that Presidio's pattern-based recognizers
+// (US_DRIVER_LICENSE in particular) misread as license numbers. The
+// YAML literal-block form replaces those escapes with real newlines.
+func TestReformatJSONAsYAML_EscapedNewlinesBecomeLiteralBlock(t *testing.T) {
+	t.Parallel()
+
+	in := `{"message":"first line\nsecond line\nthird line"}`
+	out := reformatJSONAsYAML(in)
+
+	assert.Contains(t, out, "|", "multiline strings should be emitted as a YAML literal block scalar")
+	assert.NotContains(t, out, `\n`, "JSON newline escapes must not survive into the Presidio payload")
+	for _, line := range []string{"first line", "second line", "third line"} {
+		assert.Contains(t, out, line)
+	}
+	assert.GreaterOrEqual(t, strings.Count(out, "\n"), 3, "literal block should preserve real newlines between lines")
+}
+
+// TestReformatJSONAsYAML_PreservesStructureAndValues confirms that
+// non-string JSON values (numbers, booleans, null, nested arrays and
+// objects) round-trip through the converter into a YAML document that
+// decodes back to the same data.
+func TestReformatJSONAsYAML_PreservesStructureAndValues(t *testing.T) {
+	t.Parallel()
+
+	in := `{"a":1,"b":1.5,"c":true,"d":null,"e":["x","y"],"f":{"nested":"value"}}`
+	out := reformatJSONAsYAML(in)
+
+	var roundTrip map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(out), &roundTrip))
+	assert.Equal(t, 1, roundTrip["a"])
+	assert.InEpsilon(t, 1.5, roundTrip["b"], 1e-9)
+	assert.Equal(t, true, roundTrip["c"])
+	assert.Nil(t, roundTrip["d"])
+	assert.Equal(t, []any{"x", "y"}, roundTrip["e"])
+	assert.Equal(t, map[string]any{"nested": "value"}, roundTrip["f"])
+}
+
+// TestReformatJSONAsYAML_PreservesTrailingBytes guards against
+// json.Decoder.Decode silently discarding bytes after the first JSON value:
+// for mixed prefix-JSON-then-prose inputs we must still hand the trailing
+// portion to Presidio so PII outside the JSON envelope is not dropped.
+func TestReformatJSONAsYAML_PreservesTrailingBytes(t *testing.T) {
+	t.Parallel()
+
+	in := `{"a":1} contact sarah@example.com for details`
+	out := reformatJSONAsYAML(in)
+
+	assert.Contains(t, out, "a: 1", "JSON prefix should still be reformatted as YAML")
+	assert.Contains(t, out, "sarah@example.com", "trailing bytes must survive into the Presidio payload")
+}
+
+// TestReformatJSONAsYAML_SortsMapKeys makes the output deterministic so
+// repeated scans of the same payload produce stable Presidio offsets.
+func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
+	t.Parallel()
+
+	in := `{"zebra":"z","apple":"a","mango":"m"}`
+	out := reformatJSONAsYAML(in)
+
+	appleIdx := strings.Index(out, "apple:")
+	mangoIdx := strings.Index(out, "mango:")
+	zebraIdx := strings.Index(out, "zebra:")
+	require.GreaterOrEqual(t, appleIdx, 0)
+	require.GreaterOrEqual(t, mangoIdx, 0)
+	require.GreaterOrEqual(t, zebraIdx, 0)
+	assert.Less(t, appleIdx, mangoIdx)
+	assert.Less(t, mangoIdx, zebraIdx)
+}
+
+// TestAnalyzeOncePayloadIsYAMLForJSONInput is the end-to-end assertion
+// that the client converts JSON bodies before handing them to Presidio.
+// We send a JSON object with a multiline string and confirm the wire
+// payload no longer contains the raw `\n` escape sequence.
+func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
+	t.Parallel()
+
+	var got presidioRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&got))
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestPresidioClient(t, srv.URL)
+	in := `{"body":"line one\nline two"}`
+	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, nil)
+	require.NoError(t, err)
+
+	require.Len(t, got.Text, 1)
+	wire := got.Text[0]
+	assert.NotContains(t, wire, `\n`, "JSON newline escapes must not reach Presidio")
+	assert.Contains(t, wire, "body: |", "object key should be followed by a literal-block scalar marker")
+	assert.Contains(t, wire, "line one")
+	assert.Contains(t, wire, "line two")
 }
 
 // --- helpers ---
