@@ -2719,15 +2719,16 @@ func (q *Queries) ListRecentHookEventsForOnboarding(ctx context.Context, arg Lis
 		"time_unix_nano",
 		"gram_project_id",
 		"gram_chat_id",
-		"service_version",
+		"hook_source",
 		"tool_name",
 		"user_email",
-		"toString(attributes.`gram.hook.event_name`) AS event_name",
+		"toString(attributes.gram.hook.event) AS event_name",
 		"multiIf(hook_block_reason IS NOT NULL AND hook_block_reason != '', 'blocked', 'received') AS status",
 	).
 		From("telemetry_logs").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("event_source = 'hook'")
+		Where("event_source = 'hook'").
+		Where("toString(attributes.gram.hook.event) != ''")
 
 	if arg.SinceUnixNano > 0 {
 		sb = sb.Where("time_unix_nano > ?", arg.SinceUnixNano)
@@ -2777,7 +2778,8 @@ func (q *Queries) CountRecentHookEventsForOnboarding(ctx context.Context, projec
 	sb := sq.Select("count() AS cnt").
 		From("telemetry_logs").
 		Where(squirrel.Eq{"gram_project_id": projectIDs}).
-		Where("event_source = 'hook'")
+		Where("event_source = 'hook'").
+		Where("toString(attributes.gram.hook.event) != ''")
 
 	if sinceUnixNano > 0 {
 		sb = sb.Where("time_unix_nano > ?", sinceUnixNano)

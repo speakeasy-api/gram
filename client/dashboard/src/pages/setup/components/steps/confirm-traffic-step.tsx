@@ -22,7 +22,9 @@ const PLAYBACK_INTERVAL_MS = 400;
 const ROW_HEIGHT = 32;
 
 const SOURCE_ICONS: Record<string, string> = {
-  claude_code: "/icons/platforms/claude.svg",
+  "claude-code": "/icons/platforms/claude.svg",
+  "claude-code-desktop": "/icons/platforms/claude.svg",
+  cowork: "/icons/platforms/claude.svg",
   cursor: "/icons/platforms/cursor.svg",
   codex: "/icons/platforms/openai.svg",
 };
@@ -35,12 +37,16 @@ function eventKey(ev: OnboardingHookEvent): string {
 
 function sourceLabel(source: string): string {
   switch (source) {
-    case "claude_code":
+    case "claude-code":
       return "Claude Code";
+    case "claude-code-desktop":
+      return "Claude Desktop";
     case "cursor":
       return "Cursor";
     case "codex":
       return "Codex";
+    case "cowork":
+      return "Cowork";
     default:
       return source;
   }
