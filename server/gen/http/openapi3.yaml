@@ -41255,7 +41255,8 @@ components:
                         - '*'
                 server_url:
                     type: string
-                    description: Server URL filter (risk policy scopes only).
+                    description: Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.
+                    format: uri
                 tool:
                     type: string
                     description: Specific tool name filter (MCP scopes only).

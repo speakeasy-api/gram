@@ -681,7 +681,8 @@ var SelectorModel = Type("Selector", func() {
 		Description("Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.")
 	})
 	Attribute("server_url", String, func() {
-		Description("Server URL filter (risk policy scopes only).")
+		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")
+		Format(FormatURI)
 	})
 })
 

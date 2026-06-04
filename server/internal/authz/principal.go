@@ -90,7 +90,7 @@ func PatchPrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID string, pri
 		return err
 	}
 	q := repo.New(dbtx)
-	if err := deletePrincipalGrants(ctx, q, orgID, []urn.Principal{principal}, removeRows, principal.String()); err != nil {
+	if err := deletePrincipalGrants(ctx, q, orgID, []urn.Principal{principal}, removeRows); err != nil {
 		return err
 	}
 
@@ -98,7 +98,7 @@ func PatchPrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID string, pri
 	if err != nil {
 		return err
 	}
-	if err := upsertPrincipalGrants(ctx, q, orgID, principal, addRows, principal.String()); err != nil {
+	if err := upsertPrincipalGrants(ctx, q, orgID, principal, addRows); err != nil {
 		return err
 	}
 
@@ -171,10 +171,10 @@ func (rp rolePrincipals) deleteAllGrants(ctx context.Context, q *repo.Queries, o
 }
 
 func (rp rolePrincipals) upsertGrants(ctx context.Context, q *repo.Queries, orgID string, rows []roleGrantRow) error {
-	return upsertPrincipalGrants(ctx, q, orgID, rp.WritePrincipal, rows, fmt.Sprintf("role %q", rp.Slug))
+	return upsertPrincipalGrants(ctx, q, orgID, rp.WritePrincipal, rows)
 }
 
-func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, rows []roleGrantRow, label string) error {
+func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, rows []roleGrantRow) error {
 	for _, row := range rows {
 		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 			OrganizationID: orgID,
@@ -183,7 +183,7 @@ func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, p
 			Effect:         row.Effect.pgText(),
 			Selectors:      row.SelectorRaw,
 		}); err != nil {
-			return fmt.Errorf("upsert grant %q for %s: %w", row.Scope, label, err)
+			return fmt.Errorf("upsert grant %q for %s: %w", row.Scope, principal.Label(), err)
 		}
 	}
 
@@ -207,10 +207,10 @@ func (rp rolePrincipals) insertGrantsIfAbsent(ctx context.Context, q *repo.Queri
 }
 
 func (rp rolePrincipals) deleteGrants(ctx context.Context, q *repo.Queries, orgID string, rows []roleGrantRow) error {
-	return deletePrincipalGrants(ctx, q, orgID, rp.MatchPrincipals, rows, fmt.Sprintf("role %q", rp.Slug))
+	return deletePrincipalGrants(ctx, q, orgID, rp.MatchPrincipals, rows)
 }
 
-func deletePrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principals []urn.Principal, rows []roleGrantRow, label string) error {
+func deletePrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principals []urn.Principal, rows []roleGrantRow) error {
 	for _, principal := range principals {
 		for _, row := range rows {
 			if _, err := q.DeletePrincipalGrantByIdentity(ctx, repo.DeletePrincipalGrantByIdentityParams{
@@ -220,7 +220,7 @@ func deletePrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, p
 				Effect:         string(row.Effect),
 				Selectors:      row.SelectorRaw,
 			}); err != nil {
-				return fmt.Errorf("delete grant %q for %s: %w", row.Scope, label, err)
+				return fmt.Errorf("delete grant %q for %s: %w", row.Scope, principal.Label(), err)
 			}
 		}
 	}

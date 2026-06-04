@@ -339,7 +339,7 @@ func TestResourceGrantValidate(t *testing.T) {
 		Selector{
 			"resource_kind": ResourceKindRiskPolicy,
 			"resource_id":   "policy_123",
-			"server_url":    "api.example.com",
+			"server_url":    "https://api.example.com",
 		},
 	).Validate())
 
@@ -351,7 +351,7 @@ func TestResourceGrantValidate(t *testing.T) {
 		Selector{
 			"resource_kind": ResourceKindRiskPolicy,
 			"resource_id":   "policy_456",
-			"server_url":    "api.example.com",
+			"server_url":    "https://api.example.com",
 		},
 	).Validate(), "does not match resource id")
 }
@@ -380,7 +380,7 @@ func TestGrantAndRevokeResourcePrincipalGrantWithSelector(t *testing.T) {
 	selector := Selector{
 		"resource_kind": ResourceKindRiskPolicy,
 		"resource_id":   policyID,
-		"server_url":    "api.example.com",
+		"server_url":    "https://api.example.com",
 	}
 
 	seedOrganization(t, ctx, conn, organizationID)
