@@ -21,18 +21,26 @@ export function CreateMarketplaceStep({
 }: CreateMarketplaceStepProps) {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"publish" | "manage">("publish");
   const { data: publishStatus, isLoading } = usePublishStatus();
 
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
       setDialogOpen(false);
       invalidateAllPublishStatus(queryClient);
-      toast.success("Plugins published to GitHub", {
-        description: data.repoUrl,
-      });
+      toast.success(
+        dialogMode === "manage"
+          ? "Collaborators added"
+          : "Plugins published to GitHub",
+        { description: data.repoUrl },
+      );
     },
     onError: () => {
-      toast.error("Failed to publish plugins to GitHub");
+      toast.error(
+        dialogMode === "manage"
+          ? "Failed to add collaborators"
+          : "Failed to publish plugins to GitHub",
+      );
     },
   });
 
@@ -47,7 +55,16 @@ export function CreateMarketplaceStep({
 
   const isConnected = !!(publishStatus?.connected && publishStatus.repoUrl);
 
-  const primaryAction = isConnected ? onComplete : () => setDialogOpen(true);
+  const openPublishDialog = () => {
+    setDialogMode("publish");
+    setDialogOpen(true);
+  };
+  const openManageDialog = () => {
+    setDialogMode("manage");
+    setDialogOpen(true);
+  };
+
+  const primaryAction = isConnected ? onComplete : openPublishDialog;
   const primaryLabel = isConnected ? "Continue" : "Setup Plugin Marketplace";
 
   return (
@@ -73,72 +90,68 @@ export function CreateMarketplaceStep({
           </div>
         ) : isConnected ? (
           <div className="bg-card border-border rounded-md border p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Book className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-                  <span className="text-base">
-                    {publishStatus.repoOwner && (
-                      <a
-                        href={publishStatus.repoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sky-500 hover:text-sky-600 hover:underline"
-                      >
-                        {publishStatus.repoOwner}
-                      </a>
-                    )}
-                    {publishStatus.repoOwner && publishStatus.repoName && (
-                      <span className="text-muted-foreground/60 mx-1">/</span>
-                    )}
-                    {publishStatus.repoName && (
-                      <a
-                        href={publishStatus.repoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold text-sky-500 hover:text-sky-600 hover:underline"
-                      >
-                        {publishStatus.repoName}
-                      </a>
-                    )}
-                  </span>
-                  <span className="border-border text-muted-foreground rounded-full border px-2 py-0 text-[10px] font-medium tracking-wider uppercase">
-                    Private
-                  </span>
-                </div>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  This repo is your team's plugin marketplace. The observability
-                  plugins are already inside, and any plugins you build in Gram
-                  later will be published here too.
-                </p>
-                <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                    </span>
-                    <span className="font-medium text-emerald-700 dark:text-emerald-400">
-                      Marketplace set up
-                    </span>
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-shrink-0 flex-col gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Book className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+              <span className="min-w-0 truncate text-base">
+                {publishStatus.repoOwner && (
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    {publishStatus.repoOwner}
+                  </a>
+                )}
+                {publishStatus.repoOwner && publishStatus.repoName && (
+                  <span className="text-muted-foreground/60 mx-1">/</span>
+                )}
+                {publishStatus.repoName && (
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    {publishStatus.repoName}
+                  </a>
+                )}
+              </span>
+              <span className="border-border text-muted-foreground rounded-full border px-2 py-0 text-[10px] font-medium tracking-wider uppercase">
+                Private
+              </span>
+            </div>
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+              This repo is your team's plugin marketplace. The observability
+              plugins are already inside, and any plugins you build in Gram
+              later will be published here too.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                  Marketplace set up
+                </span>
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
                 <a
                   href={publishStatus.repoUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Open repo
+                  <ExternalLink className="h-3 w-3" />
+                  Open
                 </a>
                 <button
                   type="button"
-                  onClick={() => setDialogOpen(true)}
-                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                  onClick={openManageDialog}
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
                 >
-                  <Users className="h-3.5 w-3.5" />
+                  <Users className="h-3 w-3" />
                   Manage collaborators
                 </button>
               </div>
@@ -176,6 +189,7 @@ export function CreateMarketplaceStep({
         onOpenChange={setDialogOpen}
         onPublish={handlePublish}
         isPending={publishMutation.isPending}
+        mode={dialogMode}
       />
     </StepContainer>
   );
