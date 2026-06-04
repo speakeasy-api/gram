@@ -58,7 +58,7 @@ export function CreateMarketplaceStep({
         </div>
       }
       title="Create plugin marketplace"
-      description="Gram publishes a private GitHub repo that acts as your team's plugin marketplace for Claude Code, Cursor, and Codex. It ships with the observability plugins out of the box and is also where any plugins you build in Gram later get published — so this only needs to be set up once per project."
+      description="Gram publishes a private GitHub repo that acts as your team's plugin marketplace for Claude Code, Cursor, and Codex. It ships with our core observability plugin, required for us to collect usage metrics and enforce authorization, and is also where any plugins you build in Gram later get published — so this only needs to be set up once per project."
       onContinue={primaryAction}
       continueLabel={primaryLabel}
       isLoading={publishMutation.isPending || isLoading}
