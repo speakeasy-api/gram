@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -32,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -142,8 +145,20 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*type
 		if parseErr != nil {
 			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid toolset_id").Log(ctx, s.logger)
 		}
-		if err := s.attachServerToCollection(ctx, cr, collection.ID, toolsetID, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
+		backend := serverBackend{toolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, mcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+		if err := s.attachServerToCollection(ctx, cr, collection.ID, backend, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to attach toolset to collection").Log(ctx, s.logger)
+		}
+	}
+
+	for _, idStr := range payload.McpServerIds {
+		mcpServerID, parseErr := uuid.Parse(idStr)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid mcp_server_id").Log(ctx, s.logger)
+		}
+		backend := serverBackend{toolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true}}
+		if err := s.attachServerToCollection(ctx, cr, collection.ID, backend, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to attach mcp server to collection").Log(ctx, s.logger)
 		}
 	}
 
@@ -384,9 +399,9 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid collection_id").Log(ctx, s.logger)
 	}
 
-	toolsetID, err := uuid.Parse(payload.ToolsetID)
+	backend, err := parseServerBackend(payload.ToolsetID, payload.McpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+		return nil, err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -408,7 +423,7 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection").Log(ctx, s.logger)
 	}
 
-	if err := s.attachServerToCollection(ctx, tx, collectionID, toolsetID, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
+	if err := s.attachServerToCollection(ctx, tx, collectionID, backend, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
 		return nil, err
 	}
 
@@ -420,6 +435,7 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing collection registry").Log(ctx, s.logger)
 	}
 
+	toolsetURN, mcpServerURN := backend.auditURNs()
 	if err := s.audit.LogMcpCollectionAttachServer(ctx, dbtx, audit.LogMcpCollectionAttachServerEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -428,7 +444,8 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 		CollectionURN:    urn.NewMcpCollection(collection.ID),
 		CollectionName:   collection.Name,
 		CollectionSlug:   collection.Slug,
-		ToolsetURN:       urn.NewToolset(toolsetID),
+		ToolsetURN:       toolsetURN,
+		McpServerURN:     mcpServerURN,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log collection server attachment").Log(ctx, s.logger)
 	}
@@ -455,9 +472,9 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return oops.E(oops.CodeBadRequest, err, "invalid collection_id").Log(ctx, s.logger)
 	}
 
-	toolsetID, err := uuid.Parse(payload.ToolsetID)
+	backend, err := parseServerBackend(payload.ToolsetID, payload.McpServerID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+		return err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -479,11 +496,20 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return oops.E(oops.CodeUnexpected, err, "error accessing collection").Log(ctx, s.logger)
 	}
 
-	attached, err := tx.IsServerAttachedToOrganizationMcpCollection(ctx, repo.IsServerAttachedToOrganizationMcpCollectionParams{
-		CollectionID:   collectionID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
-	})
+	var attached bool
+	if backend.mcpServerID.Valid {
+		attached, err = tx.IsMcpServerAttachedToOrganizationMcpCollection(ctx, repo.IsMcpServerAttachedToOrganizationMcpCollectionParams{
+			CollectionID:   collectionID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			McpServerID:    backend.mcpServerID,
+		})
+	} else {
+		attached, err = tx.IsServerAttachedToOrganizationMcpCollection(ctx, repo.IsServerAttachedToOrganizationMcpCollectionParams{
+			CollectionID:   collectionID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ToolsetID:      backend.toolsetID,
+		})
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error checking collection server attachment").Log(ctx, s.logger)
 	}
@@ -491,14 +517,24 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return nil
 	}
 
-	if err := tx.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
-		CollectionID:   collectionID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
-	}); err != nil {
+	if backend.mcpServerID.Valid {
+		err = tx.DetachMcpServerFromOrganizationMcpCollection(ctx, repo.DetachMcpServerFromOrganizationMcpCollectionParams{
+			CollectionID:   collectionID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			McpServerID:    backend.mcpServerID,
+		})
+	} else {
+		err = tx.DetachServerFromOrganizationMcpCollection(ctx, repo.DetachServerFromOrganizationMcpCollectionParams{
+			CollectionID:   collectionID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ToolsetID:      backend.toolsetID,
+		})
+	}
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to detach server from collection").Log(ctx, s.logger)
 	}
 
+	toolsetURN, mcpServerURN := backend.auditURNs()
 	if err := s.audit.LogMcpCollectionDetachServer(ctx, dbtx, audit.LogMcpCollectionDetachServerEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -507,7 +543,8 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		CollectionURN:    urn.NewMcpCollection(collection.ID),
 		CollectionName:   collection.Name,
 		CollectionSlug:   collection.Slug,
-		ToolsetURN:       urn.NewToolset(toolsetID),
+		ToolsetURN:       toolsetURN,
+		McpServerURN:     mcpServerURN,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log collection server detachment").Log(ctx, s.logger)
 	}
@@ -556,17 +593,28 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list collection servers").Log(ctx, s.logger)
 	}
 
+	mcpServerRows, err := s.repo.ListOrganizationMcpCollectionMcpServerAttachments(ctx, repo.ListOrganizationMcpCollectionMcpServerAttachmentsParams{
+		CollectionID:   collection.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list collection mcp servers").Log(ctx, s.logger)
+	}
+
 	collectionRegistryIDStr := registry.ID.String()
 	mcpMetaRepo := mcpmetadataRepo.New(s.db)
 
-	servers := make([]*types.ExternalMCPServer, 0, len(toolsets))
+	// Toolset-backed and mcp_server-backed attachments are listed independently
+	// (Option A) and merged into one published_at DESC stream so a collection
+	// that mixes both backends presents a single stable ordering.
+	entries := make([]collectionServerEntry, 0, len(toolsets)+len(mcpServerRows))
 	for _, t := range toolsets {
 		if !t.McpSlug.Valid {
 			continue
 		}
 
 		remoteURL := s.serverURL.JoinPath("mcp", t.McpSlug.String).String()
-		remoteHeaders, err := s.collectionRemoteHeaders(ctx, mcpMetaRepo, t)
+		remoteHeaders, err := s.collectionRemoteHeaders(ctx, mcpMetaRepo, t.ID, t.McpIsPublic)
 		if err != nil {
 			return nil, err
 		}
@@ -579,39 +627,116 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 			specifier = path.Join(registry.Namespace, t.McpSlug.String)
 		}
 		toolsetID := t.ID.String()
-		servers = append(servers, &types.ExternalMCPServer{
-			RegistrySpecifier:                   specifier,
-			Version:                             "1.0.0",
-			Description:                         desc,
-			ToolsetID:                           &toolsetID,
-			RegistryID:                          nil,
-			OrganizationMcpCollectionRegistryID: &collectionRegistryIDStr,
-			Title:                               &t.Name,
-			IconURL:                             nil,
-			Meta:                                nil,
-			Tools:                               nil,
-			Remotes: []*types.ExternalMCPRemote{{
-				URL:           remoteURL,
-				TransportType: "streamable-http",
-				Headers:       remoteHeaders,
-			}},
+		entries = append(entries, collectionServerEntry{
+			publishedAt: t.PublishedAt.Time,
+			tiebreak:    toolsetID,
+			server: &types.ExternalMCPServer{
+				RegistrySpecifier:                   specifier,
+				Version:                             "1.0.0",
+				Description:                         desc,
+				ToolsetID:                           &toolsetID,
+				McpServerID:                         nil,
+				RegistryID:                          nil,
+				OrganizationMcpCollectionRegistryID: &collectionRegistryIDStr,
+				Title:                               &t.Name,
+				IconURL:                             nil,
+				Meta:                                nil,
+				Tools:                               nil,
+				Remotes: []*types.ExternalMCPRemote{{
+					URL:           remoteURL,
+					TransportType: "streamable-http",
+					Headers:       remoteHeaders,
+				}},
+			},
 		})
+	}
+
+	for _, m := range mcpServerRows {
+		// Custom-domain endpoints are served from the domain host; platform
+		// endpoints from the Gram server URL. The query already resolved the
+		// single preferred endpoint per server.
+		var remoteURL string
+		if m.EndpointCustomDomain.Valid && m.EndpointCustomDomain.String != "" {
+			remoteURL = (&url.URL{Scheme: "https", Host: m.EndpointCustomDomain.String}).JoinPath("mcp", m.EndpointSlug).String()
+		} else {
+			remoteURL = s.serverURL.JoinPath("mcp", m.EndpointSlug).String()
+		}
+
+		specifier := m.EndpointSlug
+		if registry.Namespace != "" {
+			specifier = path.Join(registry.Namespace, m.EndpointSlug)
+		}
+
+		title := m.McpServerSlug.String
+		if m.McpServerName.Valid && m.McpServerName.String != "" {
+			title = m.McpServerName.String
+		}
+
+		mcpServerID := m.McpServerID.String()
+		entries = append(entries, collectionServerEntry{
+			publishedAt: m.PublishedAt.Time,
+			tiebreak:    mcpServerID,
+			server: &types.ExternalMCPServer{
+				RegistrySpecifier:                   specifier,
+				Version:                             "1.0.0",
+				Description:                         "",
+				ToolsetID:                           nil,
+				McpServerID:                         &mcpServerID,
+				RegistryID:                          nil,
+				OrganizationMcpCollectionRegistryID: &collectionRegistryIDStr,
+				Title:                               &title,
+				IconURL:                             nil,
+				Meta:                                nil,
+				Tools:                               nil,
+				// mcp_server-backed servers authenticate via their user session
+				// issuer (OAuth), so there are no static headers for the client
+				// to collect. Environments are not yet wired to mcp_servers; when
+				// they are, per-variable headers would be derived here.
+				Remotes: []*types.ExternalMCPRemote{{
+					URL:           remoteURL,
+					TransportType: "streamable-http",
+					Headers:       []*types.ExternalMCPRemoteHeader{},
+				}},
+			},
+		})
+	}
+
+	// Global ordering: newest published first, breaking ties on the backend id
+	// descending so the order is deterministic across both sources.
+	sort.SliceStable(entries, func(i, j int) bool {
+		if !entries[i].publishedAt.Equal(entries[j].publishedAt) {
+			return entries[i].publishedAt.After(entries[j].publishedAt)
+		}
+		return entries[i].tiebreak > entries[j].tiebreak
+	})
+
+	servers := make([]*types.ExternalMCPServer, 0, len(entries))
+	for _, e := range entries {
+		servers = append(servers, e.server)
 	}
 
 	return &gen.ListServersResult{Servers: servers}, nil
 }
 
-func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpmetadataRepo.Queries, toolset repo.Toolset) ([]*types.ExternalMCPRemoteHeader, error) {
+// collectionServerEntry pairs a built ExternalMCPServer with the sort keys used
+// to merge toolset-backed and mcp_server-backed attachments into one stream.
+type collectionServerEntry struct {
+	server      *types.ExternalMCPServer
+	publishedAt time.Time
+	tiebreak    string
+}
+
+func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpmetadataRepo.Queries, toolsetID uuid.UUID, mcpIsPublic bool) ([]*types.ExternalMCPRemoteHeader, error) {
 	headers := make([]*types.ExternalMCPRemoteHeader, 0)
 
-	if !toolset.McpIsPublic {
+	if !mcpIsPublic {
 		headers = append(headers,
 			collectionRemoteHeader("gram_environment", "gram-environment", false),
 			collectionRemoteHeader("authorization", "gram-key", true),
 		)
 	}
 
-	metadataRecord, err := mcpMetaRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
+	metadataRecord, err := mcpMetaRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return headers, nil
@@ -660,7 +785,56 @@ func collectionRemoteHeader(systemName, displayName string, sensitive bool) *typ
 	}
 }
 
-func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Queries, collectionID, toolsetID uuid.UUID, organizationID, userID string) error {
+// serverBackend identifies which backend a collection attachment targets.
+// Exactly one of toolsetID / mcpServerID is Valid, mirroring the
+// toolset_id XOR mcp_server_id attachment row.
+type serverBackend struct {
+	toolsetID   uuid.NullUUID
+	mcpServerID uuid.NullUUID
+}
+
+// parseServerBackend validates that exactly one of toolset_id / mcp_server_id
+// was supplied and parses the provided id. The XOR is enforced here in the
+// handler because the Goa payload accepts both as optional for wire-compat.
+func parseServerBackend(toolsetID, mcpServerID *string) (serverBackend, error) {
+	hasToolset := toolsetID != nil && *toolsetID != ""
+	hasMcpServer := mcpServerID != nil && *mcpServerID != ""
+
+	switch {
+	case hasToolset == hasMcpServer:
+		return serverBackend{}, oops.E(oops.CodeBadRequest, nil, "provide exactly one of toolset_id or mcp_server_id")
+	case hasToolset:
+		id, err := uuid.Parse(*toolsetID)
+		if err != nil {
+			return serverBackend{}, oops.E(oops.CodeBadRequest, err, "invalid toolset_id")
+		}
+		return serverBackend{toolsetID: uuid.NullUUID{UUID: id, Valid: true}, mcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
+	default:
+		id, err := uuid.Parse(*mcpServerID)
+		if err != nil {
+			return serverBackend{}, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id")
+		}
+		return serverBackend{toolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID: uuid.NullUUID{UUID: id, Valid: true}}, nil
+	}
+}
+
+// auditURNs returns the subject URN for whichever backend is set, leaving the
+// other nil, for the backend-aware collection attach/detach audit events.
+func (b serverBackend) auditURNs() (*urn.Toolset, *urn.McpServer) {
+	if b.mcpServerID.Valid {
+		u := urn.NewMcpServer(b.mcpServerID.UUID)
+		return nil, &u
+	}
+	u := urn.NewToolset(b.toolsetID.UUID)
+	return &u, nil
+}
+
+func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Queries, collectionID uuid.UUID, backend serverBackend, organizationID, userID string) error {
+	if backend.mcpServerID.Valid {
+		return s.attachMcpServerToCollection(ctx, queries, collectionID, backend.mcpServerID.UUID, organizationID, userID)
+	}
+
+	toolsetID := backend.toolsetID.UUID
 	toolset, err := s.toolsets.GetToolsetByIDAndOrganization(ctx, toolsetsRepo.GetToolsetByIDAndOrganizationParams{
 		ID:             toolsetID,
 		OrganizationID: organizationID,
@@ -687,6 +861,38 @@ func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Qu
 			return oops.E(oops.CodeConflict, err, "toolset already attached to collection").Log(ctx, s.logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to attach server to collection").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) attachMcpServerToCollection(ctx context.Context, queries *repo.Queries, collectionID, mcpServerID uuid.UUID, organizationID, userID string) error {
+	server, err := s.repo.GetMcpServerForOrganizationAttachment(ctx, repo.GetMcpServerForOrganizationAttachmentParams{
+		McpServerID:    mcpServerID,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
+		return oops.E(oops.CodeUnexpected, err, "error accessing mcp server").Log(ctx, s.logger)
+	}
+	if server.Visibility == mcpservers.VisibilityDisabled || !server.HasEndpoint {
+		return oops.E(oops.CodeInvalid, nil, "cannot attach an mcp server that is disabled or has no endpoint").Log(ctx, s.logger)
+	}
+
+	_, err = queries.AttachMcpServerToOrganizationMcpCollection(ctx, repo.AttachMcpServerToOrganizationMcpCollectionParams{
+		CollectionID:   collectionID,
+		OrganizationID: organizationID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		PublishedBy:    conv.PtrToPGTextEmpty(&userID),
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return oops.E(oops.CodeConflict, err, "mcp server already attached to collection").Log(ctx, s.logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "failed to attach mcp server to collection").Log(ctx, s.logger)
 	}
 
 	return nil

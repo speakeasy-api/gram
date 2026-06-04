@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -19,6 +21,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/collections"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -140,6 +147,117 @@ func createMCPEnabledToolset(
 	return updated
 }
 
+// mcpServerFixture is a toolset-backed mcp_server with a single endpoint,
+// created directly via the repos. The collections publishing path only reads
+// the mcp_server's id/name/slug/visibility and its endpoints, so a
+// toolset-backed server stands in for a Remote MCP-backed one without the
+// remote_mcp_server / user_session_issuer fixture weight.
+type mcpServerFixture struct {
+	id           uuid.UUID
+	idStr        string
+	slug         string
+	endpointSlug string
+}
+
+func createMCPServerWithEndpoint(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	slug string,
+	visibility string,
+	customDomainID uuid.NullUUID,
+) mcpServerFixture {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	backing := createMCPEnabledToolset(t, ctx, ti, name+" Backing", "")
+	toolsetID, err := uuid.Parse(backing.ID)
+	require.NoError(t, err)
+
+	serverID := uuid.New()
+	_, err = mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                pgtype.Text{String: name, Valid: true},
+		Slug:                pgtype.Text{String: slug, Valid: true},
+		EnvironmentID:       uuid.NullUUID{},
+		UserSessionIssuerID: uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{},
+		ToolsetID:           uuid.NullUUID{UUID: toolsetID, Valid: true},
+		Visibility:          visibility,
+	})
+	require.NoError(t, err)
+
+	endpointSlug := slug + "-endpoint"
+	_, err = mcpendpointsRepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: customDomainID,
+		McpServerID:    serverID,
+		Slug:           endpointSlug,
+	})
+	require.NoError(t, err)
+
+	return mcpServerFixture{id: serverID, idStr: serverID.String(), slug: slug, endpointSlug: endpointSlug}
+}
+
+func createMCPServerWithoutEndpoint(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	slug string,
+	visibility string,
+) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	backing := createMCPEnabledToolset(t, ctx, ti, name+" Backing", "")
+	toolsetID, err := uuid.Parse(backing.ID)
+	require.NoError(t, err)
+
+	serverID := uuid.New()
+	_, err = mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                pgtype.Text{String: name, Valid: true},
+		Slug:                pgtype.Text{String: slug, Valid: true},
+		EnvironmentID:       uuid.NullUUID{},
+		UserSessionIssuerID: uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{},
+		ToolsetID:           uuid.NullUUID{UUID: toolsetID, Valid: true},
+		Visibility:          visibility,
+	})
+	require.NoError(t, err)
+
+	return serverID
+}
+
+func createCustomDomain(t *testing.T, ctx context.Context, ti *testInstance, domain string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	created, err := customdomainsRepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          domain,
+		IngressName:     pgtype.Text{Valid: false},
+		CertSecretName:  pgtype.Text{Valid: false},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	return created.ID
+}
+
 func createCollection(t *testing.T, ctx context.Context, ti *testInstance, name, slug, namespace string) *types.MCPCollection {
 	t.Helper()
 
@@ -156,4 +274,12 @@ func createCollection(t *testing.T, ctx context.Context, ti *testInstance, name,
 	require.NoError(t, err)
 
 	return result
+}
+
+func requireOopsCode(t *testing.T, err error, code oops.Code) {
+	t.Helper()
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, code, oopsErr.Code)
 }

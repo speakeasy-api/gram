@@ -40,6 +40,7 @@ var _ = Service("collections", func() {
 				Default("private")
 			})
 			Attribute("toolset_ids", ArrayOf(String), "Toolset IDs to attach to the collection")
+			Attribute("mcp_server_ids", ArrayOf(String), "MCP server IDs to attach to the collection")
 			Required("name", "slug", "mcp_registry_namespace")
 
 			security.SessionPayload()
@@ -146,16 +147,19 @@ var _ = Service("collections", func() {
 	})
 
 	Method("attachServer", func() {
-		Description("Attach a server (toolset) to a collection")
+		Description("Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.")
 
 		Payload(func() {
 			Attribute("collection_id", String, "ID of the collection", func() {
 				Format(FormatUUID)
 			})
-			Attribute("toolset_id", String, "ID of the toolset to attach", func() {
+			Attribute("toolset_id", String, "ID of the toolset to attach (provide exactly one of toolset_id or mcp_server_id)", func() {
 				Format(FormatUUID)
 			})
-			Required("collection_id", "toolset_id")
+			Attribute("mcp_server_id", String, "ID of the MCP server to attach (provide exactly one of toolset_id or mcp_server_id)", func() {
+				Format(FormatUUID)
+			})
+			Required("collection_id")
 
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -175,16 +179,19 @@ var _ = Service("collections", func() {
 	})
 
 	Method("detachServer", func() {
-		Description("Detach a server (toolset) from a collection")
+		Description("Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.")
 
 		Payload(func() {
 			Attribute("collection_id", String, "ID of the collection", func() {
 				Format(FormatUUID)
 			})
-			Attribute("toolset_id", String, "ID of the toolset to detach", func() {
+			Attribute("toolset_id", String, "ID of the toolset to detach (provide exactly one of toolset_id or mcp_server_id)", func() {
 				Format(FormatUUID)
 			})
-			Required("collection_id", "toolset_id")
+			Attribute("mcp_server_id", String, "ID of the MCP server to detach (provide exactly one of toolset_id or mcp_server_id)", func() {
+				Format(FormatUUID)
+			})
+			Required("collection_id")
 
 			security.SessionPayload()
 			security.ByKeyPayload()

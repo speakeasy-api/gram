@@ -1,5 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
+import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
 import { DetailHero } from "@/components/detail-hero";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
@@ -21,7 +22,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   PageTabsTrigger,
@@ -48,11 +48,6 @@ import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isNotFoundError } from "@/lib/route-errors";
 import { Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
-import {
-  useAttachServer,
-  useCollections,
-  useDetachServer,
-} from "@/pages/collections/hooks";
 import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
@@ -66,7 +61,6 @@ import {
   invalidateAllGetPeriodUsage,
   invalidateAllListToolsets,
   invalidateAllToolset,
-  buildCollectionsListServersQuery,
   useAddOAuthProxyServerMutation,
   useExportMcpMetadataMutation,
   invalidateListToolsetToolFilters,
@@ -87,7 +81,7 @@ import {
   Icon,
   Stack,
 } from "@speakeasy-api/moonshine";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircleIcon,
@@ -1833,187 +1827,20 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   );
 }
 
+// MCPPublishingSection wraps the shared publishing section for toolset-backed
+// MCP servers. The mcp_server-backed variant lives on the Remote MCP server
+// settings page; both share MCPPublishingSection.
 function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
-  const client = useSdkClient();
-  const { data: collections, isLoading: collectionsLoading } = useCollections();
-  const attachServer = useAttachServer();
-  const detachServer = useDetachServer();
-  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const serveQueries = useQueries({
-    queries: collections.map((collection) => ({
-      ...buildCollectionsListServersQuery(client, {
-        collectionSlug: collection.slug!,
-      }),
-      enabled: !!collection.slug,
-    })),
-  });
-
-  const publishedCollectionIds = useMemo(() => {
-    const ids = new Set<string>();
-
-    for (let i = 0; i < collections.length; i++) {
-      const servers = serveQueries[i]?.data?.servers ?? [];
-      for (const server of servers) {
-        if (server.toolsetId === toolset.id) {
-          ids.add(collections[i]!.id!);
-          break;
-        }
-
-        const parts = server.registrySpecifier?.split("/") ?? [];
-        const slug = parts[parts.length - 1];
-        if (slug === toolset.mcpSlug) {
-          ids.add(collections[i]!.id!);
-          break;
-        }
-      }
-    }
-
-    return ids;
-  }, [collections, serveQueries, toolset.id, toolset.mcpSlug]);
-
-  const effectiveSelected = selectedIds ?? publishedCollectionIds;
-
-  const hasChanges = useMemo(() => {
-    if (!selectedIds) return false;
-    if (selectedIds.size !== publishedCollectionIds.size) return true;
-    for (const id of selectedIds) {
-      if (!publishedCollectionIds.has(id)) return true;
-    }
-    return false;
-  }, [selectedIds, publishedCollectionIds]);
-
-  const toggleCollection = (collectionId: string) => {
-    setSelectedIds((prev) => {
-      const current = prev ?? new Set(publishedCollectionIds);
-      const next = new Set(current);
-      if (next.has(collectionId)) {
-        next.delete(collectionId);
-      } else {
-        next.add(collectionId);
-      }
-      return next;
-    });
-  };
-
-  const handleSave = async () => {
-    if (!selectedIds) return;
-
-    setIsSaving(true);
-    try {
-      const toAttach = [...selectedIds].filter(
-        (id) => !publishedCollectionIds.has(id),
-      );
-      const toDetach = [...publishedCollectionIds].filter(
-        (id) => !selectedIds.has(id),
-      );
-
-      await Promise.all([
-        ...toAttach.map((collectionId) =>
-          attachServer.mutateAsync({
-            request: {
-              attachServerRequestBody: {
-                collectionId,
-                toolsetId: toolset.id,
-              },
-            },
-          }),
-        ),
-        ...toDetach.map((collectionId) =>
-          detachServer.mutateAsync({
-            request: {
-              attachServerRequestBody: {
-                collectionId,
-                toolsetId: toolset.id,
-              },
-            },
-          }),
-        ),
-      ]);
-
-      setSelectedIds(null);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDiscard = () => {
-    setSelectedIds(null);
-  };
-
-  const isLoading =
-    collectionsLoading || serveQueries.some((query) => query.isLoading);
-
   return (
-    <PageSection
-      heading="Publishing"
-      description="Publish this server to collections so it can be discovered and installed by others in your organization."
-    >
-      <Block label="Collections" className="p-0">
-        <BlockInner>
-          {!toolset.mcpEnabled || !toolset.mcpSlug ? (
-            <Type muted small>
-              Enable this MCP server before publishing it to a collection.
-            </Type>
-          ) : isLoading ? (
-            <Type muted small>
-              Loading collections...
-            </Type>
-          ) : collections.length === 0 ? (
-            <Type muted small>
-              No collections available.
-            </Type>
-          ) : (
-            <Stack direction="vertical" gap={2}>
-              {collections.map((collection) => (
-                <label
-                  key={collection.id}
-                  className="flex cursor-pointer items-center gap-3"
-                >
-                  <Checkbox
-                    checked={effectiveSelected.has(collection.id)}
-                    disabled={isSaving}
-                    onCheckedChange={() => toggleCollection(collection.id)}
-                  />
-                  <Stack direction="vertical" gap={0}>
-                    <Type small className="font-medium">
-                      {collection.name}
-                    </Type>
-                    {collection.description && (
-                      <Type muted small>
-                        {collection.description}
-                      </Type>
-                    )}
-                  </Stack>
-                </label>
-              ))}
-            </Stack>
-          )}
-        </BlockInner>
-        {hasChanges && (
-          <BlockInner>
-            <Stack direction="horizontal" gap={2}>
-              <Button
-                size="sm"
-                disabled={isSaving}
-                onClick={() => void handleSave()}
-              >
-                <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={isSaving}
-                onClick={handleDiscard}
-              >
-                <Button.Text>Discard</Button.Text>
-              </Button>
-            </Stack>
-          </BlockInner>
-        )}
-      </Block>
-    </PageSection>
+    <SharedMCPPublishingSection
+      target={{
+        kind: "toolset",
+        toolsetId: toolset.id,
+        mcpSlug: toolset.mcpSlug ?? undefined,
+      }}
+      canPublish={Boolean(toolset.mcpEnabled && toolset.mcpSlug)}
+      disabledMessage="Enable this MCP server before publishing it to a collection."
+    />
   );
 }
 
