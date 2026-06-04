@@ -42,10 +42,11 @@ type RiskScanner interface {
 // a deny message that follows the same `matched policy %q (...)` format as
 // gitleaks/presidio enforcement.
 type ShadowMCPPolicy struct {
-	ID          string
-	Name        string
-	Version     int64
-	UserMessage *string // nil/empty means "render the default message"
+	ID           string
+	Name         string
+	Version      int64
+	UserMessage  *string // nil/empty means "render the default message"
+	AudienceType string  // "everyone" (default) or "targeted"
 }
 
 // ScanResult describes a match from a blocking risk policy.
@@ -211,10 +212,11 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 	for _, p := range policies {
 		if p.Action == "block" {
 			return &ShadowMCPPolicy{
-				ID:          p.ID.String(),
-				Name:        p.Name,
-				Version:     p.Version,
-				UserMessage: conv.FromPGText[string](p.UserMessage),
+				ID:           p.ID.String(),
+				Name:         p.Name,
+				Version:      p.Version,
+				UserMessage:  conv.FromPGText[string](p.UserMessage),
+				AudienceType: p.AudienceType,
 			}, nil
 		}
 	}

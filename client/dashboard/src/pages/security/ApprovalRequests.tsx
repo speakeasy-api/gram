@@ -1,11 +1,8 @@
-import { ApprovalRequestsContent } from "@/components/access/ApprovalRequestsContent";
+import { PolicyAccessRequestsContent } from "@/components/access/PolicyAccessRequestsContent";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { useProject } from "@/contexts/Auth";
 
 export default function ApprovalRequests() {
-  const project = useProject();
-
   return (
     <Page>
       <Page.Header>
@@ -15,14 +12,14 @@ export default function ApprovalRequests() {
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
             <Page.Section.Title stage="beta">
-              Approval Requests
+              Policy Access Requests
             </Page.Section.Title>
             <Page.Section.Description>
-              Review blocked resource access requests and manage project-scoped
-              access rules.
+              Requests created when a risk policy blocks a caller. Approve to
+              grant a bypass to a role (narrowed to the blocked server).
             </Page.Section.Description>
             <Page.Section.Body>
-              <ApprovalRequestsContent projectId={project.id} />
+              <PolicyAccessRequestsContent />
             </Page.Section.Body>
           </Page.Section>
         </RequireScope>

@@ -1021,6 +1021,29 @@ type PluginServer struct {
 	Deleted     bool
 }
 
+// Risk-policy access request workflow. A block records a request here; an admin approves by granting risk_policy:bypass to a role.
+type PolicyAccessRequest struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	PolicyID             uuid.UUID
+	TargetKind           string
+	TargetLabel          string
+	TargetKey            string
+	TargetDimensions     []byte
+	RequesterUserID      string
+	RequesterEmail       string
+	Note                 string
+	Status               string
+	DecidedBy            string
+	GrantedPrincipalUrns []string
+	DecidedAt            pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
 // RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.
 type PrincipalGrant struct {
 	ID uuid.UUID

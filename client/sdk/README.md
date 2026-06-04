@@ -391,6 +391,13 @@ run();
 * [updatePlugin](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 * [updatePluginServer](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 
+### [Policyaccess](docs/sdks/policyaccess/README.md)
+
+* [decideRequest](docs/sdks/policyaccess/README.md#deciderequest) - decideRequest policyaccess
+* [listBypasses](docs/sdks/policyaccess/README.md#listbypasses) - listBypasses policyaccess
+* [listRequests](docs/sdks/policyaccess/README.md#listrequests) - listRequests policyaccess
+* [revokeBypass](docs/sdks/policyaccess/README.md#revokebypass) - revokeBypass policyaccess
+
 ### [Projects](docs/sdks/projects/README.md)
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
@@ -781,6 +788,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsSetPluginAssignments`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`pluginsUpdatePlugin`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`pluginsUpdatePluginServer`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
+- [`policyaccessDecideRequest`](docs/sdks/policyaccess/README.md#deciderequest) - decideRequest policyaccess
+- [`policyaccessListBypasses`](docs/sdks/policyaccess/README.md#listbypasses) - listBypasses policyaccess
+- [`policyaccessListRequests`](docs/sdks/policyaccess/README.md#listrequests) - listRequests policyaccess
+- [`policyaccessRevokeBypass`](docs/sdks/policyaccess/README.md#revokebypass) - revokeBypass policyaccess
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsDeleteById`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
@@ -992,6 +1003,7 @@ To learn about this feature and how to get started, check
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
 - [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
 - [`useCustomDomainMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
+- [`useDecidePolicyAccessRequestMutation`](docs/sdks/policyaccess/README.md#deciderequest) - decideRequest policyaccess
 - [`useDeleteAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
@@ -1103,6 +1115,8 @@ To learn about this feature and how to get started, check
 - [`usePluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`usePluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+- [`usePolicyAccessRequests`](docs/sdks/policyaccess/README.md#listrequests) - listRequests policyaccess
+- [`usePolicyBypasses`](docs/sdks/policyaccess/README.md#listbypasses) - listBypasses policyaccess
 - [`useProductFeatures`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
@@ -1128,6 +1142,7 @@ To learn about this feature and how to get started, check
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`useRevokePolicyBypassMutation`](docs/sdks/policyaccess/README.md#revokebypass) - revokeBypass policyaccess
 - [`useRevokeRemoteSessionMutation`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents

@@ -248,6 +248,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{Slug: string(authz.ScopeEnvironmentRead), Description: "View environments and their entries within the project.", ResourceType: "environment"},
 		{Slug: string(authz.ScopeEnvironmentWrite), Description: "Add, edit, clone, and remove environments within the project.", ResourceType: "environment"},
 		{Slug: string(authz.ScopeRiskPolicyEvaluate), Description: "Evaluate risk policies.", ResourceType: "risk_policy"},
+		{Slug: string(authz.ScopeRiskPolicyBypass), Description: "Bypass risk policies.", ResourceType: "risk_policy"},
 	}}, nil
 }
 
@@ -487,6 +488,7 @@ func allScopesGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 	}
 }
 
@@ -1054,6 +1056,11 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	}, nil
 }
 
+const (
+	resolutionRoleAssigned = "role_assigned"
+	resolutionDismissed    = "dismissed"
+)
+
 func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChallengePayload) (*gen.ResolveChallengesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -1072,13 +1079,12 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	}
 
 	// Validate: role_assigned requires role_slug.
-	if payload.ResolutionType == "role_assigned" && (payload.RoleSlug == nil || *payload.RoleSlug == "") {
+	if payload.ResolutionType == resolutionRoleAssigned && (payload.RoleSlug == nil || *payload.RoleSlug == "") {
 		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug is required when resolution_type is role_assigned").Log(ctx, s.logger)
 	}
-	if payload.ResolutionType == "dismissed" && payload.RoleSlug != nil && *payload.RoleSlug != "" {
+	if payload.ResolutionType == resolutionDismissed && payload.RoleSlug != nil && *payload.RoleSlug != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug must be empty when resolution_type is dismissed").Log(ctx, s.logger)
 	}
-
 	resolvedBy := fmt.Sprintf("user:%s", authCtx.UserID)
 
 	resourceKind := ""

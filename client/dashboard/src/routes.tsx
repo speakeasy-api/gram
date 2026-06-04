@@ -507,7 +507,7 @@ const ROUTE_STRUCTURE = {
     component: DetectionRules,
   },
   approvalRequests: {
-    title: "Approval Requests",
+    title: "Policy Access",
     url: "approval-requests",
     icon: "inbox",
     component: ApprovalRequests,

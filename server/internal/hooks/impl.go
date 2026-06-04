@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/policyaccess"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -183,7 +184,7 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 // back to permissive behaviour. Flag-action policies are intentionally ignored
 // here — they surface as findings via the batch scanner instead of denying at
 // the hook layer.
-func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, projectID string) *risk.ShadowMCPPolicy {
+func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, orgID, userID, projectID string) *risk.ShadowMCPPolicy {
 	if s.riskScanner == nil || projectID == "" {
 		return nil
 	}
@@ -198,5 +199,101 @@ func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, projectID s
 		)
 		return nil
 	}
+	if policy == nil {
+		return nil
+	}
+	// Audience + bypass gate: a targeted policy only applies to in-audience
+	// principals, and any principal holding a risk_policy:bypass grant for it is
+	// exempt. Out-of-audience / bypassed callers get a nil policy (no block).
+	// Anonymous / unresolvable callers always have the policy applied (fail-safe).
+	if !s.policyAppliesToCaller(ctx, orgID, userID, policy.ID, policy.AudienceType) {
+		return nil
+	}
 	return policy
+}
+
+// policyAppliesToCaller implements the realtime AUDIENCE rule for risk policies
+// (RFC §2.1): everyone-tier always applies; a targeted policy applies only to
+// in-audience principals; any failure to positively resolve a known in-org
+// caller collapses to "applies" so an error can never silently skip
+// enforcement. Bypass is NOT checked here — it is per-server and is evaluated at
+// the block site (callerBypassesPolicy) once the target server is known.
+//
+// Takes the caller identity explicitly because on the hook path authCtx.UserID
+// is empty (API-key auth); the resolved Gram user id lives in the OTEL-seeded
+// session metadata (claude metadata.UserID, from resolveUserByEmail). Passing ""
+// for userID/orgID collapses to the anonymous branch -> always scan.
+func (s *Service) policyAppliesToCaller(ctx context.Context, orgID, userID, policyID, audienceType string) bool {
+	everyoneTier := audienceType != risk.AudienceTypeTargeted
+
+	if userID == "" || orgID == "" {
+		return true
+	}
+
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, orgID, userID)
+	if err != nil {
+		// Cross-org / non-member / resolution error -> anonymous -> always scan.
+		return true
+	}
+
+	audience, err := authz.ListGrantsForResource(ctx, s.db, orgID, authz.ScopeRiskPolicyEvaluate, policyID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to load policy audience; applying policy",
+			attr.SlogError(err),
+		)
+		return true
+	}
+
+	return risk.InAudience(principals, everyoneTier, audience)
+}
+
+// recordPolicyAccessRequest upserts a pending policy_access_request for a block,
+// so the admin approvals queue is populated. The pending unique index dedups
+// repeat blocks for the same (org, requester, policy, server) onto one row. A
+// block IS the access request — "review blocked resource access requests".
+// Best-effort: failures are logged, never block the hook response.
+func (s *Service) recordPolicyAccessRequest(ctx context.Context, metadata SessionMetadata, policyID, serverURL string) {
+	if metadata.GramOrgID == "" || metadata.ProjectID == "" {
+		return
+	}
+	if _, err := policyaccess.RecordRequest(ctx, s.db, policyaccess.RecordRequestParams{
+		OrganizationID:  metadata.GramOrgID,
+		ProjectID:       metadata.ProjectID,
+		PolicyID:        policyID,
+		Target:          policyaccess.ShadowMCPServerTarget(serverURL),
+		RequesterUserID: metadata.UserID,
+		RequesterEmail:  metadata.UserEmail,
+		Note:            "",
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to record policy access request", attr.SlogError(err))
+	}
+}
+
+// callerBypassesPolicy reports whether the caller holds a risk_policy:bypass
+// grant exempting them from this policy for the given server URL host. A bypass
+// grant with no server_url selector key exempts the whole policy (every server);
+// one with a server_url matches only that host. This is the unified model: the
+// thing being unblocked is always the policy, narrowed by an optional server_url
+// caveat. Resolution failure -> not bypassed (the policy still blocks; the
+// caller can request access).
+func (s *Service) callerBypassesPolicy(ctx context.Context, orgID, userID, policyID, serverURL string) bool {
+	if orgID == "" || userID == "" {
+		return false
+	}
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, orgID, userID)
+	if err != nil {
+		return false
+	}
+	bypass, err := authz.ListGrantsForResource(ctx, s.db, orgID, authz.ScopeRiskPolicyBypass, policyID)
+	if err != nil {
+		return false
+	}
+	check := authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindRiskPolicy,
+		authz.SelectorKeyResourceID:   policyID,
+	}
+	if serverURL != "" {
+		check[authz.SelectorKeyServerURL] = serverURL
+	}
+	return risk.IsBypassed(principals, bypass, check)
 }

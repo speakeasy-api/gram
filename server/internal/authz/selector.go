@@ -19,6 +19,9 @@ const (
 	SelectorKeyTool         = "tool"
 	SelectorKeyDisposition  = "disposition"
 	SelectorKeyProjectID    = "project_id"
+	// SelectorKeyServerURL narrows a risk_policy:bypass to one shadow-MCP server
+	// (URL host). Absent = bypass applies to every server the policy would block.
+	SelectorKeyServerURL = "server_url"
 )
 
 // Matches reports whether this (grant) selector satisfies the given check
@@ -107,6 +110,11 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	},
 	ResourceKindEnvironment: {
 		SelectorKeyProjectID: true,
+	},
+	// risk_policy:bypass may optionally narrow to one shadow-MCP server by URL
+	// host. A bypass with no server_url applies to the whole policy.
+	ResourceKindRiskPolicy: {
+		SelectorKeyServerURL: true,
 	},
 }
 

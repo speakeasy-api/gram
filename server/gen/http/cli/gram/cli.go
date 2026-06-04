@@ -46,6 +46,7 @@ import (
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
+	policyaccessc "github.com/speakeasy-api/gram/server/gen/http/policyaccess/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
 	remotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/client"
@@ -105,6 +106,7 @@ func UsageCommands() []string {
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
+		"policyaccess (list-requests|decide-request|list-bypasses|revoke-bypass)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server)",
@@ -1110,6 +1112,27 @@ func ParseEndpoint(
 		pluginsPublishPluginsBodyFlag             = pluginsPublishPluginsFlags.String("body", "REQUIRED", "")
 		pluginsPublishPluginsSessionTokenFlag     = pluginsPublishPluginsFlags.String("session-token", "", "")
 		pluginsPublishPluginsProjectSlugInputFlag = pluginsPublishPluginsFlags.String("project-slug-input", "", "")
+
+		policyaccessFlags = flag.NewFlagSet("policyaccess", flag.ContinueOnError)
+
+		policyaccessListRequestsFlags            = flag.NewFlagSet("list-requests", flag.ExitOnError)
+		policyaccessListRequestsStatusFlag       = policyaccessListRequestsFlags.String("status", "", "")
+		policyaccessListRequestsApikeyTokenFlag  = policyaccessListRequestsFlags.String("apikey-token", "", "")
+		policyaccessListRequestsSessionTokenFlag = policyaccessListRequestsFlags.String("session-token", "", "")
+
+		policyaccessDecideRequestFlags            = flag.NewFlagSet("decide-request", flag.ExitOnError)
+		policyaccessDecideRequestBodyFlag         = policyaccessDecideRequestFlags.String("body", "REQUIRED", "")
+		policyaccessDecideRequestApikeyTokenFlag  = policyaccessDecideRequestFlags.String("apikey-token", "", "")
+		policyaccessDecideRequestSessionTokenFlag = policyaccessDecideRequestFlags.String("session-token", "", "")
+
+		policyaccessListBypassesFlags            = flag.NewFlagSet("list-bypasses", flag.ExitOnError)
+		policyaccessListBypassesApikeyTokenFlag  = policyaccessListBypassesFlags.String("apikey-token", "", "")
+		policyaccessListBypassesSessionTokenFlag = policyaccessListBypassesFlags.String("session-token", "", "")
+
+		policyaccessRevokeBypassFlags            = flag.NewFlagSet("revoke-bypass", flag.ExitOnError)
+		policyaccessRevokeBypassBodyFlag         = policyaccessRevokeBypassFlags.String("body", "REQUIRED", "")
+		policyaccessRevokeBypassApikeyTokenFlag  = policyaccessRevokeBypassFlags.String("apikey-token", "", "")
+		policyaccessRevokeBypassSessionTokenFlag = policyaccessRevokeBypassFlags.String("session-token", "", "")
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
@@ -2178,6 +2201,12 @@ func ParseEndpoint(
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 
+	policyaccessFlags.Usage = policyaccessUsage
+	policyaccessListRequestsFlags.Usage = policyaccessListRequestsUsage
+	policyaccessDecideRequestFlags.Usage = policyaccessDecideRequestUsage
+	policyaccessListBypassesFlags.Usage = policyaccessListBypassesUsage
+	policyaccessRevokeBypassFlags.Usage = policyaccessRevokeBypassUsage
+
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
@@ -2429,6 +2458,8 @@ func ParseEndpoint(
 			svcf = packagesFlags
 		case "plugins":
 			svcf = pluginsFlags
+		case "policyaccess":
+			svcf = policyaccessFlags
 		case "features":
 			svcf = featuresFlags
 		case "projects":
@@ -3126,6 +3157,22 @@ func ParseEndpoint(
 
 			case "publish-plugins":
 				epf = pluginsPublishPluginsFlags
+
+			}
+
+		case "policyaccess":
+			switch epn {
+			case "list-requests":
+				epf = policyaccessListRequestsFlags
+
+			case "decide-request":
+				epf = policyaccessDecideRequestFlags
+
+			case "list-bypasses":
+				epf = policyaccessListBypassesFlags
+
+			case "revoke-bypass":
+				epf = policyaccessRevokeBypassFlags
 
 			}
 
@@ -4285,6 +4332,22 @@ func ParseEndpoint(
 			case "publish-plugins":
 				endpoint = c.PublishPlugins()
 				data, err = pluginsc.BuildPublishPluginsPayload(*pluginsPublishPluginsBodyFlag, *pluginsPublishPluginsSessionTokenFlag, *pluginsPublishPluginsProjectSlugInputFlag)
+			}
+		case "policyaccess":
+			c := policyaccessc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-requests":
+				endpoint = c.ListRequests()
+				data, err = policyaccessc.BuildListRequestsPayload(*policyaccessListRequestsStatusFlag, *policyaccessListRequestsApikeyTokenFlag, *policyaccessListRequestsSessionTokenFlag)
+			case "decide-request":
+				endpoint = c.DecideRequest()
+				data, err = policyaccessc.BuildDecideRequestPayload(*policyaccessDecideRequestBodyFlag, *policyaccessDecideRequestApikeyTokenFlag, *policyaccessDecideRequestSessionTokenFlag)
+			case "list-bypasses":
+				endpoint = c.ListBypasses()
+				data, err = policyaccessc.BuildListBypassesPayload(*policyaccessListBypassesApikeyTokenFlag, *policyaccessListBypassesSessionTokenFlag)
+			case "revoke-bypass":
+				endpoint = c.RevokeBypass()
+				data, err = policyaccessc.BuildRevokeBypassPayload(*policyaccessRevokeBypassBodyFlag, *policyaccessRevokeBypassApikeyTokenFlag, *policyaccessRevokeBypassSessionTokenFlag)
 			}
 		case "features":
 			c := featuresc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9118,6 +9181,106 @@ func pluginsPublishPluginsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --body '{\n      \"github_usernames\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// policyaccessUsage displays the usage of the policyaccess command and its
+// subcommands.
+func policyaccessUsage() {
+	fmt.Fprintln(os.Stderr, `Risk policy access request workflow.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] policyaccess COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-requests: List risk-policy access requests produced when a policy blocks a caller.`)
+	fmt.Fprintln(os.Stderr, `    decide-request: Approve or deny a risk-policy access request. Approving grants risk_policy:bypass to selected principals.`)
+	fmt.Fprintln(os.Stderr, `    list-bypasses: List active risk-policy bypass grants.`)
+	fmt.Fprintln(os.Stderr, `    revoke-bypass: Revoke one active risk-policy bypass grant.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s policyaccess COMMAND --help\n", os.Args[0])
+}
+func policyaccessListRequestsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] policyaccess list-requests", os.Args[0])
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List risk-policy access requests produced when a policy blocks a caller.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "policyaccess list-requests --status \"approved\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func policyaccessDecideRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] policyaccess decide-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve or deny a risk-policy access request. Approving grants risk_policy:bypass to selected principals.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "policyaccess decide-request --body '{\n      \"grant_type\": \"requester_roles\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"role_slugs\": [\n         \"abc123\"\n      ],\n      \"status\": \"denied\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func policyaccessListBypassesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] policyaccess list-bypasses", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List active risk-policy bypass grants.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "policyaccess list-bypasses --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func policyaccessRevokeBypassUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] policyaccess revoke-bypass", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke one active risk-policy bypass grant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "policyaccess revoke-bypass --body '{\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.

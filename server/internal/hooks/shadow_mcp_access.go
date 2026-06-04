@@ -2,12 +2,29 @@ package hooks
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
+
+// shadowServerURLHost is the stable per-server key for risk_policy:bypass
+// narrowing: the URL host of a remote shadow MCP (e.g. "mcp.datadoghq.com").
+// Falls back to URLHost, then to the tool-prefix ServerIdentity for local stdio
+// servers that have no URL. The same value is used at block-emit and grant-check
+// time so a server-narrowed bypass matches.
+func shadowServerURLHost(ev shadowmcp.AccessEvidence) string {
+	if ev.FullURL != "" {
+		if u, err := url.Parse(ev.FullURL); err == nil && u.Host != "" {
+			return u.Host
+		}
+	}
+	if ev.URLHost != "" {
+		return ev.URLHost
+	}
+	return ev.ServerIdentity
+}
 
 func (s *Service) enforceShadowMCPToolAccess(
 	ctx context.Context,
@@ -20,25 +37,6 @@ func (s *Service) enforceShadowMCPToolAccess(
 ) (string, bool) {
 	if s.shadowMCPClient == nil {
 		return "Shadow MCP validation is unavailable", true
-	}
-
-	decision := s.shadowMCPClient.EvaluateAccessRules(ctx, organizationID, projectID, evidence)
-	s.logger.InfoContext(ctx, "evaluated shadow mcp access rules",
-		attr.SlogEvent("shadow_mcp_access_rule_evaluated"),
-		attr.SlogOrganizationID(organizationID),
-		attr.SlogProjectID(projectID),
-		attr.SlogValueAny(map[string]any{
-			"outcome":                   decision.Outcome,
-			"shadow_mcp_access_rule_id": decision.RuleID,
-			"reason":                    decision.Reason,
-			"tool_name":                 toolName,
-		}),
-	)
-	switch decision.Outcome {
-	case shadowmcp.AccessRuleOutcomeDenied, shadowmcp.AccessRuleOutcomeError:
-		return decision.Reason, true
-	case shadowmcp.AccessRuleOutcomeAllowed:
-		return "", false
 	}
 
 	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)

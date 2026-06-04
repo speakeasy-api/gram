@@ -721,7 +721,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 	}
 
-	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.ProjectID)
+	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.UserID, metadata.ProjectID)
 	if policy == nil {
 		if output != nil {
 			output.PermissionDecision = &allow
@@ -784,47 +784,22 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			evidence.ServerIdentity = matched.Command
 		}
 	}
-	// Access Rules can explicitly allow a shadow MCP server by URL, command,
-	// or server identity. Deny rules win inside EvaluateAccessRules.
-	if detail != "" && matched != nil {
-		if s.shadowMCPClient == nil {
-			detail = "Shadow MCP validation is unavailable"
-		} else {
-			decision := s.shadowMCPClient.EvaluateAccessRules(ctx, metadata.GramOrgID, metadata.ProjectID, evidence)
-			s.logger.InfoContext(ctx, "evaluated shadow mcp access rules",
-				attr.SlogEvent("shadow_mcp_access_rule_evaluated"),
-				attr.SlogOrganizationID(metadata.GramOrgID),
-				attr.SlogProjectID(metadata.ProjectID),
-				attr.SlogValueAny(map[string]any{
-					"outcome":                   decision.Outcome,
-					"shadow_mcp_access_rule_id": decision.RuleID,
-					"reason":                    decision.Reason,
-					"tool_name":                 mcpToolName,
-				}),
-			)
-			if decision.Allows() {
-				matchedURL, matchedCommand := "", ""
-				if matched != nil {
-					matchedURL = matched.URL
-					matchedCommand = matched.Command
-				}
-				s.logger.InfoContext(ctx, "shadow-mcp call allowed via approval",
-					attr.SlogEvent("claude_hook_allowlist_allow"),
-					attr.SlogToolName(rawToolName),
-					attr.SlogRiskPolicyID(policy.ID),
-					attr.SlogValueAny(map[string]any{
-						"serverPrefix":   serverPrefix,
-						"matchedURL":     matchedURL,
-						"matchedCommand": matchedCommand,
-					}),
-				)
-				detail = ""
-			} else if decision.Reason != "" {
-				detail = decision.Reason
-			}
-		}
+	// RBAC path: a risk_policy:bypass grant for this policy exempts the
+	// caller. Shadow-MCP policies narrow by server URL host (server_url selector
+	// key); a bypass with no server_url exempts the whole policy. Minted on
+	// approval.
+	serverURL := shadowServerURLHost(evidence)
+	if detail != "" && s.callerBypassesPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, serverURL) {
+		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk_policy:bypass grant",
+			attr.SlogEvent("claude_hook_policy_bypass_allow"),
+			attr.SlogToolName(rawToolName),
+			attr.SlogRiskPolicyID(policy.ID),
+			attr.SlogValueAny(map[string]any{"server_url": serverURL}),
+		)
+		detail = ""
 	}
 	if detail != "" {
+		s.recordPolicyAccessRequest(ctx, metadata, policy.ID, serverURL)
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
 			OrganizationID:  metadata.GramOrgID,

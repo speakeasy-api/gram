@@ -33,6 +33,7 @@ import { Organizations } from "./organizations.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
+import { Policyaccess } from "./policyaccess.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
 import { RemoteSessionClients } from "./remotesessionclients.js";
@@ -198,6 +199,11 @@ export class Gram extends ClientSDK {
   private _plugins?: Plugins;
   get plugins(): Plugins {
     return (this._plugins ??= new Plugins(this._options));
+  }
+
+  private _policyaccess?: Policyaccess;
+  get policyaccess(): Policyaccess {
+    return (this._policyaccess ??= new Policyaccess(this._options));
   }
 
   private _features?: Features;

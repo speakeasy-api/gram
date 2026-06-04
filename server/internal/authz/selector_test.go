@@ -316,13 +316,6 @@ func TestValidateSelector_riskPolicyAllowsOnlyResourceKeys(t *testing.T) {
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, withExtraKey), "not allowed")
 }
 
-func TestIsInternalScope(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, IsInternalScope(ScopeRiskPolicyEvaluate))
-	require.False(t, IsInternalScope(ScopeProjectRead))
-}
-
 func TestMCPCheck_injectsProjectID(t *testing.T) {
 	t.Parallel()
 

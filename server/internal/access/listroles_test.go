@@ -77,7 +77,9 @@ func TestService_ListRoles(t *testing.T) {
 	mcpSelectors := grantsByScope[string(authz.ScopeMCPConnect)].Selectors
 	require.Len(t, mcpSelectors, 1)
 	require.Equal(t, authz.WildcardResource, mcpSelectors[0].ResourceID)
-	require.Equal(t, "policy-1", grantsByScope[string(authz.ScopeRiskPolicyEvaluate)].Selectors[0].ResourceID)
+	riskPolicySelectors := grantsByScope[string(authz.ScopeRiskPolicyEvaluate)].Selectors
+	require.Len(t, riskPolicySelectors, 1)
+	require.Equal(t, "policy-1", riskPolicySelectors[0].ResourceID)
 }
 
 func TestService_ListRoles_ExcludesDisconnectedUsersFromMemberCounts(t *testing.T) {

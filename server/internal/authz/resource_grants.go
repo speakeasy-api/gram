@@ -128,6 +128,79 @@ func replaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, replacement r
 	return nil
 }
 
+// GrantResourceToPrincipalTx adds a single allow grant binding one principal to
+// one resource-scoped permission, without disturbing other principals' grants
+// for the same resource. Used by challenge resolution to mint a bypass /
+// server-access grant on approval (a single principal at a time, so it must not
+// use the replace-the-set semantics of ReplaceGrantsForResource).
+func GrantResourceToPrincipalTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, resourceID string) error {
+	if organizationID == "" {
+		return fmt.Errorf("organization id is required")
+	}
+	if resourceID == "" {
+		return fmt.Errorf("resource id is required")
+	}
+	if _, err := principal.Value(); err != nil {
+		return fmt.Errorf("invalid grant principal: %w", err)
+	}
+
+	resourceKind := ResourceKindForScope(scope)
+	if resourceKind == WildcardResource {
+		return fmt.Errorf("scope %q does not map to a resource kind", scope)
+	}
+
+	selector := NewSelector(scope, resourceID)
+	if err := ValidateSelector(scope, selector); err != nil {
+		return err
+	}
+	selectorBytes, err := selector.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("marshal grant selector: %w", err)
+	}
+
+	if _, err := repo.New(db).UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   principal,
+		Scope:          string(scope),
+		Effect:         PolicyEffectAllow.pgText(),
+		Selectors:      selectorBytes,
+	}); err != nil {
+		return fmt.Errorf("upsert principal grant: %w", err)
+	}
+
+	return nil
+}
+
+// GrantResourceToPrincipalWithSelectorTx adds a single allow grant binding one
+// principal to a scope with an explicit selector (e.g. a risk_policy:bypass
+// narrowed by server_url). The selector must carry resource_kind + resource_id
+// matching the scope and is validated before insert.
+func GrantResourceToPrincipalWithSelectorTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, selector Selector) error {
+	if organizationID == "" {
+		return fmt.Errorf("organization id is required")
+	}
+	if _, err := principal.Value(); err != nil {
+		return fmt.Errorf("invalid grant principal: %w", err)
+	}
+	if err := ValidateSelector(scope, selector); err != nil {
+		return err
+	}
+	selectorBytes, err := selector.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("marshal grant selector: %w", err)
+	}
+	if _, err := repo.New(db).UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   principal,
+		Scope:          string(scope),
+		Effect:         PolicyEffectAllow.pgText(),
+		Selectors:      selectorBytes,
+	}); err != nil {
+		return fmt.Errorf("upsert principal grant: %w", err)
+	}
+	return nil
+}
+
 // ListGrantsForResource loads grants for one resource-scoped permission.
 func ListGrantsForResource(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceID string) ([]Grant, error) {
 	if organizationID == "" {

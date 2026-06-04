@@ -26,6 +26,7 @@ const (
 	ScopeEnvironmentRead    Scope = "environment:read"
 	ScopeEnvironmentWrite   Scope = "environment:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
+	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 )
 
 var adminScopes = []Scope{
@@ -40,7 +41,12 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 }
 
-var allScopes = append(append([]Scope(nil), adminScopes...), ScopeRiskPolicyEvaluate)
+// allScopes includes the internal relation scopes (risk_policy:*, shadow_mcp:*)
+// that are not user-facing RBAC capabilities and are not seeded into system roles.
+var allScopes = append(append([]Scope(nil), adminScopes...),
+	ScopeRiskPolicyEvaluate,
+	ScopeRiskPolicyBypass,
+)
 
 var memberScopes = []Scope{
 	ScopeOrgRead,
@@ -86,20 +92,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
 	ScopeEnvironmentWrite:   nil,
 	ScopeRiskPolicyEvaluate: nil,
-}
-
-var internalScopes = map[Scope]bool{
-	ScopeRoot:               false,
-	ScopeOrgRead:            false,
-	ScopeOrgAdmin:           false,
-	ScopeProjectRead:        false,
-	ScopeProjectWrite:       false,
-	ScopeMCPRead:            false,
-	ScopeMCPWrite:           false,
-	ScopeMCPConnect:         false,
-	ScopeEnvironmentRead:    false,
-	ScopeEnvironmentWrite:   false,
-	ScopeRiskPolicyEvaluate: true,
+	ScopeRiskPolicyBypass:   nil,
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
@@ -127,10 +120,4 @@ func CalculateSubScopes(scope Scope) []string {
 		out[i] = string(s)
 	}
 	return out
-}
-
-// IsInternalScope reports whether a scope is used as an internal relation
-// rather than a user-facing RBAC capability.
-func IsInternalScope(scope Scope) bool {
-	return internalScopes[scope]
 }

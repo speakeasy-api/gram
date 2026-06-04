@@ -30,6 +30,8 @@ export function reasonLabel(reason: Reason): string {
     case "dev_override":
       return "Access allowed via a development override.";
   }
+
+  return "Authorization decision recorded.";
 }
 
 /**
