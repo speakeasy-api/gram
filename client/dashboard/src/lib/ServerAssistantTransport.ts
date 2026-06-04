@@ -1,193 +1,270 @@
-import { assistantsListMessages } from "@gram/client/funcs/assistantsListMessages";
 import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage";
+import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
-import { type ChatTransport, createUIMessageStream, type UIMessage } from "ai";
+import { sleep, type ElementsTransportContext } from "@gram-ai/elements";
+import {
+  type ChatTransport,
+  createUIMessageStream,
+  type UIMessage,
+  type UIMessageStreamWriter,
+} from "ai";
 
-export interface ServerAssistantTransportConfig {
-  /** SDK client (from useGramContext). */
+const DEFAULT_POLL_INTERVAL_MS = 1500;
+const DEFAULT_POLL_TIMEOUT_MS = 600_000;
+const MAX_CONSECUTIVE_POLL_FAILURES = 3;
+
+export interface ServerAssistantTransportDeps {
+  /** SDK client (from useGramContext) — already authenticated. */
   client: GramCore;
-  /** The assistant to converse with (the project's managed assistant). */
+  /** The project's managed assistant. */
   assistantId: string;
-  /** Project slug for the Gram-Project header. */
+  /** Project slug for the Gram-Project header on sendMessage. */
   projectSlug: string;
-  /** Resolves the current conversation key. A fresh value starts a new thread. */
-  getCorrelationId: () => string;
   /** Optional poll tuning. */
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
 }
 
-/**
- * ChatTransport that routes the conversation through the persistent server-side
- * assistant instead of the client-side AI SDK: it posts the user's message via
- * `assistants.sendMessage`, then polls `assistants.listMessages` for the
- * assistant's reply and surfaces it as a single (non-streamed) message. Delivery
- * is message-level — the UI shows a thinking state until the reply lands — in
- * exchange for persistence, server-side tool execution, and cross-session memory.
- */
-export class ServerAssistantTransport implements ChatTransport<UIMessage> {
-  private config: ServerAssistantTransportConfig;
+interface Snapshot {
+  ids: Set<string>;
   /**
-   * Poll cursor per chat: the highest seq surfaced for that chatId. Keyed by
-   * chatId (not a single field) so that "Start fresh" — which rotates the
-   * correlation id and therefore opens a new chat whose seqs restart at 1 —
-   * polls the new chat from 0 instead of from the old conversation's high-water
-   * mark (which would never be reached, causing a guaranteed timeout).
+   * The chat's `max_generation` at snapshot time. Pinning subsequent polls to
+   * this value keeps the loop on the same transcript even if a concurrent
+   * compaction or edit opens a new generation mid-turn.
    */
-  private lastSeqByChat = new Map<string, number>();
+  generation: number;
+}
 
-  constructor(config: ServerAssistantTransportConfig) {
-    this.config = config;
-  }
-
-  updateConfig(config: Partial<ServerAssistantTransportConfig>) {
-    this.config = { ...this.config, ...config };
-  }
-
-  async sendMessages({
-    messages,
-    abortSignal,
-  }: {
-    messages: UIMessage[];
-    abortSignal?: AbortSignal;
-  }) {
-    const text = latestUserText(messages);
-    if (!text) {
-      throw new Error("No user message to send.");
-    }
-
-    const {
-      client,
-      assistantId,
-      projectSlug,
-      getCorrelationId,
-      pollIntervalMs = 1500,
-      pollTimeoutMs = 120_000,
-    } = this.config;
-
-    const sent = await assistantsSendMessage(client, {
-      gramProject: projectSlug,
-      sendMessageRequestBody: {
-        assistantId,
-        correlationId: getCorrelationId(),
-        message: text,
-        idempotencyKey: crypto.randomUUID(),
-      },
-    });
-    if (!sent.ok) {
-      throw sent.error;
-    }
-    const chatId = sent.value.chatId;
-
-    const reply = await this.pollForReply({
-      client,
-      projectSlug,
-      chatId,
-      pollIntervalMs,
-      pollTimeoutMs,
-      abortSignal,
-    });
-
-    return createUIMessageStream<UIMessage>({
-      originalMessages: messages,
-      execute: ({ writer }) => {
-        const id = reply.id;
-        writer.write({ type: "start" });
-        writer.write({ type: "text-start", id });
-        writer.write({ type: "text-delta", id, delta: reply.content });
-        writer.write({ type: "text-end", id });
-        writer.write({ type: "finish" });
-      },
-    });
-  }
-
-  async reconnectToStream() {
-    // The server assistant is poll-based; there is no stream to reconnect to.
-    return null;
-  }
-
-  /** Polls the conversation log until an assistant message newer than the
-   *  current cursor appears, then advances the cursor past it. */
-  private async pollForReply({
-    client,
-    projectSlug,
-    chatId,
-    pollIntervalMs,
-    pollTimeoutMs,
-    abortSignal,
-  }: {
-    client: GramCore;
-    projectSlug: string;
-    chatId: string;
-    pollIntervalMs: number;
-    pollTimeoutMs: number;
-    abortSignal?: AbortSignal;
-  }): Promise<{ id: string; content: string }> {
-    const deadline = Date.now() + pollTimeoutMs;
-
-    for (;;) {
-      if (abortSignal?.aborted) {
-        throw new DOMException("Aborted", "AbortError");
+/**
+ * Builds an Elements transport factory that routes the conversation through the
+ * project's server-side assistant. `sendMessages` posts the user's message via
+ * `assistants.sendMessage` — for a new conversation it omits the chat id and the
+ * server mints one, which we adopt via `ctx.setChatId` so Elements' thread
+ * list/history resolve to it. It then polls `chat.load` for the assistant's
+ * reply and surfaces it. History, the conversation list, and titles are owned by
+ * Elements' RemoteThreadListAdapter — this only does send + reply reflection.
+ */
+export function createServerAssistantTransport(
+  deps: ServerAssistantTransportDeps,
+): (ctx: ElementsTransportContext) => ChatTransport<UIMessage> {
+  return (ctx) => ({
+    async sendMessages({ messages, abortSignal }) {
+      let latest: UIMessage | undefined;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user") {
+          latest = messages[i];
+          break;
+        }
+      }
+      const text =
+        latest?.parts
+          .filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join("")
+          .trim() ?? "";
+      if (!text) {
+        throw new Error("No user message to send.");
       }
 
-      const cursor = this.lastSeqByChat.get(chatId) ?? 0;
-      const res = await assistantsListMessages(client, {
-        gramProject: projectSlug,
-        chatId,
-        afterSeq: cursor,
+      // The stream is created up front and `execute` does all the async work —
+      // send + poll — writing chunks as new assistant rows are discovered so
+      // assistant-ui surfaces per-row updates in real time rather than a single
+      // dump after the turn completes.
+      return createUIMessageStream<UIMessage>({
+        originalMessages: messages,
+        execute: async ({ writer }) => {
+          writer.write({ type: "start" });
+
+          let chatId = ctx.getChatId();
+
+          // Snapshot the assistant rows already on the server before sending —
+          // the poll's "new" baseline. Elements' optimistic `messages` carry
+          // local UI ids that don't match server `chat_messages` ids, so
+          // without this we'd re-surface every prior-turn assistant row on
+          // each follow-up. Runs in parallel with the send since neither
+          // depends on the other.
+          const [snapshot, sent] = await Promise.all([
+            chatId
+              ? snapshotAssistantIds(deps.client, chatId, abortSignal)
+              : Promise.resolve<Snapshot | null>(null),
+            assistantsSendMessage(
+              deps.client,
+              {
+                gramProject: deps.projectSlug,
+                sendMessageRequestBody: {
+                  assistantId: deps.assistantId,
+                  message: text,
+                  chatId: chatId ?? undefined,
+                  idempotencyKey: latest?.id,
+                },
+              },
+              undefined,
+              { fetchOptions: { signal: abortSignal } },
+            ),
+          ]);
+          if (!sent.ok) {
+            throw sent.error;
+          }
+          if (!chatId) {
+            // New conversation: adopt the server-minted id so the thread, its
+            // history, and the conversation list all resolve to the same chat.
+            chatId = sent.value.chatId;
+            ctx.setChatId(chatId);
+          }
+
+          await pollForReplies({
+            deps,
+            chatId,
+            snapshot,
+            writer,
+            abortSignal,
+          });
+
+          writer.write({ type: "finish" });
+        },
       });
-      if (!res.ok) {
+    },
+
+    async reconnectToStream() {
+      // The server assistant is poll-based; there is no stream to reconnect to.
+      return null;
+    },
+  });
+}
+
+/**
+ * Polls chat.load until the assistant's turn ends, emitting text chunks to the
+ * writer as soon as each new assistant row appears. A tool-using turn writes
+ * multiple assistant rows interleaved with tool rows; we keep polling until the
+ * latest assistant row carries finish_reason "stop" with no pending tool_calls.
+ * Empty assistant rows (pure tool-call turns with no narrative) are skipped.
+ */
+async function pollForReplies(args: {
+  deps: ServerAssistantTransportDeps;
+  chatId: string;
+  snapshot: Snapshot | null;
+  writer: UIMessageStreamWriter<UIMessage>;
+  abortSignal?: AbortSignal;
+}): Promise<void> {
+  const { deps, chatId, snapshot, writer, abortSignal } = args;
+  const {
+    client,
+    pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+    pollTimeoutMs = DEFAULT_POLL_TIMEOUT_MS,
+  } = deps;
+  const deadline = Date.now() + pollTimeoutMs;
+  const seen = new Set<string>(snapshot?.ids ?? []);
+  // Pin the poll to the generation captured at snapshot time so a concurrent
+  // compaction/edit that opens a new generation can't surface its summary as a
+  // reply. For new conversations we don't know the generation yet — leave it
+  // undefined for the first iteration, then pin to the response's generation.
+  let pinnedGeneration: number | undefined = snapshot?.generation;
+  let consecutiveFailures = 0;
+
+  for (;;) {
+    if (abortSignal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
+    const res = await chatLoad(
+      client,
+      { id: chatId, generation: pinnedGeneration },
+      undefined,
+      { fetchOptions: { signal: abortSignal } },
+    );
+    if (res.ok) {
+      consecutiveFailures = 0;
+      if (pinnedGeneration === undefined) {
+        pinnedGeneration = res.value.generation;
+      }
+      // Only the *new* (post-baseline) assistant rows belong to this turn —
+      // prior-turn terminal rows would otherwise satisfy the terminal check on
+      // the first iteration and short-circuit the loop with empty replies.
+      let lastNewAssistant: {
+        finishReason?: string;
+        toolCalls?: string;
+      } | null = null;
+      for (const m of res.value.messages) {
+        if (m.role !== "assistant") continue;
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
+        lastNewAssistant = m;
+        const text = contentText(m.content);
+        if (text) {
+          writer.write({ type: "text-start", id: m.id });
+          writer.write({ type: "text-delta", id: m.id, delta: text });
+          writer.write({ type: "text-end", id: m.id });
+        }
+      }
+      if (lastNewAssistant && isTurnTerminal(lastNewAssistant)) {
+        return;
+      }
+    } else {
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
         throw res.error;
       }
+    }
 
-      // Advance the cursor past everything seen (user echo + any replies) and
-      // surface the first assistant message in this batch.
-      let nextCursor = cursor;
-      let assistantReply: { id: string; content: string } | null = null;
-      for (const m of res.value.messages) {
-        if (m.seq > nextCursor) {
-          nextCursor = m.seq;
-        }
-        if (!assistantReply && m.role === "assistant") {
-          assistantReply = { id: m.id, content: m.content };
-        }
-      }
-      this.lastSeqByChat.set(chatId, nextCursor);
-      if (assistantReply) {
-        return assistantReply;
-      }
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for the assistant's reply.");
+    }
+    await sleep(pollIntervalMs, abortSignal);
+  }
+}
 
-      if (Date.now() >= deadline) {
-        throw new Error("Timed out waiting for the assistant's reply.");
-      }
-      await delay(pollIntervalMs, abortSignal);
+// Returns the assistant message ids and current generation for the chat. Used
+// as the "already seen" baseline and the generation pin so the poll only
+// surfaces rows produced by the turn we're about to send, on the same
+// generation. Throws on failure: falling back to an empty baseline would let
+// the poll's first iteration treat every prior assistant row as new and
+// short-circuit on the previous turn's terminal row, returning the entire chat
+// history as the reply.
+async function snapshotAssistantIds(
+  client: GramCore,
+  chatId: string,
+  abortSignal?: AbortSignal,
+): Promise<Snapshot> {
+  const res = await chatLoad(client, { id: chatId }, undefined, {
+    fetchOptions: { signal: abortSignal },
+  });
+  if (!res.ok) {
+    throw res.error;
+  }
+  const ids = new Set<string>();
+  for (const m of res.value.messages) {
+    if (m.role === "assistant") {
+      ids.add(m.id);
     }
   }
+  return { ids, generation: res.value.maxGeneration };
 }
 
-function latestUserText(messages: UIMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m.role !== "user") continue;
-    return m.parts
-      .filter((p): p is { type: "text"; text: string } => p.type === "text")
-      .map((p) => p.text)
-      .join("")
-      .trim();
+// A turn ends when the model returns finish_reason "stop" with no pending
+// tool_calls. "tool_calls" (or any other reason) means more assistant rows are
+// still on their way.
+function isTurnTerminal(m: {
+  finishReason?: string;
+  toolCalls?: string;
+}): boolean {
+  if (m.finishReason !== "stop") return false;
+  if (!m.toolCalls) return true;
+  const trimmed = m.toolCalls.trim();
+  return trimmed === "" || trimmed === "[]" || trimmed === "null";
+}
+
+function contentText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((p) =>
+        p && typeof p === "object" && (p as { type?: string }).type === "text"
+          ? ((p as { text?: string }).text ?? "")
+          : "",
+      )
+      .join("");
   }
   return "";
-}
-
-function delay(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const id = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(id);
-        reject(new DOMException("Aborted", "AbortError"));
-      },
-      { once: true },
-    );
-  });
 }

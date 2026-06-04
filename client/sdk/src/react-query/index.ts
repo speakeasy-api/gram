@@ -138,7 +138,6 @@ export * from "./listAllowedOrigins.js";
 export * from "./listAPIKeys.js";
 export * from "./listAssets.js";
 export * from "./listAssistantMemories.js";
-export * from "./listAssistantMessages.js";
 export * from "./listAttributeKeys.js";
 export * from "./listChats.js";
 export * from "./listCollections.js";

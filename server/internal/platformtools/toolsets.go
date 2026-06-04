@@ -8,8 +8,8 @@ const AssistantsPlatformToolsetSlug = "assistants"
 
 // ManagedAssistantPlatformToolsetSlug is the reserved slug for the platform
 // toolset granted only to a project's managed assistant (the one powering the
-// dashboard sidebar). It carries the dashboard egress tool, which must not be
-// reachable by any other assistant.
+// dashboard sidebar). It carries tools that must not be reachable by any
+// other assistant.
 const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
 
 // Toolset is a virtual collection of platform tools exposed at runtime via a
@@ -24,9 +24,9 @@ type Toolset struct {
 // platform toolset registry. Add a field here when a new toolset needs an
 // external service or pre-built tool slice.
 type ToolsetDependencies struct {
-	AssistantMemoryTools    []ExternalTool
-	AssistantTriggerTools   []ExternalTool
-	AssistantDashboardTools []ExternalTool
+	AssistantMemoryTools     []ExternalTool
+	AssistantTriggerTools    []ExternalTool
+	ManagedAssistantLogTools []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
@@ -39,7 +39,9 @@ var toolsetRegistry = []toolsetBuilder{
 		return NewAssistantsToolset(tools...)
 	},
 	func(deps ToolsetDependencies) Toolset {
-		return NewManagedAssistantToolset(deps.AssistantDashboardTools...)
+		tools := make([]ExternalTool, 0, len(deps.ManagedAssistantLogTools))
+		tools = append(tools, deps.ManagedAssistantLogTools...)
+		return NewManagedAssistantToolset(tools...)
 	},
 }
 

@@ -67,6 +67,19 @@ import { ElementsContext } from "./contexts";
 import { ToolApprovalProvider } from "./ToolApprovalContext";
 import { ToolExecutionProvider } from "./ToolExecutionContext";
 
+// Reads the active local thread id from the runtime's threads store. Reaches
+// into an assistant-ui internal that isn't part of the public type, so it's
+// isolated here as the single point of breakage if the API moves.
+function getActiveLocalThreadId(
+  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>,
+): string | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const threadsState = (runtimeRef.current as any)?.threads?.getState?.();
+  return (threadsState?.mainThreadId ?? threadsState?.threadIds?.[0]) as
+    | string
+    | undefined;
+}
+
 /**
  * Extracts executable tools from frontend tool definitions.
  * Frontend tools created via defineFrontendTool have an unstable_tool property
@@ -300,12 +313,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // chatId is already set correctly from the synced ref
         } else if (isLocalThreadId(chatId) || !chatId) {
           // For local thread IDs or no ID, check/generate UUID mapping
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const runtimeAny = runtimeRef.current as any;
-          const threadsState = runtimeAny?.threads?.getState?.();
-          const localThreadId = (threadsState?.mainThreadId ??
-            threadsState?.threadIds?.[0]) as string | undefined;
-
+          const localThreadId = getActiveLocalThreadId(runtimeRef);
           const lookupKey = chatId ?? localThreadId;
           if (lookupKey) {
             const existingUuid = localIdToUuidMapRef.current.get(lookupKey);
@@ -523,9 +531,39 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     ],
   );
 
-  // A consumer-supplied transport (e.g. a server-side assistant transport)
-  // takes precedence over the built-in client-side one.
-  const transport = config.transport ?? defaultTransport;
+  // A consumer-supplied transport (e.g. a server-side assistant transport) takes
+  // precedence over the built-in client-side one. It may be a ChatTransport or a
+  // factory: a factory is invoked here, inside the provider, with a getChatId()
+  // sourced from the synced thread state, so the transport can read the active
+  // chat id at send time without reaching into Elements internals. Local
+  // (unpersisted) thread ids read as null so the transport can treat them as a
+  // brand-new conversation.
+  const getChatId = useCallback(() => {
+    const id = currentRemoteIdRef.current;
+    return id && !isLocalThreadId(id) ? id : null;
+  }, []);
+  // Adopt a chat id assigned out-of-band (e.g. a server-minted id a consumer
+  // transport receives on the first send): map the active local thread to it and
+  // sync the refs/headers the rest of the provider reads — the same
+  // reconciliation the built-in transport does inline when it generates an id.
+  const setChatId = useCallback(
+    (chatId: string) => {
+      const localThreadId = getActiveLocalThreadId(runtimeRef);
+      if (localThreadId) {
+        localIdToUuidMapRef.current.set(localThreadId, chatId);
+      }
+      currentRemoteIdRef.current = chatId;
+      mcpHeaders["Gram-Chat-ID"] = chatId;
+      setCurrentChatId(chatId);
+    },
+    [mcpHeaders, setCurrentChatId],
+  );
+  const transport = useMemo<ChatTransport<UIMessage>>(() => {
+    if (typeof config.transport === "function") {
+      return config.transport({ getChatId, setChatId });
+    }
+    return config.transport ?? defaultTransport;
+  }, [config.transport, defaultTransport, getChatId, setChatId]);
 
   const historyEnabled = config.history?.enabled ?? false;
 
@@ -664,6 +702,8 @@ const ElementsProviderWithHistory = ({
     apiUrl,
     headers,
     localIdToUuidMap,
+    threadListFilters: contextValue?.config.history?.threadListFilters,
+    deferThreadIdMinting: contextValue?.config.history?.deferThreadIdMinting,
   });
   const initialThreadId = contextValue?.config.history?.initialThreadId;
 

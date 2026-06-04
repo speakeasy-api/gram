@@ -772,15 +772,15 @@ func newStartCommand() *cli.Command {
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
-			dashboardTools := platformtoolsruntime.DashboardExternalTools(db)
+			managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemSvc)
 			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-				AssistantMemoryTools:    memoryTools,
-				AssistantTriggerTools:   triggerTools,
-				AssistantDashboardTools: dashboardTools,
+				AssistantMemoryTools:     memoryTools,
+				AssistantTriggerTools:    triggerTools,
+				ManagedAssistantLogTools: managedLogsTools,
 			})
 			// Runner-callable platform tools the runtime must be able to execute
 			// (trigger tools are wired separately via WithTriggerTools).
-			assistantPlatformExtras := append(append([]platformtools.ExternalTool{}, memoryTools...), dashboardTools...)
+			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 
 			platformSvc := platformtoolsruntime.NewService(
 				logger,

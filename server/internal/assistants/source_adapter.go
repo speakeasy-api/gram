@@ -4,18 +4,34 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 type sourceAdapter interface {
 	ThreadContext(sourceRefJSON []byte) (string, error)
 	OutputChannelGuidance() string
 	DecodeTurn(event assistantThreadEventRecord) (string, error)
+	// ChatID derives the conversation identity from a turn's correlation key.
+	// External sources hash an opaque correlation key into a stable id; the
+	// dashboard's correlation key already IS the chat id (server-minted on the
+	// first turn and round-tripped by the client).
+	ChatID(assistantID uuid.UUID, correlationID string) uuid.UUID
+}
+
+// deterministicChatIDAdapter is the default ChatID strategy embedded by every
+// source whose correlation key is opaque (Slack, cron, wake). The dashboard
+// source overrides ChatID because its correlation key already IS the chat id.
+type deterministicChatIDAdapter struct{}
+
+func (deterministicChatIDAdapter) ChatID(assistantID uuid.UUID, correlationID string) uuid.UUID {
+	return deterministicChatID(assistantID, correlationID)
 }
 
 var sourceAdapters = map[string]sourceAdapter{
-	sourceKindSlack:     slackAdapter{},
-	sourceKindCron:      cronAdapter{},
-	sourceKindWake:      wakeAdapter{},
+	sourceKindSlack:     slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindCron:      cronAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindWake:      wakeAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
 	sourceKindDashboard: dashboardAdapter{},
 }
 
@@ -57,7 +73,7 @@ type slackEventPayload struct {
 	BlockID      string `json:"block_id,omitempty"`
 }
 
-type slackAdapter struct{}
+type slackAdapter struct{ deterministicChatIDAdapter }
 
 func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	var ref slackSourceRef
@@ -152,7 +168,7 @@ type cronEventPayload struct {
 	Note              string `json:"note,omitempty"`
 }
 
-type cronAdapter struct{}
+type cronAdapter struct{ deterministicChatIDAdapter }
 
 func (cronAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	var ref cronSourceRef
@@ -211,7 +227,7 @@ type wakeEventPayload struct {
 	Note              string `json:"note,omitempty"`
 }
 
-type wakeAdapter struct{}
+type wakeAdapter struct{ deterministicChatIDAdapter }
 
 func (wakeAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	var ref wakeSourceRef
@@ -285,7 +301,17 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (dashboardAdapter) OutputChannelGuidance() string {
 	return `## Dashboard output preferences
 
-You are answering a Gram user in the web dashboard's side panel. Deliver every reply by calling platform_dashboard_send_message — plain text is not shown to the user. Reply conversationally and concisely in Markdown; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.`
+You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.`
+}
+
+// ChatID: the dashboard's correlation key already IS the server-minted chat id
+// (round-tripped by the client). Use it directly; fall back to a deterministic
+// hash if a non-UUID correlation key ever slips through.
+func (dashboardAdapter) ChatID(assistantID uuid.UUID, correlationID string) uuid.UUID {
+	if parsed, err := uuid.Parse(correlationID); err == nil {
+		return parsed
+	}
+	return deterministicChatID(assistantID, correlationID)
 }
 
 func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {

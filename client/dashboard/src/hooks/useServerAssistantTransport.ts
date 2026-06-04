@@ -1,65 +1,38 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useEnsureManagedAssistantMutation,
   useGramContext,
 } from "@gram/client/react-query";
-import { ServerAssistantTransport } from "@/lib/ServerAssistantTransport";
-
-function correlationStorageKey(projectSlug: string): string {
-  return `gram.projectAssistant.correlation.${projectSlug}`;
-}
-
-/**
- * Reads the persisted correlation id for a project, creating (and persisting)
- * one on first use. Falls back to an ephemeral id if localStorage is
- * unavailable (e.g. private browsing).
- */
-function loadOrCreateCorrelationId(projectSlug: string): string {
-  const key = correlationStorageKey(projectSlug);
-  try {
-    const existing = localStorage.getItem(key);
-    if (existing) return existing;
-  } catch {
-    return crypto.randomUUID();
-  }
-  const fresh = crypto.randomUUID();
-  try {
-    localStorage.setItem(key, fresh);
-  } catch {
-    // Persisting failed; the id still works for this session.
-  }
-  return fresh;
-}
+import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
+import type { ElementsTransportFactory } from "@gram-ai/elements";
 
 export interface UseServerAssistantTransportResult {
   /**
-   * The server-backed transport, available once the managed assistant has been
-   * resolved. Undefined while connecting so the caller can withhold it (and
-   * keep the UI in a connecting state) rather than fall back to client-side
+   * Transport factory for `ElementsConfig.transport`, available once the managed
+   * assistant has resolved. Undefined while connecting (or after a failure) so
+   * the caller can gate the chat instead of falling back to client-side
    * generation.
    */
-  transport: ServerAssistantTransport | undefined;
-  /** Whether the managed assistant has been resolved and the transport is live. */
+  transport: ElementsTransportFactory | undefined;
+  /** The project's managed assistant id — used to scope the conversation list. */
+  assistantId: string;
+  /** Whether the managed assistant has resolved and the transport is live. */
   ready: boolean;
   /** Connection error message, if resolving the managed assistant failed. */
   error: string | null;
-  /**
-   * Starts a brand-new conversation: rotates the correlation id (so the server
-   * opens a fresh thread). The caller is responsible for clearing the visible
-   * chat (e.g. by remounting the chat provider).
-   */
-  startFresh: () => void;
 }
 
 /**
- * Owns the lifecycle of the project's server-side Project Assistant for the
- * insights sidebar: resolves (provisioning on first access) the managed
- * assistant, persists a per-project correlation id so the conversation survives
- * reloads, and exposes a stable {@link ServerAssistantTransport} wired to both.
+ * Resolves the project's server-side Project Assistant (provisioning it on first
+ * access) and exposes a transport factory wired to it. The conversation id,
+ * history, and conversation list are owned by Elements' RemoteThreadListAdapter
+ * (backed by the chat service), so this hook only resolves the assistant and
+ * builds the send transport.
  *
- * The assistant is resolved lazily — only once `enabled` first becomes true
- * (i.e. the sidebar is opened) — so we never provision an assistant for users
- * who never open it.
+ * Resolution is lazy — only once `enabled` first becomes true (the sidebar is
+ * opened) — so we never provision an assistant for users who never open it. The
+ * provider is expected to mount inside the sidebar, so closing and reopening
+ * after a failure retries.
  */
 export function useServerAssistantTransport(
   projectSlug: string,
@@ -67,71 +40,66 @@ export function useServerAssistantTransport(
 ): UseServerAssistantTransportResult {
   const client = useGramContext();
   const ensureManaged = useEnsureManagedAssistantMutation();
-
-  // Correlation id lives in a ref so rotating it (Start fresh) doesn't force the
-  // transport to be recreated — getCorrelationId reads the latest value lazily.
-  const correlationRef = useRef<string>("");
-  if (!correlationRef.current && projectSlug) {
-    correlationRef.current = loadOrCreateCorrelationId(projectSlug);
-  }
-  const getCorrelationId = useCallback(() => correlationRef.current, []);
-
-  // A single transport instance, reconfigured in place, so its identity stays
-  // stable across renders and the chat runtime is never needlessly remounted.
-  const transportRef = useRef<ServerAssistantTransport | null>(null);
-  if (!transportRef.current) {
-    transportRef.current = new ServerAssistantTransport({
-      client,
-      assistantId: "",
-      projectSlug,
-      getCorrelationId,
-    });
-  }
+  const ensureManagedMutate = ensureManaged.mutate;
 
   const [assistantId, setAssistantId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
-  // Resolve the managed assistant the first time the sidebar opens.
   const requestedRef = useRef(false);
+  const resolvedForSlugRef = useRef<string | null>(null);
+
+  // Project switch: drop the previously-resolved assistant so the new project's
+  // managed assistant gets resolved fresh. The InsightsProvider lives above the
+  // route outlet and persists across project navigation, so without this reset
+  // the transport would route assistant from project A to project B → 404.
   useEffect(() => {
-    if (!enabled || requestedRef.current || !projectSlug) return;
+    if (
+      resolvedForSlugRef.current !== null &&
+      resolvedForSlugRef.current !== projectSlug
+    ) {
+      resolvedForSlugRef.current = null;
+      requestedRef.current = false;
+      setAssistantId("");
+      setError(null);
+    }
+  }, [projectSlug]);
+
+  useEffect(() => {
+    if (!enabled) {
+      if (!assistantId) {
+        requestedRef.current = false;
+      }
+      return;
+    }
+    if (requestedRef.current || !projectSlug) {
+      return;
+    }
     requestedRef.current = true;
-    ensureManaged.mutate(
+    setError(null);
+    const slugAtRequest = projectSlug;
+    ensureManagedMutate(
       {},
       {
-        onSuccess: (assistant) => setAssistantId(assistant.id),
+        onSuccess: (assistant) => {
+          resolvedForSlugRef.current = slugAtRequest;
+          setAssistantId(assistant.id);
+        },
         onError: () =>
           setError(
             "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
           ),
       },
     );
-  }, [enabled, projectSlug, ensureManaged]);
-
-  // Push the latest config into the stable transport instance.
-  useEffect(() => {
-    transportRef.current?.updateConfig({ client, assistantId, projectSlug });
-  }, [client, assistantId, projectSlug]);
-
-  const startFresh = useCallback(() => {
-    const fresh = crypto.randomUUID();
-    correlationRef.current = fresh;
-    try {
-      localStorage.setItem(correlationStorageKey(projectSlug), fresh);
-    } catch {
-      // Ephemeral for this session if persistence fails.
-    }
-  }, [projectSlug]);
+  }, [enabled, projectSlug, ensureManagedMutate, assistantId]);
 
   const ready = assistantId !== "";
 
-  return useMemo(
-    () => ({
-      transport: ready ? (transportRef.current ?? undefined) : undefined,
-      ready,
-      error,
-      startFresh,
-    }),
-    [ready, error, startFresh],
-  );
+  const transport = useMemo<ElementsTransportFactory | undefined>(() => {
+    if (!ready) {
+      return undefined;
+    }
+    return createServerAssistantTransport({ client, assistantId, projectSlug });
+  }, [ready, client, assistantId, projectSlug]);
+
+  return { transport, assistantId, ready, error };
 }

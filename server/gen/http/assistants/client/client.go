@@ -41,10 +41,6 @@ type Client struct {
 	// endpoint.
 	SendMessageDoer goahttp.Doer
 
-	// ListMessages Doer is the HTTP client used to make requests to the
-	// listMessages endpoint.
-	ListMessagesDoer goahttp.Doer
-
 	// EnsureManagedAssistant Doer is the HTTP client used to make requests to the
 	// ensureManagedAssistant endpoint.
 	EnsureManagedAssistantDoer goahttp.Doer
@@ -75,7 +71,6 @@ func NewClient(
 		UpdateAssistantDoer:        doer,
 		DeleteAssistantDoer:        doer,
 		SendMessageDoer:            doer,
-		ListMessagesDoer:           doer,
 		EnsureManagedAssistantDoer: doer,
 		RestoreResponseBody:        restoreBody,
 		scheme:                     scheme,
@@ -224,30 +219,6 @@ func (c *Client) SendMessage() goa.Endpoint {
 		resp, err := c.SendMessageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistants", "sendMessage", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ListMessages returns an endpoint that makes HTTP requests to the assistants
-// service listMessages server.
-func (c *Client) ListMessages() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListMessagesRequest(c.encoder)
-		decodeResponse = DecodeListMessagesResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListMessagesRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListMessagesDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("assistants", "listMessages", err)
 		}
 		return decodeResponse(resp)
 	}

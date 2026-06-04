@@ -7,7 +7,6 @@ import { assistantsDelete } from "../funcs/assistantsDelete.js";
 import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsList } from "../funcs/assistantsList.js";
-import { assistantsListMessages } from "../funcs/assistantsListMessages.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -112,29 +111,10 @@ export class Assistants extends ClientSDK {
   }
 
   /**
-   * listMessages assistants
-   *
-   * @remarks
-   * List a dashboard conversation log for a chat (the user's messages and the assistant's delivered replies). Only the user who owns the conversation may read it. Poll with after_seq to fetch only newer messages.
-   */
-  async listMessages(
-    request: operations.ListAssistantMessagesRequest,
-    security?: operations.ListAssistantMessagesSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListMessagesResult> {
-    return unwrapAsync(assistantsListMessages(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * sendMessage assistants
    *
    * @remarks
-   * Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.
+   * Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.
    */
   async sendMessage(
     request: operations.SendAssistantMessageRequest,

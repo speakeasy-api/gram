@@ -50,6 +50,38 @@ export const VARIANTS = ["widget", "sidecar", "standalone"] as const;
 export type Variant = (typeof VARIANTS)[number];
 
 /**
+ * Live chat context handed to a {@link ElementsTransportFactory}.
+ */
+export interface ElementsTransportContext {
+  /**
+   * The active conversation's persisted chat id, or null when the current
+   * thread has no server-side chat yet (a brand-new, not-yet-sent thread).
+   * Sourced from the thread-list runtime, so it stays current as the user
+   * switches conversations.
+   */
+  getChatId: () => string | null;
+
+  /**
+   * Adopt a chat id assigned out-of-band — e.g. when the backend mints the id
+   * for a new conversation and returns it on the first send. Elements maps the
+   * active (still-local) thread to this id so subsequent history loads and the
+   * thread list resolve to the right server chat. Call it once, with the id the
+   * server returned, immediately after the first send of a new conversation.
+   */
+  setChatId: (chatId: string) => void;
+}
+
+/**
+ * A factory for a {@link ChatTransport}. When `ElementsConfig.transport` is a
+ * function, Elements invokes it once inside the provider and passes the live
+ * chat context, letting the transport read the current chat id at send time
+ * without reaching into Elements internals.
+ */
+export type ElementsTransportFactory = (
+  ctx: ElementsTransportContext,
+) => ChatTransport<UIMessage>;
+
+/**
  * The top level configuration object for the Elements library.
  *
  * @example
@@ -71,8 +103,22 @@ export interface ElementsConfig {
    * to route the conversation through a persistent server-side assistant that
    * generates replies and is polled for them. When omitted, the default
    * client-side transport is used.
+   *
+   * May be a {@link ChatTransport} directly, or an {@link ElementsTransportFactory}
+   * that Elements invokes inside the provider with the live chat context — use
+   * the factory form when the transport needs the active chat id at send time.
    */
-  transport?: ChatTransport<UIMessage>;
+  transport?: ChatTransport<UIMessage> | ElementsTransportFactory;
+
+  /**
+   * Whether to expose the inline message-edit affordance on user messages.
+   * Edit relies on assistant-ui's local branch rewriting; transports backed by a
+   * persistent server-side assistant typically can't honour that, so the
+   * sidebar uses this to hide the action rather than offer a broken control.
+   *
+   * @default true
+   */
+  allowMessageEdit?: boolean;
 
   /**
    * Any plugins to use for the Elements library.
@@ -1011,6 +1057,22 @@ export interface HistoryConfig {
    * @default false
    */
   enabled: boolean;
+
+  /**
+   * Extra query parameters forwarded to the thread-list request, used to
+   * filter which conversations are shown. Opaque to Elements — the consumer
+   * decides the keys (e.g. a search term, or a backend-specific scope). When
+   * omitted, all of the caller's chats are listed.
+   */
+  threadListFilters?: Record<string, string>;
+
+  /**
+   * Let the backend own chat-id creation. When true, a brand-new thread does not
+   * get a client-generated id; instead the transport assigns the id (e.g. one
+   * the server minted on the first send, reported via the transport context's
+   * `setChatId`). Use with a server-backed `transport`.
+   */
+  deferThreadIdMinting?: boolean;
 
   /**
    * Whether to show the thread list sidebar/panel.

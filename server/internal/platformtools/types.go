@@ -17,8 +17,6 @@ const (
 	SourceMemory                   = "memory"
 	SourceSlack                    = "slack"
 	SourceTriggers                 = "triggers"
-	SourceDashboard                = "dashboard"
-	ToolNameDashboardSendMessage   = "platform_dashboard_send_message"
 	ToolNameSearchLogs             = "platform_search_logs"
 	ToolNameListTriggers           = "platform_list_triggers"
 	ToolNameConfigureTrigger       = "platform_configure_trigger"

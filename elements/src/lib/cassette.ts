@@ -12,6 +12,7 @@
 
 import { createUIMessageStream, type ChatTransport, type UIMessage } from "ai";
 import type { ThreadMessage } from "@assistant-ui/react";
+import { sleep } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Cassette types
@@ -111,25 +112,6 @@ export function recordCassette(messages: readonly ThreadMessage[]): Cassette {
 // ---------------------------------------------------------------------------
 // Playback: Cassette → ChatTransport
 // ---------------------------------------------------------------------------
-
-/** Sleep that respects AbortSignal for clean cancellation. */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
-    const timeout = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timeout);
-        reject(new DOMException("Aborted", "AbortError"));
-      },
-      { once: true },
-    );
-  });
-}
 
 /**
  * Creates a ChatTransport that replays pre-recorded assistant messages

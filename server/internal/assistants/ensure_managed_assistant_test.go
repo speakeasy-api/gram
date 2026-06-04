@@ -14,7 +14,7 @@ func TestEnsureManagedAssistantProvisionsAndIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_ensure_managed")
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
 
 	// First call provisions the built-in assistant out of nothing.
 	first, err := svc.EnsureManagedAssistant(ctx, &gen.EnsureManagedAssistantPayload{

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: d3bc8b535652fd1591cc608e9c70674a
+  docChecksum: a491731049395303617eb5e4926880b6
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -256,10 +256,6 @@ trackedFiles:
     last_write_checksum: sha1:223b1f9afd3b382f3b3570debe758547362731dc
   docs/models/components/customdomainmcpendpoint.md:
     last_write_checksum: sha1:617d60e0c7ecb67914f505e0ac62966aab59cfb9
-  docs/models/components/dashboardmessage.md:
-    last_write_checksum: sha1:0cff1abdf6d37eb8af8c42070bb2d6cfca50c92c
-  docs/models/components/dashboardmessagerole.md:
-    last_write_checksum: sha1:d618080f8d9778c35f8fc8ddf07405d04813b8c3
   docs/models/components/deleteaiintegrationconfigrequest.md:
     last_write_checksum: sha1:c880791036abdb30f71e62015017e036e52a4d86
   docs/models/components/deletecustomdetectionrulerequestbody.md:
@@ -492,8 +488,6 @@ trackedFiles:
     last_write_checksum: sha1:b405b0f206e6a0c9e0d4b8a1a0e7415de7bb5f2a
   docs/models/components/listmembersresult.md:
     last_write_checksum: sha1:8d30ed2359baaa8ddda4ca408b22a52d33cfc1f2
-  docs/models/components/listmessagesresult.md:
-    last_write_checksum: sha1:88463ad032b5ea3a6952e17114093308af858c26
   docs/models/components/listpackagesresult.md:
     last_write_checksum: sha1:cb359e2921071954d7b35a3897ae94db823311c4
   docs/models/components/listpluginsresult.md:
@@ -883,9 +877,9 @@ trackedFiles:
   docs/models/components/sendinviterequestbody.md:
     last_write_checksum: sha1:e433f2544bc88fdc779ca174ecf2b7ea969d6e9f
   docs/models/components/sendmessagerequestbody.md:
-    last_write_checksum: sha1:a9bac7deea95dd3c780760b1de5a6a2b006669d8
+    last_write_checksum: sha1:a8bfab897b87afbbd8253195d8c5b569e470f340
   docs/models/components/sendmessageresult.md:
-    last_write_checksum: sha1:6c767c6fd27391c57d7aa75757bd00e419020dbb
+    last_write_checksum: sha1:9325eeca23e115f9b30785531c51ba87288de934
   docs/models/components/serveimageform.md:
     last_write_checksum: sha1:530060f0cc468c392b1fd32052fc990c4a5c17c5
   docs/models/components/serverclass.md:
@@ -2114,10 +2108,6 @@ trackedFiles:
     last_write_checksum: sha1:bd03eafccb6236d112debbfd154d2cf6051de1aa
   docs/models/operations/listassistantmemoriessecurity.md:
     last_write_checksum: sha1:a2da68e439d2181c01e6968ef3f154776c079962
-  docs/models/operations/listassistantmessagesrequest.md:
-    last_write_checksum: sha1:61c5b52216297f4ade6cd7e16637e87e748ad015
-  docs/models/operations/listassistantmessagessecurity.md:
-    last_write_checksum: sha1:76c7834aa60e1fcca4a6d4be843a1fc6166ad7c8
   docs/models/operations/listassistantsrequest.md:
     last_write_checksum: sha1:30179c34b2734d484ee01d79c218e6674077f555
   docs/models/operations/listassistantssecurity.md:
@@ -2687,7 +2677,7 @@ trackedFiles:
   docs/models/operations/searchuserssecurityoption2.md:
     last_write_checksum: sha1:0b76a2a1d256a669c500a2845b41755f9fbfd195
   docs/models/operations/sendassistantmessagerequest.md:
-    last_write_checksum: sha1:ae727d6d896ce5994e5c241817de675504317c75
+    last_write_checksum: sha1:30cfa2bfea2bee736860b874da7d1ac66537c095
   docs/models/operations/sendassistantmessagesecurity.md:
     last_write_checksum: sha1:7c43bf5d8bf25c592be0c4b652dc325242609aec
   docs/models/operations/sendenterpriseadminonboardingemailrequest.md:
@@ -3079,7 +3069,7 @@ trackedFiles:
   docs/sdks/assistantmemories/README.md:
     last_write_checksum: sha1:5f2d9d10074617110479871148d92fd118f1cefa
   docs/sdks/assistants/README.md:
-    last_write_checksum: sha1:8cc25c5323a8d6299a35fd5cf84ef033adde1b6d
+    last_write_checksum: sha1:b43a3e22801c48026710bc8311d1a4aef0c2ca63
   docs/sdks/auditlogs/README.md:
     last_write_checksum: sha1:7caf64a8e89202447bef36b378db3eec3e55821b
   docs/sdks/auth/README.md:
@@ -3288,10 +3278,8 @@ trackedFiles:
     last_write_checksum: sha1:6ca81dcfb983d0954b2181566e707a8dfca52c0c
   src/funcs/assistantsList.ts:
     last_write_checksum: sha1:0eef1ce8687ff64f5589fe7886de0357532ee2ac
-  src/funcs/assistantsListMessages.ts:
-    last_write_checksum: sha1:2cb11179dda7fc15b83ed31c6306e1ce0ba80d62
   src/funcs/assistantsSendMessage.ts:
-    last_write_checksum: sha1:33bfdec8bf247b2db6111fc6e53832eea9ae0a11
+    last_write_checksum: sha1:b93bd49f8327c335885718b1b721178615e8c30b
   src/funcs/assistantsUpdate.ts:
     last_write_checksum: sha1:8c6a96b7a83a911923bfd545c892310af8590711
   src/funcs/auditlogsList.ts:
@@ -4000,8 +3988,6 @@ trackedFiles:
     last_write_checksum: sha1:1f9defd04e6ac311940c345ea4fd3befced5d0c3
   src/models/components/customdomainmcpendpoint.ts:
     last_write_checksum: sha1:f8efac77a26df7a14f5cdbbbd8c81f9ef7b13ab2
-  src/models/components/dashboardmessage.ts:
-    last_write_checksum: sha1:cbcec7cf76196e44f190efaf10966020ae22cd01
   src/models/components/deleteaiintegrationconfigrequest.ts:
     last_write_checksum: sha1:46c26beb62b12aecc1ca69e68f8095e329a195c7
   src/models/components/deletecustomdetectionrulerequestbody.ts:
@@ -4143,7 +4129,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:d9ffc44e13d0c5f0964902d9f66043421713c55c
+    last_write_checksum: sha1:ea585b12990abe4929c5d7476738190ae3d748c7
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4207,8 +4193,6 @@ trackedFiles:
     last_write_checksum: sha1:d7dde341e1769c9ade7a7720e4ea261126fd5264
   src/models/components/listmembersresult.ts:
     last_write_checksum: sha1:77969b0b48a5757cbb84a4e2a550fb0e20b6d570
-  src/models/components/listmessagesresult.ts:
-    last_write_checksum: sha1:5e9494f54011ade20e101bb829a92e4c3fe0e9d8
   src/models/components/listpackagesresult.ts:
     last_write_checksum: sha1:8a57c7fdc51768c6ebe0c4d1dc0ba5c58efd27d6
   src/models/components/listpluginsresult.ts:
@@ -4537,9 +4521,9 @@ trackedFiles:
   src/models/components/sendinviterequestbody.ts:
     last_write_checksum: sha1:4db10ad0000eeaf1021650d75cbb16501a3eeb42
   src/models/components/sendmessagerequestbody.ts:
-    last_write_checksum: sha1:f20badc7852122344d9e0fa63de3a536624c8a66
+    last_write_checksum: sha1:9608affaba18b0452988338ee9839179a883a39f
   src/models/components/sendmessageresult.ts:
-    last_write_checksum: sha1:4182cf0fcfda5059fd6295528769d4ac7456491e
+    last_write_checksum: sha1:1b536a4541a4bebd14271375512e1a22c348c541
   src/models/components/serveimageform.ts:
     last_write_checksum: sha1:02556f1de78b6d7b643c4bee99807bd701536d2a
   src/models/components/servernameoverride.ts:
@@ -5066,7 +5050,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:994051508fa04e86fedd12fff1ca7328bd57b531
+    last_write_checksum: sha1:b6bad81cd364e8f8a79824eac7a8646f0983560d
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5078,8 +5062,6 @@ trackedFiles:
     last_write_checksum: sha1:e0b6b1caf8ce64bf0fd3906dbfeaa54e601c3349
   src/models/operations/listassistantmemories.ts:
     last_write_checksum: sha1:b6acc96084858b504620a115e3fc0c1cf7305175
-  src/models/operations/listassistantmessages.ts:
-    last_write_checksum: sha1:695a8f33000bc278abb82b7e716e6c6e9325ee30
   src/models/operations/listassistants.ts:
     last_write_checksum: sha1:a05822e576170fdbd4688fc840d15162b62c2702
   src/models/operations/listattributekeys.ts:
@@ -5706,7 +5688,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:3d2e405dc770d9261022734e15f4641bfbb4312d
+    last_write_checksum: sha1:e398abb9abfb754e1dc0c801100297c6ebc03189
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -5736,10 +5718,6 @@ trackedFiles:
     last_write_checksum: sha1:211cc258a70100e853a44c5ffb4dc1257c535557
   src/react-query/listAssistantMemories.ts:
     last_write_checksum: sha1:9b182e38c07d12c56382e65c8b6ca31de8c0a703
-  src/react-query/listAssistantMessages.core.ts:
-    last_write_checksum: sha1:97a5c92162cc2fb7a0000a865b5d230367173c3c
-  src/react-query/listAssistantMessages.ts:
-    last_write_checksum: sha1:25ef033c45843ed597658ecc9b3c37ec57caec1a
   src/react-query/listAttributeKeys.core.ts:
     last_write_checksum: sha1:ef73bd3a060ae12659db898766287a9b6707cf14
   src/react-query/listAttributeKeys.ts:
@@ -6079,7 +6057,7 @@ trackedFiles:
   src/react-query/searchUsers.ts:
     last_write_checksum: sha1:1aed86190eb13de376440fc48529c7a208791c2f
   src/react-query/sendAssistantMessage.ts:
-    last_write_checksum: sha1:c634ee48bb1662040f275313a6b88f61fb1bc8ec
+    last_write_checksum: sha1:cbdfe34cf025e983d032459977d72b05d0d459eb
   src/react-query/sendEnterpriseAdminOnboardingEmail.ts:
     last_write_checksum: sha1:b0d0f7dbf81ecdf5dba9acd42e8dfb542e82269c
   src/react-query/sendInvite.ts:
@@ -6267,7 +6245,7 @@ trackedFiles:
   src/sdk/assistantmemories.ts:
     last_write_checksum: sha1:40c6f4887e1a7715160ab9f35cb2aadb55c0c5f5
   src/sdk/assistants.ts:
-    last_write_checksum: sha1:e1f1b9e04380ca3ea08145c81b6d594ee758e19d
+    last_write_checksum: sha1:7f663a43bccc705ba81f618a9ea8835f3a2ef0b5
   src/sdk/auditlogs.ts:
     last_write_checksum: sha1:7a7107003acbf2d60125e0777974a9d270328eeb
   src/sdk/auth.ts:
@@ -9470,10 +9448,10 @@ examples:
   sendAssistantMessage:
     speakeasy-default-send-assistant-message:
       requestBody:
-        application/json: {"assistant_id": "6c62bf37-7865-4440-8031-71e7336013d5", "correlation_id": "<id>", "message": "<value>"}
+        application/json: {"assistant_id": "6c62bf37-7865-4440-8031-71e7336013d5", "message": "<value>"}
       responses:
         "200":
-          application/json: {"accepted": true, "chat_id": "c62bf377-8654-4400-b317-1e7336013d52", "thread_id": "5983913b-3bda-425c-9952-35f5a2c7cf12"}
+          application/json: {"accepted": true, "chat_id": "c62bf377-8654-4400-b317-1e7336013d52"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
