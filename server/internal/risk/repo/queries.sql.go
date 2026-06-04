@@ -548,6 +548,46 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 	return i, err
 }
 
+const getRiskPolicyBypassRequest = `-- name: GetRiskPolicyBypassRequest :one
+SELECT id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
+FROM risk_policy_bypass_requests
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type GetRiskPolicyBypassRequestParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetRiskPolicyBypassRequest(ctx context.Context, arg GetRiskPolicyBypassRequestParams) (RiskPolicyBypassRequest, error) {
+	row := q.db.QueryRow(ctx, getRiskPolicyBypassRequest, arg.ID, arg.ProjectID)
+	var i RiskPolicyBypassRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.TargetKind,
+		&i.TargetLabel,
+		&i.TargetKey,
+		&i.TargetDimensions,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.Note,
+		&i.Status,
+		&i.DecidedBy,
+		&i.GrantedPrincipalUrns,
+		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const hardDeleteRiskPoliciesByProject = `-- name: HardDeleteRiskPoliciesByProject :exec
 DELETE FROM risk_policies WHERE project_id = $1
 `
@@ -1091,6 +1131,68 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 			&i.AutoName,
 			&i.UserMessage,
 			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskPolicyBypassRequests = `-- name: ListRiskPolicyBypassRequests :many
+SELECT id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
+FROM risk_policy_bypass_requests
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND (
+    $2::uuid IS NULL
+    OR risk_policy_id = $2::uuid
+  )
+  AND (
+    $3::text IS NULL
+    OR status = $3::text
+  )
+ORDER BY updated_at DESC
+`
+
+type ListRiskPolicyBypassRequestsParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.NullUUID
+	Status       pgtype.Text
+}
+
+func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRiskPolicyBypassRequestsParams) ([]RiskPolicyBypassRequest, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyBypassRequests, arg.ProjectID, arg.RiskPolicyID, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicyBypassRequest
+	for rows.Next() {
+		var i RiskPolicyBypassRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.RiskPolicyID,
+			&i.TargetKind,
+			&i.TargetLabel,
+			&i.TargetKey,
+			&i.TargetDimensions,
+			&i.RequesterUserID,
+			&i.RequesterEmail,
+			&i.Note,
+			&i.Status,
+			&i.DecidedBy,
+			&i.GrantedPrincipalUrns,
+			&i.DecidedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1960,6 +2062,159 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		&i.AutoName,
 		&i.UserMessage,
 		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateRiskPolicyBypassRequestStatus = `-- name: UpdateRiskPolicyBypassRequestStatus :one
+UPDATE risk_policy_bypass_requests
+SET status = $1
+  , decided_by = $2
+  , granted_principal_urns = $3
+  , decided_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $4
+  AND project_id = $5
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateRiskPolicyBypassRequestStatusParams struct {
+	Status               string
+	DecidedBy            pgtype.Text
+	GrantedPrincipalUrns []string
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+}
+
+func (q *Queries) UpdateRiskPolicyBypassRequestStatus(ctx context.Context, arg UpdateRiskPolicyBypassRequestStatusParams) (RiskPolicyBypassRequest, error) {
+	row := q.db.QueryRow(ctx, updateRiskPolicyBypassRequestStatus,
+		arg.Status,
+		arg.DecidedBy,
+		arg.GrantedPrincipalUrns,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i RiskPolicyBypassRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.TargetKind,
+		&i.TargetLabel,
+		&i.TargetKey,
+		&i.TargetDimensions,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.Note,
+		&i.Status,
+		&i.DecidedBy,
+		&i.GrantedPrincipalUrns,
+		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertRiskPolicyBypassRequest = `-- name: UpsertRiskPolicyBypassRequest :one
+INSERT INTO risk_policy_bypass_requests (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , target_kind
+  , target_label
+  , target_key
+  , target_dimensions
+  , requester_user_id
+  , requester_email
+  , note
+  , status
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+)
+ON CONFLICT (project_id, requester_user_id, risk_policy_id, target_kind, target_key)
+WHERE deleted IS FALSE
+DO UPDATE
+SET target_label = EXCLUDED.target_label
+  , target_dimensions = EXCLUDED.target_dimensions
+  , requester_email = EXCLUDED.requester_email
+  , note = EXCLUDED.note
+  , status = EXCLUDED.status
+  , decided_by = NULL
+  , granted_principal_urns = ARRAY[]::TEXT[]
+  , decided_at = NULL
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRiskPolicyBypassRequestParams struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	RiskPolicyID     uuid.UUID
+	TargetKind       pgtype.Text
+	TargetLabel      pgtype.Text
+	TargetKey        pgtype.Text
+	TargetDimensions []byte
+	RequesterUserID  string
+	RequesterEmail   pgtype.Text
+	Note             pgtype.Text
+	Status           string
+}
+
+func (q *Queries) UpsertRiskPolicyBypassRequest(ctx context.Context, arg UpsertRiskPolicyBypassRequestParams) (RiskPolicyBypassRequest, error) {
+	row := q.db.QueryRow(ctx, upsertRiskPolicyBypassRequest,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.TargetKind,
+		arg.TargetLabel,
+		arg.TargetKey,
+		arg.TargetDimensions,
+		arg.RequesterUserID,
+		arg.RequesterEmail,
+		arg.Note,
+		arg.Status,
+	)
+	var i RiskPolicyBypassRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.TargetKind,
+		&i.TargetLabel,
+		&i.TargetKey,
+		&i.TargetDimensions,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.Note,
+		&i.Status,
+		&i.DecidedBy,
+		&i.GrantedPrincipalUrns,
+		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

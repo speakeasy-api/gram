@@ -104,6 +104,83 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: UpsertRiskPolicyBypassRequest :one
+INSERT INTO risk_policy_bypass_requests (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , target_kind
+  , target_label
+  , target_key
+  , target_dimensions
+  , requester_user_id
+  , requester_email
+  , note
+  , status
+)
+VALUES (
+    @id
+  , @organization_id
+  , @project_id
+  , @risk_policy_id
+  , @target_kind
+  , @target_label
+  , @target_key
+  , @target_dimensions
+  , @requester_user_id
+  , @requester_email
+  , @note
+  , @status
+)
+ON CONFLICT (project_id, requester_user_id, risk_policy_id, target_kind, target_key)
+WHERE deleted IS FALSE
+DO UPDATE
+SET target_label = EXCLUDED.target_label
+  , target_dimensions = EXCLUDED.target_dimensions
+  , requester_email = EXCLUDED.requester_email
+  , note = EXCLUDED.note
+  , status = EXCLUDED.status
+  , decided_by = NULL
+  , granted_principal_urns = ARRAY[]::TEXT[]
+  , decided_at = NULL
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: ListRiskPolicyBypassRequests :many
+SELECT *
+FROM risk_policy_bypass_requests
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (
+    sqlc.narg(risk_policy_id)::uuid IS NULL
+    OR risk_policy_id = sqlc.narg(risk_policy_id)::uuid
+  )
+  AND (
+    sqlc.narg(status)::text IS NULL
+    OR status = sqlc.narg(status)::text
+  )
+ORDER BY updated_at DESC;
+
+-- name: GetRiskPolicyBypassRequest :one
+SELECT *
+FROM risk_policy_bypass_requests
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: UpdateRiskPolicyBypassRequestStatus :one
+UPDATE risk_policy_bypass_requests
+SET status = @status
+  , decided_by = @decided_by
+  , granted_principal_urns = @granted_principal_urns
+  , decided_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: CreateCustomDetectionRule :one
 INSERT INTO risk_custom_detection_rules (
     project_id

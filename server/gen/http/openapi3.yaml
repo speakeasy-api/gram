@@ -21751,7 +21751,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/DeleteCustomDetectionRuleRequestBody'
+                            $ref: '#/components/schemas/ApproveRiskPolicyBypassRequestRequestBody'
                 required: true
             responses:
                 "200":
@@ -23326,6 +23326,532 @@ paths:
                 - risk
             x-speakeasy-group: risk.policies
             x-speakeasy-name-override: update
+    /rpc/risk.policyBypassRequests.approve:
+        post:
+            description: Approve a risk policy bypass request and grant the requester risk_policy:bypass for the requested policy target.
+            operationId: approveRiskPolicyBypassRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApproveRiskPolicyBypassRequestRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyBypassRequest'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: approveRiskPolicyBypassRequest risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policyBypassRequests
+            x-speakeasy-name-override: approve
+            x-speakeasy-react-hook:
+                name: RiskApprovePolicyBypassRequest
+                type: mutation
+    /rpc/risk.policyBypassRequests.create:
+        post:
+            description: Create or refresh a risk policy bypass request from a signed request URL token.
+            operationId: createRiskPolicyBypassRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateShadowMCPApprovalRequestForm'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyBypassRequest'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createRiskPolicyBypassRequest risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policyBypassRequests
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: RiskCreatePolicyBypassRequest
+                type: mutation
+    /rpc/risk.policyBypassRequests.deny:
+        post:
+            description: Deny a risk policy bypass request. Denial updates workflow state only and does not change grants.
+            operationId: denyRiskPolicyBypassRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApproveRiskPolicyBypassRequestRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyBypassRequest'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: denyRiskPolicyBypassRequest risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policyBypassRequests
+            x-speakeasy-name-override: deny
+            x-speakeasy-react-hook:
+                name: RiskDenyPolicyBypassRequest
+                type: mutation
+    /rpc/risk.policyBypassRequests.list:
+        get:
+            description: List current risk policy bypass request workflow records for administrators.
+            operationId: listRiskPolicyBypassRequests
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional risk policy ID filter.
+                  in: query
+                  name: policy_id
+                  schema:
+                    description: Optional risk policy ID filter.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional request status filter.
+                  in: query
+                  name: status
+                  schema:
+                    description: Optional request status filter.
+                    enum:
+                        - requested
+                        - approved
+                        - denied
+                        - revoked
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskPolicyBypassRequestsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskPolicyBypassRequests risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policyBypassRequests
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: RiskListPolicyBypassRequests
+    /rpc/risk.policyBypassRequests.revoke:
+        post:
+            description: Revoke a previously approved risk policy bypass request and remove the corresponding risk_policy:bypass grant.
+            operationId: revokeRiskPolicyBypassRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApproveRiskPolicyBypassRequestRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyBypassRequest'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: revokeRiskPolicyBypassRequest risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policyBypassRequests
+            x-speakeasy-name-override: revoke
+            x-speakeasy-react-hook:
+                name: RiskRevokePolicyBypassRequest
+                type: mutation
     /rpc/risk.results.byChat:
         get:
             description: List risk results grouped by chat session for the current project.
@@ -32013,6 +32539,15 @@ components:
                 - status
                 - created_at
                 - updated_at
+        ApproveRiskPolicyBypassRequestRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The bypass request ID.
+                    format: uuid
+            required:
+                - id
         ApproveShadowMCPApprovalRequestForm:
             type: object
             properties:
@@ -34443,15 +34978,6 @@ components:
                     description: AI provider identifier. Initially only cursor is supported.
             required:
                 - provider
-        DeleteCustomDetectionRuleRequestBody:
-            type: object
-            properties:
-                id:
-                    type: string
-                    description: The custom detection rule ID.
-                    format: uuid
-            required:
-                - id
         DeleteGlobalToolVariationForm:
             type: object
             properties:
@@ -37286,6 +37812,16 @@ components:
                     description: The list of risk policies.
             required:
                 - policies
+        ListRiskPolicyBypassRequestsResult:
+            type: object
+            properties:
+                requests:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskPolicyBypassRequest'
+                    description: Current risk policy bypass request records.
+            required:
+                - requests
         ListRiskResultsByChatResult:
             type: object
             properties:
@@ -40420,6 +40956,77 @@ components:
                 - updated_at
                 - pending_messages
                 - total_messages
+        RiskPolicyBypassRequest:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: Creation timestamp.
+                    format: date-time
+                decided_at:
+                    type: string
+                    description: Decision timestamp.
+                    format: date-time
+                decided_by:
+                    type: string
+                    description: User ID that approved, denied, or revoked the request.
+                granted_principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Principal URNs granted when approved.
+                id:
+                    type: string
+                    description: The bypass request ID.
+                    format: uuid
+                note:
+                    type: string
+                    description: Requester note.
+                policy_id:
+                    type: string
+                    description: The risk policy ID.
+                    format: uuid
+                requester_email:
+                    type: string
+                    description: Requester email when known.
+                requester_user_id:
+                    type: string
+                    description: Requester user ID.
+                status:
+                    type: string
+                    description: Current request status.
+                    enum:
+                        - requested
+                        - approved
+                        - denied
+                        - revoked
+                target_dimensions:
+                    type: object
+                    description: Selector dimensions for the request target.
+                    additionalProperties:
+                        type: string
+                target_key:
+                    type: string
+                    description: Canonical key for the target.
+                target_kind:
+                    type: string
+                    description: Optional target namespace for the request, such as server_url.
+                target_label:
+                    type: string
+                    description: Optional display label for the target.
+                updated_at:
+                    type: string
+                    description: Last update timestamp.
+                    format: date-time
+            required:
+                - id
+                - policy_id
+                - target_dimensions
+                - requester_user_id
+                - status
+                - granted_principal_urns
+                - created_at
+                - updated_at
         RiskPolicyStatus:
             type: object
             properties:
