@@ -60,7 +60,7 @@ export type Selector = {
    */
   resourceKind: ResourceKind;
   /**
-   * Server URL filter (risk policy scopes only).
+   * Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.
    */
   serverUrl?: string | undefined;
   /**
