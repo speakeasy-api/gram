@@ -1187,25 +1187,31 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS")
 	}
 
-	opts := workos.GenerateAdminPortalLinkOpts{
-		ReturnURL:       conv.PtrValOr(payload.ReturnURL, ""),
-		SuccessURL:      conv.PtrValOr(payload.SuccessURL, ""),
-		ITContactEmails: payload.ItContactEmails,
-	}
+	var iopts *workos.IntentOptions
 	if payload.IntentOptions != nil {
-		iopts := &workos.IntentOptions{}
+		var sso *workos.SSOIntentOptions
 		if payload.IntentOptions.Sso != nil {
-			iopts.SSO = &workos.SSOIntentOptions{
+			sso = &workos.SSOIntentOptions{
 				BookmarkSlug: conv.PtrValOr(payload.IntentOptions.Sso.BookmarkSlug, ""),
 				ProviderType: conv.PtrValOr(payload.IntentOptions.Sso.ProviderType, ""),
 			}
 		}
+		var dv *workos.DomainVerificationIntentOptions
 		if payload.IntentOptions.DomainVerification != nil {
-			iopts.DomainVerification = &workos.DomainVerificationIntentOptions{
+			dv = &workos.DomainVerificationIntentOptions{
 				DomainName: conv.PtrValOr(payload.IntentOptions.DomainVerification.DomainName, ""),
 			}
 		}
-		opts.IntentOptions = iopts
+		iopts = &workos.IntentOptions{
+			SSO:                sso,
+			DomainVerification: dv,
+		}
+	}
+	opts := workos.GenerateAdminPortalLinkOpts{
+		ReturnURL:       conv.PtrValOr(payload.ReturnURL, ""),
+		SuccessURL:      conv.PtrValOr(payload.SuccessURL, ""),
+		ITContactEmails: payload.ItContactEmails,
+		IntentOptions:   iopts,
 	}
 
 	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), opts)
