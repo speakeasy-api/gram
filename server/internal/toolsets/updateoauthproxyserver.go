@@ -31,7 +31,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 
 	form := payload.OauthProxyServer
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	// Load the toolset inside the transaction so the returned view reflects a consistent snapshot.
-	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	}
 
 	// Re-fetch the toolset so the returned value reflects all updates.
-	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}

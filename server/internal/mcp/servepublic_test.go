@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
 // ---------------------------------------------------------------------------
@@ -427,4 +428,246 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, bodyBytes, "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "batch requests are not supported")
+}
+
+// servePublicToolsRequest issues a POST to /mcp/{slug} with an optional raw
+// query string (e.g. "tags=alpha,beta") and returns the recorder. Unlike
+// servePublicHTTP it threads a query string onto the URL so ?tags= filtering
+// can be exercised through the full serve path.
+func servePublicToolsRequest(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, rawQuery string, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+
+	target := "/mcp/" + mcpSlug
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
+
+	req := httptest.NewRequest(http.MethodPost, target, bytes.NewReader(body))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServePublic(w, req))
+	return w
+}
+
+func makeToolsCallBody(toolName string) []byte {
+	bs, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      3,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      toolName,
+			"arguments": map[string]any{},
+		},
+	})
+	return bs
+}
+
+// setupTagFilterToolset builds a public MCP toolset with three HTTP tools and a
+// project-default variation group. tool_alpha and tool_beta carry tagged,
+// renamed variations; tool_gamma has no variation at all. It returns the MCP
+// slug. The toolset has no tool_variations_group_id, so the project-default
+// group applies — exercising the "?tags= filters against the project default"
+// behavior.
+func setupTagFilterToolset(t *testing.T, ctx context.Context, ti *testInstance) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "tag-filter-"+uuid.New().String()[:8])
+
+	urns := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID,
+		"tool_alpha", "tool_beta", "tool_gamma")
+
+	variationsRepo := variations_repo.New(ti.conn)
+	group, err := variationsRepo.InitGlobalToolVariationsGroup(ctx, variations_repo.InitGlobalToolVariationsGroupParams{
+		ProjectID:   *authCtx.ProjectID,
+		Name:        "default-group",
+		Description: conv.ToPGText("default group"),
+	})
+	require.NoError(t, err)
+
+	_, err = variationsRepo.UpsertToolVariation(ctx, variations_repo.UpsertToolVariationParams{
+		GroupID:     group,
+		SrcToolUrn:  urns["tool_alpha"],
+		SrcToolName: "tool_alpha",
+		Name:        conv.ToPGText("alpha_renamed"),
+		Tags:        []string{"alpha", "shared"},
+	})
+	require.NoError(t, err)
+
+	_, err = variationsRepo.UpsertToolVariation(ctx, variations_repo.UpsertToolVariationParams{
+		GroupID:     group,
+		SrcToolUrn:  urns["tool_beta"],
+		SrcToolName: "tool_beta",
+		Name:        conv.ToPGText("beta_renamed"),
+		Tags:        []string{"beta", "shared"},
+	})
+	require.NoError(t, err)
+
+	return toolset.McpSlug.String
+}
+
+// setupSourceTagFilterToolset builds a public MCP toolset whose tools carry
+// source-defined tags, exercising the rule that a variation is not required for
+// ?tags= filtering. Three tools cover the three tag states:
+//
+//   - source_only: source tags ["billing"], no variation — filterable by its
+//     source tag with no variation row at all.
+//   - reporting_renamed: source tags ["reporting"], a variation that renames it
+//     but does not modify tags (nil) — source tags stay authoritative.
+//   - removed: source tags ["billing"], a variation with an explicit empty tag
+//     set — removed from every tag filter even though its source tag matches.
+//
+// It returns the MCP slug and the renamed/removed source names for assertions.
+func setupSourceTagFilterToolset(t *testing.T, ctx context.Context, ti *testInstance) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "src-tag-filter-"+uuid.New().String()[:8])
+
+	urns := addHTTPToolsWithSourceTags(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID,
+		map[string][]string{
+			"source_only": {"billing"},
+			"reporting":   {"reporting"},
+			"removed":     {"billing"},
+		})
+
+	variationsRepo := variations_repo.New(ti.conn)
+	group, err := variationsRepo.InitGlobalToolVariationsGroup(ctx, variations_repo.InitGlobalToolVariationsGroupParams{
+		ProjectID:   *authCtx.ProjectID,
+		Name:        "default-group",
+		Description: conv.ToPGText("default group"),
+	})
+	require.NoError(t, err)
+
+	// A variation that renames but leaves tags unset (nil) — source tags remain
+	// authoritative for filtering.
+	_, err = variationsRepo.UpsertToolVariation(ctx, variations_repo.UpsertToolVariationParams{
+		GroupID:     group,
+		SrcToolUrn:  urns["reporting"],
+		SrcToolName: "reporting",
+		Name:        conv.ToPGText("reporting_renamed"),
+		Tags:        nil,
+	})
+	require.NoError(t, err)
+
+	// A variation with an explicit empty tag set — removes the tool from every
+	// tag filter despite its source "billing" tag.
+	_, err = variationsRepo.UpsertToolVariation(ctx, variations_repo.UpsertToolVariationParams{
+		GroupID:     group,
+		SrcToolUrn:  urns["removed"],
+		SrcToolName: "removed",
+		Tags:        []string{},
+	})
+	require.NoError(t, err)
+
+	return toolset.McpSlug.String
+}
+
+func TestServePublic_ToolsList_SourceTags_NoVariationRequired(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupSourceTagFilterToolset(t, ctx, ti)
+
+	// source_only has no variation at all, yet its source tag drives filtering.
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=billing", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	// removed also has source tag "billing" but its empty variation tag set takes
+	// it out of every filter, so only source_only remains.
+	require.Equal(t, []string{"source_only"}, names)
+}
+
+func TestServePublic_ToolsList_SourceTags_NilVariationFallsBackToSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupSourceTagFilterToolset(t, ctx, ti)
+
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=reporting", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	// The renaming variation leaves tags unset, so the source "reporting" tag
+	// still matches; the wire name reflects the variation rename.
+	require.Equal(t, []string{"reporting_renamed"}, names)
+}
+
+func TestServePublic_ToolsList_EmptyVariationTags_RemovesFromAllFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupSourceTagFilterToolset(t, ctx, ti)
+
+	// With no ?tags= filter, every tool is returned — removed is present.
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	all := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	require.ElementsMatch(t, []string{"source_only", "reporting_renamed", "removed"}, all)
+
+	// Under a filter matching its source tag, the empty variation tag set keeps
+	// removed out of the results entirely.
+	w = servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=billing", makeToolsListBody())
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	filtered := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
+	require.NotContains(t, filtered, "removed")
+}
+
+func TestServePublic_ToolsCall_EmptyVariationTags_NotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupSourceTagFilterToolset(t, ctx, ti)
+
+	// removed is excluded by its empty variation tag set, so calling it under a
+	// filter matching its source tag must resolve to method-not-found.
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=billing", makeToolsCallBody("removed"))
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	var resp struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
+	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
+	require.Contains(t, resp.Error.Message, "not found")
+}
+
+func TestServePublic_ToolsCall_FilteredOutTool_NotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := setupTagFilterToolset(t, ctx, ti)
+
+	// alpha_renamed exists but is excluded by the beta-only filter, so the call
+	// must resolve to method-not-found rather than executing.
+	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "tags=beta", makeToolsCallBody("alpha_renamed"))
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	var resp struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
+	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
+	require.Contains(t, resp.Error.Message, "not found")
 }

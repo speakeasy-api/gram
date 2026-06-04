@@ -88,9 +88,18 @@ func handleToolsCall(
 
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, platformExtras...)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, payload.toolVariationsGroupID, platformExtras...)
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
+	// proxy matching, and the static name lookup all read this slice, so a
+	// filtered-out tool surfaces as method-not-found.
+	if len(payload.tags) > 0 {
+		before := len(toolset.Tools)
+		toolset.Tools = filterToolsByTags(toolset.Tools, payload.tags)
+		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
 	if payload.mode != ToolModeStatic {

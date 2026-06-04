@@ -153,6 +153,13 @@ type mcpInputs struct {
 	userID           string
 	externalUserID   string
 	apiKeyID         string
+	// toolVariationsGroupID is the effective variation group resolved per
+	// request (mcp_servers, then toolsets, then nil for the project default).
+	toolVariationsGroupID *uuid.UUID
+	// tags is the parsed ?tags= filter. When non-empty, tools/list and
+	// tools/call expose only tools whose variation row carries one of these
+	// tags. Empty means no filtering.
+	tags []string
 }
 
 func NewService(
@@ -434,7 +441,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, "")
+	// Legacy toolset-by-slug path has no mcp_server, so there is no
+	// server-level variation group override; ServeToolsetResolved falls back to
+	// the toolset's own column.
+	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, "", nil)
 }
 
 // ServeToolsetResolved serves an MCP runtime request after the slug has
@@ -458,10 +468,29 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // the downstream tool dispatch doesn't 401 when the in-toolset gate is
 // skipped. /mcp callers pass "".
 //
+// mcpServerVariationsGroupID is the variation group resolved from the
+// mcp_servers row, when this request arrived via an mcp_endpoint that maps to
+// one. It takes precedence over the toolset's own tool_variations_group_id;
+// when nil, the toolset's column is used, and when that is also unset the
+// project-default group applies. /mcp's legacy toolset-by-slug path has no
+// mcp_server and passes nil.
+//
 // The caller is responsible for closing r.Body.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamToken string) error {
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamToken string, mcpServerVariationsGroupID *uuid.UUID) error {
 	ctx := r.Context()
 	var err error
+
+	// Resolve the effective variation group: mcp_servers value first, then the
+	// toolset's own column, else nil (project default).
+	toolVariationsGroupID := mcpServerVariationsGroupID
+	if toolVariationsGroupID == nil && toolset.ToolVariationsGroupID.Valid {
+		id := toolset.ToolVariationsGroupID.UUID
+		toolVariationsGroupID = &id
+	}
+
+	// Parse the ?tags= filter (comma-separated, OR/union). Absent or empty
+	// means no filtering.
+	tags := parseTagsFilter(r.URL.Query().Get("tags"))
 
 	baseURL := s.serverURL.String()
 	if customDomainCtx := customdomains.FromContext(ctx); customDomainCtx != nil {
@@ -713,18 +742,31 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	mcpInputs := &mcpInputs{
-		projectID:        toolset.ProjectID,
-		toolset:          toolset.Slug,
-		environment:      selectedEnvironment,
-		mcpEnvVariables:  parseMcpEnvVariables(r, headerDisplayNames),
-		authenticated:    authenticated,
-		oauthTokenInputs: tokenInputs,
-		sessionID:        sessionID,
-		chatID:           r.Header.Get("Gram-Chat-ID"),
-		mode:             resolveToolMode(r, *toolset),
-		userID:           userID,
-		externalUserID:   externalUserID,
-		apiKeyID:         apiKeyID,
+		projectID:             toolset.ProjectID,
+		toolset:               toolset.Slug,
+		environment:           selectedEnvironment,
+		mcpEnvVariables:       parseMcpEnvVariables(r, headerDisplayNames),
+		authenticated:         authenticated,
+		oauthTokenInputs:      tokenInputs,
+		sessionID:             sessionID,
+		chatID:                r.Header.Get("Gram-Chat-ID"),
+		mode:                  resolveToolMode(r, *toolset),
+		userID:                userID,
+		externalUserID:        externalUserID,
+		apiKeyID:              apiKeyID,
+		toolVariationsGroupID: toolVariationsGroupID,
+		tags:                  tags,
+	}
+
+	// Record the resolved variation group and requested tag filter for
+	// debugging which tools a client sees.
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		if toolVariationsGroupID != nil {
+			span.SetAttributes(attr.ToolVariationsGroupID(toolVariationsGroupID.String()))
+		}
+		if len(tags) > 0 {
+			span.SetAttributes(attr.MCPRequestedTags(tags))
+		}
 	}
 
 	// Check security schemes before dispatching any RPC — including initialize.
@@ -779,7 +821,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 // (or if the toolset has no security requirements).
 func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_repo.Toolset, payload *mcpInputs) (bool, error) {
 	projectID := mv.ProjectID(payload.projectID)
-	described, err := mv.DescribeToolset(ctx, s.logger, s.db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), &s.toolsetCache, s.platformExtras...)
+	// Security-scheme detection must see the full, unfiltered toolset, so this
+	// always uses the project-default variation group (nil) regardless of any
+	// ?groups= filter on the request. Variations never change a tool's security
+	// requirements, so this does not weaken the auth gate.
+	described, err := mv.DescribeToolset(ctx, s.logger, s.db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), &s.toolsetCache, nil, s.platformExtras...)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").Log(ctx, s.logger)
 	}
@@ -1012,6 +1058,36 @@ func parseMcpSessionID(headers http.Header) string {
 		session = uuid.New().String()
 	}
 	return session
+}
+
+// parseTagsFilter parses the ?tags= query value into a deduplicated set of tag
+// names. The value is comma-separated; surrounding whitespace and empty
+// segments are dropped. An absent or empty value yields nil, meaning no
+// filtering is applied.
+func parseTagsFilter(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	tags := make([]string, 0)
+	for part := range strings.SplitSeq(raw, ",") {
+		tag := strings.TrimSpace(part)
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		tags = append(tags, tag)
+	}
+
+	if len(tags) == 0 {
+		return nil
+	}
+
+	return tags
 }
 
 // RequirePrivateIdentityAuth runs identity authentication for a non-public

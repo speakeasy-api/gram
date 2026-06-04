@@ -521,7 +521,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		// Ignore errors - custom domain is optional
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
 	}
@@ -1080,7 +1080,7 @@ func (s *Service) loadInstallPageMetadata(ctx context.Context, ic *installContex
 func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseWriter, ic *installContext, mcpSlug string, metadataRecord *repo.McpMetadatum) error {
 	toolset := ic.toolset
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "describe toolset").Log(ctx, s.logger)
 	}
