@@ -75,9 +75,9 @@ func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rol
 	return rp.deleteAllGrants(ctx, q, orgID)
 }
 
-// PatchPrincipalGrantsTx applies exact grant additions and removals for one
+// PatchPrincipalGrants applies exact grant additions and removals for one
 // principal without treating omitted grants as deletes.
-func PatchPrincipalGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, principal urn.Principal, addGrants []*RoleGrant, removeGrants []*RoleGrant) error {
+func PatchPrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID string, principal urn.Principal, addGrants []*RoleGrant, removeGrants []*RoleGrant) error {
 	if orgID == "" {
 		return fmt.Errorf("organization id is required")
 	}

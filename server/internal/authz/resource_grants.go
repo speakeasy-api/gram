@@ -4,122 +4,127 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// ReplaceGrantsForResource replaces allow grants for one resource-scoped permission.
-func ReplaceGrantsForResource(ctx context.Context, db *pgxpool.Pool, organizationID string, scope Scope, resourceID string, principals []urn.Principal) error {
-	replacement, err := newResourceGrantReplacement(organizationID, scope, resourceID, principals)
-	if err != nil {
-		return err
-	}
+// Resource identifies one resource-scoped permission.
+type Resource struct {
+	OrganizationID string
+	Scope          Scope
+	ResourceID     string
+}
 
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin resource grant transaction: %w", err)
+func (r Resource) Validate() error {
+	if r.OrganizationID == "" {
+		return fmt.Errorf("organization id is required")
 	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	if err := replaceGrantsForResourceTx(ctx, tx, replacement); err != nil {
-		return err
+	if r.Scope == "" {
+		return fmt.Errorf("scope is required")
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit resource grant transaction: %w", err)
+	if r.ResourceID == "" {
+		return fmt.Errorf("resource id is required")
+	}
+	if ResourceKindForScope(r.Scope) == WildcardResource {
+		return fmt.Errorf("scope %q does not map to a resource kind", r.Scope)
 	}
 
 	return nil
 }
 
-// ReplaceGrantsForResourceTx replaces allow grants using the caller's transaction.
-func ReplaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceID string, principals []urn.Principal) error {
-	replacement, err := newResourceGrantReplacement(organizationID, scope, resourceID, principals)
-	if err != nil {
+func (r Resource) Kind() string {
+	return ResourceKindForScope(r.Scope)
+}
+
+// ResourceGrant describes grant changes for one resource-scoped permission and
+// one or more principals.
+type ResourceGrant struct {
+	Resource
+	Principals []urn.Principal
+	Selector   Selector
+}
+
+func (r ResourceGrant) Validate() error {
+	if err := r.Resource.Validate(); err != nil {
+		return err
+	}
+	for _, principal := range r.Principals {
+		if _, err := principal.Value(); err != nil {
+			return fmt.Errorf("invalid grant principal: %w", err)
+		}
+	}
+	if r.Selector == nil {
+		return nil
+	}
+	if r.Selector.ResourceID() != r.ResourceID {
+		return fmt.Errorf("selector resource_id %q does not match resource id %q", r.Selector.ResourceID(), r.ResourceID)
+	}
+	if err := ValidateSelector(r.Scope, r.Selector); err != nil {
 		return err
 	}
 
-	return replaceGrantsForResourceTx(ctx, db, replacement)
+	return nil
 }
 
-type resourceGrantReplacement struct {
-	OrganizationID   string
-	Scope            Scope
-	ResourceID       string
-	ResourceKind     string
-	SelectorBytes    []byte
-	UniquePrincipals []urn.Principal
+func (r ResourceGrant) ValidatePrincipals() error {
+	if len(r.Principals) == 0 {
+		return fmt.Errorf("at least one principal is required")
+	}
+
+	return nil
 }
 
-func newResourceGrantReplacement(organizationID string, scope Scope, resourceID string, principals []urn.Principal) (resourceGrantReplacement, error) {
-	if organizationID == "" {
-		return resourceGrantReplacement{}, fmt.Errorf("organization id is required")
+func (r ResourceGrant) selector() Selector {
+	if r.Selector != nil {
+		return r.Selector
 	}
-	if scope == "" {
-		return resourceGrantReplacement{}, fmt.Errorf("scope is required")
-	}
-	if resourceID == "" {
-		return resourceGrantReplacement{}, fmt.Errorf("resource id is required")
-	}
+	return NewSelector(r.Scope, r.ResourceID)
+}
 
-	uniquePrincipals := make([]urn.Principal, 0, len(principals))
-	seen := make(map[string]struct{}, len(principals))
-	for _, principal := range principals {
-		if _, err := principal.Value(); err != nil {
-			return resourceGrantReplacement{}, fmt.Errorf("invalid grant principal: %w", err)
-		}
-		if _, ok := seen[principal.String()]; ok {
+func (r ResourceGrant) uniquePrincipals() []urn.Principal {
+	principals := make([]urn.Principal, 0, len(r.Principals))
+	seen := make(map[string]struct{}, len(r.Principals))
+	for _, principal := range r.Principals {
+		key := principal.String()
+		if _, ok := seen[key]; ok {
 			continue
 		}
-		seen[principal.String()] = struct{}{}
-		uniquePrincipals = append(uniquePrincipals, principal)
+		seen[key] = struct{}{}
+		principals = append(principals, principal)
 	}
-
-	resourceKind := ResourceKindForScope(scope)
-	if resourceKind == WildcardResource {
-		return resourceGrantReplacement{}, fmt.Errorf("scope %q does not map to a resource kind", scope)
-	}
-
-	selector := NewSelector(scope, resourceID)
-	if err := ValidateSelector(scope, selector); err != nil {
-		return resourceGrantReplacement{}, err
-	}
-	selectorBytes, err := selector.MarshalJSON()
-	if err != nil {
-		return resourceGrantReplacement{}, fmt.Errorf("marshal grant selector: %w", err)
-	}
-
-	return resourceGrantReplacement{
-		OrganizationID:   organizationID,
-		Scope:            scope,
-		ResourceID:       resourceID,
-		ResourceKind:     resourceKind,
-		SelectorBytes:    selectorBytes,
-		UniquePrincipals: uniquePrincipals,
-	}, nil
+	return principals
 }
 
-func replaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, replacement resourceGrantReplacement) error {
+// Replace replaces allow grants for one resource-scoped permission.
+func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
+	if err := resource.Validate(); err != nil {
+		return err
+	}
+	selector := resource.selector()
+	principals := resource.uniquePrincipals()
+
+	selectorBytes, err := selector.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("marshal grant selector: %w", err)
+	}
+
 	q := repo.New(db)
 	if _, err := q.DeletePrincipalGrantsByResource(ctx, repo.DeletePrincipalGrantsByResourceParams{
-		OrganizationID: replacement.OrganizationID,
-		Scope:          string(replacement.Scope),
-		ResourceKind:   replacement.ResourceKind,
-		ResourceID:     replacement.ResourceID,
+		OrganizationID: resource.OrganizationID,
+		Scope:          string(resource.Scope),
+		ResourceKind:   resource.Kind(),
+		ResourceID:     resource.ResourceID,
 	}); err != nil {
 		return fmt.Errorf("delete resource grants: %w", err)
 	}
 
-	for _, principal := range replacement.UniquePrincipals {
+	for _, principal := range principals {
 		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-			OrganizationID: replacement.OrganizationID,
+			OrganizationID: resource.OrganizationID,
 			PrincipalUrn:   principal,
-			Scope:          string(replacement.Scope),
+			Scope:          string(resource.Scope),
 			Effect:         PolicyEffectAllow.pgText(),
-			Selectors:      replacement.SelectorBytes,
+			Selectors:      selectorBytes,
 		}); err != nil {
 			return fmt.Errorf("upsert resource grant: %w", err)
 		}
@@ -128,70 +133,65 @@ func replaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, replacement r
 	return nil
 }
 
-// GrantResourceToPrincipalTx adds one allow grant for a principal without
-// replacing other grants for the same resource.
-func GrantResourceToPrincipalTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, resourceID string) error {
-	if resourceID == "" {
-		return fmt.Errorf("resource id is required")
+// Grant adds one allow grant per principal without replacing other principals'
+// grants for the same resource.
+func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
+	if err := resource.Validate(); err != nil {
+		return err
 	}
-	return GrantResourceToPrincipalWithSelectorTx(ctx, db, organizationID, principal, scope, NewSelector(scope, resourceID))
-}
-
-// GrantResourceToPrincipalWithSelectorTx adds one allow grant for a principal
-// with an explicit selector, such as a risk_policy:bypass narrowed by server_url.
-func GrantResourceToPrincipalWithSelectorTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, selector Selector) error {
-	return PatchPrincipalGrantsTx(ctx, db, organizationID, principal, []*RoleGrant{
-		{
-			Scope:     string(scope),
-			Effect:    PolicyEffectAllow,
-			Selectors: []Selector{selector},
-		},
-	}, nil)
-}
-
-// RevokeResourceFromPrincipalTx removes one allow grant for a principal without
-// replacing other grants for the same resource.
-func RevokeResourceFromPrincipalTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, resourceID string) error {
-	if resourceID == "" {
-		return fmt.Errorf("resource id is required")
+	if err := resource.ValidatePrincipals(); err != nil {
+		return err
 	}
-	return RevokeResourceFromPrincipalWithSelectorTx(ctx, db, organizationID, principal, scope, NewSelector(scope, resourceID))
+	grant := &RoleGrant{
+		Scope:     string(resource.Scope),
+		Effect:    PolicyEffectAllow,
+		Selectors: []Selector{resource.selector()},
+	}
+
+	for _, principal := range resource.uniquePrincipals() {
+		if err := PatchPrincipalGrants(ctx, db, resource.OrganizationID, principal, []*RoleGrant{grant}, nil); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
-// RevokeResourceFromPrincipalWithSelectorTx removes one exact allow grant for a
-// principal and selector.
-func RevokeResourceFromPrincipalWithSelectorTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, selector Selector) error {
-	return PatchPrincipalGrantsTx(ctx, db, organizationID, principal, nil, []*RoleGrant{
-		{
-			Scope:     string(scope),
-			Effect:    PolicyEffectAllow,
-			Selectors: []Selector{selector},
-		},
-	})
+// Revoke removes one exact allow grant per principal without replacing other
+// principals' grants for the same resource.
+func RevokeResourceFromPrincipals(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
+	if err := resource.Validate(); err != nil {
+		return err
+	}
+	if err := resource.ValidatePrincipals(); err != nil {
+		return err
+	}
+	grant := &RoleGrant{
+		Scope:     string(resource.Scope),
+		Effect:    PolicyEffectAllow,
+		Selectors: []Selector{resource.selector()},
+	}
+
+	for _, principal := range resource.uniquePrincipals() {
+		if err := PatchPrincipalGrants(ctx, db, resource.OrganizationID, principal, nil, []*RoleGrant{grant}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ListGrantsForResource loads grants for one resource-scoped permission.
-func ListGrantsForResource(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceID string) ([]Grant, error) {
-	if organizationID == "" {
-		return nil, fmt.Errorf("organization id is required")
-	}
-	if scope == "" {
-		return nil, fmt.Errorf("scope is required")
-	}
-	if resourceID == "" {
-		return nil, fmt.Errorf("resource id is required")
-	}
-
-	resourceKind := ResourceKindForScope(scope)
-	if resourceKind == WildcardResource {
-		return nil, fmt.Errorf("scope %q does not map to a resource kind", scope)
+func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource) ([]Grant, error) {
+	if err := resource.Validate(); err != nil {
+		return nil, err
 	}
 
 	rows, err := repo.New(db).ListPrincipalGrantsByResource(ctx, repo.ListPrincipalGrantsByResourceParams{
-		OrganizationID: organizationID,
-		Scope:          string(scope),
-		ResourceKind:   resourceKind,
-		ResourceID:     resourceID,
+		OrganizationID: resource.OrganizationID,
+		Scope:          string(resource.Scope),
+		ResourceKind:   resource.Kind(),
+		ResourceID:     resource.ResourceID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list resource grants: %w", err)
