@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/workos/workos-go/v6/pkg/directorysync"
 	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/organizations"
+	"github.com/workos/workos-go/v6/pkg/sso"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 
@@ -62,6 +64,8 @@ type Client struct {
 	orgs       *organizations.Client
 	um         *usermanagement.Client
 	events     *events.Client
+	sso        *sso.Client
+	dsync      *directorysync.Client
 }
 
 // ClientOpts configures optional overrides for New.
@@ -107,6 +111,8 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:         um,
 		events:     &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+		sso:        &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
+		dsync:      &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 	}
 }
 
