@@ -44,6 +44,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -61,7 +63,10 @@ type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
-	GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent workos.PortalIntent, returnURL string) (string, error)
+	ListRoles(ctx context.Context, workosOrgID string) ([]workos.Role, error)
+	GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent workos.PortalIntent, opts workos.GenerateAdminPortalLinkOpts) (string, error)
+	ListConnections(ctx context.Context, organizationID string) ([]workos.Connection, error)
+	ListDirectories(ctx context.Context, organizationID string) ([]workos.Directory, error)
 }
 
 var _ OrganizationProvider = (*workos.Client)(nil)
@@ -77,6 +82,14 @@ type orgFeatureChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
+// HookEventReader is the subset of the telemetry repo used by the onboarding
+// wizard's verifyOnboardingHooksSetup poll. Decoupled from a concrete repo so
+// tests can stub it.
+type HookEventReader interface {
+	ListRecentHookEventsForOnboarding(ctx context.Context, arg telemrepo.ListRecentHookEventsForOnboardingParams) ([]telemrepo.RecentHookEvent, error)
+	CountRecentHookEventsForOnboarding(ctx context.Context, projectIDs []string, sinceUnixNano int64) (uint64, error)
+}
+
 type Service struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
@@ -87,6 +100,7 @@ type Service struct {
 	orgs      OrganizationProvider
 	invite    InviteIdentityProvider
 	features  orgFeatureChecker
+	hooks     HookEventReader // optional; nil disables verifyOnboardingHooksSetup
 	email     *email.Service
 	serverURL string // API server URL; used to build invite links
 	siteURL   string // frontend URL; used for post-callback browser redirects
@@ -98,7 +112,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
@@ -111,6 +125,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		orgs:      orgs,
 		invite:    invite,
 		features:  features,
+		hooks:     hooks,
 		email:     emailService,
 		serverURL: serverURL,
 		siteURL:   siteURL,
@@ -120,6 +135,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 }
 
 const inviteCallbackPath = "/rpc/organizations.inviteCallback"
+const setupCallbackPath = "/v1/setup/callback"
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
@@ -132,6 +148,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 	// Raw HTTP handler for Gram invite-token acceptance.
 	mux.Handle("GET", inviteCallbackPath, service.handleInviteCallback)
+
+	// Raw HTTP handler for onboarding setup portal callback.
+	// WorkOS success_url redirects here; we verify the setup state and redirect
+	// to the appropriate wizard step in the dashboard.
+	mux.Handle("GET", setupCallbackPath, service.handleSetupCallback)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -902,6 +923,250 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	}, nil
 }
 
+func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboardingStatusPayload) (*gen.OnboardingStatusResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+	}
+
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	if workosOrgID == "" {
+		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false}, nil
+	}
+
+	connections, err := s.orgs.ListConnections(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check SSO connections").Log(ctx, s.logger)
+	}
+
+	directories, err := s.orgs.ListDirectories(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check directory sync").Log(ctx, s.logger)
+	}
+
+	return &gen.OnboardingStatusResult{
+		SsoConfigured:   workos.HasActiveConnection(connections),
+		DsyncConfigured: workos.HasActiveDirectory(directories),
+	}, nil
+}
+
+const verifyOnboardingHooksLimit = 50
+
+func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.VerifyOnboardingHooksSetupPayload) (*gen.VerifyOnboardingHooksSetupResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	if s.hooks == nil {
+		// Telemetry/ClickHouse is not wired in this binary. Return an empty result
+		// so the wizard can render gracefully on local OSS setups.
+		return &gen.VerifyOnboardingHooksSetupResult{Events: []*gen.OnboardingHookEvent{}, LatestUnixNano: "0", TotalCount: 0}, nil
+	}
+
+	var sinceUnixNano int64
+	if payload.SinceUnixNano != nil && *payload.SinceUnixNano != "" {
+		parsed, parseErr := strconv.ParseInt(*payload.SinceUnixNano, 10, 64)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid since_unix_nano cursor").Log(ctx, s.logger)
+		}
+		if parsed > 0 {
+			sinceUnixNano = parsed
+		}
+	}
+
+	projects, err := projectsrepo.New(s.db).ListProjectsByOrganization(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list projects for organization").Log(ctx, s.logger)
+	}
+
+	if len(projects) == 0 {
+		return &gen.VerifyOnboardingHooksSetupResult{Events: []*gen.OnboardingHookEvent{}, LatestUnixNano: strconv.FormatInt(sinceUnixNano, 10), TotalCount: 0}, nil
+	}
+
+	projectIDs := make([]string, 0, len(projects))
+	slugByID := make(map[string]string, len(projects))
+	for _, p := range projects {
+		id := p.ID.String()
+		projectIDs = append(projectIDs, id)
+		slugByID[id] = p.Slug
+	}
+
+	rows, err := s.hooks.ListRecentHookEventsForOnboarding(ctx, telemrepo.ListRecentHookEventsForOnboardingParams{
+		ProjectIDs:    projectIDs,
+		SinceUnixNano: sinceUnixNano,
+		Limit:         verifyOnboardingHooksLimit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read recent hook events").Log(ctx, s.logger)
+	}
+
+	total, err := s.hooks.CountRecentHookEventsForOnboarding(ctx, projectIDs, sinceUnixNano)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to count recent hook events").Log(ctx, s.logger)
+	}
+
+	events := make([]*gen.OnboardingHookEvent, 0, len(rows))
+	latest := sinceUnixNano
+	for _, r := range rows {
+		if r.TimeUnixNano > latest {
+			latest = r.TimeUnixNano
+		}
+		ev := &gen.OnboardingHookEvent{
+			TimeUnixNano: strconv.FormatInt(r.TimeUnixNano, 10),
+			Source:       r.ServiceVersion,
+			ProjectSlug:  slugByID[r.GramProjectID],
+			ToolName:     r.ToolName,
+			EventName:    r.EventName,
+			UserEmail:    r.UserEmail,
+			ChatID:       r.GramChatID,
+			Status:       conv.PtrEmpty(r.Status),
+		}
+		events = append(events, ev)
+	}
+
+	return &gen.VerifyOnboardingHooksSetupResult{
+		Events:         events,
+		LatestUnixNano: strconv.FormatInt(latest, 10),
+		TotalCount:     int(total), //nolint:gosec // count fits int
+	}, nil
+}
+
+// handleSetupCallback is the backend handler that WorkOS's success_url redirects to
+// after portal completion. It authenticates the session, verifies the setup
+// state with WorkOS, and 302-redirects to the appropriate wizard step.
+//
+// Query params:
+//   - intent: "sso" or "dsync"
+func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
+	ctx, span := s.tracer.Start(r.Context(), "organizations.handleSetupCallback")
+	defer span.End()
+
+	intent := r.URL.Query().Get("intent")
+	if intent == "" {
+		span.SetStatus(codes.Error, "missing intent")
+		http.Error(w, "missing intent parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Authenticate the user's session cookie (set by SessionMiddleware).
+	sessionToken, ok := contextvalues.GetSessionTokenFromContext(ctx)
+	if !ok {
+		span.SetStatus(codes.Error, "unauthenticated")
+		http.Redirect(w, r, s.siteURL+"/login", http.StatusTemporaryRedirect)
+		return
+	}
+
+	ctx, err := s.auth.Authorize(ctx, sessionToken, &security.APIKeyScheme{
+		Name:           "session",
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	})
+	if err != nil {
+		span.SetStatus(codes.Error, "auth failed")
+		http.Redirect(w, r, s.siteURL+"/login", http.StatusTemporaryRedirect)
+		return
+	}
+
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		span.SetStatus(codes.Error, "missing auth context")
+		http.Error(w, "missing auth context", http.StatusUnauthorized)
+		return
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
+		span.SetStatus(codes.Error, "read org failed")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	orgSlug := org.Slug
+
+	// Determine the next step based on what was just completed and what's verified.
+	var nextStepSlug string
+	switch intent {
+	case "sso":
+		if workosOrgID != "" {
+			connections, err := s.orgs.ListConnections(ctx, workosOrgID)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
+			}
+			if workos.HasActiveConnection(connections) {
+				nextStepSlug = "directory-sync"
+			}
+		}
+	case "dsync":
+		// Directory sync may take time to become "linked" after portal setup.
+		// Completing the portal is sufficient to advance — DSYNC is also skippable.
+		nextStepSlug = "create-marketplace"
+	}
+
+	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
+	if nextStepSlug != "" {
+		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
+	}
+
+	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+}
+
+func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payload *gen.SendEnterpriseAdminOnboardingEmailPayload) (*gen.SendEnterpriseAdminOnboardingEmailResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	if s.email == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "email service not configured").Log(ctx, s.logger)
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+	}
+
+	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), org.Slug)
+
+	tmpl := email.EnterpriseAdminOnboarding{SetupLink: setupLink}
+
+	sent := 0
+	for _, recipient := range payload.Recipients {
+		recipient = strings.TrimSpace(recipient)
+		if recipient == "" {
+			continue
+		}
+		if err := s.email.Send(ctx, recipient, tmpl); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to send onboarding email to %s", recipient).Log(ctx, s.logger)
+		}
+		sent++
+	}
+
+	return &gen.SendEnterpriseAdminOnboardingEmailResult{
+		SentCount: sent,
+		SetupLink: setupLink,
+	}, nil
+}
+
 func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *gen.GenerateWorkOSAdminPortalLinkPayload) (res *gen.GenerateWorkOSAdminPortalLinkResult, err error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -922,7 +1187,34 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS")
 	}
 
-	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), "")
+	var iopts *workos.IntentOptions
+	if payload.IntentOptions != nil {
+		var sso *workos.SSOIntentOptions
+		if payload.IntentOptions.Sso != nil {
+			sso = &workos.SSOIntentOptions{
+				BookmarkSlug: conv.PtrValOr(payload.IntentOptions.Sso.BookmarkSlug, ""),
+				ProviderType: conv.PtrValOr(payload.IntentOptions.Sso.ProviderType, ""),
+			}
+		}
+		var dv *workos.DomainVerificationIntentOptions
+		if payload.IntentOptions.DomainVerification != nil {
+			dv = &workos.DomainVerificationIntentOptions{
+				DomainName: conv.PtrValOr(payload.IntentOptions.DomainVerification.DomainName, ""),
+			}
+		}
+		iopts = &workos.IntentOptions{
+			SSO:                sso,
+			DomainVerification: dv,
+		}
+	}
+	opts := workos.GenerateAdminPortalLinkOpts{
+		ReturnURL:       conv.PtrValOr(payload.ReturnURL, ""),
+		SuccessURL:      conv.PtrValOr(payload.SuccessURL, ""),
+		ITContactEmails: payload.ItContactEmails,
+		IntentOptions:   iopts,
+	}
+
+	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), opts)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate WorkOS admin portal link").Log(ctx, s.logger)
 	}

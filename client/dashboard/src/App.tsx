@@ -230,7 +230,12 @@ const RouteProvider = () => {
 
     const orgRouteValues = Object.values(orgRoutes);
     const orgHomeRoute = orgRouteValues.find((r) => r.url === "");
-    const otherOrgRoutes = orgRouteValues.filter((r) => r.url !== "");
+    const outsideOrgLayoutRoutes = orgRouteValues.filter(
+      (route) => route.outsideMainLayout,
+    );
+    const otherOrgRoutes = orgRouteValues.filter(
+      (r) => r.url !== "" && !r.outsideMainLayout,
+    );
 
     return (
       <Routes>
@@ -257,6 +262,10 @@ const RouteProvider = () => {
               element={<Navigate to="../agent-sessions" replace />}
             />
             {routesWithSubroutes(authenticatedRoutes)}
+          </Route>
+          {/* Org routes that render without OrgLayout (full-screen standalone pages) */}
+          <Route path=":orgSlug">
+            {routesWithSubroutes(outsideOrgLayoutRoutes)}
           </Route>
           <Route path=":orgSlug" element={<OrgLayout />}>
             {orgHomeRoute?.component && (

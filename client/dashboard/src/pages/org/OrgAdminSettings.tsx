@@ -18,6 +18,7 @@ import {
   useFeaturesSetMutation,
   useProductFeatures,
   useRbacStatus,
+  useSendEnterpriseAdminOnboardingEmailMutation,
 } from "@gram/client/react-query";
 import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
@@ -30,10 +31,12 @@ import {
   FolderSync,
   KeyRound,
   Loader2,
+  Mail,
   ShieldCheck,
   Webhook,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 function FeatureToggle({
   label,
@@ -382,6 +385,88 @@ function ProductFeaturesTab() {
   );
 }
 
+function OnboardingTab() {
+  const [emailsInput, setEmailsInput] = useState("");
+
+  const sendEmail = useSendEnterpriseAdminOnboardingEmailMutation({
+    onSuccess: (data) => {
+      toast.success(
+        `Sent ${data.sentCount} email${data.sentCount === 1 ? "" : "s"}.`,
+      );
+      setEmailsInput("");
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to send onboarding email",
+      );
+    },
+  });
+
+  const recipients = emailsInput
+    .split(",")
+    .map((e) => e.trim())
+    .filter((e) => e.length > 0);
+
+  const handleSend = () => {
+    if (recipients.length === 0) return;
+    sendEmail.mutate({
+      request: {
+        sendEnterpriseAdminOnboardingEmailRequestBody: { recipients },
+      },
+    });
+  };
+
+  return (
+    <div className="border-border bg-card max-w-2xl rounded-lg border p-6">
+      <Stack direction="horizontal" align="center" gap={2} className="mb-2">
+        <Mail className="text-muted-foreground h-4 w-4" />
+        <Type variant="body" className="font-medium">
+          Send enterprise admin onboarding email
+        </Type>
+      </Stack>
+      <Type muted small className="mb-6 ml-6">
+        Send the enterprise admin onboarding email to one or more recipients.
+        Each recipient receives a link to this organization's setup wizard.
+      </Type>
+      <div className="ml-6 space-y-5">
+        <Input
+          name="onboarding_emails"
+          placeholder="alice@example.com, bob@example.com"
+          value={emailsInput}
+          onChange={setEmailsInput}
+          disabled={sendEmail.isPending}
+        />
+        <div className="flex items-center gap-3 pt-4">
+          <Button
+            onClick={handleSend}
+            disabled={recipients.length === 0 || sendEmail.isPending}
+          >
+            {sendEmail.isPending && (
+              <Button.LeftIcon>
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>
+              Send to{" "}
+              {recipients.length === 0
+                ? "0 recipients"
+                : `${recipients.length} recipient${recipients.length === 1 ? "" : "s"}`}
+            </Button.Text>
+          </Button>
+        </div>
+        {sendEmail.data?.setupLink && (
+          <Type muted small className="pt-2">
+            Setup link:{" "}
+            <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+              {sendEmail.data.setupLink}
+            </code>
+          </Type>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function OrgAdminSettings() {
   const isAdmin = useIsAdmin();
 
@@ -420,6 +505,7 @@ export function OrgAdminSettingsInner() {
         <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
           <PageTabsTrigger value="info">Info</PageTabsTrigger>
           <PageTabsTrigger value="features">Product Features</PageTabsTrigger>
+          <PageTabsTrigger value="onboarding">Onboarding</PageTabsTrigger>
         </TabsList>
       </div>
 
@@ -510,6 +596,17 @@ export function OrgAdminSettingsInner() {
 
       <TabsContent value="features" className="mt-6">
         <ProductFeaturesTab />
+      </TabsContent>
+
+      <TabsContent value="onboarding" className="mt-6">
+        <Heading variant="h4" className="mb-2">
+          Enterprise admin onboarding
+        </Heading>
+        <Type muted small className="mb-4">
+          Send the setup-wizard link to people you want to onboard as enterprise
+          admins of this organization.
+        </Type>
+        <OnboardingTab />
       </TabsContent>
     </Tabs>
   );

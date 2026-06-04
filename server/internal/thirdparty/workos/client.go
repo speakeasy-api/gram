@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/workos/workos-go/v6/pkg/events"
@@ -146,10 +147,18 @@ func (wc *Client) do(ctx context.Context, method, path string, body []byte, out 
 }
 
 // newRequest builds an authenticated HTTP request targeting the WorkOS API.
+// The path may include a query string (e.g. "/connections?organization_id=abc");
+// the query is preserved after joining with the base endpoint.
 func (wc *Client) newRequest(ctx context.Context, method, path string, body []byte) (*http.Request, error) {
-	reqURL, err := url.JoinPath(wc.endpoint, path)
+	// Split path from query string before JoinPath (which escapes '?').
+	pathOnly, query, _ := strings.Cut(path, "?")
+
+	reqURL, err := url.JoinPath(wc.endpoint, pathOnly)
 	if err != nil {
 		return nil, fmt.Errorf("build url: %w", err)
+	}
+	if query != "" {
+		reqURL += "?" + query
 	}
 
 	var bodyReader io.Reader

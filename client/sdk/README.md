@@ -355,12 +355,15 @@ run();
 * [enableWebhooks](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
 * [generateWorkOSAdminPortalLink](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 * [get](docs/sdks/organizations/README.md#get) - get organizations
+* [getOnboardingStatus](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 * [listInvites](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 * [listUsers](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 * [removeUser](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 * [revokeInvite](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+* [sendEnterpriseAdminOnboardingEmail](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 * [sendInvite](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 * [updateInviteRole](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+* [verifyOnboardingHooksSetup](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 
 ### [OtelForwarding](docs/sdks/otelforwarding/README.md)
 
@@ -762,12 +765,15 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`organizationsEnableWebhooks`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
 - [`organizationsGenerateWorkOSAdminPortalLink`](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 - [`organizationsGet`](docs/sdks/organizations/README.md#get) - get organizations
+- [`organizationsGetOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`organizationsRemoveUser`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`organizationsRevokeInvite`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`organizationsSendEnterpriseAdminOnboardingEmail`](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 - [`organizationsSendInvite`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`organizationsUpdateInviteRole`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+- [`organizationsVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 - [`otelForwardingDeleteConfig`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`otelForwardingGetConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`otelForwardingUpsertConfig`](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding
@@ -1111,6 +1117,7 @@ To learn about this feature and how to get started, check
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
+- [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
 - [`useOrganizationRemoteSessionIssuer`](docs/sdks/organizationremotesessionissuers/README.md#get) - getOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`useOrganizationRemoteSessionIssuers`](docs/sdks/organizationremotesessionissuers/README.md#list) - listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
@@ -1182,6 +1189,7 @@ To learn about this feature and how to get started, check
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 - [`useSearchUsers`](docs/sdks/telemetry/README.md#searchusers) - searchUsers telemetry
 - [`useSendAssistantMessageMutation`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
+- [`useSendEnterpriseAdminOnboardingEmailMutation`](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 - [`useSendInviteMutation`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`useServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
@@ -1243,6 +1251,7 @@ To learn about this feature and how to get started, check
 - [`useUserSessionIssuers`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
 - [`useUserSessions`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`useVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 - [`useVerifyRemoteMcpURLMutation`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 
 </details>
