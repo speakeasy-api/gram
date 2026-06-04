@@ -529,13 +529,17 @@ function RiskEventsRow({
   const isShadowMCP = result.source === "shadow_mcp";
 
   const handleShare = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.stopPropagation();
       if (!result.chatId) return;
       const url = new URL(window.location.href);
       url.searchParams.set("chat_id", result.chatId);
-      void navigator.clipboard.writeText(url.toString());
-      toast.success("Link copied to clipboard");
+      try {
+        await navigator.clipboard.writeText(url.toString());
+        toast.success("Link copied to clipboard");
+      } catch {
+        toast.error("Failed to copy link");
+      }
     },
     [result.chatId],
   );
@@ -590,6 +594,7 @@ function RiskEventsRow({
           <button
             type="button"
             onClick={handleShare}
+            onKeyDown={(e) => e.stopPropagation()}
             className="text-muted-foreground hover:text-foreground inline-flex items-center transition-colors"
             aria-label="Copy link to this event"
             title="Copy link to this event"
