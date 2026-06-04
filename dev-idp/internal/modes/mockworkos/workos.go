@@ -1120,18 +1120,28 @@ func (h *Handler) handleWorkosListConnections(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// handleWorkosListDirectories returns an empty list by default since directory
-// sync requires explicit setup. In local dev the DSYNC step is skippable.
+// handleWorkosListDirectories returns a mock linked directory for the
+// organization so the onboarding wizard's DSYNC verify step can progress after
+// the mock portal "Complete setup" click. Mirrors handleWorkosListConnections.
 func (h *Handler) handleWorkosListDirectories(w http.ResponseWriter, r *http.Request) {
 	orgID := r.URL.Query().Get("organization_id")
 	if orgID == "" {
 		writeWorkosError(w, http.StatusBadRequest, "organization_id is required")
 		return
 	}
-	_ = orgID
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data": []map[string]any{},
+		"data": []map[string]any{
+			{
+				"id":              "directory_mock_" + orgID,
+				"organization_id": orgID,
+				"type":            "generic scim v2.0",
+				"name":            "Mock Directory",
+				"state":           "linked",
+				"created_at":      "2024-01-01T00:00:00Z",
+				"updated_at":      "2024-01-01T00:00:00Z",
+			},
+		},
 	})
 }
 
