@@ -29,7 +29,12 @@ func nonPIIIPReason(s string) string {
 	if err != nil {
 		return ""
 	}
-	if d := nonPIIIPExact[s]; d != "" {
+	// Key the exact lookup off the parsed address's canonical form, not the
+	// raw input, so equivalent spellings (uppercase hex, expanded zero
+	// groups like 2606:4700:4700:0:0:0:0:1111, IPv4 in non-canonical form)
+	// still match the catalog. nonPIIIPExact keys are canonical netip
+	// strings; TestNonPIIIPExactKeysAreCanonical locks that invariant.
+	if d := nonPIIIPExact[addr.String()]; d != "" {
 		return d
 	}
 	for _, p := range nonPIIIPPrefixes {

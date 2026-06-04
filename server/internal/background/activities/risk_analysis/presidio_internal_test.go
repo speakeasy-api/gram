@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -103,6 +104,36 @@ func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
 	// Other entity types are never filtered by this rule.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "8.8.8.8"))
+}
+
+// TestIsPresidioFalsePositive_EquivalentIPFormsMatch verifies that
+// catalogued exact IPs are caught regardless of how Presidio happens to
+// spell them. The exact lookup canonicalises via netip before matching,
+// so expanded zero-groups and uppercase hex resolve to the same entry as
+// the curated key.
+func TestIsPresidioFalsePositive_EquivalentIPFormsMatch(t *testing.T) {
+	t.Parallel()
+
+	// Cloudflare 2606:4700:4700::1111 spelled with explicit zero groups.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700:0:0:0:0:1111"), "compressed-zero variant")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700:0000:0000:0000:0000:1111"), "fully-expanded variant")
+	// Google 2001:4860:4860::8888 with explicit zero groups.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2001:4860:4860:0:0:0:0:8888"), "Google DNS expanded")
+	// AdGuard 2a10:50c0::bad1:ff in uppercase hex.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2A10:50C0::BAD1:FF"), "uppercase hex variant")
+}
+
+// TestNonPIIIPExactKeysAreCanonical locks the invariant that every key in
+// nonPIIIPExact is already in netip canonical form. The exact lookup keys
+// off addr.String(), so a non-canonical key would silently never match.
+func TestNonPIIIPExactKeysAreCanonical(t *testing.T) {
+	t.Parallel()
+
+	for key := range nonPIIIPExact {
+		addr, err := netip.ParseAddr(key)
+		require.NoErrorf(t, err, "key %q must parse as an IP", key)
+		assert.Equalf(t, key, addr.String(), "key %q must be in canonical netip form", key)
+	}
 }
 
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
