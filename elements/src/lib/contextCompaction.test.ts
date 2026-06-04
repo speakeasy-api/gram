@@ -39,7 +39,7 @@ describe("getModelContextLimit", () => {
   });
 
   it("returns known mapping for Claude 4 (non-1M)", () => {
-    expect(getModelContextLimit("anthropic/claude-sonnet-4")).toBe(200_000);
+    expect(getModelContextLimit("anthropic/claude-haiku-4.5")).toBe(200_000);
   });
 
   it("returns DEFAULT_CONTEXT_LIMIT for unknown models", () => {
