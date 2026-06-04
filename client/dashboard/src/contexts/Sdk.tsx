@@ -95,6 +95,10 @@ export const useProjectSlugForRequests = (): string => {
   const { projectSlug } = useSlugs();
   const location = useLocation();
   if (projectSlug) return projectSlug;
+  // Treat empty string the same as missing — `?projectSlug=` yields `""`
+  // from URLSearchParams.get, which would suppress the header otherwise.
   const search = new URLSearchParams(location.search);
-  return search.get("projectSlug") ?? "default";
+  const queryProjectSlug = search.get("projectSlug");
+  if (queryProjectSlug) return queryProjectSlug;
+  return "default";
 };

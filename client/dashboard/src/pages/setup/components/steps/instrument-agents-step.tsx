@@ -24,6 +24,7 @@ import {
 import { StepContainer } from "../step-container";
 import { AGENT_PLATFORMS } from "../../setup-data";
 import type { AgentPlatform, PlatformSetupStatus } from "../../types";
+import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { Badge, Button, Link } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
 
@@ -93,6 +94,7 @@ interface InstrumentAgentsStepProps {
 
 const PLATFORM_LOGOS: Record<string, string> = {
   claude: "/icons/platforms/claude.svg",
+  "claude-cowork": "/icons/platforms/claude.svg",
   codex: "/icons/platforms/openai.svg",
   cursor: "/icons/platforms/cursor.svg",
 };
@@ -125,8 +127,10 @@ export function InstrumentAgentsStep({
   const repoOwner = publishStatus?.repoOwner ?? "";
   const repoName = publishStatus?.repoName ?? "";
   const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
-  const repoUrl =
-    repoOwner && repoName ? `https://github.com/${repoOwner}/${repoName}` : "";
+  // Use server-provided repoUrl when present rather than reconstructing it
+  // client-side — keeps the wizard in lock-step with whatever URL format the
+  // publish path actually wrote (e.g. enterprise GitHub hosts).
+  const repoUrl = publishStatus?.repoUrl ?? "";
   // Marketplace + plugin slug formulas mirror server/internal/plugins/naming/naming.go.
   // Both sides derive from the org slug — NOT the GitHub repo name, which can
   // be anything (e.g. "speakeasy-default-plugins"). The marketplace.json "name"
@@ -139,8 +143,14 @@ export function InstrumentAgentsStep({
 
   const createKeyMutation = useCreateAPIKeyMutation();
 
-  const completedCount = Object.values(platformStatus).filter(
-    (s) => s === "complete",
+  const availablePlatforms = AGENT_PLATFORMS.filter(
+    (p) => p.available !== false,
+  );
+  const comingSoonPlatforms = AGENT_PLATFORMS.filter(
+    (p) => p.available === false,
+  );
+  const completedCount = availablePlatforms.filter(
+    (p) => platformStatus[p.id] === "complete",
   ).length;
 
   const activePlatform =
@@ -394,6 +404,10 @@ export function InstrumentAgentsStep({
                   displayCode = displayCode.split(marker).join(value);
                 }
               }
+              // Don't render the code block when a step depends on the API key
+              // and we haven't yet minted one — otherwise users would copy a
+              // snippet with an empty Gram-Key value.
+              const codeBlockReady = !needsKey || !!platformKey;
 
               return (
                 <div
@@ -508,7 +522,7 @@ export function InstrumentAgentsStep({
                     </div>
                   )}
 
-                  {displayCode && (
+                  {displayCode && codeBlockReady && (
                     <div className="overflow-hidden rounded-md bg-zinc-950">
                       <div className="flex items-center justify-between px-3 py-2.5">
                         <span className="text-[10px] tracking-wider text-zinc-500 uppercase">
@@ -589,11 +603,11 @@ export function InstrumentAgentsStep({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground text-sm">
-            {completedCount} of {AGENT_PLATFORMS.length} platforms configured
+            {completedCount} of {availablePlatforms.length} platforms configured
           </span>
         </div>
 
-        {AGENT_PLATFORMS.map((platform) => {
+        {availablePlatforms.map((platform) => {
           const status = platformStatus[platform.id] ?? "not_started";
 
           return (
@@ -641,6 +655,35 @@ export function InstrumentAgentsStep({
             </button>
           );
         })}
+
+        {comingSoonPlatforms.length > 0 && (
+          <div className="pt-3">
+            <p className="text-muted-foreground mb-2 text-[11px] font-medium tracking-wider uppercase">
+              Coming soon
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {comingSoonPlatforms.map((platform) => (
+                <div
+                  key={platform.id}
+                  aria-disabled
+                  className="border-border bg-card flex cursor-not-allowed items-center gap-3 rounded-lg border p-3 opacity-50"
+                >
+                  <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
+                    <HookSourceIcon source={platform.id} className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-foreground truncate text-sm font-medium">
+                      {platform.name}
+                    </p>
+                    <p className="text-muted-foreground truncate text-xs">
+                      {platform.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <Sheet

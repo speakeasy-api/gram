@@ -1,50 +1,3 @@
-export type OnboardingStep =
-  | "connect-idp"
-  | "directory-sync"
-  | "create-marketplace"
-  | "instrument-agents"
-  | "confirm-traffic";
-
-export interface StepConfig {
-  id: OnboardingStep;
-  title: string;
-  description: string;
-  icon: string;
-}
-
-export const ONBOARDING_STEPS: StepConfig[] = [
-  {
-    id: "connect-idp",
-    title: "Connect Identity Provider",
-    description: "Link your SSO provider",
-    icon: "shield",
-  },
-  {
-    id: "directory-sync",
-    title: "Directory Sync",
-    description: "Confirm roles and admins",
-    icon: "users",
-  },
-  {
-    id: "create-marketplace",
-    title: "Create Plugin Marketplace",
-    description: "Publish observability plugins to GitHub",
-    icon: "git-branch",
-  },
-  {
-    id: "instrument-agents",
-    title: "Instrument Agents",
-    description: "Setup agent platform hooks",
-    icon: "cpu",
-  },
-  {
-    id: "confirm-traffic",
-    title: "Confirm Traffic",
-    description: "Verify compliance",
-    icon: "activity",
-  },
-];
-
 // Mock data types
 export interface IdpProvider {
   id: string;
@@ -108,6 +61,12 @@ export interface AgentPlatform {
   description: string;
   icon: string;
   connected: boolean;
+  /**
+   * When false, the platform renders as a grayed-out "coming soon" card and
+   * does not contribute to the wizard's configured/total count. Defaults to
+   * true when omitted.
+   */
+  available?: boolean;
   /** Platform-specific setup instructions shown when the card is expanded. */
   setupSteps: PlatformSetupStep[];
 }

@@ -71,4 +71,3 @@ package-lock.json
 .claude/hooks/*
 **/.claude/scheduled_tasks.lock
 flagged-chats.jsonl
-.venv-listen/

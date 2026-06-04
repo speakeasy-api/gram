@@ -67,12 +67,73 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
       }
     }
   },
-  "plugins": {
-    "required": ["{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}"]
+  "enabledPlugins": {
+    "{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}": true
   }
 }`,
         language: "json",
         requiresApiKey: true,
+      },
+    ],
+  },
+  {
+    id: "claude-cowork",
+    name: "Claude Cowork",
+    description:
+      "Team Claude.ai workspace with admin-managed plugins, billing, and access",
+    icon: "claude",
+    connected: false,
+    setupSteps: [
+      {
+        title: "Open Organization settings on Claude.ai",
+        description:
+          "Sign in to claude.ai as an org admin and navigate to Organization settings → Plugins. Cowork talks directly to GitHub via its own GitHub App — there's no marketplace URL to register.",
+        helpLink: {
+          url: "https://claude.ai/",
+          linkLabel: "claude.ai",
+          sentence: "Sign in to {LINK} as an org admin",
+        },
+      },
+      {
+        title: "Click Add plugin → Sync from GitHub",
+        description:
+          'Open the "Add plugins" dialog and pick "Sync from GitHub". The other two options (Anthropic sources, Upload .zip) aren\'t needed — your repo is the source of truth.',
+        screenshot: {
+          src: "/setup/claude-cowork-add-plugins.png",
+          alt: "Claude.ai Add plugins dialog with three options: Browse Anthropic sources, Sync from GitHub (highlighted), Upload a file",
+          caption: 'Pick "Sync from GitHub".',
+        },
+      },
+      {
+        title: "Install Claude's GitHub App, then select your repo",
+        description:
+          "Only private and internal repos appear here. If your repo isn't listed, click \"Install the Claude GitHub app\" at the bottom of the picker, grant access to your org's repo, then return — it'll show up. Select the repo slug below to finish.",
+        screenshot: {
+          src: "/setup/claude-cowork-sync-from-github.png",
+          alt: 'Claude.ai "Sync from GitHub" picker showing "No repositories found" and an "Install the Claude GitHub app" link at the bottom',
+          caption:
+            'If you see "No repositories found", install the Claude GitHub App on your repo via the link at the bottom.',
+        },
+        code: `{{GRAM_REPO_OWNER}}/{{GRAM_REPO_NAME}}`,
+        language: "text",
+        helpLink: {
+          url: "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization",
+          linkLabel: "Cowork setup guide",
+          sentence: "See the {LINK} for GitHub App installation details",
+        },
+      },
+      {
+        title: "Mark the observability plugin as Required",
+        description:
+          "After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Gram without per-user opt-in.",
+        screenshot: {
+          src: "/setup/claude-cowork-set-required.png",
+          alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
+          caption:
+            'Open the Default access dropdown on the observability plugin row and select "Required".',
+        },
+        code: `{{GRAM_CLAUDE_PLUGIN_NAME}}`,
+        language: "text",
       },
     ],
   },
@@ -87,7 +148,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
         title: "Register the Gram plugin marketplace",
         description:
           "Register your org's private marketplace with Codex. The repo URL points at the GitHub repository Gram just published for you.",
-        code: `codex plugin marketplace add {{GRAM_REPO_URL}}`,
+        code: `codex plugin marketplace add {{GRAM_MARKETPLACE_URL}}`,
         language: "bash",
         helpLink: {
           url: "https://developers.openai.com/codex/plugins/build",
@@ -150,5 +211,41 @@ enabled = true`,
         language: "text",
       },
     ],
+  },
+  {
+    id: "copilot",
+    name: "GitHub Copilot",
+    description: "Microsoft / GitHub AI pair programmer",
+    icon: "copilot",
+    connected: false,
+    available: false,
+    setupSteps: [],
+  },
+  {
+    id: "gemini",
+    name: "Gemini",
+    description: "Google's coding assistant",
+    icon: "gemini",
+    connected: false,
+    available: false,
+    setupSteps: [],
+  },
+  {
+    id: "glean",
+    name: "Glean",
+    description: "Enterprise work assistant",
+    icon: "glean",
+    connected: false,
+    available: false,
+    setupSteps: [],
+  },
+  {
+    id: "bedrock",
+    name: "AWS Bedrock",
+    description: "Amazon foundation-model gateway",
+    icon: "bedrock",
+    connected: false,
+    available: false,
+    setupSteps: [],
   },
 ];

@@ -122,28 +122,35 @@ export const PublishDialog = memo(function PublishDialog({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      const dropdownOpen = focused && results.length > 0;
+      // Two distinct conditions: arrow nav only makes sense with results; Escape
+      // should close any visible panel (loading + empty-results states too).
+      const hasResultsForNav = focused && results.length > 0;
+      const panelVisible =
+        focused &&
+        (results.length > 0 ||
+          searchLoading ||
+          draft.trim().length >= MIN_QUERY_LEN);
 
-      if (dropdownOpen && e.key === "ArrowDown") {
+      if (hasResultsForNav && e.key === "ArrowDown") {
         e.preventDefault();
         setActiveIndex((i) => (i + 1) % results.length);
         return;
       }
-      if (dropdownOpen && e.key === "ArrowUp") {
+      if (hasResultsForNav && e.key === "ArrowUp") {
         e.preventDefault();
         setActiveIndex((i) => (i - 1 + results.length) % results.length);
         return;
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        if (dropdownOpen && results[activeIndex]) {
+        if (hasResultsForNav && results[activeIndex]) {
           selectResult(results[activeIndex]);
         } else if (addUsername(draft)) {
           setDraft("");
         }
         return;
       }
-      if (e.key === "Escape" && dropdownOpen) {
+      if (e.key === "Escape" && panelVisible) {
         e.preventDefault();
         setFocused(false);
         return;
@@ -167,6 +174,7 @@ export const PublishDialog = memo(function PublishDialog({
       usernames.length,
       addUsername,
       selectResult,
+      searchLoading,
     ],
   );
 
