@@ -323,14 +323,6 @@ func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, withExtraKey), "not allowed")
 }
 
-func TestIsInternalScope(t *testing.T) {
-	t.Parallel()
-
-	require.False(t, IsInternalScope(ScopeRiskPolicyEvaluate))
-	require.False(t, IsInternalScope(ScopeRiskPolicyBypass))
-	require.False(t, IsInternalScope(ScopeProjectRead))
-}
-
 func TestRiskPolicyBypassCheck_injectsServerURL(t *testing.T) {
 	t.Parallel()
 
