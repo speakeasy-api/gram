@@ -1733,7 +1733,7 @@ func (s *ServiceCore) processEventTurn(
 // MCP calls, audit attribution, and per-user RBAC reflect the actual sender
 // rather than the assistant's creator. Other sources either don't carry a
 // Gram user identity (cron/wake) or carry an external one (Slack), so they
-// fall back to the creator — the historical behavior.
+// fall back to the creator.
 func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
 	if thread.SourceKind == sourceKindDashboard {
 		var payload dashboardEventPayload
@@ -1795,12 +1795,6 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 // downstream, so platform tools that key on the calling thread (wake,
 // memory, telemetry) keep working under the v2 single-VM-per-assistant
 // runtime — the VM is shared but the auth identity is per-thread.
-//
-// userID is the Gram user whose identity the turn acts under. Dashboard
-// turns pass the sender so per-turn MCP calls, audit attribution, and
-// per-user RBAC line up with the actual user. Non-interactive sources
-// (cron/wake), external-id sources (Slack), and system events (MCP auth
-// resume) pass the assistant's creator.
 func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, userID string) (string, error) {
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
