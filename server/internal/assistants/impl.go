@@ -255,6 +255,39 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	}, nil
 }
 
+func (s *Service) KickoffMessage(ctx context.Context, payload *gen.KickoffMessagePayload) (*gen.SendMessageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	// The greeting is attributed to the calling user, so a user identity is required.
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "kicking off a greeting requires a user identity").Log(ctx, s.logger)
+	}
+
+	assistantID, err := uuid.Parse(payload.AssistantID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").Log(ctx, s.logger)
+	}
+
+	result, err := s.core.KickoffDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, payload.CorrelationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "assistant not found").Log(ctx, s.logger)
+		}
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "kickoff assistant greeting")
+	}
+
+	return &gen.SendMessageResult{
+		ChatID:   result.ChatID.String(),
+		ThreadID: result.ThreadID.String(),
+		Accepted: result.Accepted,
+	}, nil
+}
+
 func (s *Service) ListMessages(ctx context.Context, payload *gen.ListMessagesPayload) (*gen.ListMessagesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

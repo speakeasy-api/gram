@@ -27,6 +27,7 @@ type Server struct {
 	SendMessage            http.Handler
 	ListMessages           http.Handler
 	EnsureManagedAssistant http.Handler
+	KickoffMessage         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -64,6 +65,7 @@ func New(
 			{"SendMessage", "POST", "/rpc/assistants.sendMessage"},
 			{"ListMessages", "GET", "/rpc/assistants.listMessages"},
 			{"EnsureManagedAssistant", "POST", "/rpc/assistants.ensureManagedAssistant"},
+			{"KickoffMessage", "POST", "/rpc/assistants.kickoffMessage"},
 		},
 		ListAssistants:         NewListAssistantsHandler(e.ListAssistants, mux, decoder, encoder, errhandler, formatter),
 		GetAssistant:           NewGetAssistantHandler(e.GetAssistant, mux, decoder, encoder, errhandler, formatter),
@@ -73,6 +75,7 @@ func New(
 		SendMessage:            NewSendMessageHandler(e.SendMessage, mux, decoder, encoder, errhandler, formatter),
 		ListMessages:           NewListMessagesHandler(e.ListMessages, mux, decoder, encoder, errhandler, formatter),
 		EnsureManagedAssistant: NewEnsureManagedAssistantHandler(e.EnsureManagedAssistant, mux, decoder, encoder, errhandler, formatter),
+		KickoffMessage:         NewKickoffMessageHandler(e.KickoffMessage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -89,6 +92,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SendMessage = m(s.SendMessage)
 	s.ListMessages = m(s.ListMessages)
 	s.EnsureManagedAssistant = m(s.EnsureManagedAssistant)
+	s.KickoffMessage = m(s.KickoffMessage)
 }
 
 // MethodNames returns the methods served.
@@ -104,6 +108,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSendMessageHandler(mux, h.SendMessage)
 	MountListMessagesHandler(mux, h.ListMessages)
 	MountEnsureManagedAssistantHandler(mux, h.EnsureManagedAssistant)
+	MountKickoffMessageHandler(mux, h.KickoffMessage)
 }
 
 // Mount configures the mux to serve the assistants endpoints.
@@ -512,6 +517,59 @@ func NewEnsureManagedAssistantHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "ensureManagedAssistant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assistants")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountKickoffMessageHandler configures the mux to serve the "assistants"
+// service "kickoffMessage" endpoint.
+func MountKickoffMessageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/assistants.kickoffMessage", f)
+}
+
+// NewKickoffMessageHandler creates a HTTP handler which loads the HTTP request
+// and calls the "assistants" service "kickoffMessage" endpoint.
+func NewKickoffMessageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeKickoffMessageRequest(mux, decoder)
+		encodeResponse = EncodeKickoffMessageResponse(encoder)
+		encodeError    = EncodeKickoffMessageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "kickoffMessage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "assistants")
 		payload, err := decodeRequest(r)
 		if err != nil {

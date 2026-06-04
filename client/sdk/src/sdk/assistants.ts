@@ -6,6 +6,7 @@ import { assistantsCreate } from "../funcs/assistantsCreate.js";
 import { assistantsDelete } from "../funcs/assistantsDelete.js";
 import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
+import { assistantsKickoffMessage } from "../funcs/assistantsKickoffMessage.js";
 import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsListMessages } from "../funcs/assistantsListMessages.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
@@ -85,6 +86,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Assistant> {
     return unwrapAsync(assistantsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * kickoffMessage assistants
+   *
+   * @remarks
+   * Nudge the assistant to proactively greet a returning user. Enqueues a hidden turn (the prompt is server-owned and never shown in the conversation log) so the assistant emits a short welcome-back recap as the next reply. Poll the returned chat to read it.
+   */
+  async kickoffMessage(
+    request: operations.KickoffAssistantMessageRequest,
+    security?: operations.KickoffAssistantMessageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SendMessageResult> {
+    return unwrapAsync(assistantsKickoffMessage(
       this,
       request,
       security,

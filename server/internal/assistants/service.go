@@ -1203,7 +1203,9 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		if err := json.Unmarshal(normalizedPayloadJSON, &dash); err != nil {
 			return EnqueueResult{}, fmt.Errorf("decode dashboard payload for log: %w", err)
 		}
-		if dash.Text != "" {
+		// Hidden turns (the welcome-back kickoff) drive the model but are kept out
+		// of the visible log — only the assistant's reply should surface.
+		if dash.Text != "" && !dash.Hidden {
 			if _, err := queries.InsertDashboardMessage(ctx, assistantrepo.InsertDashboardMessageParams{
 				ProjectID: assistant.ProjectID,
 				ChatID:    chatID,

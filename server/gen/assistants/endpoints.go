@@ -24,6 +24,7 @@ type Endpoints struct {
 	SendMessage            goa.Endpoint
 	ListMessages           goa.Endpoint
 	EnsureManagedAssistant goa.Endpoint
+	KickoffMessage         goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "assistants" service with endpoints.
@@ -39,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SendMessage:            NewSendMessageEndpoint(s, a.APIKeyAuth),
 		ListMessages:           NewListMessagesEndpoint(s, a.APIKeyAuth),
 		EnsureManagedAssistant: NewEnsureManagedAssistantEndpoint(s, a.APIKeyAuth),
+		KickoffMessage:         NewKickoffMessageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -52,6 +54,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SendMessage = m(e.SendMessage)
 	e.ListMessages = m(e.ListMessages)
 	e.EnsureManagedAssistant = m(e.EnsureManagedAssistant)
+	e.KickoffMessage = m(e.KickoffMessage)
 }
 
 // NewListAssistantsEndpoint returns an endpoint function that calls the method
@@ -331,5 +334,40 @@ func NewEnsureManagedAssistantEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 			return nil, err
 		}
 		return s.EnsureManagedAssistant(ctx, p)
+	}
+}
+
+// NewKickoffMessageEndpoint returns an endpoint function that calls the method
+// "kickoffMessage" of service "assistants".
+func NewKickoffMessageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*KickoffMessagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.KickoffMessage(ctx, p)
 	}
 }

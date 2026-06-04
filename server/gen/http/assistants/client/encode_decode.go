@@ -1904,6 +1904,244 @@ func DecodeEnsureManagedAssistantResponse(decoder func(*http.Response) goahttp.D
 	}
 }
 
+// BuildKickoffMessageRequest instantiates a HTTP request object with method
+// and path set to call the "assistants" service "kickoffMessage" endpoint
+func (c *Client) BuildKickoffMessageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: KickoffMessageAssistantsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assistants", "kickoffMessage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeKickoffMessageRequest returns an encoder for requests sent to the
+// assistants kickoffMessage server.
+func EncodeKickoffMessageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assistants.KickoffMessagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("assistants", "kickoffMessage", "*assistants.KickoffMessagePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewKickoffMessageRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("assistants", "kickoffMessage", err)
+		}
+		return nil
+	}
+}
+
+// DecodeKickoffMessageResponse returns a decoder for responses returned by the
+// assistants kickoffMessage endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeKickoffMessageResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeKickoffMessageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body KickoffMessageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			res := NewKickoffMessageSendMessageResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body KickoffMessageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			return nil, NewKickoffMessageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body KickoffMessageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			return nil, NewKickoffMessageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body KickoffMessageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			return nil, NewKickoffMessageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body KickoffMessageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			return nil, NewKickoffMessageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body KickoffMessageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			return nil, NewKickoffMessageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body KickoffMessageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			return nil, NewKickoffMessageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body KickoffMessageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			return nil, NewKickoffMessageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body KickoffMessageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+				}
+				err = ValidateKickoffMessageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+				}
+				return nil, NewKickoffMessageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body KickoffMessageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+				}
+				err = ValidateKickoffMessageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+				}
+				return nil, NewKickoffMessageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assistants", "kickoffMessage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body KickoffMessageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "kickoffMessage", err)
+			}
+			err = ValidateKickoffMessageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "kickoffMessage", err)
+			}
+			return nil, NewKickoffMessageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assistants", "kickoffMessage", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAssistantResponseBodyToTypesAssistant builds a value of type
 // *types.Assistant from a value of type *AssistantResponseBody.
 func unmarshalAssistantResponseBodyToTypesAssistant(v *AssistantResponseBody) *types.Assistant {

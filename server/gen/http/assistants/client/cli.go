@@ -341,3 +341,46 @@ func BuildEnsureManagedAssistantPayload(assistantsEnsureManagedAssistantSessionT
 
 	return v, nil
 }
+
+// BuildKickoffMessagePayload builds the payload for the assistants
+// kickoffMessage endpoint from CLI flags.
+func BuildKickoffMessagePayload(assistantsKickoffMessageBody string, assistantsKickoffMessageSessionToken string, assistantsKickoffMessageProjectSlugInput string) (*assistants.KickoffMessagePayload, error) {
+	var err error
+	var body KickoffMessageRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantsKickoffMessageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"correlation_id\": \"aa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", body.AssistantID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.CorrelationID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.correlation_id", body.CorrelationID, utf8.RuneCountInString(body.CorrelationID), 1, true))
+		}
+		if utf8.RuneCountInString(body.CorrelationID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.correlation_id", body.CorrelationID, utf8.RuneCountInString(body.CorrelationID), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsKickoffMessageSessionToken != "" {
+			sessionToken = &assistantsKickoffMessageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsKickoffMessageProjectSlugInput != "" {
+			projectSlugInput = &assistantsKickoffMessageProjectSlugInput
+		}
+	}
+	v := &assistants.KickoffMessagePayload{
+		AssistantID:   body.AssistantID,
+		CorrelationID: body.CorrelationID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

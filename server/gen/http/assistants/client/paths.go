@@ -46,3 +46,8 @@ func ListMessagesAssistantsPath() string {
 func EnsureManagedAssistantAssistantsPath() string {
 	return "/rpc/assistants.ensureManagedAssistant"
 }
+
+// KickoffMessageAssistantsPath returns the URL path to the assistants service kickoffMessage HTTP endpoint.
+func KickoffMessageAssistantsPath() string {
+	return "/rpc/assistants.kickoffMessage"
+}

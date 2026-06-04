@@ -218,6 +218,37 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "ensureManaged")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnsureManagedAssistant", "type": "mutation"}`)
 	})
+
+	Method("kickoffMessage", func() {
+		Description("Nudge the assistant to proactively greet a returning user. Enqueues a hidden turn (the prompt is server-owned and never shown in the conversation log) so the assistant emits a short welcome-back recap as the next reply. Poll the returned chat to read it.")
+
+		Payload(func() {
+			Attribute("assistant_id", String, "The assistant to greet from.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("correlation_id", String, "Conversation key to greet within — pass the same value used for sendMessage so the assistant greets inside the existing thread (and can recap it).", func() {
+				MinLength(1)
+				MaxLength(255)
+			})
+			Required("assistant_id", "correlation_id")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SendMessageResult)
+
+		HTTP(func() {
+			POST("/rpc/assistants.kickoffMessage")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "kickoffAssistantMessage")
+		Meta("openapi:extension:x-speakeasy-name-override", "kickoffMessage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "KickoffAssistantMessage"}`)
+	})
 })
 
 var CreateAssistantForm = Type("CreateAssistantForm", func() {

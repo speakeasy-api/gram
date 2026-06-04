@@ -70,6 +70,16 @@ type SendMessageRequestBody struct {
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 }
 
+// KickoffMessageRequestBody is the type of the "assistants" service
+// "kickoffMessage" endpoint HTTP request body.
+type KickoffMessageRequestBody struct {
+	// The assistant to greet from.
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// Conversation key to greet within — pass the same value used for sendMessage
+	// so the assistant greets inside the existing thread (and can recap it).
+	CorrelationID *string `form:"correlation_id,omitempty" json:"correlation_id,omitempty" xml:"correlation_id,omitempty"`
+}
+
 // ListAssistantsResponseBody is the type of the "assistants" service
 // "listAssistants" endpoint HTTP response body.
 type ListAssistantsResponseBody struct {
@@ -201,6 +211,17 @@ type EnsureManagedAssistantResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Last update timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// KickoffMessageResponseBody is the type of the "assistants" service
+// "kickoffMessage" endpoint HTTP response body.
+type KickoffMessageResponseBody struct {
+	// The chat to poll for the assistant's reply.
+	ChatID string `form:"chat_id" json:"chat_id" xml:"chat_id"`
+	// The assistant thread the message was enqueued on.
+	ThreadID string `form:"thread_id" json:"thread_id" xml:"thread_id"`
+	// Whether the message was accepted and enqueued for processing.
+	Accepted bool `form:"accepted" json:"accepted" xml:"accepted"`
 }
 
 // ListAssistantsUnauthorizedResponseBody is the type of the "assistants"
@@ -1681,6 +1702,190 @@ type EnsureManagedAssistantGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// KickoffMessageUnauthorizedResponseBody is the type of the "assistants"
+// service "kickoffMessage" endpoint HTTP response body for the "unauthorized"
+// error.
+type KickoffMessageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageForbiddenResponseBody is the type of the "assistants" service
+// "kickoffMessage" endpoint HTTP response body for the "forbidden" error.
+type KickoffMessageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageBadRequestResponseBody is the type of the "assistants" service
+// "kickoffMessage" endpoint HTTP response body for the "bad_request" error.
+type KickoffMessageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageNotFoundResponseBody is the type of the "assistants" service
+// "kickoffMessage" endpoint HTTP response body for the "not_found" error.
+type KickoffMessageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageConflictResponseBody is the type of the "assistants" service
+// "kickoffMessage" endpoint HTTP response body for the "conflict" error.
+type KickoffMessageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageUnsupportedMediaResponseBody is the type of the "assistants"
+// service "kickoffMessage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type KickoffMessageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageInvalidResponseBody is the type of the "assistants" service
+// "kickoffMessage" endpoint HTTP response body for the "invalid" error.
+type KickoffMessageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageInvariantViolationResponseBody is the type of the "assistants"
+// service "kickoffMessage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type KickoffMessageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageUnexpectedResponseBody is the type of the "assistants" service
+// "kickoffMessage" endpoint HTTP response body for the "unexpected" error.
+type KickoffMessageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// KickoffMessageGatewayErrorResponseBody is the type of the "assistants"
+// service "kickoffMessage" endpoint HTTP response body for the "gateway_error"
+// error.
+type KickoffMessageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AssistantResponseBody is used to define fields on response body types.
 type AssistantResponseBody struct {
 	// The assistant ID.
@@ -1905,6 +2110,17 @@ func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedA
 		}
 	} else {
 		body.Toolsets = []*AssistantToolsetRefResponseBody{}
+	}
+	return body
+}
+
+// NewKickoffMessageResponseBody builds the HTTP response body from the result
+// of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageResponseBody(res *assistants.SendMessageResult) *KickoffMessageResponseBody {
+	body := &KickoffMessageResponseBody{
+		ChatID:   res.ChatID,
+		ThreadID: res.ThreadID,
+		Accepted: res.Accepted,
 	}
 	return body
 }
@@ -3052,6 +3268,147 @@ func NewEnsureManagedAssistantGatewayErrorResponseBody(res *goa.ServiceError) *E
 	return body
 }
 
+// NewKickoffMessageUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageUnauthorizedResponseBody(res *goa.ServiceError) *KickoffMessageUnauthorizedResponseBody {
+	body := &KickoffMessageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageForbiddenResponseBody builds the HTTP response body from
+// the result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageForbiddenResponseBody(res *goa.ServiceError) *KickoffMessageForbiddenResponseBody {
+	body := &KickoffMessageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageBadRequestResponseBody builds the HTTP response body from
+// the result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageBadRequestResponseBody(res *goa.ServiceError) *KickoffMessageBadRequestResponseBody {
+	body := &KickoffMessageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageNotFoundResponseBody builds the HTTP response body from the
+// result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageNotFoundResponseBody(res *goa.ServiceError) *KickoffMessageNotFoundResponseBody {
+	body := &KickoffMessageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageConflictResponseBody builds the HTTP response body from the
+// result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageConflictResponseBody(res *goa.ServiceError) *KickoffMessageConflictResponseBody {
+	body := &KickoffMessageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageUnsupportedMediaResponseBody(res *goa.ServiceError) *KickoffMessageUnsupportedMediaResponseBody {
+	body := &KickoffMessageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageInvalidResponseBody builds the HTTP response body from the
+// result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageInvalidResponseBody(res *goa.ServiceError) *KickoffMessageInvalidResponseBody {
+	body := &KickoffMessageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "kickoffMessage" endpoint of the "assistants"
+// service.
+func NewKickoffMessageInvariantViolationResponseBody(res *goa.ServiceError) *KickoffMessageInvariantViolationResponseBody {
+	body := &KickoffMessageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageUnexpectedResponseBody builds the HTTP response body from
+// the result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageUnexpectedResponseBody(res *goa.ServiceError) *KickoffMessageUnexpectedResponseBody {
+	body := &KickoffMessageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewKickoffMessageGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "kickoffMessage" endpoint of the "assistants" service.
+func NewKickoffMessageGatewayErrorResponseBody(res *goa.ServiceError) *KickoffMessageGatewayErrorResponseBody {
+	body := &KickoffMessageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListAssistantsPayload builds a assistants service listAssistants endpoint
 // payload.
 func NewListAssistantsPayload(sessionToken *string, projectSlugInput *string) *assistants.ListAssistantsPayload {
@@ -3174,6 +3531,19 @@ func NewEnsureManagedAssistantPayload(sessionToken *string, projectSlugInput *st
 	return v
 }
 
+// NewKickoffMessagePayload builds a assistants service kickoffMessage endpoint
+// payload.
+func NewKickoffMessagePayload(body *KickoffMessageRequestBody, sessionToken *string, projectSlugInput *string) *assistants.KickoffMessagePayload {
+	v := &assistants.KickoffMessagePayload{
+		AssistantID:   *body.AssistantID,
+		CorrelationID: *body.CorrelationID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateAssistantRequestBody runs the validations defined on
 // CreateAssistantRequestBody
 func ValidateCreateAssistantRequestBody(body *CreateAssistantRequestBody) (err error) {
@@ -3266,6 +3636,31 @@ func ValidateSendMessageRequestBody(body *SendMessageRequestBody) (err error) {
 	if body.IdempotencyKey != nil {
 		if utf8.RuneCountInString(*body.IdempotencyKey) > 255 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 255, false))
+		}
+	}
+	return
+}
+
+// ValidateKickoffMessageRequestBody runs the validations defined on
+// KickoffMessageRequestBody
+func ValidateKickoffMessageRequestBody(body *KickoffMessageRequestBody) (err error) {
+	if body.AssistantID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_id", "body"))
+	}
+	if body.CorrelationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("correlation_id", "body"))
+	}
+	if body.AssistantID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+	}
+	if body.CorrelationID != nil {
+		if utf8.RuneCountInString(*body.CorrelationID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.correlation_id", *body.CorrelationID, utf8.RuneCountInString(*body.CorrelationID), 1, true))
+		}
+	}
+	if body.CorrelationID != nil {
+		if utf8.RuneCountInString(*body.CorrelationID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.correlation_id", *body.CorrelationID, utf8.RuneCountInString(*body.CorrelationID), 255, false))
 		}
 	}
 	return

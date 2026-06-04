@@ -195,6 +195,7 @@ run();
 * [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 * [ensureManaged](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 * [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
+* [kickoffMessage](docs/sdks/assistants/README.md#kickoffmessage) - kickoffMessage assistants
 * [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
 * [listMessages](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
 * [sendMessage](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
@@ -665,6 +666,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`assistantsEnsureManaged`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`assistantsKickoffMessage`](docs/sdks/assistants/README.md#kickoffmessage) - kickoffMessage assistants
 - [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`assistantsListMessages`](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
 - [`assistantsSendMessage`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
@@ -1074,6 +1076,7 @@ To learn about this feature and how to get started, check
 - [`useHooksServerNamesUpsertServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
 - [`useInstance`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
+- [`useKickoffAssistantMessageMutation`](docs/sdks/assistants/README.md#kickoffmessage) - kickoffMessage assistants
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`useListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys

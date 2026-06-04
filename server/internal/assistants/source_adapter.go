@@ -264,6 +264,9 @@ type dashboardSourceRef struct {
 type dashboardEventPayload struct {
 	Text   string `json:"text"`
 	UserID string `json:"user_id,omitempty"`
+	// Hidden turns (e.g. the welcome-back kickoff) still drive the model but are
+	// not written to the user-visible conversation log.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 type dashboardAdapter struct{}

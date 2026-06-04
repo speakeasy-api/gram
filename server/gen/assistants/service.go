@@ -37,6 +37,11 @@ type Service interface {
 	// Get the project's built-in Project Assistant, provisioning it on first
 	// access. Idempotent — safe to call on every sidebar open.
 	EnsureManagedAssistant(context.Context, *EnsureManagedAssistantPayload) (res *types.Assistant, err error)
+	// Nudge the assistant to proactively greet a returning user. Enqueues a hidden
+	// turn (the prompt is server-owned and never shown in the conversation log) so
+	// the assistant emits a short welcome-back recap as the next reply. Poll the
+	// returned chat to read it.
+	KickoffMessage(context.Context, *KickoffMessagePayload) (res *SendMessageResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -59,7 +64,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "listMessages", "ensureManagedAssistant"}
+var MethodNames = [9]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "listMessages", "ensureManagedAssistant", "kickoffMessage"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -117,6 +122,18 @@ type EnsureManagedAssistantPayload struct {
 type GetAssistantPayload struct {
 	// The assistant ID.
 	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// KickoffMessagePayload is the payload type of the assistants service
+// kickoffMessage method.
+type KickoffMessagePayload struct {
+	// The assistant to greet from.
+	AssistantID string
+	// Conversation key to greet within — pass the same value used for sendMessage
+	// so the assistant greets inside the existing thread (and can recap it).
+	CorrelationID    string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

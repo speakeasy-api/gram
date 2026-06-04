@@ -133,6 +133,7 @@ export * from "./hooksServerNamesListServerNameOverrides.js";
 export * from "./hooksServerNamesUpsertServerNameOverride.js";
 export * from "./instance.js";
 export * from "./integrationsIntegrationsNumberGet.js";
+export * from "./kickoffAssistantMessage.js";
 export * from "./latestDeployment.js";
 export * from "./listAllowedOrigins.js";
 export * from "./listAPIKeys.js";

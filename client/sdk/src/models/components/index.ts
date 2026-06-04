@@ -157,6 +157,7 @@ export * from "./integration.js";
 export * from "./integrationentry.js";
 export * from "./integrationversion.js";
 export * from "./key.js";
+export * from "./kickoffmessagerequestbody.js";
 export * from "./listallowedoriginsresult.js";
 export * from "./listassetsresult.js";
 export * from "./listassistantmemoriesresult.js";

@@ -436,6 +436,8 @@ trackedFiles:
     last_write_checksum: sha1:3edbc96125a9f5fecd38fd2e6d6ae3190fd62873
   docs/models/components/key.md:
     last_write_checksum: sha1:01ec12d1a17b6d6c5f6dfdd06215fe5a1545570a
+  docs/models/components/kickoffmessagerequestbody.md:
+    last_write_checksum: sha1:e22bf2678104e0c7128f9fc6b93263a586d7cb47
   docs/models/components/kind.md:
     last_write_checksum: sha1:f17db76576b64ca436fcac0d69c8ca428204e20e
   docs/models/components/lastpollstatus.md:
@@ -2068,6 +2070,10 @@ trackedFiles:
     last_write_checksum: sha1:de50d4e9156da656b78521f23055725545f45bf5
   docs/models/operations/integrationsnumbergetsecurity.md:
     last_write_checksum: sha1:d92062024245589855c682146ef62d6e991eddaf
+  docs/models/operations/kickoffassistantmessagerequest.md:
+    last_write_checksum: sha1:bffd2bc645b0e0ebdebee2dbebff20c38076b292
+  docs/models/operations/kickoffassistantmessagesecurity.md:
+    last_write_checksum: sha1:986bb69503373ede9b03e10861e70eb8ddd2026c
   docs/models/operations/listallowedoriginsrequest.md:
     last_write_checksum: sha1:598af101059e598e59eba5e913a395d7f82209b3
   docs/models/operations/listallowedoriginssecurity.md:
@@ -3051,7 +3057,7 @@ trackedFiles:
   docs/sdks/assistantmemories/README.md:
     last_write_checksum: sha1:5f2d9d10074617110479871148d92fd118f1cefa
   docs/sdks/assistants/README.md:
-    last_write_checksum: sha1:8cc25c5323a8d6299a35fd5cf84ef033adde1b6d
+    last_write_checksum: sha1:32cd0bc8816f54de6d6d58072c0b1bf950b34ee2
   docs/sdks/auditlogs/README.md:
     last_write_checksum: sha1:7caf64a8e89202447bef36b378db3eec3e55821b
   docs/sdks/auth/README.md:
@@ -3258,6 +3264,8 @@ trackedFiles:
     last_write_checksum: sha1:1973f7cac2983a99eeb981c7759d762c24c75668
   src/funcs/assistantsGet.ts:
     last_write_checksum: sha1:6ca81dcfb983d0954b2181566e707a8dfca52c0c
+  src/funcs/assistantsKickoffMessage.ts:
+    last_write_checksum: sha1:2dc54822c40339c7b4505cba005b2fcda52303ce
   src/funcs/assistantsList.ts:
     last_write_checksum: sha1:0eef1ce8687ff64f5589fe7886de0357532ee2ac
   src/funcs/assistantsListMessages.ts:
@@ -4109,7 +4117,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:8b4b12facc6282323461079b68270e825a08e376
+    last_write_checksum: sha1:68ba08c0c0cd43072aab5fdcc1984aec842dd0fd
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4123,6 +4131,8 @@ trackedFiles:
     last_write_checksum: sha1:fe35a6624508cd49ce08312b542e1be98098847b
   src/models/components/key.ts:
     last_write_checksum: sha1:f2a0b88ec9fa15cab098bc1587b4eb126a97b1e7
+  src/models/components/kickoffmessagerequestbody.ts:
+    last_write_checksum: sha1:091e22e79986d153f5aaeff4cc0e1176c03374fc
   src/models/components/listallowedoriginsresult.ts:
     last_write_checksum: sha1:731fb3f015c77d80c8434633ddf892da940a623a
   src/models/components/listassetsresult.ts:
@@ -5014,10 +5024,12 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:5fa83527a7aef37931409ce3b4dd2ba38462fc3e
+    last_write_checksum: sha1:dbce4b2e9e673a89522f52552ca727739e246e17
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
+  src/models/operations/kickoffassistantmessage.ts:
+    last_write_checksum: sha1:bbe3a2431d9745c87d98060befc15e41c0268e72
   src/models/operations/listallowedorigins.ts:
     last_write_checksum: sha1:8d6bb2c7d1782f5a1e9c0fd97577fbe266f21aee
   src/models/operations/listapikeys.ts:
@@ -5650,7 +5662,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:946f0a0e284e04e04bbf6fca15a228bfdc02fadf
+    last_write_checksum: sha1:48f63c6cc778fe285ff8b6bc9252b19dd083290f
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -5660,6 +5672,8 @@ trackedFiles:
     last_write_checksum: sha1:0cb28415ff46205772314562be7b898c470828d4
   src/react-query/integrationsIntegrationsNumberGet.ts:
     last_write_checksum: sha1:76a5826d438145cccef847a0e46bcd787054ef20
+  src/react-query/kickoffAssistantMessage.ts:
+    last_write_checksum: sha1:b678882e514ff3e5133d72b0b23cb2be06a64f85
   src/react-query/latestDeployment.core.ts:
     last_write_checksum: sha1:15dce32a9f9ce68f47032e64c432f07f3da5dda7
   src/react-query/latestDeployment.ts:
@@ -6201,7 +6215,7 @@ trackedFiles:
   src/sdk/assistantmemories.ts:
     last_write_checksum: sha1:40c6f4887e1a7715160ab9f35cb2aadb55c0c5f5
   src/sdk/assistants.ts:
-    last_write_checksum: sha1:e1f1b9e04380ca3ea08145c81b6d594ee758e19d
+    last_write_checksum: sha1:bdc871e07b7ae39772229ac5e84431d6ba044dff
   src/sdk/auditlogs.ts:
     last_write_checksum: sha1:7a7107003acbf2d60125e0777974a9d270328eeb
   src/sdk/auth.ts:
@@ -9485,5 +9499,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  kickoffAssistantMessage:
+    speakeasy-default-kickoff-assistant-message:
+      requestBody:
+        application/json: {"assistant_id": "4b59f6b4-bfb9-459e-bdd4-b6eff409ee1c", "correlation_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"accepted": false, "chat_id": "12afcd0c-6ebd-4a30-b801-80cf9db1496f", "thread_id": "1f228d07-b6bc-4188-89d6-0df0412fa9e6"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

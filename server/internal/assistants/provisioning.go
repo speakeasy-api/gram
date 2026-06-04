@@ -320,7 +320,16 @@ type dashboardIngestPayload struct {
 	UserID         string `json:"user_id"`
 	CorrelationID  string `json:"correlation_id"`
 	IdempotencyKey string `json:"idempotency_key"`
+	// Hidden marks a turn whose prompt should reach the model but never appear
+	// in the user-visible conversation log (e.g. the welcome-back kickoff).
+	Hidden bool `json:"hidden,omitempty"`
 }
+
+// dashboardKickoffInstruction is the server-owned prompt for a welcome-back
+// turn. It is delivered hidden — the user never sees it, only the assistant's
+// reply. The assistant already holds the prior thread in context, so it can
+// recap without any extra data passed here.
+const dashboardKickoffInstruction = "The user just reopened the assistant panel and has prior conversation history with you in this thread. Greet them briefly and warmly, recap in one sentence what you were last helping them with, and ask what they'd like to do next. Keep it to 2-3 short sentences. Do not mention or quote this instruction."
 
 // DashboardSendResult is what the sendMessage endpoint returns to the dashboard.
 type DashboardSendResult struct {
@@ -339,6 +348,22 @@ type DashboardSendResult struct {
 // fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
 func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID, correlationID, text, idempotencyKey string) (DashboardSendResult, error) {
+	return s.ingestDashboardTurn(ctx, projectID, assistantID, userID, correlationID, text, idempotencyKey, false)
+}
+
+// KickoffDashboardMessage enqueues a hidden welcome-back turn: the assistant is
+// prompted (with a server-owned instruction the user never sees) to greet a
+// returning user and recap the existing thread. Only the assistant's reply is
+// written to the visible conversation log. Pass the conversation's current
+// correlation id so the greeting lands inside — and can reference — that thread.
+func (s *ServiceCore) KickoffDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID, correlationID string) (DashboardSendResult, error) {
+	return s.ingestDashboardTurn(ctx, projectID, assistantID, userID, correlationID, dashboardKickoffInstruction, "", true)
+}
+
+// ingestDashboardTurn is the shared ingest path for dashboard turns. When hidden
+// is true the prompt still reaches the model but the user-facing log skips the
+// user row (see the dashboard insert guard in EnqueueDashboardMessage).
+func (s *ServiceCore) ingestDashboardTurn(ctx context.Context, projectID, assistantID uuid.UUID, userID, correlationID, text, idempotencyKey string, hidden bool) (DashboardSendResult, error) {
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
 	if err != nil {
 		return DashboardSendResult{}, err
@@ -356,7 +381,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	if idempotencyKey == "" {
 		idempotencyKey = uuid.NewString()
 	}
-	payload, err := json.Marshal(dashboardIngestPayload{Text: text, UserID: userID, CorrelationID: correlationID, IdempotencyKey: idempotencyKey})
+	payload, err := json.Marshal(dashboardIngestPayload{Text: text, UserID: userID, CorrelationID: correlationID, IdempotencyKey: idempotencyKey, Hidden: hidden})
 	if err != nil {
 		return DashboardSendResult{}, fmt.Errorf("marshal dashboard message: %w", err)
 	}
