@@ -32,9 +32,15 @@ export function MCPPublishingSection({
   return (
     // Publishing attaches the server to an org-level collection, which the
     // collections service authorizes as org:admin (see AttachServer /
-    // DetachServer). Gate the controls to match so non-admins don't see
-    // actions that would 403.
-    <RequireScope scope="org:admin" level="component">
+    // DetachServer). Gate to match: non-admins see the section greyed out with
+    // a permission tooltip rather than controls that would 403. className keeps
+    // the block-level PageSection full-width inside the disabled wrapper.
+    <RequireScope
+      scope="org:admin"
+      level="component"
+      className="w-full"
+      reason="Only organization admins can publish servers to collections."
+    >
       <PageSection
         heading="Publishing"
         description="Publish this server to collections so it can be discovered and installed by others in your organization."
@@ -83,7 +89,11 @@ export function MCPPublishingSection({
           {hasChanges && (
             <BlockInner>
               <Stack direction="horizontal" gap={2}>
-                <Button size="sm" disabled={isSaving} onClick={handleSave}>
+                <Button
+                  size="sm"
+                  disabled={isSaving}
+                  onClick={() => void handleSave()}
+                >
                   <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
                 </Button>
                 <Button
