@@ -1698,7 +1698,9 @@ func (s *ServiceCore) processEventTurn(
 	event assistantThreadEventRecord,
 ) error {
 	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID)
+		// MCP auth resumption is a system event with no human sender — act as
+		// the assistant's creator.
+		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, assistant.CreatedByUserID)
 		if err != nil {
 			return err
 		}
@@ -1716,7 +1718,7 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return fmt.Errorf("decode assistant turn: %w", err)
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, turnUserID(assistant, thread, event))
 	if err != nil {
 		return err
 	}
@@ -1724,6 +1726,22 @@ func (s *ServiceCore) processEventTurn(
 		return fmt.Errorf("run assistant turn: %w", err)
 	}
 	return nil
+}
+
+// turnUserID returns the Gram user whose identity a turn should act under.
+// Dashboard turns carry a Gram user id on the event payload (the sender), so
+// MCP calls, audit attribution, and per-user RBAC reflect the actual sender
+// rather than the assistant's creator. Other sources either don't carry a
+// Gram user identity (cron/wake) or carry an external one (Slack), so they
+// fall back to the creator.
+func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
+	if thread.SourceKind == sourceKindDashboard {
+		var payload dashboardEventPayload
+		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err == nil && payload.UserID != "" {
+			return payload.UserID
+		}
+	}
+	return assistant.CreatedByUserID
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -1777,11 +1795,11 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 // downstream, so platform tools that key on the calling thread (wake,
 // memory, telemetry) keep working under the v2 single-VM-per-assistant
 // runtime — the VM is shared but the auth identity is per-thread.
-func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID) (string, error) {
+func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, userID string) (string, error) {
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
-		UserID:      assistant.CreatedByUserID,
+		UserID:      userID,
 		AssistantID: assistant.ID,
 		ThreadID:    threadID,
 		TTL:         assistantRuntimeTokenTTL,
