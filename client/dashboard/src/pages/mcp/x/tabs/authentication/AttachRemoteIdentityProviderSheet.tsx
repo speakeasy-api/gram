@@ -374,8 +374,10 @@ export function AttachRemoteIdentityProviderSheet({
     const preferred = pickPreferredAuthMethod(
       discoveredSnapshot.tokenEndpointAuthMethodsSupported,
     );
-    if (preferred) setTokenEndpointAuthMethod(preferred);
-  }, [discoveredSnapshot, issuerUrl]);
+    if (!tokenEndpointAuthMethod && preferred) {
+      setTokenEndpointAuthMethod(preferred);
+    }
+  }, [discoveredSnapshot, issuerUrl, tokenEndpointAuthMethod]);
 
   // Resolve the issuer record the operator picked in Select-existing mode.
   // We need it to know whether the picked issuer supports DCR and to pull
