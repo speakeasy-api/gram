@@ -7,7 +7,7 @@ import {
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { LanguageModel } from "ai";
+import { ChatTransport, LanguageModel, UIMessage } from "ai";
 import {
   ComponentType,
   Dispatch,
@@ -64,6 +64,15 @@ export interface ElementsConfig {
    * The system prompt to use for the Elements library.
    */
   systemPrompt?: string;
+
+  /**
+   * Optional chat transport override. When provided, Elements uses this
+   * transport instead of its built-in client-side streaming transport — e.g.
+   * to route the conversation through a persistent server-side assistant that
+   * generates replies and is polled for them. When omitted, the default
+   * client-side transport is used.
+   */
+  transport?: ChatTransport<UIMessage>;
 
   /**
    * Any plugins to use for the Elements library.

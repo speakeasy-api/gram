@@ -1,10 +1,17 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
+import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { cn } from "@/lib/utils";
 import { useAssistantRuntime } from "@assistant-ui/react";
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { ChevronRight, Sparkles, Terminal, Wand2 } from "lucide-react";
+import {
+  ChevronRight,
+  Sparkles,
+  SquarePen,
+  Terminal,
+  Wand2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
@@ -283,6 +290,16 @@ export function InsightsProvider({
   const hideTrigger = override?.hideTrigger ?? false;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
 
+  // Server-side Project Assistant transport. Resolved lazily once the sidebar is
+  // first opened; until then `transport` is undefined and the chat shows a
+  // connecting state rather than falling back to client-side generation.
+  const {
+    transport: serverTransport,
+    ready: assistantReady,
+    error: assistantError,
+    startFresh,
+  } = useServerAssistantTransport(mcpConfig.projectSlug, isExpanded);
+
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
   // Build system prompt with optional context info.
@@ -320,6 +337,10 @@ When the user asks about "current period", "selected period", "this timeframe", 
     () => ({
       ...mcpConfig,
       variant: "standalone",
+      // Route the conversation through the persistent server-side Project
+      // Assistant when it's resolved. Falls back to Elements' built-in
+      // client-side transport only while connecting (or if resolution failed).
+      transport: serverTransport,
       systemPrompt,
       model: {
         defaultModel: "anthropic/claude-sonnet-4.6",
@@ -354,7 +375,15 @@ When the user asks about "current period", "selected period", "this timeframe", 
         colorScheme: theme === "dark" ? "dark" : "light",
       },
     }),
-    [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
+    [
+      mcpConfig,
+      title,
+      subtitle,
+      suggestions,
+      theme,
+      systemPrompt,
+      serverTransport,
+    ],
   );
 
   // Page-level <InsightsConfig> calls this on every parent re-render and on
@@ -377,6 +406,14 @@ When the user asks about "current period", "selected period", "this timeframe", 
   }, []);
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
+
+  // Start a brand-new Project Assistant conversation: rotate the server-side
+  // correlation id and remount the chat provider (bumping sessionKey) so the
+  // visible thread clears.
+  const handleStartFresh = useCallback(() => {
+    startFresh();
+    setSessionKey((k) => k + 1);
+  }, [startFresh]);
 
   // Global keyboard shortcut: Option+Shift+W (Mac) / Alt+Shift+W (PC) toggles
   // the sidebar. Cmd+W is reserved by the browser (closes the tab before JS
@@ -458,24 +495,43 @@ When the user asks about "current period", "selected period", "this timeframe", 
           <div className="border-border bg-muted/30 flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-2">
               <Sparkles className="text-primary size-5" />
-              <span className="font-semibold">AI Insights</span>
+              <span className="font-semibold">Project Assistant</span>
             </div>
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="hover:bg-muted rounded p-1.5 transition-colors"
-              aria-label="Close AI Insights"
-            >
-              <ChevronRight className="size-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleStartFresh}
+                disabled={!assistantReady}
+                className="hover:bg-muted rounded p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Start a new conversation"
+                title="Start a new conversation"
+              >
+                <SquarePen className="size-[18px]" />
+              </button>
+              <button
+                onClick={() => setIsExpanded(false)}
+                className="hover:bg-muted rounded p-1.5 transition-colors"
+                aria-label="Close Project Assistant"
+              >
+                <ChevronRight className="size-5" />
+              </button>
+            </div>
           </div>
+
+          {/* Notice when the Project Assistant failed to connect */}
+          {assistantError && (
+            <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+              <Terminal className="mt-0.5 size-3.5 shrink-0" />
+              <span>{assistantError}</span>
+            </div>
+          )}
 
           {/* Notice when no toolsets are configured */}
           {noToolsetsConfigured && (
             <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
               <Terminal className="mt-0.5 size-3.5 shrink-0" />
               <span>
-                AI tools are unavailable. Create an MCP server to enable AI
-                Insights.
+                AI tools are unavailable. Create an MCP server to enable the
+                Project Assistant.
               </span>
             </div>
           )}

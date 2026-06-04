@@ -276,8 +276,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // in a way that's accessible from the transport's sendMessages function.
   const currentRemoteIdRef = useRef<string | null>(null);
 
-  // Create chat transport configuration
-  const transport = useMemo<ChatTransport<UIMessage>>(
+  // Create chat transport configuration. This is the built-in client-side
+  // streaming transport; a consumer can override it via config.transport (see
+  // below) to route the conversation through a server-side assistant instead.
+  const defaultTransport = useMemo<ChatTransport<UIMessage>>(
     () => ({
       sendMessages: async ({ messages, abortSignal }) => {
         const usingCustomModel = !!config.languageModel;
@@ -520,6 +522,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       connectionStatus,
     ],
   );
+
+  // A consumer-supplied transport (e.g. a server-side assistant transport)
+  // takes precedence over the built-in client-side one.
+  const transport = config.transport ?? defaultTransport;
 
   const historyEnabled = config.history?.enabled ?? false;
 
