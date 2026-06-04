@@ -36900,6 +36900,7 @@ components:
             - environment:read
             - environment:write
             - risk_policy:evaluate
+            - risk_policy:bypass
         selectors:
           type: array
           items:
@@ -36920,6 +36921,7 @@ components:
               - environment:read
               - environment:write
               - risk_policy:evaluate
+              - risk_policy:bypass
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -40284,6 +40286,7 @@ components:
             - environment:read
             - environment:write
             - risk_policy:evaluate
+            - risk_policy:bypass
         selectors:
           type: array
           items:
@@ -40368,6 +40371,7 @@ components:
             - environment:read
             - environment:write
             - risk_policy:evaluate
+            - risk_policy:bypass
       required:
         - slug
         - description
@@ -40790,6 +40794,9 @@ components:
             - environment
             - risk_policy
             - '*'
+        server_url:
+          type: string
+          description: Server URL filter (risk policy scopes only).
         tool:
           type: string
           description: Specific tool name filter (MCP scopes only).

@@ -40,6 +40,7 @@ export const Scope = {
   EnvironmentRead: "environment:read",
   EnvironmentWrite: "environment:write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
+  RiskPolicyBypass: "risk_policy:bypass",
 } as const;
 /**
  * The scope slug this grant applies to.
