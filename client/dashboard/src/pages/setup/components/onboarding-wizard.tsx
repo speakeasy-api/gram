@@ -27,7 +27,7 @@ const STEPS: Step[] = [
   {
     id: "create-marketplace",
     title: "Create plugin marketplace",
-    description: "Publish observability plugins to GitHub",
+    description: "For distributing servers to your users",
   },
   {
     id: "instrument-agents",
