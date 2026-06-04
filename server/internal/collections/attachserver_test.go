@@ -369,10 +369,12 @@ func TestCollectionsService_AttachServer_RequiresExactlyOneBackend(t *testing.T)
 	requireOopsCode(t, bothErr, oops.CodeBadRequest)
 }
 
-func TestCollectionsService_AttachServer_DetachRequiresExactlyOneBackend(t *testing.T) {
+func TestCollectionsService_DetachServer_RequiresExactlyOneBackend(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestCollectionsService(t)
+	toolset := createMCPEnabledToolset(t, ctx, ti, "Toolset", "")
+	server := createMCPServerWithEndpoint(t, ctx, ti, "Server", "server", mcpservers.VisibilityPrivate, uuid.NullUUID{})
 	collection := createCollection(t, ctx, ti, "Registry", "registry", "com.speakeasy.registry")
 
 	neitherErr := ti.service.DetachServer(ctx, &gen.DetachServerPayload{
@@ -381,6 +383,15 @@ func TestCollectionsService_AttachServer_DetachRequiresExactlyOneBackend(t *test
 		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, neitherErr, oops.CodeBadRequest)
+
+	bothErr := ti.service.DetachServer(ctx, &gen.DetachServerPayload{
+		CollectionID: collection.ID,
+		ToolsetID:    &toolset.ID,
+		McpServerID:  &server.idStr,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, bothErr, oops.CodeBadRequest)
 }
 
 func TestCollectionsService_AttachServer_RejectsDisabledMcpServer(t *testing.T) {
