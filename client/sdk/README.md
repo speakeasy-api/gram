@@ -193,6 +193,7 @@ run();
 
 * [create](docs/sdks/assistants/README.md#create) - createAssistant assistants
 * [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+* [ensureManaged](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 * [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
 * [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
 * [listMessages](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
@@ -665,6 +666,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assistantMemoriesList`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`assistantsCreate`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+- [`assistantsEnsureManaged`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
 - [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`assistantsListMessages`](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
@@ -1042,6 +1044,7 @@ To learn about this feature and how to get started, check
 - [`useDiscoverRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
 - [`useEnableRBACMutation`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`useEnableWebhooksMutation`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+- [`useEnsureManagedAssistantMutation`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features

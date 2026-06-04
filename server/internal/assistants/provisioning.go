@@ -48,9 +48,11 @@ var ErrManagedAssistantNameTaken = errors.New("an assistant with the managed ass
 // managedAssistantName composes a project's managed-assistant display name. The
 // project name is embedded so the per-project assistants stay distinguishable
 // across an organization. project.name is capped at 40 chars and assistants.name
-// at 120, so the composed name always fits.
+// at 120, so the composed name always fits. The user-facing dashboard surfaces
+// (card, sidebar) render the plain "Project Assistant" label; this fuller name
+// is what shows in org-wide / admin assistant listings.
 func managedAssistantName(projectName string) string {
-	return fmt.Sprintf("Speakeasy Assistant for %s", projectName)
+	return fmt.Sprintf("Project Assistant for %s", projectName)
 }
 
 // EnableManagedAssistant turns on the managed assistant for a project: it

@@ -4,6 +4,7 @@
 
 import { assistantsCreate } from "../funcs/assistantsCreate.js";
 import { assistantsDelete } from "../funcs/assistantsDelete.js";
+import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsListMessages } from "../funcs/assistantsListMessages.js";
@@ -46,6 +47,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(assistantsDelete(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * ensureManagedAssistant assistants
+   *
+   * @remarks
+   * Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.
+   */
+  async ensureManaged(
+    request?: operations.EnsureManagedAssistantRequest | undefined,
+    security?: operations.EnsureManagedAssistantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Assistant> {
+    return unwrapAsync(assistantsEnsureManaged(
       this,
       request,
       security,
