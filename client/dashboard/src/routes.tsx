@@ -54,7 +54,7 @@ import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
-import Setup from "./pages/setup/Setup";
+import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
 import CreateCollection from "./pages/collections/CreateCollection";
@@ -850,7 +850,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Setup",
     url: "setup",
     icon: "settings",
-    component: Setup,
+    component: SetupWizard,
     outsideMainLayout: true,
   },
   adminSettings: {
