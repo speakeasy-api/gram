@@ -683,9 +683,11 @@ func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
 // pattern-based recognizers (US_DRIVER_LICENSE in particular) to fabricate
 // matches inside multiline string bodies.
 //
-// Returns text unchanged whenever it does not parse as a single JSON value
-// or whenever YAML encoding fails, so non-JSON payloads continue to flow
-// through to Presidio as-is.
+// Returns text unchanged whenever it does not parse as a JSON value or
+// whenever YAML encoding fails, so non-JSON payloads continue to flow
+// through to Presidio as-is. Any bytes after the first JSON value (mixed
+// prefix-JSON-then-prose inputs) are appended verbatim so Presidio still
+// scans them.
 func reformatJSONAsYAML(text string) string {
 	if text == "" {
 		return text
@@ -707,7 +709,7 @@ func reformatJSONAsYAML(text string) string {
 	if err := enc.Close(); err != nil {
 		return text
 	}
-	return buf.String()
+	return buf.String() + text[dec.InputOffset():]
 }
 
 func jsonValueToYAMLNode(v any) *yaml.Node {

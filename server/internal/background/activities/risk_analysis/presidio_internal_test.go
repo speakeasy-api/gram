@@ -500,6 +500,20 @@ func TestReformatJSONAsYAML_PreservesStructureAndValues(t *testing.T) {
 	assert.Equal(t, map[string]any{"nested": "value"}, roundTrip["f"])
 }
 
+// TestReformatJSONAsYAML_PreservesTrailingBytes guards against
+// json.Decoder.Decode silently discarding bytes after the first JSON value:
+// for mixed prefix-JSON-then-prose inputs we must still hand the trailing
+// portion to Presidio so PII outside the JSON envelope is not dropped.
+func TestReformatJSONAsYAML_PreservesTrailingBytes(t *testing.T) {
+	t.Parallel()
+
+	in := `{"a":1} contact sarah@example.com for details`
+	out := reformatJSONAsYAML(in)
+
+	assert.Contains(t, out, "a: 1", "JSON prefix should still be reformatted as YAML")
+	assert.Contains(t, out, "sarah@example.com", "trailing bytes must survive into the Presidio payload")
+}
+
 // TestReformatJSONAsYAML_SortsMapKeys makes the output deterministic so
 // repeated scans of the same payload produce stable Presidio offsets.
 func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
