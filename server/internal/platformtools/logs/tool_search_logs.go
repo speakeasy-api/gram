@@ -3,13 +3,16 @@ package logs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"reflect"
+
 	"github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
-	"io"
-	"reflect"
 )
 
 type TelemetryService interface {
@@ -111,6 +114,9 @@ func (s *SearchLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 		Sort:             input.Sort,
 	})
 	if err != nil {
+		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {
+			return writeLogsDisabledResponse(wr)
+		}
 		return fmt.Errorf("search logs: %w", err)
 	}
 
@@ -118,5 +124,20 @@ func (s *SearchLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 		return fmt.Errorf("encode response: %w", err)
 	}
 
+	return nil
+}
+
+// writeLogsDisabledResponse encodes a structured response the model can read
+// and surface to the user, complete with the navigation hint to flip logging
+// on in the dashboard.
+func writeLogsDisabledResponse(wr io.Writer) error {
+	body := map[string]string{
+		"error":   "logging_disabled",
+		"message": "Telemetry logging is not enabled for this organization, so the search_logs tool has no data to query.",
+		"hint":    "Tell the user to enable logging from the dashboard: Observe → Logs, then toggle logging on. Once enabled, retry the question.",
+	}
+	if err := json.NewEncoder(wr).Encode(body); err != nil {
+		return fmt.Errorf("encode logs disabled response: %w", err)
+	}
 	return nil
 }

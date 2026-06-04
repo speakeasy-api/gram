@@ -45,7 +45,6 @@ const (
 	sourceKindCron       = bgtriggers.DefinitionSlugCron
 	sourceKindWake       = bgtriggers.DefinitionSlugWake
 	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
-	dashboardRoleUser    = "user"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -1144,7 +1143,11 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("parse trigger instance id: %w", err)
 	}
-	chatID := deterministicChatID(assistant.ID, task.CorrelationID)
+	adapter, err := getSourceAdapter(sourceKind)
+	if err != nil {
+		return EnqueueResult{}, err
+	}
+	chatID := adapter.ChatID(assistant.ID, task.CorrelationID)
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1159,6 +1162,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
+		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
 		Title:          conv.ToPGText(assistant.Name),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
@@ -1190,30 +1194,8 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	// pgx.ErrNoRows means the event was already enqueued by an earlier attempt
 	// (idempotent retry). We still signal: a turn whose earlier coordinator
 	// signal failed must be picked up when the client retries.
-	eventCreated := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("insert assistant thread event: %w", err)
-	}
-
-	// Record the user's turn in the dashboard conversation log, in the same tx
-	// as the event so the log and the processing queue can't diverge. Guarded
-	// by eventCreated so an idempotent retry doesn't duplicate the row.
-	if eventCreated && sourceKind == sourceKindDashboard {
-		var dash dashboardEventPayload
-		if err := json.Unmarshal(normalizedPayloadJSON, &dash); err != nil {
-			return EnqueueResult{}, fmt.Errorf("decode dashboard payload for log: %w", err)
-		}
-		if dash.Text != "" {
-			if _, err := queries.InsertDashboardMessage(ctx, assistantrepo.InsertDashboardMessageParams{
-				ProjectID: assistant.ProjectID,
-				ChatID:    chatID,
-				UserID:    dash.UserID,
-				Role:      dashboardRoleUser,
-				Content:   dash.Text,
-			}); err != nil {
-				return EnqueueResult{}, fmt.Errorf("record dashboard user message: %w", err)
-			}
-		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1227,53 +1209,34 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}, nil
 }
 
-type dashboardMessageRecord struct {
-	ID        uuid.UUID
-	Role      string
-	Content   string
-	Seq       int64
-	CreatedAt time.Time
+// dashboardChatUserID extracts the Gram user id from a dashboard turn payload
+// so UpsertAssistantChat can stamp it on the chats row. External-source turns
+// return empty — their chat rows are owner-less.
+func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
+	if sourceKind != sourceKindDashboard {
+		return ""
+	}
+	var dash dashboardEventPayload
+	if err := json.Unmarshal(normalizedPayloadJSON, &dash); err != nil {
+		return ""
+	}
+	return dash.UserID
 }
 
-// ListDashboardMessages returns a dashboard chat's conversation log in send
-// order, optionally only messages newer than afterSeq, scoped to callerUserID's
-// own messages. The conversation key (correlation id) is client-chosen and not
-// user-namespaced, so a single chat_id can hold more than one user's rows; every
-// read is filtered to the caller so one user can never see another's messages.
-// Returns pgx.ErrNoRows when the caller has no messages in the chat, so a
-// conversation they don't participate in reads the same as one that doesn't
-// exist.
-func (s *ServiceCore) ListDashboardMessages(ctx context.Context, projectID, chatID uuid.UUID, callerUserID string, afterSeq int64) ([]dashboardMessageRecord, error) {
-	q := assistantrepo.New(s.db)
-
-	if _, err := q.CallerOwnsDashboardChat(ctx, assistantrepo.CallerOwnsDashboardChatParams{
+// CheckDashboardChatOwnership returns nil when callerUserID owns the chats row
+// for (projectID, chatID), pgx.ErrNoRows when they don't, and a wrapped error
+// otherwise. Callers gate sendMessage on this so a leaked or guessed chat_id
+// can't be used to inject into another user's conversation.
+func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID, chatID uuid.UUID, callerUserID string) error {
+	_, err := assistantrepo.New(s.db).CallerOwnsDashboardChat(ctx, assistantrepo.CallerOwnsDashboardChatParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
-		UserID:    callerUserID,
-	}); err != nil {
-		return nil, fmt.Errorf("resolve dashboard chat access: %w", err)
-	}
-
-	rows, err := q.ListDashboardMessages(ctx, assistantrepo.ListDashboardMessagesParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-		UserID:    callerUserID,
-		AfterSeq:  afterSeq,
+		UserID:    conv.ToPGText(callerUserID),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list dashboard messages: %w", err)
+		return fmt.Errorf("resolve dashboard chat access: %w", err)
 	}
-	out := make([]dashboardMessageRecord, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, dashboardMessageRecord{
-			ID:        r.ID,
-			Role:      r.Role,
-			Content:   r.Content,
-			Seq:       r.Seq,
-			CreatedAt: r.CreatedAt.Time,
-		})
-	}
-	return out, nil
+	return nil
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
@@ -1890,9 +1853,9 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").Log(ctx, s.logger, logAttrs...)
 	}
 
-	// The managed-assistant platform toolset (carrying the dashboard egress
-	// tool) is granted only to the project's managed assistant, so no other
-	// assistant can deliver into the dashboard conversation log.
+	// The managed-assistant platform toolset is granted only to the project's
+	// managed assistant; tools in it must not be reachable by any other
+	// assistant.
 	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
@@ -1900,7 +1863,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
-		// Project has no managed assistant; dashboard tools stay ungranted.
+		// Project has no managed assistant; managed-only tools stay ungranted.
 	default:
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").Log(ctx, s.logger, logAttrs...)
 	}
@@ -1945,24 +1908,19 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 // bound between refreshes for an idle runtime.
 const assistantRuntimeTokenTTL = 60 * time.Minute
 
-const outputChannelAddendum = `## Output channel
-
-Text responses not delivered to user. To communicate, call a tool (e.g. post Slack message, send email). No suitable tool = user won't see reply.
-
-## MCP authentication
+// mcpAuthAddendum is source-agnostic framing for MCP auth: who may see an
+// AuthURL, when auth events appear, and what each event carries. Per-source
+// delivery mechanics (Slack Block Kit button, dashboard Markdown link, etc.)
+// live in each adapter's OutputChannelGuidance.
+const mcpAuthAddendum = `## MCP authentication
 
 OAuth + MCP auth are owner-only: only owner can sign in and complete flow. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
 Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
 
-- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim via output tool (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID.
+- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners; if the current surface can't reach the owner privately, don't surface the URL — tell the requester (without URL) that owner must complete auth, then stop. The per-surface output preferences below describe how to deliver the URL on this surface.
 
-  Delivery rules — never post AuthURL to public or shared channel readable by non-owners. Pick most private channel available:
-    1. Conversation supports owner-only ephemeral message (single recipient) → send AuthURL there, addressed to owner.
-    2. Else DM the owner. AuthURL expires, so don't paste cold into DM owner hasn't engaged with recently. First ask owner if available to authenticate now; only after they confirm, re-attempt the tool call that required auth to issue a fresh AuthURL, then deliver new AuthURL in same DM.
-    3. Neither ephemeral nor DM possible → don't surface AuthURL; tell requester (without URL) that owner must complete auth, then stop.
-
-- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform user via output tool, include ErrorDescription if present.`
+- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
 func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
@@ -1977,7 +1935,7 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	if base != "" {
 		parts = append(parts, base)
 	}
-	parts = append(parts, outputChannelAddendum)
+	parts = append(parts, mcpAuthAddendum)
 	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
 		parts = append(parts, guidance)
 	}

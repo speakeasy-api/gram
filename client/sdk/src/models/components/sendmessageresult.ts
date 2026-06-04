@@ -18,9 +18,9 @@ export type SendMessageResult = {
    */
   chatId: string;
   /**
-   * The assistant thread the message was enqueued on.
+   * The assistant thread the message was enqueued on, when the ingest produced one.
    */
-  threadId: string;
+  threadId?: string | undefined;
 };
 
 /** @internal */
@@ -31,7 +31,7 @@ export const SendMessageResult$inboundSchema: z.ZodMiniType<
   z.object({
     accepted: z.boolean(),
     chat_id: z.string(),
-    thread_id: z.string(),
+    thread_id: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
