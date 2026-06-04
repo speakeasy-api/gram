@@ -854,6 +854,10 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
   const [rulePendingDelete, setRulePendingDelete] =
     useState<ShadowMCPAccessRule | null>(null);
 
+  useEffect(() => {
+    setRulePendingDelete(null);
+  }, [projectId]);
+
   const ruleDisposition =
     ruleDispositionFilter === "all" ? undefined : ruleDispositionFilter;
   const hasActiveRuleFilter = ruleDispositionFilter !== "all";

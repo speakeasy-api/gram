@@ -1104,6 +1104,93 @@ describe("ApprovalRequestsContent", () => {
     });
   });
 
+  it("resets pending rule deletion when the project changes", async () => {
+    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
+      requests: [],
+    });
+    const listShadowMCPAccessRules = vi
+      .fn()
+      .mockImplementation(({ projectId }: { projectId: string }) => {
+        const rule =
+          projectId === "project-1"
+            ? {
+                id: "rule-project-1",
+                displayName: "Project one rule",
+                resourceType: "shadow_mcp",
+                disposition: "allowed",
+                accessScope: "project",
+                projectId: "project-1",
+                matchBreadth: "url_host",
+                matchValue: "one.example.com",
+                updatedAt: new Date("2026-01-01"),
+              }
+            : {
+                id: "rule-project-2",
+                displayName: "Project two rule",
+                resourceType: "shadow_mcp",
+                disposition: "allowed",
+                accessScope: "project",
+                projectId: "project-2",
+                matchBreadth: "url_host",
+                matchValue: "two.example.com",
+                updatedAt: new Date("2026-01-01"),
+              };
+
+        return Promise.resolve({ rules: [rule] });
+      });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    const queryClient = new QueryClient();
+    const renderWithProject = (projectId: string) => (
+      <MemoryRouter
+        initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
+      >
+        <Routes>
+          <Route
+            path="/:orgSlug/projects/:projectSlug/approval-requests"
+            element={
+              <QueryClientProvider client={queryClient}>
+                <ApprovalRequestsContent projectId={projectId} />
+              </QueryClientProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const view = render(renderWithProject("project-1"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Project one rule")).toBeTruthy();
+    });
+    const deleteRuleRow = screen.getByText("Project one rule").closest("tr");
+    if (!deleteRuleRow) throw new Error("Rule row not found");
+    fireEvent.click(
+      within(deleteRuleRow).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeTruthy();
+    });
+
+    view.rerender(renderWithProject("project-2"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
   it("renders a filtered empty state when a rule filter has no matches", async () => {
     const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
       requests: [],
