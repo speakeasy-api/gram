@@ -79,8 +79,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   {
     id: "claude-cowork",
     name: "Claude Cowork",
-    description:
-      "Team Claude.ai workspace with admin-managed plugins, billing, and access",
+    description: "Autonomous AI desktop assistant",
     icon: "claude",
     connected: false,
     setupSteps: [
