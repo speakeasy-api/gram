@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Activity, Loader2, PartyPopper } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useVerifyOnboardingHooksSetup } from "@gram/client/react-query";
