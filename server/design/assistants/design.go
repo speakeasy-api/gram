@@ -196,6 +196,28 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listMessages")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAssistantMessages"}`)
 	})
+
+	Method("ensureManagedAssistant", func() {
+		Description("Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Assistant)
+
+		HTTP(func() {
+			POST("/rpc/assistants.ensureManagedAssistant")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "ensureManagedAssistant")
+		Meta("openapi:extension:x-speakeasy-name-override", "ensureManaged")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnsureManagedAssistant", "type": "mutation"}`)
+	})
 })
 
 var CreateAssistantForm = Type("CreateAssistantForm", func() {

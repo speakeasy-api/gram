@@ -90,6 +90,7 @@ export * from "./downloadobservabilityplugin.js";
 export * from "./downloadpluginpackage.js";
 export * from "./enablerbac.js";
 export * from "./enablewebhooks.js";
+export * from "./ensuremanagedassistant.js";
 export * from "./evolvedeployment.js";
 export * from "./exportmcpmetadata.js";
 export * from "./fetchopenapiv3fromurl.js";

@@ -174,6 +174,33 @@ type ListMessagesResponseBody struct {
 	Messages []*DashboardMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
 }
 
+// EnsureManagedAssistantResponseBody is the type of the "assistants" service
+// "ensureManagedAssistant" endpoint HTTP response body.
+type EnsureManagedAssistantResponseBody struct {
+	// The assistant ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID owning the assistant.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The assistant name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The model identifier used by the assistant.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The system instructions for the assistant.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Toolsets available to the assistant.
+	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// Warm runtime TTL in seconds.
+	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
+	// Maximum active warm runtimes for the assistant.
+	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// The assistant status.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Creation timestamp.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Last update timestamp.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // ListAssistantsUnauthorizedResponseBody is the type of the "assistants"
 // service "listAssistants" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1447,6 +1474,196 @@ type ListMessagesUnexpectedResponseBody struct {
 // ListMessagesGatewayErrorResponseBody is the type of the "assistants" service
 // "listMessages" endpoint HTTP response body for the "gateway_error" error.
 type ListMessagesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantUnauthorizedResponseBody is the type of the
+// "assistants" service "ensureManagedAssistant" endpoint HTTP response body
+// for the "unauthorized" error.
+type EnsureManagedAssistantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantForbiddenResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "forbidden" error.
+type EnsureManagedAssistantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantBadRequestResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "bad_request" error.
+type EnsureManagedAssistantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantNotFoundResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "not_found" error.
+type EnsureManagedAssistantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantConflictResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "conflict" error.
+type EnsureManagedAssistantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantUnsupportedMediaResponseBody is the type of the
+// "assistants" service "ensureManagedAssistant" endpoint HTTP response body
+// for the "unsupported_media" error.
+type EnsureManagedAssistantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantInvalidResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "invalid" error.
+type EnsureManagedAssistantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantInvariantViolationResponseBody is the type of the
+// "assistants" service "ensureManagedAssistant" endpoint HTTP response body
+// for the "invariant_violation" error.
+type EnsureManagedAssistantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantUnexpectedResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "unexpected" error.
+type EnsureManagedAssistantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureManagedAssistantGatewayErrorResponseBody is the type of the
+// "assistants" service "ensureManagedAssistant" endpoint HTTP response body
+// for the "gateway_error" error.
+type EnsureManagedAssistantGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2759,6 +2976,183 @@ func NewListMessagesGatewayError(body *ListMessagesGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewEnsureManagedAssistantAssistantOK builds a "assistants" service
+// "ensureManagedAssistant" endpoint result from a HTTP "OK" response.
+func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBody) *types.Assistant {
+	v := &types.Assistant{
+		ID:             *body.ID,
+		ProjectID:      *body.ProjectID,
+		Name:           *body.Name,
+		Model:          *body.Model,
+		Instructions:   *body.Instructions,
+		WarmTTLSeconds: *body.WarmTTLSeconds,
+		MaxConcurrency: *body.MaxConcurrency,
+		Status:         *body.Status,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
+	for i, val := range body.Toolsets {
+		if val == nil {
+			v.Toolsets[i] = nil
+			continue
+		}
+		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantUnauthorized builds a assistants service
+// ensureManagedAssistant endpoint unauthorized error.
+func NewEnsureManagedAssistantUnauthorized(body *EnsureManagedAssistantUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantForbidden builds a assistants service
+// ensureManagedAssistant endpoint forbidden error.
+func NewEnsureManagedAssistantForbidden(body *EnsureManagedAssistantForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantBadRequest builds a assistants service
+// ensureManagedAssistant endpoint bad_request error.
+func NewEnsureManagedAssistantBadRequest(body *EnsureManagedAssistantBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantNotFound builds a assistants service
+// ensureManagedAssistant endpoint not_found error.
+func NewEnsureManagedAssistantNotFound(body *EnsureManagedAssistantNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantConflict builds a assistants service
+// ensureManagedAssistant endpoint conflict error.
+func NewEnsureManagedAssistantConflict(body *EnsureManagedAssistantConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantUnsupportedMedia builds a assistants service
+// ensureManagedAssistant endpoint unsupported_media error.
+func NewEnsureManagedAssistantUnsupportedMedia(body *EnsureManagedAssistantUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantInvalid builds a assistants service
+// ensureManagedAssistant endpoint invalid error.
+func NewEnsureManagedAssistantInvalid(body *EnsureManagedAssistantInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantInvariantViolation builds a assistants service
+// ensureManagedAssistant endpoint invariant_violation error.
+func NewEnsureManagedAssistantInvariantViolation(body *EnsureManagedAssistantInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantUnexpected builds a assistants service
+// ensureManagedAssistant endpoint unexpected error.
+func NewEnsureManagedAssistantUnexpected(body *EnsureManagedAssistantUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureManagedAssistantGatewayError builds a assistants service
+// ensureManagedAssistant endpoint gateway_error error.
+func NewEnsureManagedAssistantGatewayError(body *EnsureManagedAssistantGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListAssistantsResponseBody runs the validations defined on
 // ListAssistantsResponseBody
 func ValidateListAssistantsResponseBody(body *ListAssistantsResponseBody) (err error) {
@@ -2997,6 +3391,69 @@ func ValidateListMessagesResponseBody(body *ListMessagesResponseBody) (err error
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantResponseBody runs the validations defined on
+// EnsureManagedAssistantResponseBody
+func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Model == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
+	}
+	if body.Instructions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
+	}
+	if body.Toolsets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
+	}
+	if body.WarmTTLSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
+	}
+	if body.MaxConcurrency == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	for _, e := range body.Toolsets {
+		if e != nil {
+			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "active" || *body.Status == "paused") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -4660,6 +5117,247 @@ func ValidateListMessagesUnexpectedResponseBody(body *ListMessagesUnexpectedResp
 // ValidateListMessagesGatewayErrorResponseBody runs the validations defined on
 // listMessages_gateway_error_response_body
 func ValidateListMessagesGatewayErrorResponseBody(body *ListMessagesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantUnauthorizedResponseBody runs the validations
+// defined on ensureManagedAssistant_unauthorized_response_body
+func ValidateEnsureManagedAssistantUnauthorizedResponseBody(body *EnsureManagedAssistantUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantForbiddenResponseBody runs the validations
+// defined on ensureManagedAssistant_forbidden_response_body
+func ValidateEnsureManagedAssistantForbiddenResponseBody(body *EnsureManagedAssistantForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantBadRequestResponseBody runs the validations
+// defined on ensureManagedAssistant_bad_request_response_body
+func ValidateEnsureManagedAssistantBadRequestResponseBody(body *EnsureManagedAssistantBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantNotFoundResponseBody runs the validations
+// defined on ensureManagedAssistant_not_found_response_body
+func ValidateEnsureManagedAssistantNotFoundResponseBody(body *EnsureManagedAssistantNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantConflictResponseBody runs the validations
+// defined on ensureManagedAssistant_conflict_response_body
+func ValidateEnsureManagedAssistantConflictResponseBody(body *EnsureManagedAssistantConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantUnsupportedMediaResponseBody runs the
+// validations defined on ensureManagedAssistant_unsupported_media_response_body
+func ValidateEnsureManagedAssistantUnsupportedMediaResponseBody(body *EnsureManagedAssistantUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantInvalidResponseBody runs the validations
+// defined on ensureManagedAssistant_invalid_response_body
+func ValidateEnsureManagedAssistantInvalidResponseBody(body *EnsureManagedAssistantInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantInvariantViolationResponseBody runs the
+// validations defined on
+// ensureManagedAssistant_invariant_violation_response_body
+func ValidateEnsureManagedAssistantInvariantViolationResponseBody(body *EnsureManagedAssistantInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantUnexpectedResponseBody runs the validations
+// defined on ensureManagedAssistant_unexpected_response_body
+func ValidateEnsureManagedAssistantUnexpectedResponseBody(body *EnsureManagedAssistantUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureManagedAssistantGatewayErrorResponseBody runs the validations
+// defined on ensureManagedAssistant_gateway_error_response_body
+func ValidateEnsureManagedAssistantGatewayErrorResponseBody(body *EnsureManagedAssistantGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

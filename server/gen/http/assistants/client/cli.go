@@ -319,3 +319,25 @@ func BuildListMessagesPayload(assistantsListMessagesChatID string, assistantsLis
 
 	return v, nil
 }
+
+// BuildEnsureManagedAssistantPayload builds the payload for the assistants
+// ensureManagedAssistant endpoint from CLI flags.
+func BuildEnsureManagedAssistantPayload(assistantsEnsureManagedAssistantSessionToken string, assistantsEnsureManagedAssistantProjectSlugInput string) (*assistants.EnsureManagedAssistantPayload, error) {
+	var sessionToken *string
+	{
+		if assistantsEnsureManagedAssistantSessionToken != "" {
+			sessionToken = &assistantsEnsureManagedAssistantSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsEnsureManagedAssistantProjectSlugInput != "" {
+			projectSlugInput = &assistantsEnsureManagedAssistantProjectSlugInput
+		}
+	}
+	v := &assistants.EnsureManagedAssistantPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

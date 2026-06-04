@@ -299,6 +299,33 @@ func (s *Service) ListMessages(ctx context.Context, payload *gen.ListMessagesPay
 	return &gen.ListMessagesResult{Messages: messages}, nil
 }
 
+func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManagedAssistantPayload) (*types.Assistant, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	// Provisioning records the creating user, so a user identity is required.
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").Log(ctx, s.logger)
+	}
+
+	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
+	if err != nil {
+		if errors.Is(err, ErrManagedAssistantNameTaken) {
+			return nil, oops.E(oops.CodeConflict, err, "an assistant with the project assistant's name already exists — rename it to enable the built-in assistant").Log(ctx, s.logger)
+		}
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "ensure project assistant")
+	}
+	view, err := toHTTPAssistant(record)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
+	}
+	return view, nil
+}
+
 func (s *Service) Kind() string {
 	return bgtriggers.TargetKindAssistant
 }
