@@ -156,11 +156,6 @@ export function CreateMarketplaceStep({
                 </button>
               </div>
             </div>
-            <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
-              At least one of your organization's users needs to be attached to
-              the repository as a collaborator so that the repository is
-              discoverable by Agent Platforms.
-            </p>
           </div>
         ) : (
           <div className="bg-card border-border rounded-lg border p-4">
@@ -181,6 +176,13 @@ export function CreateMarketplaceStep({
               </div>
             </div>
           </div>
+        )}
+        {isConnected && (
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            At least one of your organization's users needs to be attached to
+            the repository as a collaborator so that the repository is
+            discoverable by Agent Platforms.
+          </p>
         )}
       </div>
 
