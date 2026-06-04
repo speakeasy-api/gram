@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Book, ExternalLink, GitBranch, Loader2, Lock } from "lucide-react";
+import { Book, ExternalLink, GitBranch, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -102,16 +102,25 @@ export function CreateMarketplaceStep({
                       </a>
                     )}
                   </span>
+                  <span className="border-border text-muted-foreground rounded-full border px-2 py-0 text-[10px] font-medium tracking-wider uppercase">
+                    Private
+                  </span>
                 </div>
                 <p className="text-muted-foreground text-sm leading-relaxed">
                   This repo is your team's plugin marketplace. The observability
                   plugins are already inside, and any plugins you build in Gram
-                  later will be published here too. Continue to install them
-                  into your agent platforms.
+                  later will be published here too.
                 </p>
-                <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                  <Lock className="h-3 w-3" />
-                  <span>Private</span>
+                <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                      Marketplace set up
+                    </span>
+                  </span>
                 </div>
               </div>
               <a
@@ -126,7 +135,7 @@ export function CreateMarketplaceStep({
             </div>
           </div>
         ) : (
-          <div className="bg-secondary/50 border-border rounded-lg border p-4">
+          <div className="bg-card border-border rounded-lg border p-4">
             <div className="flex items-start gap-3">
               <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
                 <GitBranch className="text-muted-foreground h-4 w-4" />

@@ -186,7 +186,7 @@ export function ConnectIdpStep({ onSkip }: ConnectIdpStepProps) {
         </div>
 
         {selectedProvider && !generatePortalLink.isPending && (
-          <div className="bg-secondary/50 border-border rounded-lg border p-4">
+          <div className="bg-card border-border rounded-lg border p-4">
             <div className="flex items-start gap-3">
               <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
                 <ExternalLink className="text-muted-foreground h-4 w-4" />

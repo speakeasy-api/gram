@@ -1,33 +1,12 @@
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+
 export function OnboardingFooter() {
   return (
-    <footer className="border-border bg-card flex items-center justify-between border-t px-8 py-4">
-      <div className="flex items-center gap-6">
-        <a
-          href="#"
-          className="text-muted-foreground hover:text-foreground text-sm transition-colors"
-        >
-          Help Center
-        </a>
-        <a
-          href="#"
-          className="text-muted-foreground hover:text-foreground text-sm transition-colors"
-        >
-          Status
-        </a>
-        <a
-          href="#"
-          className="text-muted-foreground hover:text-foreground text-sm transition-colors"
-        >
-          Docs
-        </a>
-        <a
-          href="#"
-          className="text-muted-foreground hover:text-foreground text-sm transition-colors"
-        >
-          Contact Support
-        </a>
+    <footer className="border-border bg-background w-full border-t">
+      <div className="mx-auto flex w-full max-w-5xl items-center justify-between py-4">
+        <ThemeToggle />
+        <span className="text-muted-foreground text-sm">Speakeasy 2026</span>
       </div>
-      <span className="text-muted-foreground text-sm">Speakeasy 2026</span>
     </footer>
   );
 }

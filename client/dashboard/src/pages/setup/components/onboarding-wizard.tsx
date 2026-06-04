@@ -1,5 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
+import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { OnboardingHeader } from "./onboarding-header";
 import { OnboardingFooter } from "./onboarding-footer";
 import { OnboardingStepper, type Step } from "./onboarding-stepper";
@@ -49,18 +51,43 @@ export function SetupWizard() {
 
   const stepSlug = searchParams.get("step");
 
+  // Server-side onboarding signals used to resume at the right step on reload.
+  // `onboardingStatus` covers SSO + DSYNC; `publishStatus` covers the
+  // marketplace step. Steps after marketplace (instrument-agents,
+  // confirm-traffic) have no server signal — once marketplace is published we
+  // land on instrument-agents and let the user click forward.
+  const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
+    useOnboardingStatus();
+  const { data: publishStatus, isLoading: isPublishStatusLoading } =
+    usePublishStatus();
+  const statusLoading = isOnboardingStatusLoading || isPublishStatusLoading;
+
   useEffect(() => {
-    if (!stepSlug) {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set("step", STEPS[0].id);
-          return next;
-        },
-        { replace: true },
-      );
+    if (stepSlug) return;
+    if (statusLoading) return; // wait so we don't flash step 0 then jump
+    let resumeStep = 0;
+    if (publishStatus?.connected) {
+      resumeStep = 3; // marketplace done → instrument-agents
+    } else if (onboardingStatus?.dsyncConfigured) {
+      resumeStep = 2; // dsync done → create-marketplace
+    } else if (onboardingStatus?.ssoConfigured) {
+      resumeStep = 1; // sso done → directory-sync
     }
-  }, [stepSlug, setSearchParams]);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("step", STEPS[resumeStep].id);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [
+    stepSlug,
+    statusLoading,
+    onboardingStatus,
+    publishStatus,
+    setSearchParams,
+  ]);
 
   const requestedStep = stepSlug
     ? Math.max(
@@ -109,13 +136,17 @@ export function SetupWizard() {
     }
   }, [currentStep, setCurrentStep]);
 
-  const handleRestart = () => {
-    setCurrentStep(0);
-  };
-
   const handleLeave = () => {
     navigate(`/${orgSlug}`);
   };
+
+  // While we're still figuring out where to resume (no slug + queries in
+  // flight), render nothing rather than briefly mounting step 0. The
+  // resume-step useEffect above will set the slug as soon as the queries
+  // resolve.
+  if (!stepSlug && statusLoading) {
+    return null;
+  }
 
   const renderStep = () => {
     switch (currentStep) {
@@ -153,7 +184,7 @@ export function SetupWizard() {
 
   return (
     <div className="bg-background flex min-h-screen flex-col">
-      <OnboardingHeader onRestart={handleRestart} onLeave={handleLeave} />
+      <OnboardingHeader onLeave={handleLeave} />
 
       <main className="flex flex-1 items-start justify-center px-8 py-16">
         <div className="flex w-full max-w-5xl gap-24">
