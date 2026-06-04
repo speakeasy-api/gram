@@ -1,1 +1,0 @@
-../../plugin-claude/hooks/send_session_start.sh

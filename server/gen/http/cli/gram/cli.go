@@ -82,7 +82,7 @@ func UsageCommands() []string {
 		"ai-integrations (get-config|upsert-config|delete-config)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
-		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message)",
+		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|list-messages)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|delete-chat|submit-feedback)",
@@ -104,7 +104,7 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server)",
@@ -474,6 +474,12 @@ func ParseEndpoint(
 		assistantsSendMessageBodyFlag             = assistantsSendMessageFlags.String("body", "REQUIRED", "")
 		assistantsSendMessageSessionTokenFlag     = assistantsSendMessageFlags.String("session-token", "", "")
 		assistantsSendMessageProjectSlugInputFlag = assistantsSendMessageFlags.String("project-slug-input", "", "")
+
+		assistantsListMessagesFlags                = flag.NewFlagSet("list-messages", flag.ExitOnError)
+		assistantsListMessagesChatIDFlag           = assistantsListMessagesFlags.String("chat-id", "REQUIRED", "")
+		assistantsListMessagesAfterSeqFlag         = assistantsListMessagesFlags.String("after-seq", "", "")
+		assistantsListMessagesSessionTokenFlag     = assistantsListMessagesFlags.String("session-token", "", "")
+		assistantsListMessagesProjectSlugInputFlag = assistantsListMessagesFlags.String("project-slug-input", "", "")
 
 		auditlogsFlags = flag.NewFlagSet("auditlogs", flag.ContinueOnError)
 
@@ -1121,6 +1127,15 @@ func ParseEndpoint(
 		pluginsPublishPluginsBodyFlag             = pluginsPublishPluginsFlags.String("body", "REQUIRED", "")
 		pluginsPublishPluginsSessionTokenFlag     = pluginsPublishPluginsFlags.String("session-token", "", "")
 		pluginsPublishPluginsProjectSlugInputFlag = pluginsPublishPluginsFlags.String("project-slug-input", "", "")
+
+		pluginsGetMarketplaceSettingsFlags                = flag.NewFlagSet("get-marketplace-settings", flag.ExitOnError)
+		pluginsGetMarketplaceSettingsSessionTokenFlag     = pluginsGetMarketplaceSettingsFlags.String("session-token", "", "")
+		pluginsGetMarketplaceSettingsProjectSlugInputFlag = pluginsGetMarketplaceSettingsFlags.String("project-slug-input", "", "")
+
+		pluginsUpdateMarketplaceSettingsFlags                = flag.NewFlagSet("update-marketplace-settings", flag.ExitOnError)
+		pluginsUpdateMarketplaceSettingsBodyFlag             = pluginsUpdateMarketplaceSettingsFlags.String("body", "REQUIRED", "")
+		pluginsUpdateMarketplaceSettingsSessionTokenFlag     = pluginsUpdateMarketplaceSettingsFlags.String("session-token", "", "")
+		pluginsUpdateMarketplaceSettingsProjectSlugInputFlag = pluginsUpdateMarketplaceSettingsFlags.String("project-slug-input", "", "")
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
@@ -2047,6 +2062,7 @@ func ParseEndpoint(
 	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
 	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
 	assistantsSendMessageFlags.Usage = assistantsSendMessageUsage
+	assistantsListMessagesFlags.Usage = assistantsListMessagesUsage
 
 	auditlogsFlags.Usage = auditlogsUsage
 	auditlogsListFlags.Usage = auditlogsListUsage
@@ -2208,6 +2224,8 @@ func ParseEndpoint(
 	pluginsDownloadCodexInstallScriptFlags.Usage = pluginsDownloadCodexInstallScriptUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
+	pluginsGetMarketplaceSettingsFlags.Usage = pluginsGetMarketplaceSettingsUsage
+	pluginsUpdateMarketplaceSettingsFlags.Usage = pluginsUpdateMarketplaceSettingsUsage
 
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
@@ -2731,6 +2749,9 @@ func ParseEndpoint(
 			case "send-message":
 				epf = assistantsSendMessageFlags
 
+			case "list-messages":
+				epf = assistantsListMessagesFlags
+
 			}
 
 		case "auditlogs":
@@ -3169,6 +3190,12 @@ func ParseEndpoint(
 
 			case "publish-plugins":
 				epf = pluginsPublishPluginsFlags
+
+			case "get-marketplace-settings":
+				epf = pluginsGetMarketplaceSettingsFlags
+
+			case "update-marketplace-settings":
+				epf = pluginsUpdateMarketplaceSettingsFlags
 
 			}
 
@@ -3907,6 +3934,9 @@ func ParseEndpoint(
 			case "send-message":
 				endpoint = c.SendMessage()
 				data, err = assistantsc.BuildSendMessagePayload(*assistantsSendMessageBodyFlag, *assistantsSendMessageSessionTokenFlag, *assistantsSendMessageProjectSlugInputFlag)
+			case "list-messages":
+				endpoint = c.ListMessages()
+				data, err = assistantsc.BuildListMessagesPayload(*assistantsListMessagesChatIDFlag, *assistantsListMessagesAfterSeqFlag, *assistantsListMessagesSessionTokenFlag, *assistantsListMessagesProjectSlugInputFlag)
 			}
 		case "auditlogs":
 			c := auditlogsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4346,6 +4376,12 @@ func ParseEndpoint(
 			case "publish-plugins":
 				endpoint = c.PublishPlugins()
 				data, err = pluginsc.BuildPublishPluginsPayload(*pluginsPublishPluginsBodyFlag, *pluginsPublishPluginsSessionTokenFlag, *pluginsPublishPluginsProjectSlugInputFlag)
+			case "get-marketplace-settings":
+				endpoint = c.GetMarketplaceSettings()
+				data, err = pluginsc.BuildGetMarketplaceSettingsPayload(*pluginsGetMarketplaceSettingsSessionTokenFlag, *pluginsGetMarketplaceSettingsProjectSlugInputFlag)
+			case "update-marketplace-settings":
+				endpoint = c.UpdateMarketplaceSettings()
+				data, err = pluginsc.BuildUpdateMarketplaceSettingsPayload(*pluginsUpdateMarketplaceSettingsBodyFlag, *pluginsUpdateMarketplaceSettingsSessionTokenFlag, *pluginsUpdateMarketplaceSettingsProjectSlugInputFlag)
 			}
 		case "features":
 			c := featuresc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6177,6 +6213,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
 	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.`)
+	fmt.Fprintln(os.Stderr, `    list-messages: List a dashboard conversation log for a chat (the user's messages and the assistant's delivered replies). Only the user who owns the conversation may read it. Poll with after_seq to fetch only newer messages.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s assistants COMMAND --help\n", os.Args[0])
@@ -6309,6 +6346,30 @@ func assistantsSendMessageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants send-message --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"correlation_id\": \"aa\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsListMessagesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants list-messages", os.Args[0])
+	fmt.Fprint(os.Stderr, " -chat-id STRING")
+	fmt.Fprint(os.Stderr, " -after-seq INT64")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List a dashboard conversation log for a chat (the user's messages and the assistant's delivered replies). Only the user who owns the conversation may read it. Poll with after_seq to fetch only newer messages.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -chat-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -after-seq INT64: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants list-messages --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --after-seq 1 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // auditlogsUsage displays the usage of the auditlogs command and its
@@ -7754,7 +7815,7 @@ func hooksClaudeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\"")
 }
 
 func hooksCursorUsage() {
@@ -8941,6 +9002,8 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    download-codex-install-script: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
+	fmt.Fprintln(os.Stderr, `    get-marketplace-settings: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.`)
+	fmt.Fprintln(os.Stderr, `    update-marketplace-settings: Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s plugins COMMAND --help\n", os.Args[0])
@@ -9249,6 +9312,48 @@ func pluginsPublishPluginsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --body '{\n      \"github_usernames\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsGetMarketplaceSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-marketplace-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-marketplace-settings --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsUpdateMarketplaceSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins update-marketplace-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-marketplace-settings --body '{\n      \"marketplace_name\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.
@@ -10295,7 +10400,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -10387,7 +10492,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {

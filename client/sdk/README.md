@@ -195,6 +195,7 @@ run();
 * [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 * [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
 * [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
+* [listMessages](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
 * [sendMessage](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 * [update](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 
@@ -385,12 +386,14 @@ run();
 * [downloadCodexInstallScript](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 * [downloadObservabilityPlugin](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+* [getMarketplaceSettings](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 * [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 * [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 * [publishPlugins](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 * [removePluginServer](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 * [setPluginAssignments](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
+* [updateMarketplaceSettings](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 * [updatePlugin](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 * [updatePluginServer](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 
@@ -664,6 +667,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
 - [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
+- [`assistantsListMessages`](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
 - [`assistantsSendMessage`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 - [`assistantsUpdate`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`auditlogsList`](docs/sdks/auditlogs/README.md#list) - list auditlogs
@@ -782,12 +786,14 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`pluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+- [`pluginsGetMarketplaceSettings`](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 - [`pluginsPublishPlugins`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 - [`pluginsRemovePluginServer`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`pluginsSetPluginAssignments`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
+- [`pluginsUpdateMarketplaceSettings`](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 - [`pluginsUpdatePlugin`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`pluginsUpdatePluginServer`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
@@ -1076,6 +1082,7 @@ To learn about this feature and how to get started, check
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
+- [`useListAssistantMessages`](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
@@ -1099,6 +1106,7 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useMarketplaceSettings`](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 - [`useMcpEndpoints`](docs/sdks/mcpendpoints/README.md#list) - listMcpEndpoints mcpEndpoints
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
@@ -1206,6 +1214,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+- [`useUpdateMarketplaceSettingsMutation`](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 - [`useUpdateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
 - [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`useUpdateMemberRolesMutation`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access

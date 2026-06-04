@@ -33,6 +33,7 @@ import {
   Loader2,
   Mail,
   ShieldCheck,
+  Webhook,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -335,6 +336,21 @@ function ProductFeaturesTab() {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.AuthzChallengeLogging
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="Webhooks"
+        description="Unlocks the Webhooks page for this organization (Svix-backed event delivery). While disabled, members see the preview gate."
+        icon={Webhook}
+        featureName={FeatureName.Webhooks}
+        enabled={features.webhooks}
+        isPending={isPending && pendingFeature === FeatureName.Webhooks}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.Webhooks
             ? mutError?.message
             : undefined
         }

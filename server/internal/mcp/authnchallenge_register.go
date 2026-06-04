@@ -61,7 +61,8 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
-	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
 	if err != nil {
 		return err
 	}
@@ -143,6 +144,12 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	logger.InfoContext(ctx, "user session client registered",
 		attr.SlogOAuthClientID(clientID),
 		attr.SlogOAuthClientName(req.ClientName),
+		attr.SlogToolsetMCPSlug(endpoint.Slug),
+		attr.SlogOAuthRegisteredAuthMethod(req.TokenEndpointAuthMethod),
+		attr.SlogOAuthClientSecretGenerated(clientSecretHash.Valid),
+		attr.SlogOAuthRedirectURICount(len(req.RedirectURIs)),
+		attr.SlogURLOriginal(r.URL.Path),
+		attr.SlogHTTPRequestHeaderUserAgent(r.UserAgent()),
 	)
 
 	// Confidential clients get client_secret + client_secret_expires_at=0

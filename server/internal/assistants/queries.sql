@@ -85,6 +85,52 @@ WHERE project_id = @project_id
   AND correlation_id = @correlation_id
   AND deleted IS FALSE;
 
+-- name: GetDashboardThreadTarget :one
+-- Resolves where a dashboard egress reply goes: the thread's chat id (the log
+-- key) and the conversation's owner user id (stamped on every log row). The
+-- egress tool knows only its thread id, from the assistant principal.
+SELECT chat_id, COALESCE(source_ref_json->>'user_id', '')::TEXT AS user_id
+FROM assistant_threads
+WHERE id = @thread_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: InsertDashboardMessage :one
+-- Appends a message to a dashboard assistant chat's conversation log. role is
+-- 'user' (recorded at ingest) or 'assistant' (written by the egress tool).
+-- user_id is the conversation owner, stamped on every row so reads scope to it.
+INSERT INTO assistant_dashboard_messages (project_id, chat_id, user_id, role, content)
+VALUES (@project_id, @chat_id, @user_id, @role, @content)
+RETURNING id, seq, created_at;
+
+-- name: ListDashboardMessages :many
+-- Reads a dashboard chat's conversation log in send order, optionally only
+-- messages newer than a cursor (after_seq) for incremental polling. Scoped to
+-- the caller's own rows: chat_id is a hash of the client-chosen correlation id
+-- and is not user-namespaced, so a single chat_id can hold more than one user's
+-- messages — filtering by user_id keeps a reader to their own conversation.
+SELECT id, chat_id, role, content, seq, created_at
+FROM assistant_dashboard_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id
+  AND user_id = @user_id
+  AND seq > @after_seq
+ORDER BY seq;
+
+-- name: CallerOwnsDashboardChat :one
+-- Read gate for a dashboard conversation: returns a row only when the caller has
+-- at least one message in the chat. The conversation key (correlation id) is
+-- client-chosen and not user-namespaced, so a chat_id can hold rows for more
+-- than one user; scoping by user_id keeps each caller to their own conversation.
+-- No row means the caller has nothing here (chat doesn't exist for them), which
+-- the handler surfaces as not-found so existence isn't disclosed.
+SELECT 1 AS ok
+FROM assistant_dashboard_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id
+  AND user_id = @user_id
+LIMIT 1;
+
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
 FROM toolsets

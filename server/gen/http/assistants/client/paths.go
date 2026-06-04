@@ -36,3 +36,8 @@ func DeleteAssistantAssistantsPath() string {
 func SendMessageAssistantsPath() string {
 	return "/rpc/assistants.sendMessage"
 }
+
+// ListMessagesAssistantsPath returns the URL path to the assistants service listMessages HTTP endpoint.
+func ListMessagesAssistantsPath() string {
+	return "/rpc/assistants.listMessages"
+}

@@ -30,6 +30,10 @@ type Service interface {
 	// Send a message from the dashboard to an assistant as the calling user. The
 	// reply is delivered asynchronously; poll the returned chat to read it.
 	SendMessage(context.Context, *SendMessagePayload) (res *SendMessageResult, err error)
+	// List a dashboard conversation log for a chat (the user's messages and the
+	// assistant's delivered replies). Only the user who owns the conversation may
+	// read it. Poll with after_seq to fetch only newer messages.
+	ListMessages(context.Context, *ListMessagesPayload) (res *ListMessagesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -52,7 +56,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage"}
+var MethodNames = [7]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "listMessages"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -73,6 +77,20 @@ type CreateAssistantPayload struct {
 	MaxConcurrency *int
 	// Optional initial status.
 	Status *string
+}
+
+type DashboardMessage struct {
+	// Message id.
+	ID string
+	// Message author.
+	Role string
+	// Message content (Markdown).
+	Content string
+	// Monotonic cursor; pass the latest value as after_seq to poll for newer
+	// messages.
+	Seq int64
+	// RFC3339 creation timestamp.
+	CreatedAt string
 }
 
 // DeleteAssistantPayload is the payload type of the assistants service
@@ -105,6 +123,24 @@ type ListAssistantsPayload struct {
 type ListAssistantsResult struct {
 	// Assistants for the current project.
 	Assistants []*types.Assistant
+}
+
+// ListMessagesPayload is the payload type of the assistants service
+// listMessages method.
+type ListMessagesPayload struct {
+	// The chat id returned by sendMessage.
+	ChatID string
+	// Return only messages with seq greater than this; omit or 0 for the full log.
+	AfterSeq         *int64
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListMessagesResult is the result type of the assistants service listMessages
+// method.
+type ListMessagesResult struct {
+	// Conversation log in send order.
+	Messages []*DashboardMessage
 }
 
 // SendMessagePayload is the payload type of the assistants service sendMessage

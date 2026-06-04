@@ -3,6 +3,11 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -53,8 +58,10 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
+  POLICY_MESSAGE_TYPE_META,
   type RuleCategory,
   type PolicyAction,
+  type PolicyMessageType,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
@@ -97,6 +104,10 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
 ]);
+
+const ALL_POLICY_MESSAGE_TYPES = Object.keys(
+  POLICY_MESSAGE_TYPE_META,
+) as Array<PolicyMessageType>;
 
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
@@ -187,6 +198,48 @@ function sourcesToCategories(
   return [...policyToCategories(sources, presidioEntities)];
 }
 
+function policyMessageTypesForForm(
+  messageTypes?: string[],
+): Set<PolicyMessageType> {
+  if (!messageTypes?.length) {
+    return new Set(ALL_POLICY_MESSAGE_TYPES);
+  }
+
+  return new Set(
+    messageTypes.filter((type): type is PolicyMessageType =>
+      ALL_POLICY_MESSAGE_TYPES.includes(type as PolicyMessageType),
+    ),
+  );
+}
+
+function policyMessageTypesForPayload(
+  selectedMessageTypes: Set<PolicyMessageType>,
+): PolicyMessageType[] {
+  const orderedTypes = ALL_POLICY_MESSAGE_TYPES.filter((type) =>
+    selectedMessageTypes.has(type),
+  );
+  if (orderedTypes.length === ALL_POLICY_MESSAGE_TYPES.length) {
+    return [];
+  }
+  return orderedTypes;
+}
+
+function policyMessageTypesForDisplay(
+  messageTypes?: string[],
+): PolicyMessageType[] {
+  return [...policyMessageTypesForForm(messageTypes)];
+}
+
+function messageTypesSummary(
+  selectedMessageTypes: Set<PolicyMessageType>,
+): string {
+  if (selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length) {
+    return "All types";
+  }
+
+  return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
+}
+
 export default function PolicyCenter() {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -213,6 +266,9 @@ function PolicyCenterContent() {
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(new Set<string>());
+  const [selectedMessageTypes, setSelectedMessageTypes] = useState<
+    Set<PolicyMessageType>
+  >(new Set(ALL_POLICY_MESSAGE_TYPES));
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
@@ -249,6 +305,7 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
+    setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
@@ -270,6 +327,7 @@ function PolicyCenterContent() {
     setSelectedCategories(categories);
     setDisabledRules(new Set(policy.disabledRules ?? []));
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
+    setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
@@ -283,6 +341,7 @@ function PolicyCenterContent() {
       promptInjectionRules,
       disabledRules: payloadDisabled,
     } = categoriesToPayload(selectedCategories, disabledRules);
+    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
@@ -299,6 +358,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
+            messageTypes,
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -316,6 +376,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
+            messageTypes,
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -336,6 +397,7 @@ function PolicyCenterContent() {
           id: policy.id,
           name: policy.name,
           enabled,
+          messageTypes: policy.messageTypes ?? [],
         },
       },
     });
@@ -472,7 +534,7 @@ function PolicyCenterContent() {
     {
       key: "sources",
       header: "Categories",
-      width: "3fr",
+      width: "2fr",
       render: (policy) => {
         const categories = sourcesToCategories(
           policy.sources,
@@ -487,6 +549,24 @@ function PolicyCenterContent() {
             {categories.map((cat) => (
               <Badge key={cat} variant="secondary">
                 {RULE_CATEGORY_META[cat].label}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: "messageTypes",
+      header: "Message Types",
+      width: "2.1fr",
+      render: (policy) => {
+        const types = policyMessageTypesForDisplay(policy.messageTypes);
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            {types.map((type) => (
+              <Badge key={type} variant="secondary">
+                {POLICY_MESSAGE_TYPE_META[type].label}
               </Badge>
             ))}
           </div>
@@ -605,6 +685,8 @@ function PolicyCenterContent() {
                 customRules={customRules}
                 selectedCustomRuleIds={selectedCustomRuleIds}
                 setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+                selectedMessageTypes={selectedMessageTypes}
+                setSelectedMessageTypes={setSelectedMessageTypes}
                 formAction={formAction}
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
@@ -618,6 +700,7 @@ function PolicyCenterContent() {
                 onClick={handleSave}
                 disabled={
                   (!formAutoName && !formName.trim()) ||
+                  selectedMessageTypes.size === 0 ||
                   createMutation.isPending ||
                   updateMutation.isPending
                 }
@@ -671,6 +754,8 @@ function PolicySheetBody({
   customRules,
   selectedCustomRuleIds,
   setSelectedCustomRuleIds,
+  selectedMessageTypes,
+  setSelectedMessageTypes,
   formAction,
   setFormAction,
   formAutoName,
@@ -689,6 +774,8 @@ function PolicySheetBody({
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
   selectedCustomRuleIds: Set<string>;
   setSelectedCustomRuleIds: (v: Set<string>) => void;
+  selectedMessageTypes: Set<PolicyMessageType>;
+  setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
@@ -699,6 +786,9 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
   >(null);
+  const [messageTypesOpen, setMessageTypesOpen] = useState(
+    () => selectedMessageTypes.size !== ALL_POLICY_MESSAGE_TYPES.length,
+  );
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
@@ -933,6 +1023,78 @@ function PolicySheetBody({
           }
         />
       )}
+
+      <Collapsible
+        open={messageTypesOpen}
+        onOpenChange={setMessageTypesOpen}
+        className="space-y-3"
+      >
+        <div className="space-y-1">
+          <Label className="text-sm font-medium">Message Types</Label>
+          <p className="text-muted-foreground text-xs">
+            Choose which parts of an agent session this policy scans. Leaving
+            all four selected applies the policy everywhere.
+          </p>
+        </div>
+        <div className="border-border rounded-lg border">
+          <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
+            <ChevronRight
+              className={cn(
+                "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                messageTypesOpen && "rotate-90",
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">
+                {messageTypesSummary(selectedMessageTypes)}
+              </div>
+              <div className="text-muted-foreground text-xs">
+                Advanced: narrow scanning to specific parts of a session
+              </div>
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
+            <div className="divide-border divide-y">
+              {ALL_POLICY_MESSAGE_TYPES.map((type) => {
+                const meta = POLICY_MESSAGE_TYPE_META[type];
+                const checked = selectedMessageTypes.has(type);
+
+                return (
+                  <label
+                    key={type}
+                    className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(next) => {
+                        const updated = new Set(selectedMessageTypes);
+                        if (next) {
+                          updated.add(type);
+                        } else {
+                          updated.delete(type);
+                        }
+                        setSelectedMessageTypes(updated);
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{meta.label}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {meta.description}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </CollapsibleContent>
+        </div>
+        {selectedMessageTypes.size === 0 && (
+          <p className="text-destructive text-xs">
+            Select at least one type. An empty API value means “all types,” so
+            the UI keeps that choice explicit here.
+          </p>
+        )}
+      </Collapsible>
 
       {/* Action */}
       <div className="space-y-2">

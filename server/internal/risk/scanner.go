@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
@@ -26,7 +28,7 @@ import (
 type RiskScanner interface {
 	// ScanForEnforcement scans text against all enabled blocking policies
 	// for the given project. Returns nil if no blocking policy matches.
-	ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string) (*ScanResult, error)
+	ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type) (*ScanResult, error)
 	// LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP
 	// policy for the project whose action is "block". Returns nil when no
 	// such policy exists. Used by hooks to gate the realtime deny path.
@@ -58,6 +60,7 @@ type ScanResult struct {
 	PolicyID    string
 	PolicyName  string
 	Source      string // "gitleaks" or "presidio"
+	MessageType message.Type
 	RuleID      string
 	Description string
 	UserMessage *string // optional override for the rendered block message
@@ -140,7 +143,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}, nil
 }
 
-func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string) (*ScanResult, error) {
+func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type) (*ScanResult, error) {
 	if text == "" {
 		return nil, nil
 	}
@@ -169,8 +172,12 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 	)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range policies {
+		if len(p.MessageTypes) > 0 && !slices.Contains(p.MessageTypes, messageType) {
+			continue
+		}
+
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text)
+			result, scanErr := s.scanPolicy(gctx, p, text, messageType)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -253,7 +260,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string) (*ScanResult, error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type) (*ScanResult, error) {
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
 	for _, source := range policy.Sources {
 		switch source {
@@ -265,6 +272,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 					PolicyID:    policy.ID.String(),
 					PolicyName:  policy.Name,
 					Source:      "gitleaks",
+					MessageType: messageType,
 					RuleID:      findings[0].RuleID,
 					Description: findings[0].Description,
 					UserMessage: conv.FromPGText[string](policy.UserMessage),
@@ -287,6 +295,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 						PolicyID:    policy.ID.String(),
 						PolicyName:  policy.Name,
 						Source:      "presidio",
+						MessageType: messageType,
 						RuleID:      f.RuleID,
 						Description: f.Description,
 						UserMessage: conv.FromPGText[string](policy.UserMessage),
@@ -305,6 +314,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 					PolicyID:    policy.ID.String(),
 					PolicyName:  policy.Name,
 					Source:      ra.SourcePromptInjection,
+					MessageType: messageType,
 					RuleID:      findings[0].RuleID,
 					Description: findings[0].Description,
 					UserMessage: conv.FromPGText[string](policy.UserMessage),
@@ -324,6 +334,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				PolicyID:    policy.ID.String(),
 				PolicyName:  policy.Name,
 				Source:      ra.SourceCustom,
+				MessageType: messageType,
 				RuleID:      findings[0].RuleID,
 				Description: findings[0].Description,
 				UserMessage: conv.FromPGText[string](policy.UserMessage),

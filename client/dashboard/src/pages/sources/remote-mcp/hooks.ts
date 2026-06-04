@@ -1,5 +1,6 @@
-import { useSdkClient } from "@/contexts/Sdk";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
+import { randomSlugSuffix } from "@/lib/slug";
 import type {
   McpServer,
   RemoteMcpServer,
@@ -14,6 +15,42 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+type SdkClient = ReturnType<typeof useSdkClient>;
+
+const DEFAULT_ENDPOINT_FAILED_MESSAGE =
+  "MCP server created, but the default endpoint failed. Add one from the server page.";
+
+// Auto-provisions a default platform MCP endpoint for a freshly created
+// mcp_server backed by a remote source, so the user doesn't have to create one
+// by hand afterwards. Platform endpoint slugs (no custom domain) must be
+// prefixed with the org slug; a short random suffix keeps them unique.
+//
+// Best-effort: a failure here leaves the source intact and only surfaces a
+// warning. The endpoint is a convenience and can always be added later from
+// the server detail page, so it should never roll back the source.
+async function createDefaultMcpEndpoint(
+  client: SdkClient,
+  mcpServer: McpServer,
+  orgSlug: string | undefined,
+): Promise<void> {
+  if (!orgSlug) {
+    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+    return;
+  }
+
+  try {
+    await client.mcpEndpoints.create({
+      createMcpEndpointForm: {
+        mcpServerId: mcpServer.id,
+        slug: `${orgSlug}-${randomSlugSuffix()}`,
+      },
+    });
+  } catch {
+    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+  }
+}
 
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
@@ -32,6 +69,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
 > {
   const client = useSdkClient();
   const queryClient = useQueryClient();
+  const { orgSlug } = useSlugs();
 
   return useMutation({
     mutationFn: async ({ name, url }) => {
@@ -75,6 +113,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
+      // Pre-stage a default endpoint so the user doesn't have to create one
+      // before the server can serve. Best-effort: never rolls back the source.
+      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+
       return { remoteMcpServer, mcpServer };
     },
     onSuccess: async () => {
@@ -84,6 +126,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       await Promise.all([
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
       ]);
     },
   });
@@ -105,19 +148,26 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
 > {
   const client = useSdkClient();
   const queryClient = useQueryClient();
+  const { orgSlug } = useSlugs();
 
   return useMutation({
     mutationFn: async ({ remoteMcpServer }) => {
-      await client.mcpServers.create({
+      const mcpServer = await client.mcpServers.create({
         createMcpServerForm: {
           name: formatRemoteMcpDisplay(remoteMcpServer),
           remoteMcpServerId: remoteMcpServer.id,
           visibility: "disabled",
         },
       });
+
+      // Mirror the create flow: pre-stage a default endpoint. Best-effort.
+      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
     },
     onSuccess: async () => {
-      await invalidateAllMcpServers(queryClient, { refetchType: "all" });
+      await Promise.all([
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+      ]);
     },
   });
 }

@@ -16,7 +16,7 @@ import "github.com/speakeasy-api/gram/server/internal/conv"
 // MarketplaceName is the marketplace.json "name" for an org's published
 // marketplace.
 func MarketplaceName(orgName string) string {
-	return conv.ToSlug(orgName) + "-gram"
+	return conv.ToSlug(orgName) + "-speakeasy"
 }
 
 // ObservabilitySlug is the slug of the always-required observability plugin

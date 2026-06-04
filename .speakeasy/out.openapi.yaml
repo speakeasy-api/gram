@@ -4683,6 +4683,113 @@ paths:
       tags:
         - assistants
       x-speakeasy-name-override: list
+  /rpc/assistants.listMessages:
+    get:
+      description: List a dashboard conversation log for a chat (the user's messages and the assistant's delivered replies). Only the user who owns the conversation may read it. Poll with after_seq to fetch only newer messages.
+      operationId: listAssistantMessages
+      parameters:
+        - allowEmptyValue: true
+          description: The chat id returned by sendMessage.
+          in: query
+          name: chat_id
+          required: true
+          schema:
+            description: The chat id returned by sendMessage.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Return only messages with seq greater than this; omit or 0 for the full log.
+          in: query
+          name: after_seq
+          schema:
+            description: Return only messages with seq greater than this; omit or 0 for the full log.
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMessagesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listMessages assistants
+      tags:
+        - assistants
+      x-speakeasy-name-override: listMessages
+      x-speakeasy-react-hook:
+        name: ListAssistantMessages
   /rpc/assistants.sendMessage:
     post:
       description: Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.
@@ -16036,6 +16143,96 @@ paths:
       tags:
         - plugins
       x-speakeasy-name-override: downloadPluginPackage
+  /rpc/plugins.getMarketplaceSettings:
+    get:
+      description: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
+      operationId: getMarketplaceSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceSettingsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getMarketplaceSettings plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: getMarketplaceSettings
+      x-speakeasy-react-hook:
+        name: MarketplaceSettings
   /rpc/plugins.getPlugin:
     get:
       description: Get a plugin with its servers and assignments.
@@ -16607,6 +16804,102 @@ paths:
       x-speakeasy-name-override: setPluginAssignments
       x-speakeasy-react-hook:
         name: SetPluginAssignments
+  /rpc/plugins.updateMarketplaceSettings:
+    post:
+      description: Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.
+      operationId: updateMarketplaceSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMarketplaceSettingsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMarketplaceSettingsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: updateMarketplaceSettings plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: updateMarketplaceSettings
+      x-speakeasy-react-hook:
+        name: UpdateMarketplaceSettings
   /rpc/plugins.updatePlugin:
     put:
       description: Update plugin metadata.
@@ -32166,6 +32459,7 @@ components:
           description: The type of hook event
           enum:
             - SessionStart
+            - ConfigChange
             - PreToolUse
             - PostToolUse
             - PostToolUseFailure
@@ -33013,6 +33307,11 @@ components:
         enabled:
           type: boolean
           description: Whether the policy is active.
+        message_types:
+          type: array
+          items:
+            type: string
+          description: Message types this policy applies to. When empty or omitted, the policy scans all supported types.
         name:
           type: string
           description: The policy name. If omitted, a name will be auto-generated.
@@ -33555,6 +33854,36 @@ components:
         - project_name
         - project_slug
         - mcp_server_id
+    DashboardMessage:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Message content (Markdown).
+        created_at:
+          type: string
+          description: RFC3339 creation timestamp.
+          format: date-time
+        id:
+          type: string
+          description: Message id.
+          format: uuid
+        role:
+          type: string
+          description: Message author.
+          enum:
+            - user
+            - assistant
+        seq:
+          type: integer
+          description: Monotonic cursor; pass the latest value as after_seq to poll for newer messages.
+          format: int64
+      required:
+        - id
+        - role
+        - content
+        - seq
+        - created_at
     DeleteAIIntegrationConfigRequest:
       type: object
       properties:
@@ -36263,6 +36592,16 @@ components:
           description: The members in your organization.
       required:
         - members
+    ListMessagesResult:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardMessage'
+          description: Conversation log in send order.
+      required:
+        - messages
     ListPackagesResult:
       type: object
       properties:
@@ -36819,6 +37158,21 @@ components:
         - id
         - name
         - url
+    MarketplaceSettingsResult:
+      type: object
+      properties:
+        default_name:
+          type: string
+          description: The default marketplace name used when no override is configured.
+        effective_name:
+          type: string
+          description: The marketplace name that will be used at publish time (override if set, otherwise default).
+        marketplace_name:
+          type: string
+          description: User-provided override for the marketplace name. Absent when no override is configured.
+      required:
+        - default_name
+        - effective_name
     McpEndpoint:
       type: object
       properties:
@@ -39455,6 +39809,11 @@ components:
           type: string
           description: The risk policy ID.
           format: uuid
+        message_types:
+          type: array
+          items:
+            type: string
+          description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.'
         name:
           type: string
           description: The policy name.
@@ -40696,6 +41055,7 @@ components:
             - tool_io_logs
             - session_capture
             - authz_challenge_logging
+            - webhooks
             - sso
             - scim
           maxLength: 60
@@ -42387,6 +42747,23 @@ components:
       required:
         - invitation_id
         - role_id
+    UpdateMarketplaceSettingsRequestBody:
+      type: object
+      properties:
+        marketplace_name:
+          type: string
+          description: Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.
+    UpdateMarketplaceSettingsResult:
+      type: object
+      properties:
+        republished:
+          type: boolean
+          description: Whether the marketplace was automatically republished to GitHub as part of this update.
+        settings:
+          $ref: '#/components/schemas/MarketplaceSettingsResult'
+      required:
+        - settings
+        - republished
     UpdateMcpEndpointForm:
       type: object
       properties:
@@ -42776,6 +43153,11 @@ components:
           type: string
           description: The policy ID.
           format: uuid
+        message_types:
+          type: array
+          items:
+            type: string
+          description: Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
         name:
           type: string
           description: The policy name.

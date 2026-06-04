@@ -197,6 +197,7 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
+  , message_types
   , enabled
   , action
   , auto_name
@@ -213,10 +214,11 @@ VALUES (
   , $7
   , $8
   , COALESCE($9::text[], '{}'::text[])
-  , $10
+  , $10::text[]
   , $11
   , $12
   , $13
+  , $14
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
@@ -232,6 +234,7 @@ type CreateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
+	MessageTypes         []string
 	Enabled              bool
 	Action               string
 	AutoName             bool
@@ -249,6 +252,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
+		arg.MessageTypes,
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,
@@ -411,7 +415,7 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT id, content, tool_calls
+SELECT id, role, content, tool_calls
 FROM chat_messages
 WHERE id = ANY($1::uuid[])
   AND project_id = $2
@@ -424,6 +428,7 @@ type GetMessageContentBatchParams struct {
 
 type GetMessageContentBatchRow struct {
 	ID        uuid.UUID
+	Role      string
 	Content   string
 	ToolCalls []byte
 }
@@ -437,7 +442,12 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 	var items []GetMessageContentBatchRow
 	for rows.Next() {
 		var i GetMessageContentBatchRow
-		if err := rows.Scan(&i.ID, &i.Content, &i.ToolCalls); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1876,24 +1886,26 @@ SET name = $1
   , prompt_injection_rules = $4
   , disabled_rules = $5
   , custom_rule_ids = COALESCE($6::text[], '{}'::text[])
-  , enabled = $7
-  , action = $8
-  , auto_name = $9
-  , user_message = $10
+  , message_types = $7::text[]
+  , enabled = $8
+  , action = $9
+  , auto_name = $10
+  , user_message = $11
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
         OR prompt_injection_rules IS DISTINCT FROM $4
         OR disabled_rules IS DISTINCT FROM $5
         OR custom_rule_ids IS DISTINCT FROM COALESCE($6::text[], '{}'::text[])
-        OR enabled IS DISTINCT FROM $7
-        OR action IS DISTINCT FROM $8
+        OR message_types IS DISTINCT FROM $7::text[]
+        OR enabled IS DISTINCT FROM $8
+        OR action IS DISTINCT FROM $9
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $11
-  AND project_id = $12
+WHERE id = $12
+  AND project_id = $13
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
@@ -1905,6 +1917,7 @@ type UpdateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
+	MessageTypes         []string
 	Enabled              bool
 	Action               string
 	AutoName             bool
@@ -1921,6 +1934,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
+		arg.MessageTypes,
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,

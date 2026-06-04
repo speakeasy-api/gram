@@ -94,6 +94,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					PolicyVersion:        policy.Version,
 					MessageIDs:           batch,
 					Sources:              policy.Sources,
+					MessageTypes:         policy.MessageTypes,
 					PresidioEntities:     policy.PresidioEntities,
 					PromptInjectionRules: policy.PromptInjectionRules,
 					CustomRuleIds:        policy.CustomRuleIds,

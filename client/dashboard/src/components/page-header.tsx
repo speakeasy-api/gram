@@ -4,7 +4,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
 import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
-import { capitalize, cn } from "@/lib/utils.ts";
+import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
@@ -59,24 +59,19 @@ function PageHeaderTitle({
   );
 }
 
+// Static path segments are auto Title-Cased (see `titleCaseSlug`), so this map
+// only needs to hold the exceptions where that produces the wrong text:
+//   - acronyms / non-standard casing (MCP, SDKs, OpenAPI, API)
+//   - lowercased connector words ("from")
+//   - rebrands where the display name differs from the URL segment. `slack` and
+//     `clis` are kept in the URL for backwards compatibility but were renamed.
 const breadcrumbSubstitutions = {
   mcp: "MCP",
   sdks: "SDKs",
   elements: "Chat Elements",
-  "custom-tools": "Custom Tools",
   "add-openapi": "Add OpenAPI",
-  "add-function": "Add Function",
   "add-from-catalog": "Add from Catalog",
-  "agent-sessions": "Agent Sessions",
   "api-keys": "API Keys",
-  "audit-logs": "Audit Logs",
-  "admin-settings": "Admin Settings",
-  "risk-overview": "Risk Overview",
-  "risk-events": "Risk Events",
-  "risk-policies": "Risk Policies",
-  // The URL segments `slack` and `clis` are preserved for backwards
-  // compatibility, but the sidebar/route titles were rebranded — map them
-  // here so breadcrumbs stay in sync with the rest of the UI.
   slack: "Assistants",
   clis: "Skills",
 };
@@ -144,9 +139,10 @@ function PageHeaderBreadcrumbs({
       } else if (subDecoded !== undefined) {
         display = subDecoded;
       } else if (!toPreserve.includes(decoded) && !decoded.includes("@")) {
-        // Only synthesize a Title-Case display for path-segment slugs.
-        // Route params and email-like identifiers keep their original casing.
-        display = capitalize(decoded);
+        // Only synthesize a Title-Case display for the static parts of the
+        // path. Route params (in toPreserve) and email-like identifiers are
+        // dynamic slugs and keep their original casing.
+        display = titleCaseSlug(decoded);
       }
 
       return {

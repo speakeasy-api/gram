@@ -255,9 +255,9 @@ func (wakeAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) 
 }
 
 type dashboardSourceRef struct {
-	// UserID is the Gram dashboard user driving the conversation. It doubles as
-	// the thread correlation id (one continuing conversation per user per
-	// managed assistant), so sidebar history persists across opens.
+	// UserID is the Gram dashboard user driving the conversation (attribution).
+	// The conversation thread is keyed by the caller-supplied correlation id,
+	// not the user id, so a user can start a fresh thread at will.
 	UserID string `json:"user_id"`
 }
 
@@ -275,7 +275,7 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	}
 	var b bytes.Buffer
 	b.WriteString("## Conversation context\n\n")
-	b.WriteString("Conversation originated on: Gram dashboard (AI Insights sidebar)\n")
+	b.WriteString("Conversation originated on: Gram dashboard\n")
 	if ref.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", ref.UserID)
 	}
@@ -285,7 +285,7 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (dashboardAdapter) OutputChannelGuidance() string {
 	return `## Dashboard output preferences
 
-You are answering a Gram user in the AI Insights sidebar of the web dashboard. Reply conversationally and concisely in Markdown — the user reads your response directly in the sidebar. Prefer compact tables and short summaries over long prose; this is an analyst's side panel, not a chat app.`
+You are answering a Gram user in the web dashboard's side panel. Deliver every reply by calling platform_dashboard_send_message — plain text is not shown to the user. Reply conversationally and concisely in Markdown; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.`
 }
 
 func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {

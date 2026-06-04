@@ -184,22 +184,25 @@ export function InsightsAgentsContent() {
     return PRESET_RANGE_LABELS[dateRange] ?? "the selected range";
   }, [customRange, customRangeLabel, dateRange]);
 
-  const { data: membersData, isLoading: membersLoading } = useMembers();
+  const {
+    data: membersData,
+    isLoading: membersLoading,
+    error: membersError,
+  } = useMembers();
   const memberMap = useMemo(
     () => new Map((membersData?.members ?? []).map((m) => [m.id, m])),
     [membersData],
   );
-  const memberIdentifiers = useMemo(() => {
-    const ids = new Set<string>();
-    for (const m of membersData?.members ?? []) {
-      ids.add(m.id);
-      ids.add(m.email.toLowerCase());
-    }
-    return ids;
-  }, [membersData]);
-  const isOrgMember = (userId: string) =>
-    memberIdentifiers.has(userId) ||
-    memberIdentifiers.has(userId.toLowerCase());
+  // Telemetry groups by user_id with a user_email fallback, so match members
+  // on both their ID and email to avoid dropping email-keyed activity.
+  const memberIdentifiers = useMemo(
+    () =>
+      (membersData?.members ?? []).flatMap((m) => [
+        m.id,
+        m.email.toLowerCase(),
+      ]),
+    [membersData],
+  );
 
   const usersQuery = useQuery({
     queryKey: [
@@ -208,8 +211,10 @@ export function InsightsAgentsContent() {
       "users",
       from.toISOString(),
       to.toISOString(),
+      memberIdentifiers,
     ],
-    queryFn: () => fetchAllUsers(client, from, to),
+    queryFn: () => fetchAllUsers(client, from, to, memberIdentifiers),
+    enabled: memberIdentifiers.length > 0,
     throwOnError: false,
   });
 
@@ -252,9 +257,10 @@ export function InsightsAgentsContent() {
       "roleUsage",
       from.toISOString(),
       to.toISOString(),
+      memberIdentifiers,
     ],
-    queryFn: () => fetchRoleUsage(client, from, to),
-    enabled: groupByDimension === "role",
+    queryFn: () => fetchRoleUsage(client, from, to, memberIdentifiers),
+    enabled: groupByDimension === "role" && memberIdentifiers.length > 0,
     throwOnError: false,
   });
 
@@ -273,9 +279,7 @@ export function InsightsAgentsContent() {
 
   const totalTokens = users.reduce((s, u) => s + effectiveTokens(u), 0);
   const totalCost = users.reduce((s, u) => s + u.totalCost, 0);
-  const activeUsers = users.filter(
-    (u) => effectiveTokens(u) > 0 && isOrgMember(u.userId),
-  ).length;
+  const activeUsers = users.filter((u) => effectiveTokens(u) > 0).length;
 
   const clientBreakdown = useMemo(() => {
     const map = new Map<
@@ -416,12 +420,12 @@ export function InsightsAgentsContent() {
     0,
   );
   const filteredActiveUsers = filteredUserRows.filter(
-    (u) => u.totalTokens > 0 && isOrgMember(u.userId),
+    (u) => u.totalTokens > 0,
   ).length;
 
   const isLoading =
     membersLoading || usersQuery.isLoading || projectQuery.isLoading;
-  const error = usersQuery.error ?? projectQuery.error;
+  const error = membersError ?? usersQuery.error ?? projectQuery.error;
 
   const handlePresetChange = (preset: DateRangePreset) => {
     setDateRange(preset);
@@ -1502,6 +1506,7 @@ async function fetchAllUsers(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
+  userIds: string[],
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -1510,7 +1515,7 @@ async function fetchAllUsers(
       telemetrySearchUsers(client, {
         searchUsersPayload: {
           cursor,
-          filter: { from, to },
+          filter: { from, to, userIds },
           limit: 1000,
           sort: "desc",
           userType: "internal",
@@ -1527,11 +1532,12 @@ async function fetchRoleUsage(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
+  userIds: string[],
 ): Promise<RoleSummary[]> {
   const result = await unwrapAsync(
     telemetrySearchUsers(client, {
       searchUsersPayload: {
-        filter: { from, to },
+        filter: { from, to, userIds },
         groupBy: "role",
         limit: 1000,
         sort: "desc",

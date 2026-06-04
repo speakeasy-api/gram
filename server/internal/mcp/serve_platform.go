@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -65,6 +67,10 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeUnauthorized, nil, "no project auth context").Log(ctx, s.logger)
 	}
 
+	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
+		return err
+	}
+
 	bodyBytes, err := io.ReadAll(r.Body)
 	switch {
 	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
@@ -107,6 +113,36 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	if _, writeErr := w.Write(body); writeErr != nil {
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
 	}
+	return nil
+}
+
+// authorizePlatformToolset gates entry to a platform toolset before any work
+// runs. The managed-assistant toolset carries the dashboard egress tool and is
+// reserved for a project's managed assistant; any other assistant token for the
+// project is rejected as if the toolset did not exist, rather than relying on
+// downstream tools to refuse the call.
+func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
+	if slug != platformtools.ManagedAssistantPlatformToolsetSlug {
+		return nil
+	}
+
+	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	if !ok {
+		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
+	managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").Log(ctx, s.logger)
+	}
+
+	if managed.ID != principal.AssistantID {
+		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
 	return nil
 }
 
