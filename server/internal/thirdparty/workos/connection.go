@@ -2,76 +2,98 @@ package workos
 
 import (
 	"context"
-	"fmt"
-	"net/url"
+
+	"github.com/workos/workos-go/v6/pkg/directorysync"
+	"github.com/workos/workos-go/v6/pkg/sso"
 )
 
 // Connection represents a WorkOS SSO connection.
 type Connection struct {
-	ID             string `json:"id"`
-	OrganizationID string `json:"organization_id"`
-	ConnectionType string `json:"connection_type"`
-	Name           string `json:"name"`
-	State          string `json:"state"` // "active", "inactive", "draft"
-	ExternalKey    string `json:"external_key"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
-}
-
-// ListConnectionsResponse is the paginated response from the WorkOS List Connections API.
-type ListConnectionsResponse struct {
-	Data []Connection `json:"data"`
+	ID             string
+	OrganizationID string
+	ConnectionType string
+	Name           string
+	State          string // "active", "inactive", "draft", "validating"
+	CreatedAt      string
+	UpdatedAt      string
 }
 
 // ListConnections fetches SSO connections for an organization from WorkOS.
 // https://workos.com/docs/reference/sso/connection#list-connections
 func (wc *Client) ListConnections(ctx context.Context, organizationID string) ([]Connection, error) {
-	params := url.Values{}
-	params.Set("organization_id", organizationID)
-
-	var out ListConnectionsResponse
-	if err := wc.do(ctx, "GET", "/connections?"+params.Encode(), nil, &out); err != nil {
-		return nil, fmt.Errorf("list connections: %w", err)
+	resp, err := wc.sso.ListConnections(ctx, sso.ListConnectionsOpts{
+		OrganizationID: organizationID,
+		ConnectionType: "",
+		Domain:         "",
+		Limit:          0,
+		Order:          "",
+		Before:         "",
+		After:          "",
+	})
+	if err != nil {
+		return nil, wrapSDKError(err, "list connections")
 	}
 
-	return out.Data, nil
+	out := make([]Connection, 0, len(resp.Data))
+	for _, c := range resp.Data {
+		out = append(out, Connection{
+			ID:             c.ID,
+			OrganizationID: c.OrganizationID,
+			ConnectionType: string(c.ConnectionType),
+			Name:           c.Name,
+			State:          string(c.State),
+			CreatedAt:      c.CreatedAt,
+			UpdatedAt:      c.UpdatedAt,
+		})
+	}
+	return out, nil
 }
 
 // Directory represents a WorkOS Directory Sync directory.
 type Directory struct {
-	ID             string `json:"id"`
-	OrganizationID string `json:"organization_id"`
-	Type           string `json:"type"`
-	Name           string `json:"name"`
-	State          string `json:"state"` // "linked", "unlinked", "deleting"
-	ExternalKey    string `json:"external_key"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
-}
-
-// ListDirectoriesResponse is the paginated response from the WorkOS List Directories API.
-type ListDirectoriesResponse struct {
-	Data []Directory `json:"data"`
+	ID             string
+	OrganizationID string
+	Type           string
+	Name           string
+	State          string // "linked", "unlinked", "invalid_credentials"
+	CreatedAt      string
+	UpdatedAt      string
 }
 
 // ListDirectories fetches directory sync directories for an organization from WorkOS.
 // https://workos.com/docs/reference/directory-sync/directory#list-directories
 func (wc *Client) ListDirectories(ctx context.Context, organizationID string) ([]Directory, error) {
-	params := url.Values{}
-	params.Set("organization_id", organizationID)
-
-	var out ListDirectoriesResponse
-	if err := wc.do(ctx, "GET", "/directory_sync/directories?"+params.Encode(), nil, &out); err != nil {
-		return nil, fmt.Errorf("list directories: %w", err)
+	resp, err := wc.dsync.ListDirectories(ctx, directorysync.ListDirectoriesOpts{
+		OrganizationID: organizationID,
+		Search:         "",
+		Limit:          0,
+		Order:          "",
+		Before:         "",
+		After:          "",
+	})
+	if err != nil {
+		return nil, wrapSDKError(err, "list directories")
 	}
 
-	return out.Data, nil
+	out := make([]Directory, 0, len(resp.Data))
+	for _, d := range resp.Data {
+		out = append(out, Directory{
+			ID:             d.ID,
+			OrganizationID: d.OrganizationID,
+			Type:           string(d.Type),
+			Name:           d.Name,
+			State:          string(d.State),
+			CreatedAt:      d.CreatedAt,
+			UpdatedAt:      d.UpdatedAt,
+		})
+	}
+	return out, nil
 }
 
 // HasActiveConnection returns true if the organization has at least one active SSO connection.
 func HasActiveConnection(connections []Connection) bool {
 	for _, c := range connections {
-		if c.State == "active" {
+		if c.State == string(sso.Active) {
 			return true
 		}
 	}
@@ -81,7 +103,7 @@ func HasActiveConnection(connections []Connection) bool {
 // HasActiveDirectory returns true if the organization has at least one linked directory.
 func HasActiveDirectory(directories []Directory) bool {
 	for _, d := range directories {
-		if d.State == "linked" {
+		if d.State == string(directorysync.Linked) {
 			return true
 		}
 	}

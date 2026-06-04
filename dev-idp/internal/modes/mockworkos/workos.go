@@ -98,7 +98,7 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /portal", h.handleWorkosPortalPage)
 
 	mux.HandleFunc("GET /connections", h.handleWorkosListConnections)
-	mux.HandleFunc("GET /directory_sync/directories", h.handleWorkosListDirectories)
+	mux.HandleFunc("GET /directories", h.handleWorkosListDirectories)
 }
 
 // =============================================================================
