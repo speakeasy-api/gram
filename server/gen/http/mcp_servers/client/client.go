@@ -33,6 +33,10 @@ type Client struct {
 	// updateMcpServer endpoint.
 	UpdateMcpServerDoer goahttp.Doer
 
+	// ListToolFilters Doer is the HTTP client used to make requests to the
+	// listToolFilters endpoint.
+	ListToolFiltersDoer goahttp.Doer
+
 	// DeleteMcpServer Doer is the HTTP client used to make requests to the
 	// deleteMcpServer endpoint.
 	DeleteMcpServerDoer goahttp.Doer
@@ -61,6 +65,7 @@ func NewClient(
 		GetMcpServerDoer:    doer,
 		ListMcpServersDoer:  doer,
 		UpdateMcpServerDoer: doer,
+		ListToolFiltersDoer: doer,
 		DeleteMcpServerDoer: doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -161,6 +166,30 @@ func (c *Client) UpdateMcpServer() goa.Endpoint {
 		resp, err := c.UpdateMcpServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpServers", "updateMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListToolFilters returns an endpoint that makes HTTP requests to the
+// mcpServers service listToolFilters server.
+func (c *Client) ListToolFilters() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListToolFiltersRequest(c.encoder)
+		decodeResponse = DecodeListToolFiltersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListToolFiltersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListToolFiltersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "listToolFilters", err)
 		}
 		return decodeResponse(resp)
 	}
