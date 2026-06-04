@@ -364,15 +364,18 @@ export function AttachRemoteIdentityProviderSheet({
 
   // When discovery completes, auto-select the best supported auth method.
   // Preference: client_secret_basic > client_secret_post > none.
-  // Only fires on a fresh snapshot (non-null); the URL-change reset that
-  // clears tokenEndpointAuthMethod to "" handles the "stale discovery" case.
+  // Guard against a late discovery response landing after the operator has
+  // already changed the Issuer URL: a first discovery still in flight leaves
+  // discoveredSnapshot null, so the URL-change reset can't catch it. Only
+  // apply when the snapshot is for the URL currently in the form.
   useEffect(() => {
     if (!discoveredSnapshot) return;
+    if (discoveredSnapshot.url !== issuerUrl.trim()) return;
     const preferred = pickPreferredAuthMethod(
       discoveredSnapshot.tokenEndpointAuthMethodsSupported,
     );
     if (preferred) setTokenEndpointAuthMethod(preferred);
-  }, [discoveredSnapshot]);
+  }, [discoveredSnapshot, issuerUrl]);
 
   // Resolve the issuer record the operator picked in Select-existing mode.
   // We need it to know whether the picked issuer supports DCR and to pull
