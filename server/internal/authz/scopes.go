@@ -26,6 +26,7 @@ const (
 	ScopeEnvironmentRead    Scope = "environment:read"
 	ScopeEnvironmentWrite   Scope = "environment:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
+	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 )
 
 var adminScopes = []Scope{
@@ -40,7 +41,7 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 }
 
-var allScopes = append(append([]Scope(nil), adminScopes...), ScopeRiskPolicyEvaluate)
+var allScopes = append([]Scope{ScopeRiskPolicyBypass, ScopeRiskPolicyEvaluate}, adminScopes...)
 
 var memberScopes = []Scope{
 	ScopeOrgRead,
@@ -86,6 +87,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
 	ScopeEnvironmentWrite:   nil,
 	ScopeRiskPolicyEvaluate: nil,
+	ScopeRiskPolicyBypass:   nil,
 }
 
 var internalScopes = map[Scope]bool{
@@ -99,7 +101,8 @@ var internalScopes = map[Scope]bool{
 	ScopeMCPConnect:         false,
 	ScopeEnvironmentRead:    false,
 	ScopeEnvironmentWrite:   false,
-	ScopeRiskPolicyEvaluate: true,
+	ScopeRiskPolicyEvaluate: false,
+	ScopeRiskPolicyBypass:   false,
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege

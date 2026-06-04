@@ -128,6 +128,48 @@ func replaceGrantsForResourceTx(ctx context.Context, db repo.DBTX, replacement r
 	return nil
 }
 
+// GrantResourceToPrincipalTx adds one allow grant for a principal without
+// replacing other grants for the same resource.
+func GrantResourceToPrincipalTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, resourceID string) error {
+	if resourceID == "" {
+		return fmt.Errorf("resource id is required")
+	}
+	return GrantResourceToPrincipalWithSelectorTx(ctx, db, organizationID, principal, scope, NewSelector(scope, resourceID))
+}
+
+// GrantResourceToPrincipalWithSelectorTx adds one allow grant for a principal
+// with an explicit selector, such as a risk_policy:bypass narrowed by server_url.
+func GrantResourceToPrincipalWithSelectorTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, selector Selector) error {
+	return PatchPrincipalGrantsTx(ctx, db, organizationID, principal, []*RoleGrant{
+		{
+			Scope:     string(scope),
+			Effect:    PolicyEffectAllow,
+			Selectors: []Selector{selector},
+		},
+	}, nil)
+}
+
+// RevokeResourceFromPrincipalTx removes one allow grant for a principal without
+// replacing other grants for the same resource.
+func RevokeResourceFromPrincipalTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, resourceID string) error {
+	if resourceID == "" {
+		return fmt.Errorf("resource id is required")
+	}
+	return RevokeResourceFromPrincipalWithSelectorTx(ctx, db, organizationID, principal, scope, NewSelector(scope, resourceID))
+}
+
+// RevokeResourceFromPrincipalWithSelectorTx removes one exact allow grant for a
+// principal and selector.
+func RevokeResourceFromPrincipalWithSelectorTx(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal, scope Scope, selector Selector) error {
+	return PatchPrincipalGrantsTx(ctx, db, organizationID, principal, nil, []*RoleGrant{
+		{
+			Scope:     string(scope),
+			Effect:    PolicyEffectAllow,
+			Selectors: []Selector{selector},
+		},
+	})
+}
+
 // ListGrantsForResource loads grants for one resource-scoped permission.
 func ListGrantsForResource(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceID string) ([]Grant, error) {
 	if organizationID == "" {

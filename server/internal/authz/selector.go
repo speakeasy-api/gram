@@ -19,6 +19,7 @@ const (
 	SelectorKeyTool         = "tool"
 	SelectorKeyDisposition  = "disposition"
 	SelectorKeyProjectID    = "project_id"
+	SelectorKeyServerURL    = "server_url"
 )
 
 // Matches reports whether this (grant) selector satisfies the given check
@@ -107,6 +108,9 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	},
 	ResourceKindEnvironment: {
 		SelectorKeyProjectID: true,
+	},
+	ResourceKindRiskPolicy: {
+		SelectorKeyServerURL: true,
 	},
 }
 

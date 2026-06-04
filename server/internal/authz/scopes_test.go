@@ -12,6 +12,7 @@ func TestScopeParts(t *testing.T) {
 
 	require.Equal(t, ScopeParts{Resource: "project", Action: "read"}, ScopeProjectRead.Parts())
 	require.Equal(t, ScopeParts{Resource: "risk_policy", Action: "evaluate"}, ScopeRiskPolicyEvaluate.Parts())
+	require.Equal(t, ScopeParts{Resource: "risk_policy", Action: "bypass"}, ScopeRiskPolicyBypass.Parts())
 	require.Equal(t, ScopeParts{Resource: "root", Action: ""}, ScopeRoot.Parts())
 }
 
@@ -34,7 +35,7 @@ func TestAllScopesCoversDefinedGrantableScopes(t *testing.T) {
 	}
 }
 
-func TestSystemRoleAdminExcludesRiskPolicyEvaluate(t *testing.T) {
+func TestSystemRoleAdminExcludesRiskPolicyScopes(t *testing.T) {
 	t.Parallel()
 
 	adminGrants := SystemRoleGrants[SystemRoleAdmin]
@@ -44,6 +45,7 @@ func TestSystemRoleAdminExcludesRiskPolicyEvaluate(t *testing.T) {
 	}
 
 	require.NotContains(t, adminScopes, string(ScopeRiskPolicyEvaluate))
+	require.NotContains(t, adminScopes, string(ScopeRiskPolicyBypass))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {

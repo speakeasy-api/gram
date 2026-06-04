@@ -156,3 +156,103 @@ func TestReplaceGrantsForResource_invalidPrincipalDoesNotClearExistingGrants(t *
 	require.Len(t, grants, 1)
 	require.Equal(t, userPrincipal.String(), grants[0].PrincipalUrn)
 }
+
+func TestGrantAndRevokeResourcePrincipalGrantDoesNotReplaceResourceSet(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_policy_evaluate_single"
+	policyID := "policy_123"
+	firstPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
+	secondPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "role_support")
+
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, ReplaceGrantsForResource(ctx, conn, organizationID, ScopeRiskPolicyEvaluate, policyID, []urn.Principal{firstPrincipal}))
+
+	require.NoError(t, GrantResourceToPrincipalTx(ctx, conn, organizationID, secondPrincipal, ScopeRiskPolicyEvaluate, policyID))
+	require.NoError(t, GrantResourceToPrincipalTx(ctx, conn, organizationID, secondPrincipal, ScopeRiskPolicyEvaluate, policyID))
+
+	grants, err := ListGrantsForResource(ctx, conn, organizationID, ScopeRiskPolicyEvaluate, policyID)
+	require.NoError(t, err)
+	require.Len(t, grants, 2)
+	require.ElementsMatch(t, []string{firstPrincipal.String(), secondPrincipal.String()}, []string{grants[0].PrincipalUrn, grants[1].PrincipalUrn})
+
+	require.NoError(t, RevokeResourceFromPrincipalTx(ctx, conn, organizationID, secondPrincipal, ScopeRiskPolicyEvaluate, policyID))
+	require.NoError(t, RevokeResourceFromPrincipalTx(ctx, conn, organizationID, secondPrincipal, ScopeRiskPolicyEvaluate, policyID))
+
+	grants, err = ListGrantsForResource(ctx, conn, organizationID, ScopeRiskPolicyEvaluate, policyID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, firstPrincipal.String(), grants[0].PrincipalUrn)
+}
+
+func TestPatchPrincipalGrantsTxAddsAndRemovesExactGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_patch_principal_grants"
+	policyID := "policy_123"
+	principal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
+	otherPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_other")
+	selector := NewSelector(ScopeRiskPolicyEvaluate, policyID)
+
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, PatchPrincipalGrantsTx(ctx, conn, organizationID, otherPrincipal, []*RoleGrant{{
+		Scope:     string(ScopeRiskPolicyEvaluate),
+		Effect:    PolicyEffectAllow,
+		Selectors: []Selector{selector},
+	}}, nil))
+
+	require.NoError(t, PatchPrincipalGrantsTx(ctx, conn, organizationID, principal, []*RoleGrant{{
+		Scope:     string(ScopeRiskPolicyEvaluate),
+		Effect:    PolicyEffectAllow,
+		Selectors: []Selector{selector},
+	}}, nil))
+
+	grants, err := ListGrantsForResource(ctx, conn, organizationID, ScopeRiskPolicyEvaluate, policyID)
+	require.NoError(t, err)
+	require.Len(t, grants, 2)
+
+	require.NoError(t, PatchPrincipalGrantsTx(ctx, conn, organizationID, principal, nil, []*RoleGrant{{
+		Scope:     string(ScopeRiskPolicyEvaluate),
+		Effect:    PolicyEffectAllow,
+		Selectors: []Selector{selector},
+	}}))
+
+	grants, err = ListGrantsForResource(ctx, conn, organizationID, ScopeRiskPolicyEvaluate, policyID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, otherPrincipal.String(), grants[0].PrincipalUrn)
+}
+
+func TestGrantAndRevokeResourcePrincipalGrantWithSelector(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_policy_bypass_single"
+	policyID := "policy_123"
+	principal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
+	selector := Selector{
+		"resource_kind": ResourceKindRiskPolicy,
+		"resource_id":   policyID,
+		"server_url":    "api.example.com",
+	}
+
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, GrantResourceToPrincipalWithSelectorTx(ctx, conn, organizationID, principal, ScopeRiskPolicyBypass, selector))
+
+	grants, err := ListGrantsForResource(ctx, conn, organizationID, ScopeRiskPolicyBypass, policyID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, principal.String(), grants[0].PrincipalUrn)
+	require.Equal(t, selector, grants[0].Selector)
+
+	require.NoError(t, RevokeResourceFromPrincipalWithSelectorTx(ctx, conn, organizationID, principal, ScopeRiskPolicyBypass, selector))
+
+	grants, err = ListGrantsForResource(ctx, conn, organizationID, ScopeRiskPolicyBypass, policyID)
+	require.NoError(t, err)
+	require.Empty(t, grants)
+}
