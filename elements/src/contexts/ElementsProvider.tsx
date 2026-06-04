@@ -557,9 +557,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         localIdToUuidMapRef.current.set(capturedLocalThreadId, chatId);
       }
       currentRemoteIdRef.current = chatId;
+      mcpHeaders["Gram-Chat-ID"] = chatId;
       setCurrentChatId(chatId);
     };
-  }, [setCurrentChatId]);
+  }, [mcpHeaders, setCurrentChatId]);
   const transport = useMemo<ChatTransport<UIMessage>>(() => {
     if (typeof config.transport === "function") {
       return config.transport({ getChatId, adoptChatId });
