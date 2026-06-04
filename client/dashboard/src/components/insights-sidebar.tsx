@@ -2,9 +2,13 @@ import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { cn } from "@/lib/utils";
 import { useAssistantRuntime } from "@assistant-ui/react";
-import type { ElementsConfig } from "@gram-ai/elements";
+import type {
+  ElementsConfig,
+  ElementsTransportFactory,
+} from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import type { UIMessage } from "ai";
 import {
   ChevronRight,
   Loader2,
@@ -289,6 +293,7 @@ export function InsightsProvider({
   const title = override?.title ?? defaultTitle;
   const subtitle = override?.subtitle ?? defaultSubtitle;
   const suggestions = override?.suggestions ?? defaultSuggestions;
+  const contextInfo = override?.contextInfo;
   const hideTrigger = override?.hideTrigger ?? false;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
 
@@ -303,6 +308,67 @@ export function InsightsProvider({
     error: assistantError,
   } = useServerAssistantTransport(mcpConfig.projectSlug, isExpanded);
 
+  // Read inside the transport wrapper via ref so override churn doesn't
+  // re-create the transport identity on every parent re-render.
+  const contextInfoRef = useRef(contextInfo);
+  contextInfoRef.current = contextInfo;
+
+  // Wrap the server transport so the dashboard context (date range, chart
+  // identity for "Explore with AI" clicks) reaches the model. The server owns
+  // the Project Assistant's system prompt, so we can't inject the context
+  // there — instead we prepend it to the outgoing user message text in a
+  // tagged block. The wrapper only modifies what's sent over the wire; the
+  // user's message bubble in the UI is already in the assistant-ui store and
+  // is unaffected.
+  const wrappedTransport = useMemo<ElementsTransportFactory | undefined>(() => {
+    if (!serverTransport) return undefined;
+    return (ctx) => {
+      const inner = serverTransport(ctx);
+      return {
+        sendMessages: async (args) => {
+          const ctxText = contextInfoRef.current;
+          if (!ctxText) {
+            return inner.sendMessages(args);
+          }
+          // Find the latest user message and prepend the context to its text
+          // parts. Clone shallowly so the array passed to assistant-ui's
+          // optimistic store is left intact.
+          const messages = args.messages;
+          let lastUserIdx = -1;
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === "user") {
+              lastUserIdx = i;
+              break;
+            }
+          }
+          if (lastUserIdx === -1) {
+            return inner.sendMessages(args);
+          }
+          const original = messages[lastUserIdx];
+          const prefix = `<dashboard_context>\n${ctxText}\n</dashboard_context>\n\n`;
+          let prefixed = false;
+          const newParts = original.parts.map((p) => {
+            if (!prefixed && p.type === "text") {
+              prefixed = true;
+              return { ...p, text: `${prefix}${p.text}` };
+            }
+            return p;
+          });
+          if (!prefixed) {
+            newParts.unshift({ type: "text", text: prefix });
+          }
+          const wrappedMessages: UIMessage[] = [
+            ...messages.slice(0, lastUserIdx),
+            { ...original, parts: newParts },
+            ...messages.slice(lastUserIdx + 1),
+          ];
+          return inner.sendMessages({ ...args, messages: wrappedMessages });
+        },
+        reconnectToStream: inner.reconnectToStream.bind(inner),
+      };
+    };
+  }, [serverTransport]);
+
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
 
   const elementsConfig = useMemo<ElementsConfig>(
@@ -311,8 +377,11 @@ export function InsightsProvider({
       variant: "standalone",
       // Route the conversation through the persistent server-side Project
       // Assistant. Its model and system prompt are owned server-side, so we
-      // don't set them here.
-      transport: serverTransport,
+      // don't set them here. `wrappedTransport` is the server transport with a
+      // thin wrapper that inlines the per-page dashboard context (date range,
+      // chart identity) into outgoing user messages — see `wrappedTransport`
+      // above.
+      transport: wrappedTransport,
       // Edit relies on assistant-ui's local branch rewriting, which the
       // server-side assistant transport can't honour — hide the affordance
       // rather than ship a control that silently no-ops.
@@ -347,7 +416,7 @@ export function InsightsProvider({
       subtitle,
       suggestions,
       theme,
-      serverTransport,
+      wrappedTransport,
       managedAssistantId,
     ],
   );

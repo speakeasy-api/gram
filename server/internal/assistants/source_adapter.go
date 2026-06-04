@@ -101,6 +101,8 @@ func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (slackAdapter) OutputChannelGuidance() string {
 	return `## Slack output preferences
 
+Text responses are not delivered to the user. To communicate, call a Slack post tool (e.g. platform_slack_post_message, platform_slack_post_ephemeral). If no suitable tool is available, the user will not see your reply.
+
 When relaying an "assistant_mcp_auth_required" AuthURL, prefer platform_slack_post_ephemeral so only the requesting user sees it, and render the AuthURL as a Block Kit actions block containing a single primary button rather than as plain text.`
 }
 
@@ -187,7 +189,11 @@ func (cronAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
-func (cronAdapter) OutputChannelGuidance() string { return "" }
+func (cronAdapter) OutputChannelGuidance() string {
+	return `## Cron output preferences
+
+Text responses are not delivered to anyone — no human is watching the cron tick. To produce a side effect or notify someone, call a tool (e.g. post a Slack message, send an email, write to an external system). If no suitable tool is available for the work this tick requires, log the situation and stop.`
+}
 
 func (cronAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
 	var payload cronEventPayload
@@ -246,7 +252,11 @@ func (wakeAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
-func (wakeAdapter) OutputChannelGuidance() string { return "" }
+func (wakeAdapter) OutputChannelGuidance() string {
+	return `## Wake output preferences
+
+Text responses are not delivered to anyone — the wake trigger fired against a thread you scheduled earlier. To make progress visible, call a tool (e.g. post to the original channel, send a follow-up message). If no suitable tool is available, log the situation and stop.`
+}
 
 func (wakeAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
 	var payload wakeEventPayload

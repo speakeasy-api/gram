@@ -81,27 +81,29 @@ export function createServerAssistantTransport(
           // the poll's "new" baseline. Elements' optimistic `messages` carry
           // local UI ids that don't match server `chat_messages` ids, so
           // without this we'd re-surface every prior-turn assistant row on
-          // each follow-up. Runs in parallel with the send since neither
-          // depends on the other.
-          const [snapshot, sent] = await Promise.all([
-            chatId
-              ? snapshotAssistantIds(deps.client, chatId, abortSignal)
-              : Promise.resolve<Snapshot | null>(null),
-            assistantsSendMessage(
-              deps.client,
-              {
-                gramProject: deps.projectSlug,
-                sendMessageRequestBody: {
-                  assistantId: deps.assistantId,
-                  message: text,
-                  chatId: chatId ?? undefined,
-                  idempotencyKey: latest?.id,
-                },
+          // each follow-up. Sequenced before the send: if these ran in
+          // parallel, the runtime could persist a fresh assistant row before
+          // chat.load returned, baking it into the baseline and causing the
+          // poll to wait forever for a reply it has already classified as
+          // "already seen". New conversations skip the snapshot — there's
+          // nothing to baseline against.
+          const snapshot = chatId
+            ? await snapshotAssistantIds(deps.client, chatId, abortSignal)
+            : null;
+          const sent = await assistantsSendMessage(
+            deps.client,
+            {
+              gramProject: deps.projectSlug,
+              sendMessageRequestBody: {
+                assistantId: deps.assistantId,
+                message: text,
+                chatId: chatId ?? undefined,
+                idempotencyKey: latest?.id,
               },
-              undefined,
-              { fetchOptions: { signal: abortSignal } },
-            ),
-          ]);
+            },
+            undefined,
+            { fetchOptions: { signal: abortSignal } },
+          );
           if (!sent.ok) {
             throw sent.error;
           }

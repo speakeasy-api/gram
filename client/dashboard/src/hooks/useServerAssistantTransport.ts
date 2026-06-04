@@ -47,6 +47,8 @@ export function useServerAssistantTransport(
 
   const requestedRef = useRef(false);
   const resolvedForSlugRef = useRef<string | null>(null);
+  const currentSlugRef = useRef(projectSlug);
+  currentSlugRef.current = projectSlug;
 
   // Project switch: drop the previously-resolved assistant so the new project's
   // managed assistant gets resolved fresh. The InsightsProvider lives above the
@@ -81,13 +83,20 @@ export function useServerAssistantTransport(
       {},
       {
         onSuccess: (assistant) => {
+          if (slugAtRequest !== currentSlugRef.current) {
+            return;
+          }
           resolvedForSlugRef.current = slugAtRequest;
           setAssistantId(assistant.id);
         },
-        onError: () =>
+        onError: () => {
+          if (slugAtRequest !== currentSlugRef.current) {
+            return;
+          }
           setError(
             "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
-          ),
+          );
+        },
       },
     );
   }, [enabled, projectSlug, ensureManagedMutate, assistantId]);

@@ -1908,11 +1908,11 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 // bound between refreshes for an idle runtime.
 const assistantRuntimeTokenTTL = 60 * time.Minute
 
-const outputChannelAddendum = `## Output channel
-
-Text responses not delivered to user. To communicate, call a tool (e.g. post Slack message, send email). No suitable tool = user won't see reply.
-
-## MCP authentication
+// mcpAuthAddendum applies to every source. The per-source output-channel
+// framing (text-delivered vs. must-call-tool) lives in each adapter's
+// OutputChannelGuidance — dashboard text replies are shown directly, so a
+// global "text not delivered" rule would contradict the dashboard adapter.
+const mcpAuthAddendum = `## MCP authentication
 
 OAuth + MCP auth are owner-only: only owner can sign in and complete flow. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
@@ -1940,7 +1940,7 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	if base != "" {
 		parts = append(parts, base)
 	}
-	parts = append(parts, outputChannelAddendum)
+	parts = append(parts, mcpAuthAddendum)
 	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
 		parts = append(parts, guidance)
 	}

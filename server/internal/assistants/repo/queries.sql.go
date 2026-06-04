@@ -2551,7 +2551,9 @@ func (q *Queries) UpdateAssistantRuntimeMetadata(ctx context.Context, arg Update
 const upsertAssistantChat = `-- name: UpsertAssistantChat :exec
 INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
 VALUES ($1, $2, $3, $4::TEXT, NULL, $5, NOW(), NOW())
-ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+ON CONFLICT (id) DO UPDATE SET
+  user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  updated_at = NOW()
 `
 
 type UpsertAssistantChatParams struct {
@@ -2565,8 +2567,10 @@ type UpsertAssistantChatParams struct {
 // user_id is the conversation owner — stamped on first insert so reads can
 // scope to the user who started the chat. The dashboard source passes the
 // Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
-// the existing user_id is preserved so a later NULL-user-id retry doesn't
-// unclaim the chat.
+// the existing user_id is preserved when already set so a later NULL-user-id
+// retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
+// backfilled on first owned send so dashboard ownership checks accept the
+// legitimate owner.
 func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantChatParams) error {
 	_, err := q.db.Exec(ctx, upsertAssistantChat,
 		arg.ChatID,
