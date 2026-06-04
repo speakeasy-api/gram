@@ -93,13 +93,19 @@ func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "148.0.0.0"), "network address of /8")
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "147.0.0.0"), "network address of /8")
 
-	// Real addresses still flow through. Use a routable address that is
-	// not in the curated DNS resolver set, not in any reserved range,
-	// and IPv6 with enough non-zero bytes to clear the heuristic.
+	// Real addresses still flow through. Consumer ISP IPs identify an end
+	// user and are deliberately not in the infra ASN regex, so they are
+	// still treated as PII.
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "71.126.87.167"), "residential Verizon")
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "82.15.226.61"), "residential Virgin Media")
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "2607:f8b0:4002:c0e::200e"), "real IPv6 anycast")
+
+	// Cloud / CDN / managed-hosting ASNs are filtered as infra. The DB-IP
+	// mmdb embedded by falsepositives_ip_asn.go resolves these.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2607:f8b0:4002:c0e::200e"), "Google IPv6 anycast — AS15169")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "8.29.231.184"), "Cloudflare AS13335")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "140.82.112.0"), "GitHub AS36459")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "185.199.108.0"), "Fastly / GitHub pages")
 
 	// Other entity types are never filtered by this rule.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))

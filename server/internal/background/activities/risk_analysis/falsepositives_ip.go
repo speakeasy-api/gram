@@ -20,10 +20,9 @@ import (
 //   - Shape heuristics: network address of a public /8 (X.0.0.0), and
 //     sparse IPv6 with at most two non-zero bytes (e.g. 1::, dead::).
 //
-// Cloud / CDN / hosting attribution (the fp_infra_asn category in the
-// offline classifier) needs an ASN lookup. Wiring MaxMind GeoLite2 into
-// the analyzer is a separate change; this layer only catches what code
-// alone can.
+// Cloud / CDN / managed-hosting attribution falls through to a DB-IP
+// ASN lookup (see falsepositives_ip_asn.go). Consumer ISP brands stay
+// out of the infra regex so residential IPs still flow through as PII.
 func nonPIIIPReason(s string) string {
 	addr, err := netip.ParseAddr(s)
 	if err != nil {
@@ -42,7 +41,10 @@ func nonPIIIPReason(s string) string {
 			return p.description
 		}
 	}
-	return nonPIIIPHeuristic(addr)
+	if d := nonPIIIPHeuristic(addr); d != "" {
+		return d
+	}
+	return infraASNDescription(addr)
 }
 
 // nonPIIIPHeuristic returns a description for IPs that fit common
