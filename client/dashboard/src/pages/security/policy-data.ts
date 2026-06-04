@@ -23,6 +23,12 @@ export type DetectionRule = {
   id: string;
   title: string;
   source: "gitleaks" | "presidio" | "prompt_injection";
+  // When true the rule is kept in the catalog so legacy risk_results still
+  // resolve their human-readable title via risk-utils.ts, but it is hidden
+  // from the policy create/edit form so users cannot select it on new
+  // policies. Use for rules that are accepted-but-deprecated or whose
+  // upstream scanner is unreliable.
+  hidden?: boolean;
 };
 
 export type McpServerScope = {
@@ -1277,9 +1283,14 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       source: "presidio",
     },
     {
+      // Kept for legacy risk_results display; hidden from the policy form.
+      // Upstream Presidio regex is unusably broad — see microsoft/presidio#1063
+      // and PR #3172. Server-side blacklist also drops it before any
+      // Presidio request.
       id: "pii.us_driver_license",
       title: "US state-issued driver license",
       source: "presidio",
+      hidden: true,
     },
     {
       id: "pii.us_itin",
@@ -1449,7 +1460,6 @@ export const MOCK_POLICIES: DlpPolicy[] = [
       "pii.phone_number",
       "pii.us_ssn",
       "pii.us_passport",
-      "pii.us_driver_license",
     ],
     action: "flag",
     types: ["user_message", "assistant_message", "tool_response"],

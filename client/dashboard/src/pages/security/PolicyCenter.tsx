@@ -153,6 +153,7 @@ function policyToCategories(
 function categoriesToPayload(
   cats: Set<RuleCategory>,
   disabledRules: Set<string>,
+  pinnedHidden: Set<string> = new Set(),
 ) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
@@ -167,6 +168,11 @@ function categoriesToPayload(
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
         if (disabledRules.has(rule.id)) continue;
+        // Hidden rules (deprecated / unreliable upstream) are never newly
+        // serialized into the Presidio query just because their category is
+        // selected. We only keep one if the policy being edited already
+        // pinned it, so an edit round-trips without silently dropping it.
+        if (rule.hidden && !pinnedHidden.has(rule.id)) continue;
         presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
     }
@@ -188,6 +194,25 @@ function categoriesToPayload(
     promptInjectionRules,
     disabledRules: persistedDisabled,
   };
+}
+
+/** Canonical ids of hidden rules an existing policy already pins via its
+ *  presidioEntities. Lets an edit preserve a deprecated entity the policy
+ *  carried before it was hidden, without ever newly adding one. */
+function pinnedHiddenRuleIds(presidioEntities?: string[]): Set<string> {
+  const pinned = new Set<string>();
+  if (!presidioEntities) return pinned;
+  for (const cat of PRESIDIO_CATEGORIES) {
+    for (const rule of DETECTION_RULES[cat]) {
+      if (
+        rule.hidden &&
+        presidioEntities.includes(ruleIdToPresidioEntity(rule.id))
+      ) {
+        pinned.add(rule.id);
+      }
+    }
+  }
+  return pinned;
 }
 
 /** Map sources to display categories for the table row badges. */
@@ -340,7 +365,11 @@ function PolicyCenterContent() {
       presidioEntities,
       promptInjectionRules,
       disabledRules: payloadDisabled,
-    } = categoriesToPayload(selectedCategories, disabledRules);
+    } = categoriesToPayload(
+      selectedCategories,
+      disabledRules,
+      pinnedHiddenRuleIds(editingPolicy?.presidioEntities),
+    );
     const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
@@ -828,7 +857,13 @@ function PolicySheetBody({
             const meta = RULE_CATEGORY_META[cat];
             const isAvailable = AVAILABLE_CATEGORIES.has(cat);
             const isExpanded = expandedCategory === cat;
-            const rules = DETECTION_RULES[cat];
+            // Hidden rules stay in the catalog so legacy risk_results keep
+            // resolving their title via risk-utils, but they are scrubbed
+            // from the form's display, counts, and bulk toggles. The
+            // underlying disabledRules/selectedCategories state is left
+            // untouched so existing policies that pin a hidden rule round-
+            // trip cleanly through edit.
+            const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
             const isExpandable = isAvailable && rules.length > 0;
             const categorySelected = selectedCategories.has(cat);
             const enabledRuleCount = categorySelected
