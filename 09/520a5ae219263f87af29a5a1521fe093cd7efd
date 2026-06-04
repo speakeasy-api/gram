@@ -1,0 +1,56 @@
+server/internal/risk/queries.sql
+  s_e22b3b94346bf4::t_f63a38a86d8cef 109-110,123-124
+  s_e22b3b94346bf4::t_41937beb8865cd 144-146,172,174
+  s_e22b3b94346bf4::t_8288fb4bd345c8 171
+  s_e22b3b94346bf4::t_50810743481ad9 120,134,143
+  s_e22b3b94346bf4::t_3fbf5396eac5ac 107-108,111-119,121-122,125-133,135-142,147-170,173,175-183
+server/design/risk/design.go
+  s_e22b3b94346bf4::t_ad71afd14103e9 596-619
+  s_e22b3b94346bf4::t_8c60df12574afb 620-739,1152-1186
+server/internal/hooks/shadow_mcp_request_link_test.go
+  s_e22b3b94346bf4::t_ef0663742d4085 46,51
+server/internal/risk/repo/models.go
+  s_e22b3b94346bf4::t_3d57c931073ded 49-74
+server/internal/hooks/cursor_test.go
+  s_e22b3b94346bf4::t_aa24ee89f725e1 199-200
+server/internal/risk/impl.go
+  s_e22b3b94346bf4::t_cee09e1fd7e2d2 74,109,127,146
+server/cmd/gram/start.go
+  s_e22b3b94346bf4::t_85e44a6e7c9492 1076
+server/internal/risk/policy_bypass_token.go
+  s_e22b3b94346bf4::t_576efe47af679a 163-169,241-247
+  s_e22b3b94346bf4::t_826c23d1e0fa55 12,55-69
+  s_e22b3b94346bf4::t_47a19bf722444d 203
+  s_e22b3b94346bf4::t_7187784962ec8a 1-11,13-54,70-162,170-202,204-240,248
+server/internal/risk/policy_bypass_requests.go
+  s_e22b3b94346bf4::t_65f164a611b2d5 1-356,358-422
+  s_e22b3b94346bf4::t_05aa0c8b94e2f1 357
+server/internal/risk/policy_bypass_requests_test.go
+  s_e22b3b94346bf4::t_4d481980d40c5a 1-146
+server/internal/hooks/shadow_mcp_request_link.go
+  s_e22b3b94346bf4::t_1b539a4d515e41 49,71
+  s_e22b3b94346bf4::t_9e835499aeafda 9,60
+server/internal/risk/setup_test.go
+  s_e22b3b94346bf4::t_fa62e0d47383ed 101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "09520a5ae219263f87af29a5a1521fe093cd7efd",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_e22b3b94346bf4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9385-0ca9-70d3-97f9-9fdb17029cd4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
