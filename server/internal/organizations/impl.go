@@ -1027,7 +1027,7 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 		}
 		ev := &gen.OnboardingHookEvent{
 			TimeUnixNano: strconv.FormatInt(r.TimeUnixNano, 10),
-			Source:       r.ServiceVersion,
+			Source:       r.HookSource,
 			ProjectSlug:  slugByID[r.GramProjectID],
 			ToolName:     r.ToolName,
 			EventName:    r.EventName,
