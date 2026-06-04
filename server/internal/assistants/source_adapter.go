@@ -103,7 +103,7 @@ func (slackAdapter) OutputChannelGuidance() string {
 
 Text responses are not delivered to the user. To communicate, call a Slack post tool (e.g. platform_slack_post_message, platform_slack_post_ephemeral). If no suitable tool is available, the user will not see your reply.
 
-When relaying an "assistant_mcp_auth_required" AuthURL, prefer platform_slack_post_ephemeral so only the requesting user sees it, and render the AuthURL as a Block Kit actions block containing a single primary button rather than as plain text.`
+When relaying an "assistant_mcp_auth_required" AuthURL, prefer platform_slack_post_ephemeral so only the requesting user sees it, and render the AuthURL as a Block Kit actions block containing a single primary button rather than as plain text. If ephemeral isn't available in the current channel, DM the owner instead — but AuthURL expires, so first ask if they're ready to authenticate now and only then re-attempt the tool call to mint a fresh URL for the DM. If neither ephemeral nor DM is reachable, don't post the URL.`
 }
 
 func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
@@ -311,7 +311,9 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (dashboardAdapter) OutputChannelGuidance() string {
 	return `## Dashboard output preferences
 
-You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.`
+You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.
+
+When relaying an "assistant_mcp_auth_required" AuthURL, render it as a clickable Markdown link in your reply (e.g. ` + "`[Authorize](<AuthURL>)`" + `) — the dashboard reader IS the owner, no tool call is needed.`
 }
 
 // ChatID: the dashboard's correlation key already IS the server-minted chat id

@@ -354,8 +354,11 @@ export function InsightsProvider({
             }
             return p;
           });
+          // If the user message has no text part (pure image/audio/attachment),
+          // skip the prepend entirely — fabricating a text-only part would turn
+          // the send into a context-only prompt with no actual user question.
           if (!prefixed) {
-            newParts.unshift({ type: "text", text: prefix });
+            return inner.sendMessages(args);
           }
           const wrappedMessages: UIMessage[] = [
             ...messages.slice(0, lastUserIdx),

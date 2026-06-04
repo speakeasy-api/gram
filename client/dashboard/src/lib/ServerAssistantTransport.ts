@@ -76,6 +76,11 @@ export function createServerAssistantTransport(
           writer.write({ type: "start" });
 
           let chatId = ctx.getChatId();
+          // Bind the local thread identity at send-start so a server-minted
+          // chat id is reconciled with THIS thread even if a parallel send on
+          // another thread (or a user thread-switch) shifts the runtime's
+          // active thread before our setChatId call lands.
+          const localThreadIdSnapshot = ctx.captureLocalThreadId();
 
           // Snapshot the assistant rows already on the server before sending —
           // the poll's "new" baseline. Elements' optimistic `messages` carry
@@ -111,7 +116,7 @@ export function createServerAssistantTransport(
             // New conversation: adopt the server-minted id so the thread, its
             // history, and the conversation list all resolve to the same chat.
             chatId = sent.value.chatId;
-            ctx.setChatId(chatId);
+            ctx.setChatId(chatId, localThreadIdSnapshot);
           }
 
           await pollForReplies({

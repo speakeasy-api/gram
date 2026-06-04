@@ -289,15 +289,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // in a way that's accessible from the transport's sendMessages function.
   const currentRemoteIdRef = useRef<string | null>(null);
 
-  // Snapshot of the active local thread id at the moment a consumer transport
-  // last called `getChatId` (which a well-behaved transport does at the very
-  // start of sendMessages). Used by `setChatId` to bind a server-minted chat id
-  // to the thread the user was on when the send started, not the thread they
-  // may have switched to during the async round-trip. The convention is
-  // intentional and contained to this file: any caller invoking getChatId
-  // immediately before its async work gets correct setChatId behavior for free.
-  const sendStartLocalThreadIdRef = useRef<string | undefined>(undefined);
-
   // Create chat transport configuration. This is the built-in client-side
   // streaming transport; a consumer can override it via config.transport (see
   // below) to route the conversation through a server-side assistant instead.
@@ -548,27 +539,30 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // (unpersisted) thread ids read as null so the transport can treat them as a
   // brand-new conversation.
   const getChatId = useCallback(() => {
-    // Capture the active local thread id at the moment the transport starts a
-    // send — `setChatId` reads this when reconciling a server-minted id, so the
-    // id is bound to the thread the send originated from rather than whatever
-    // thread the user has since switched to during the async round-trip.
-    sendStartLocalThreadIdRef.current = getActiveLocalThreadId(runtimeRef);
     const id = currentRemoteIdRef.current;
     return id && !isLocalThreadId(id) ? id : null;
   }, []);
+  // Capture the active local thread id without side effects. Consumer
+  // transports call this at sendMessages-start and pass the value back to
+  // `setChatId` so a server-minted chat id binds to the thread the send
+  // originated from, even if the user switches threads or fires a parallel
+  // send on a different thread during the async round-trip.
+  const captureLocalThreadId = useCallback(
+    () => getActiveLocalThreadId(runtimeRef),
+    [],
+  );
   // Adopt a chat id assigned out-of-band (e.g. a server-minted id a consumer
-  // transport receives on the first send): map the active local thread to it and
-  // sync the refs/headers the rest of the provider reads — the same
+  // transport receives on the first send): map the captured local thread to it
+  // and sync the refs/headers the rest of the provider reads — the same
   // reconciliation the built-in transport does inline when it generates an id.
   const setChatId = useCallback(
-    (chatId: string) => {
-      // Prefer the local thread id captured at send-start (set by getChatId)
-      // over the currently active one — by the time setChatId fires the user
-      // may have switched threads and the runtime now points at a different
-      // local id. Fall back to the current active thread only if getChatId
-      // wasn't called first (e.g. a transport that bypasses the convention).
+    (chatId: string, localThreadIdSnapshot?: string) => {
+      // Prefer the snapshot the consumer captured at send-start. Fall back to
+      // the currently active thread only when the consumer didn't capture one —
+      // that path is racy under parallel sends across threads but preserves
+      // behavior for transports that haven't adopted the snapshot API.
       const localThreadId =
-        sendStartLocalThreadIdRef.current ?? getActiveLocalThreadId(runtimeRef);
+        localThreadIdSnapshot ?? getActiveLocalThreadId(runtimeRef);
       if (localThreadId) {
         localIdToUuidMapRef.current.set(localThreadId, chatId);
       }
@@ -580,10 +574,16 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   );
   const transport = useMemo<ChatTransport<UIMessage>>(() => {
     if (typeof config.transport === "function") {
-      return config.transport({ getChatId, setChatId });
+      return config.transport({ getChatId, captureLocalThreadId, setChatId });
     }
     return config.transport ?? defaultTransport;
-  }, [config.transport, defaultTransport, getChatId, setChatId]);
+  }, [
+    config.transport,
+    defaultTransport,
+    getChatId,
+    captureLocalThreadId,
+    setChatId,
+  ]);
 
   const historyEnabled = config.history?.enabled ?? false;
 

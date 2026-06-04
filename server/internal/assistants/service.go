@@ -1908,24 +1908,19 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 // bound between refreshes for an idle runtime.
 const assistantRuntimeTokenTTL = 60 * time.Minute
 
-// mcpAuthAddendum applies to every source. The per-source output-channel
-// framing (text-delivered vs. must-call-tool) lives in each adapter's
-// OutputChannelGuidance — dashboard text replies are shown directly, so a
-// global "text not delivered" rule would contradict the dashboard adapter.
+// mcpAuthAddendum is source-agnostic framing for MCP auth: who may see an
+// AuthURL, when auth events appear, and what each event carries. Per-source
+// delivery mechanics (Slack Block Kit button, dashboard Markdown link, etc.)
+// live in each adapter's OutputChannelGuidance.
 const mcpAuthAddendum = `## MCP authentication
 
 OAuth + MCP auth are owner-only: only owner can sign in and complete flow. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
 Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
 
-- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim via output tool (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID.
+- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners; if the current surface can't reach the owner privately, don't surface the URL — tell the requester (without URL) that owner must complete auth, then stop. The per-surface output preferences below describe how to deliver the URL on this surface.
 
-  Delivery rules — never post AuthURL to public or shared channel readable by non-owners. Pick most private channel available:
-    1. Conversation supports owner-only ephemeral message (single recipient) → send AuthURL there, addressed to owner.
-    2. Else DM the owner. AuthURL expires, so don't paste cold into DM owner hasn't engaged with recently. First ask owner if available to authenticate now; only after they confirm, re-attempt the tool call that required auth to issue a fresh AuthURL, then deliver new AuthURL in same DM.
-    3. Neither ephemeral nor DM possible → don't surface AuthURL; tell requester (without URL) that owner must complete auth, then stop.
-
-- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform user via output tool, include ErrorDescription if present.`
+- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
 func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)

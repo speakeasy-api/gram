@@ -45,22 +45,27 @@ export function useServerAssistantTransport(
   const [assistantId, setAssistantId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
-  const requestedRef = useRef(false);
+  // Latch invariant: `inflightSlugRef` holds the slug whose mutation is
+  // currently in flight, or null. It is set at mutate kickoff and cleared in
+  // onSettled, so a stale-slug callback never strands the latch.
+  const inflightSlugRef = useRef<string | null>(null);
   const resolvedForSlugRef = useRef<string | null>(null);
   const currentSlugRef = useRef(projectSlug);
   currentSlugRef.current = projectSlug;
 
-  // Project switch: drop the previously-resolved assistant so the new project's
-  // managed assistant gets resolved fresh. The InsightsProvider lives above the
-  // route outlet and persists across project navigation, so without this reset
-  // the transport would route assistant from project A to project B → 404.
+  // Project switch: drop any prior resolution so the new project resolves
+  // fresh. The InsightsProvider lives above the route outlet and persists
+  // across project navigation, so without this reset the transport would route
+  // a project-A assistant for project B → 404. We track the last slug we
+  // touched (resolved OR kicked off) so a mid-flight switch still resets.
+  const trackedSlugRef = useRef<string | null>(null);
   useEffect(() => {
     if (
-      resolvedForSlugRef.current !== null &&
-      resolvedForSlugRef.current !== projectSlug
+      trackedSlugRef.current !== null &&
+      trackedSlugRef.current !== projectSlug
     ) {
+      trackedSlugRef.current = null;
       resolvedForSlugRef.current = null;
-      requestedRef.current = false;
       setAssistantId("");
       setError(null);
     }
@@ -68,15 +73,19 @@ export function useServerAssistantTransport(
 
   useEffect(() => {
     if (!enabled) {
-      if (!assistantId) {
-        requestedRef.current = false;
-      }
       return;
     }
-    if (requestedRef.current || !projectSlug) {
+    if (!projectSlug) {
       return;
     }
-    requestedRef.current = true;
+    if (inflightSlugRef.current === projectSlug) {
+      return;
+    }
+    if (resolvedForSlugRef.current === projectSlug) {
+      return;
+    }
+    inflightSlugRef.current = projectSlug;
+    trackedSlugRef.current = projectSlug;
     setError(null);
     const slugAtRequest = projectSlug;
     ensureManagedMutate(
@@ -97,9 +106,14 @@ export function useServerAssistantTransport(
             "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
           );
         },
+        onSettled: () => {
+          if (inflightSlugRef.current === slugAtRequest) {
+            inflightSlugRef.current = null;
+          }
+        },
       },
     );
-  }, [enabled, projectSlug, ensureManagedMutate, assistantId]);
+  }, [enabled, projectSlug, ensureManagedMutate]);
 
   const ready = assistantId !== "";
 

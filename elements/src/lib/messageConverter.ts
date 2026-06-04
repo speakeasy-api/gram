@@ -315,8 +315,10 @@ function convertGramMessageToThreadMessage(
  * Converts an array of Gram ChatMessages to an ExportedMessageRepository.
  * Creates parent-child relationships based on message order.
  *
- * Note: System messages are filtered out because assistant-ui's
- * `fromThreadMessageLike` doesn't support them in the exported format.
+ * Note: system, developer, and tool messages are filtered out. assistant-ui's
+ * exported format only models user/assistant turns; system/developer rows are
+ * pre-prompt instructions the UI doesn't render, and tool rows are folded into
+ * the preceding assistant message as `tool-call` parts via `tool_calls`.
  */
 export function convertGramMessagesToExported(
   messages: GramChatMessage[],
@@ -329,8 +331,11 @@ export function convertGramMessagesToExported(
   let prevId: string | null = null;
 
   for (const msg of messages) {
-    // Skip system messages - they're not supported in the exported message format
-    if (msg.role === "system") {
+    if (
+      msg.role === "system" ||
+      msg.role === "developer" ||
+      msg.role === "tool"
+    ) {
       continue;
     }
 

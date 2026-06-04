@@ -62,13 +62,27 @@ export interface ElementsTransportContext {
   getChatId: () => string | null;
 
   /**
+   * Capture an opaque snapshot of the active local thread identity at call
+   * time. A consumer transport should call this at the start of
+   * `sendMessages`, hold the returned value across its async work, then pass it
+   * back to {@link setChatId} so a server-minted chat id is bound to the
+   * thread the send originated from — not whatever thread the user has since
+   * switched to during the round-trip. The snapshot value is opaque and
+   * single-purpose; do not inspect or reuse it.
+   */
+  captureLocalThreadId: () => string | undefined;
+
+  /**
    * Adopt a chat id assigned out-of-band — e.g. when the backend mints the id
    * for a new conversation and returns it on the first send. Elements maps the
-   * active (still-local) thread to this id so subsequent history loads and the
-   * thread list resolve to the right server chat. Call it once, with the id the
-   * server returned, immediately after the first send of a new conversation.
+   * captured local thread (see {@link captureLocalThreadId}) to this id so
+   * subsequent history loads and the thread list resolve to the right server
+   * chat. Call it once, with the id the server returned, immediately after the
+   * first send of a new conversation. When `localThreadIdSnapshot` is omitted,
+   * Elements falls back to the currently active thread — racy under concurrent
+   * sends across threads, so always pass the snapshot when available.
    */
-  setChatId: (chatId: string) => void;
+  setChatId: (chatId: string, localThreadIdSnapshot?: string) => void;
 }
 
 /**
