@@ -178,7 +178,7 @@ export function CreateMarketplaceStep({
           </div>
         )}
         {isConnected && (
-          <p className="text-muted-foreground text-xs leading-relaxed">
+          <p className="text-muted-foreground text-sm leading-relaxed">
             At least one of your organization's users needs to be attached to
             the repository as a collaborator so that the repository is
             discoverable by Agent Platforms.
