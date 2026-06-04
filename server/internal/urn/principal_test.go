@@ -113,6 +113,38 @@ func TestPrincipal_String(t *testing.T) {
 	}
 }
 
+func TestPrincipal_Label(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		principal urn.Principal
+		want      string
+	}{
+		{
+			name:      "user principal",
+			principal: urn.NewPrincipal(urn.PrincipalTypeUser, "user_01abc"),
+			want:      `user "user_01abc"`,
+		},
+		{
+			name:      "role principal",
+			principal: urn.NewPrincipal(urn.PrincipalTypeRole, "admin"),
+			want:      `role "admin"`,
+		},
+		{
+			name:      "zero principal",
+			principal: urn.Principal{},
+			want:      ":",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, tt.principal.Label())
+		})
+	}
+}
+
 func TestParsePrincipal(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
