@@ -14,12 +14,22 @@ import (
 //go:embed data/dbip-asn.mmdb
 var dbipASNBytes []byte
 
-// infraASNRE matches the AS organisation names of cloud / CDN / managed
-// hosting providers — the orgs whose IPs are never user PII. Consumer
-// ISP brands (Verizon, Virgin Media, Comcast, AT&T, BT, Charter,
-// Telefonica, etc.) are intentionally excluded: their IPs can identify an
-// end user and should still flow through to Presidio as PII.
-var infraASNRE = regexp.MustCompile(`(?i)\b(amazon|aws|google|microsoft|azure|cloudflare|fastly|github|akamai|digitalocean|linode|hetzner|ovh|alibaba|tencent|baidu|vultr|the constant company|scaleway|leaseweb|hostinger|oracle cloud|equinix|cloudfront|netlify|vercel|datacamp|m247|choopa|phoenix nap|hurricane electric|psychz|colocrossing|sharktech|cdn|cdnetworks|edgecast|maxcdn|keycdn|jsdelivr|stackpath|cachefly|level 3|lumen)\b`)
+// infraASNRE matches the AS organisation names of cloud, CDN, and
+// managed-hosting providers as DB-IP labels them. Goal: drop org names
+// that belong only to infrastructure, never to an end user's home
+// connection.
+//
+// Conservatism rules (apply when extending):
+//   - Bare "google" would over-match "Google Fiber Inc." (residential
+//     ISP). Use "google llc" / "google cloud" / "youtube" instead, which
+//     pin to the AS15169 / Google Cloud Platform / YouTube AS naming.
+//   - "amazon", "microsoft", "azure", "oracle cloud", "alibaba",
+//     "tencent" are kept bare because none of those companies operate a
+//     consumer ISP, so the DB-IP org name is always infrastructure.
+//   - Consumer-ISP brands (Verizon, Virgin Media, Comcast, AT&T, BT,
+//     Charter, Telefonica, etc.) are intentionally excluded: their IPs
+//     can identify an end user and should still flow through as PII.
+var infraASNRE = regexp.MustCompile(`(?i)\b(amazon|aws|google llc|google cloud|googlebot|youtube|microsoft|azure|cloudflare|fastly|github|akamai|digitalocean|linode|hetzner|ovh|alibaba|tencent|baidu|vultr|the constant company|scaleway|leaseweb|hostinger|oracle cloud|equinix|cloudfront|netlify|vercel|datacamp|m247|choopa|phoenix nap|hurricane electric|psychz|colocrossing|sharktech|cdn|cdnetworks|edgecast|maxcdn|keycdn|jsdelivr|stackpath|cachefly|level 3|lumen)\b`)
 
 var (
 	dbipReaderOnce sync.Once

@@ -254,15 +254,22 @@ var nonPIIIPExact = map[string]string{
 	"182.254.116.116":  "Tencent DNSPod public",
 	"180.76.76.76":     "Baidu public DNS",
 
-	// Common placeholder / literal-example IPs (no real PII content)
-	"1.2.3.4":   "common placeholder address",
-	"1.2.1.1":   "common placeholder address",
-	"1.3.86.78": "common placeholder address",
-	"2.1.2.3":   "common placeholder address",
-	"2.2.2.2":   "common placeholder address",
-	"2.2.7.3":   "common placeholder address",
-	"25.8.3.66": "common placeholder address",
-	"9.3.15.0":  "common placeholder address",
-	"133.0.0.0": "common placeholder address",
-	"45.1.37.1": "common placeholder address",
+	// Common placeholder / literal-example IPs surfaced repeatedly by the
+	// offline FP classifier. All of these resolve to AS0 ("unrouted") in
+	// DB-IP, so the ASN fall-through in falsepositives_ip_asn.go cannot
+	// catch them and the explicit list is load-bearing.
+	//
+	// Other widely-cited literals (3.3.3.3, 4.4.4.4) deliberately stay
+	// out: DB-IP routes them to AS16509 Amazon and AS3356 Level 3
+	// respectively, so the ASN regex already drops them.
+	"1.2.3.4":   "common placeholder address", // canonical "example IP" in docs / tutorials
+	"1.2.1.1":   "common placeholder address", // frequent docs example, no allocation
+	"1.3.86.78": "common placeholder address", // recurring tutorial literal, unrouted
+	"2.1.2.3":   "common placeholder address", // sequence-style placeholder
+	"2.2.2.2":   "common placeholder address", // paired with 1.1.1.1 / 1.2.3.4 in examples
+	"2.2.7.3":   "common placeholder address", // recurring literal in scraped traffic
+	"25.8.3.66": "common placeholder address", // recurring literal in scraped traffic
+	"9.3.15.0":  "common placeholder address", // recurring literal in scraped traffic
+	"133.0.0.0": "common placeholder address", // legacy unrouted /8 boundary
+	"45.1.37.1": "common placeholder address", // recurring literal in scraped traffic
 }
