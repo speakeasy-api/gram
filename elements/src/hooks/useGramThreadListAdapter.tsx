@@ -73,9 +73,9 @@ export interface ThreadListAdapterOptions {
   /**
    * Don't client-mint a chat id for a brand-new thread. When true, `initialize`
    * waits for the transport to assign the id (via the shared `localIdToUuidMap`,
-   * e.g. a server-minted id reported through the transport context's setChatId)
-   * instead of generating one with `crypto.randomUUID()`. Use this when the
-   * backend owns chat-id creation.
+   * e.g. a server-minted id reported through the transport context's
+   * `adoptChatId` bind closure) instead of generating one with
+   * `crypto.randomUUID()`. Use this when the backend owns chat-id creation.
    */
   deferThreadIdMinting?: boolean;
 }
@@ -292,8 +292,8 @@ export function useGramThreadListAdapter(
           }
           // When the backend owns chat-id creation, don't client-mint: wait for
           // the transport to report the server-minted id (it assigns it during
-          // the first send via setChatId, populating the shared map — the same
-          // path the built-in transport uses).
+          // the first send via the adoptChatId bind closure, populating the
+          // shared map — the same path the built-in transport uses).
           if (optionsRef.current.deferThreadIdMinting) {
             const mappedUuid = await waitForMappedId(
               optionsRef.current.localIdToUuidMap,
@@ -307,8 +307,9 @@ export function useGramThreadListAdapter(
             }
             // Falling through to crypto.randomUUID() here would defeat deferred
             // minting: the client id would race the server-minted one reported
-            // later via setChatId, leaving runtime state and the local→remote
-            // map disagreeing. Surface the failure to the user instead.
+            // later via the adoptChatId bind closure, leaving runtime state
+            // and the local→remote map disagreeing. Surface the failure to
+            // the user instead.
             throw new Error(
               "Backend did not mint a chat id in time — first send may have failed or is still in flight. Retry the send.",
             );

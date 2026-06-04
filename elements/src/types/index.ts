@@ -62,27 +62,14 @@ export interface ElementsTransportContext {
   getChatId: () => string | null;
 
   /**
-   * Capture an opaque snapshot of the active local thread identity at call
-   * time. A consumer transport should call this at the start of
-   * `sendMessages`, hold the returned value across its async work, then pass it
-   * back to {@link setChatId} so a server-minted chat id is bound to the
-   * thread the send originated from — not whatever thread the user has since
-   * switched to during the round-trip. The snapshot value is opaque and
-   * single-purpose; do not inspect or reuse it.
+   * Adopt a chat id assigned out-of-band (e.g. a server-minted id a consumer
+   * transport receives on the first send). Call at the START of an async send
+   * to capture the active conversation, then invoke the returned function with
+   * the server's id once it's known. The closure binds to the conversation the
+   * send originated from, so a thread switch or a parallel send on another
+   * thread during the round-trip can't mis-associate the id.
    */
-  captureLocalThreadId: () => string | undefined;
-
-  /**
-   * Adopt a chat id assigned out-of-band — e.g. when the backend mints the id
-   * for a new conversation and returns it on the first send. Elements maps the
-   * captured local thread (see {@link captureLocalThreadId}) to this id so
-   * subsequent history loads and the thread list resolve to the right server
-   * chat. Call it once, with the id the server returned, immediately after the
-   * first send of a new conversation. When `localThreadIdSnapshot` is omitted,
-   * Elements falls back to the currently active thread — racy under concurrent
-   * sends across threads, so always pass the snapshot when available.
-   */
-  setChatId: (chatId: string, localThreadIdSnapshot?: string) => void;
+  adoptChatId: () => (chatId: string) => void;
 }
 
 /**
@@ -1084,7 +1071,7 @@ export interface HistoryConfig {
    * Let the backend own chat-id creation. When true, a brand-new thread does not
    * get a client-generated id; instead the transport assigns the id (e.g. one
    * the server minted on the first send, reported via the transport context's
-   * `setChatId`). Use with a server-backed `transport`.
+   * `adoptChatId`). Use with a server-backed `transport`.
    */
   deferThreadIdMinting?: boolean;
 

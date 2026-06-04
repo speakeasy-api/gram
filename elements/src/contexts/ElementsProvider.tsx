@@ -542,48 +542,30 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     const id = currentRemoteIdRef.current;
     return id && !isLocalThreadId(id) ? id : null;
   }, []);
-  // Capture the active local thread id without side effects. Consumer
-  // transports call this at sendMessages-start and pass the value back to
-  // `setChatId` so a server-minted chat id binds to the thread the send
-  // originated from, even if the user switches threads or fires a parallel
-  // send on a different thread during the async round-trip.
-  const captureLocalThreadId = useCallback(
-    () => getActiveLocalThreadId(runtimeRef),
-    [],
-  );
-  // Adopt a chat id assigned out-of-band (e.g. a server-minted id a consumer
-  // transport receives on the first send): map the captured local thread to it
-  // and sync the refs/headers the rest of the provider reads — the same
+  // Capture the active local thread identity now and return a bind function
+  // closing over it. Consumer transports call this at the start of
+  // `sendMessages`; once a server-minted chat id is known, invoking the
+  // returned function reconciles the captured thread to it — the same
   // reconciliation the built-in transport does inline when it generates an id.
-  const setChatId = useCallback(
-    (chatId: string, localThreadIdSnapshot?: string) => {
-      // Prefer the snapshot the consumer captured at send-start. Fall back to
-      // the currently active thread only when the consumer didn't capture one —
-      // that path is racy under parallel sends across threads but preserves
-      // behavior for transports that haven't adopted the snapshot API.
-      const localThreadId =
-        localThreadIdSnapshot ?? getActiveLocalThreadId(runtimeRef);
-      if (localThreadId) {
-        localIdToUuidMapRef.current.set(localThreadId, chatId);
+  // Closing over the captured id (instead of re-reading active state at bind
+  // time) is what makes a thread switch or a parallel send on another thread
+  // during the round-trip safe.
+  const adoptChatId = useCallback(() => {
+    const capturedLocalThreadId = getActiveLocalThreadId(runtimeRef);
+    return (chatId: string) => {
+      if (capturedLocalThreadId) {
+        localIdToUuidMapRef.current.set(capturedLocalThreadId, chatId);
       }
       currentRemoteIdRef.current = chatId;
-      mcpHeaders["Gram-Chat-ID"] = chatId;
       setCurrentChatId(chatId);
-    },
-    [mcpHeaders, setCurrentChatId],
-  );
+    };
+  }, [setCurrentChatId]);
   const transport = useMemo<ChatTransport<UIMessage>>(() => {
     if (typeof config.transport === "function") {
-      return config.transport({ getChatId, captureLocalThreadId, setChatId });
+      return config.transport({ getChatId, adoptChatId });
     }
     return config.transport ?? defaultTransport;
-  }, [
-    config.transport,
-    defaultTransport,
-    getChatId,
-    captureLocalThreadId,
-    setChatId,
-  ]);
+  }, [config.transport, defaultTransport, getChatId, adoptChatId]);
 
   const historyEnabled = config.history?.enabled ?? false;
 

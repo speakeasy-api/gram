@@ -39,10 +39,11 @@ interface Snapshot {
  * Builds an Elements transport factory that routes the conversation through the
  * project's server-side assistant. `sendMessages` posts the user's message via
  * `assistants.sendMessage` — for a new conversation it omits the chat id and the
- * server mints one, which we adopt via `ctx.setChatId` so Elements' thread
- * list/history resolve to it. It then polls `chat.load` for the assistant's
- * reply and surfaces it. History, the conversation list, and titles are owned by
- * Elements' RemoteThreadListAdapter — this only does send + reply reflection.
+ * server mints one, which we adopt via the bind closure returned by
+ * `ctx.adoptChatId()` so Elements' thread list/history resolve to it. It then
+ * polls `chat.load` for the assistant's reply and surfaces it. History, the
+ * conversation list, and titles are owned by Elements' RemoteThreadListAdapter
+ * — this only does send + reply reflection.
  */
 export function createServerAssistantTransport(
   deps: ServerAssistantTransportDeps,
@@ -79,8 +80,10 @@ export function createServerAssistantTransport(
           // Bind the local thread identity at send-start so a server-minted
           // chat id is reconciled with THIS thread even if a parallel send on
           // another thread (or a user thread-switch) shifts the runtime's
-          // active thread before our setChatId call lands.
-          const localThreadIdSnapshot = ctx.captureLocalThreadId();
+          // active thread before the bind call lands. `adopt` closes over the
+          // captured thread; calling it later attaches the server-minted id to
+          // THIS conversation.
+          const adopt = ctx.adoptChatId();
 
           // Snapshot the assistant rows already on the server before sending —
           // the poll's "new" baseline. Elements' optimistic `messages` carry
@@ -116,7 +119,7 @@ export function createServerAssistantTransport(
             // New conversation: adopt the server-minted id so the thread, its
             // history, and the conversation list all resolve to the same chat.
             chatId = sent.value.chatId;
-            ctx.setChatId(chatId, localThreadIdSnapshot);
+            adopt(chatId);
           }
 
           await pollForReplies({
