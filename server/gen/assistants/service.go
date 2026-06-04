@@ -34,6 +34,9 @@ type Service interface {
 	// assistant's delivered replies). Only the user who owns the conversation may
 	// read it. Poll with after_seq to fetch only newer messages.
 	ListMessages(context.Context, *ListMessagesPayload) (res *ListMessagesResult, err error)
+	// Get the project's built-in Project Assistant, provisioning it on first
+	// access. Idempotent — safe to call on every sidebar open.
+	EnsureManagedAssistant(context.Context, *EnsureManagedAssistantPayload) (res *types.Assistant, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -56,7 +59,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "listMessages"}
+var MethodNames = [8]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "listMessages", "ensureManagedAssistant"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -98,6 +101,13 @@ type DashboardMessage struct {
 type DeleteAssistantPayload struct {
 	// The assistant ID.
 	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// EnsureManagedAssistantPayload is the payload type of the assistants service
+// ensureManagedAssistant method.
+type EnsureManagedAssistantPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }

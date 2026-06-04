@@ -45,6 +45,10 @@ type Client struct {
 	// listMessages endpoint.
 	ListMessagesDoer goahttp.Doer
 
+	// EnsureManagedAssistant Doer is the HTTP client used to make requests to the
+	// ensureManagedAssistant endpoint.
+	EnsureManagedAssistantDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -65,18 +69,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListAssistantsDoer:  doer,
-		GetAssistantDoer:    doer,
-		CreateAssistantDoer: doer,
-		UpdateAssistantDoer: doer,
-		DeleteAssistantDoer: doer,
-		SendMessageDoer:     doer,
-		ListMessagesDoer:    doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListAssistantsDoer:         doer,
+		GetAssistantDoer:           doer,
+		CreateAssistantDoer:        doer,
+		UpdateAssistantDoer:        doer,
+		DeleteAssistantDoer:        doer,
+		SendMessageDoer:            doer,
+		ListMessagesDoer:           doer,
+		EnsureManagedAssistantDoer: doer,
+		RestoreResponseBody:        restoreBody,
+		scheme:                     scheme,
+		host:                       host,
+		decoder:                    dec,
+		encoder:                    enc,
 	}
 }
 
@@ -243,6 +248,30 @@ func (c *Client) ListMessages() goa.Endpoint {
 		resp, err := c.ListMessagesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistants", "listMessages", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnsureManagedAssistant returns an endpoint that makes HTTP requests to the
+// assistants service ensureManagedAssistant server.
+func (c *Client) EnsureManagedAssistant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnsureManagedAssistantRequest(c.encoder)
+		decodeResponse = DecodeEnsureManagedAssistantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnsureManagedAssistantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnsureManagedAssistantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistants", "ensureManagedAssistant", err)
 		}
 		return decodeResponse(resp)
 	}

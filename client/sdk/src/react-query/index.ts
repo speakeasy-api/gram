@@ -97,6 +97,7 @@ export * from "./discoverRemoteMcpProtectedResourceMetadata.js";
 export * from "./discoverRemoteSessionIssuer.js";
 export * from "./enableRBAC.js";
 export * from "./enableWebhooks.js";
+export * from "./ensureManagedAssistant.js";
 export * from "./evolveDeployment.js";
 export * from "./exportMcpMetadata.js";
 export * from "./featuresSet.js";
