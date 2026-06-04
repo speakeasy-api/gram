@@ -23,7 +23,7 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 	{
 		err = json.Unmarshal([]byte(hooksClaudeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
 		}
 		if !(body.HookEventName == "SessionStart" || body.HookEventName == "ConfigChange" || body.HookEventName == "PreToolUse" || body.HookEventName == "PostToolUse" || body.HookEventName == "PostToolUseFailure" || body.HookEventName == "UserPromptSubmit" || body.HookEventName == "Stop" || body.HookEventName == "SessionEnd" || body.HookEventName == "Notification") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "ConfigChange", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SessionEnd", "Notification"}))
@@ -59,6 +59,7 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 		Error:                body.Error,
 		IsInterrupt:          body.IsInterrupt,
 		SessionID:            body.SessionID,
+		UserEmail:            body.UserEmail,
 		Cwd:                  body.Cwd,
 		TranscriptPath:       body.TranscriptPath,
 		Source:               body.Source,

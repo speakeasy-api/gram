@@ -33707,6 +33707,9 @@ components:
                 transcript_path:
                     type: string
                     description: Path to the conversation transcript file
+                user_email:
+                    type: string
+                    description: Email of the authenticated user from the Speakeasy device agent, if available
             description: Unified payload for all Claude Code hook events
             required:
                 - hook_event_name

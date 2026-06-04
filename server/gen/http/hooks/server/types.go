@@ -31,6 +31,8 @@ type ClaudeRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// The Claude Code session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Email of the authenticated user from the Speakeasy device agent, if available
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// The working directory when the event fired
 	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
 	// Path to the conversation transcript file
@@ -2008,6 +2010,7 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 		Error:                body.Error,
 		IsInterrupt:          body.IsInterrupt,
 		SessionID:            body.SessionID,
+		UserEmail:            body.UserEmail,
 		Cwd:                  body.Cwd,
 		TranscriptPath:       body.TranscriptPath,
 		Source:               body.Source,
