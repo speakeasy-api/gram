@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Book, ExternalLink, GitBranch, Loader2 } from "lucide-react";
+import { Book, ExternalLink, GitBranch, Loader2, Users } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -123,16 +123,31 @@ export function CreateMarketplaceStep({
                   </span>
                 </div>
               </div>
-              <a
-                href={publishStatus.repoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="border-border bg-background hover:bg-muted/50 inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Open repo
-              </a>
+              <div className="flex flex-shrink-0 flex-col gap-2">
+                <a
+                  href={publishStatus.repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open repo
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setDialogOpen(true)}
+                  className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Manage collaborators
+                </button>
+              </div>
             </div>
+            <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+              At least one of your organization's users needs to be attached to
+              the repository as a collaborator so that the repository is
+              discoverable by Agent Platforms.
+            </p>
           </div>
         ) : (
           <div className="bg-card border-border rounded-lg border p-4">
