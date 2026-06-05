@@ -20,7 +20,8 @@ import type { RiskExclusion } from "@gram/client/models/components/riskexclusion
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Ellipsis } from "lucide-react";
+import type { ReactNode } from "react";
+import { Ellipsis, Plus } from "lucide-react";
 import { serializeExclusionExpression } from "./exclusion-expression";
 import { ExclusionSheet, type ExclusionSheetState } from "./exclusion-sheet";
 
@@ -159,24 +160,29 @@ export function ExclusionsTab({
     },
   ];
 
+  let body: ReactNode;
+  if (isLoading) {
+    body = <Type className="text-muted-foreground">Loading exclusions…</Type>;
+  } else if (exclusions.length === 0) {
+    body = (
+      <ExclusionsEmptyState
+        onCreate={() => onSheetChange({ mode: "create" })}
+      />
+    );
+  } else {
+    body = (
+      <Table
+        columns={columns}
+        data={exclusions}
+        rowKey={(exclusion) => exclusion.id}
+        onRowClick={(exclusion) => onSheetChange({ mode: "edit", exclusion })}
+      />
+    );
+  }
+
   return (
     <>
-      {isLoading ? (
-        <Type className="text-muted-foreground">Loading exclusions…</Type>
-      ) : (
-        <Table
-          columns={columns}
-          data={exclusions}
-          rowKey={(exclusion) => exclusion.id}
-          onRowClick={(exclusion) => onSheetChange({ mode: "edit", exclusion })}
-          noResultsMessage={
-            <Type className="text-muted-foreground">
-              No exclusions yet. Create one to suppress false-positive findings.
-            </Type>
-          }
-        />
-      )}
-
+      {body}
       <ExclusionSheet
         state={sheet}
         onOpenChange={(open) => {
@@ -184,5 +190,24 @@ export function ExclusionsTab({
         }}
       />
     </>
+  );
+}
+
+function ExclusionsEmptyState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
+      <div className="space-y-1 text-center">
+        <Type className="font-medium">No exclusions yet</Type>
+        <Type small muted>
+          Create an exclusion to suppress false-positive findings.
+        </Type>
+      </div>
+      <Button onClick={onCreate}>
+        <Button.LeftIcon>
+          <Plus className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Create exclusion</Button.Text>
+      </Button>
+    </div>
   );
 }
