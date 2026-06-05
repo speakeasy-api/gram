@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -72,7 +73,7 @@ func handleToolsList(
 	// slice.
 	if len(payload.tags) > 0 {
 		before := len(toolset.Tools)
-		toolset.Tools = filterToolsByTags(toolset.Tools, payload.tags)
+		toolset.Tools = toolfilter.FilterToolsByTags(toolset.Tools, payload.tags)
 		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 

@@ -1,6 +1,7 @@
 package risk_analysis
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -27,48 +30,97 @@ import (
 func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
 	t.Parallel()
 
-	text := ":: and ::0 and 2001:db8::1"
+	text := ":: and ::0 and dead::beef"
 	results := []presidioResult{
 		{EntityType: "IP_ADDRESS", Start: 0, End: 2, Score: 0.9},   // "::"
 		{EntityType: "IP_ADDRESS", Start: 7, End: 10, Score: 0.9},  // "::0"
-		{EntityType: "IP_ADDRESS", Start: 15, End: 26, Score: 0.9}, // "2001:db8::1"
+		{EntityType: "IP_ADDRESS", Start: 15, End: 25, Score: 0.9}, // "dead::beef"
 	}
 
 	findings := convertPresidioFindings(text, results)
 	require.Len(t, findings, 1, "only the real IPv6 address should survive the filter")
-	assert.Equal(t, "2001:db8::1", findings[0].Match)
+	assert.Equal(t, "dead::beef", findings[0].Match)
 }
 
-func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
+// TestIsPresidioFalsePositive_CorpusAllFiltered is the canonical
+// positive-coverage gate: every IP in testdata/fp-ip.txt is an address
+// the catalog must drop. Each line is run through
+// isPresidioFalsePositive; any miss is a regression. The corpus is
+// hand-curated — extend it by adding IPs (one per line, sorted) that
+// surface as false positives during catalog tuning. Real residential
+// IPs (PII) are never added to the corpus or otherwise committed.
+func TestIsPresidioFalsePositive_CorpusAllFiltered(t *testing.T) {
 	t.Parallel()
 
-	// Unspecified addresses are filtered, IPv6 and IPv4.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0::0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0:0:0:0:0:0:0:0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0.0.0.0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed")
+	f, err := os.Open("testdata/fp-ip.txt")
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
 
-	// Loopback addresses are filtered, IPv6 and IPv4 (whole 127.0.0.0/8).
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "127.0.0.1"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "127.1.2.3"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::1"))
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 1<<22)
+	var checked int
+	for sc.Scan() {
+		ip := strings.TrimSpace(sc.Text())
+		if ip == "" || strings.HasPrefix(ip, "#") {
+			continue
+		}
+		assert.True(t, isPresidioFalsePositive("IP_ADDRESS", ip),
+			"corpus IP %q must be filtered", ip)
+		checked++
+	}
+	require.NoError(t, sc.Err())
+	assert.Positive(t, checked, "fp-ip.txt corpus must not be empty")
+}
 
-	// IPv6 short-form "<hex>::" patterns dominate Presidio's IP_ADDRESS
-	// noise on prod (hex constants and text fragments greedily matched).
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "b::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "dead::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "DEAF::"), "case-insensitive")
+// TestIsPresidioFalsePositive_NegativesAndEntityScope locks the two
+// invariants the corpus cannot express: real consumer-ISP IPs still
+// surface as PII, and the filter only fires for IP_ADDRESS findings.
+func TestIsPresidioFalsePositive_NegativesAndEntityScope(t *testing.T) {
+	t.Parallel()
 
-	// Real addresses are not filtered.
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "8.8.8.8"))
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "2001:db8::1"))
+	// Real addresses still flow through. Consumer ISP IPs identify an end
+	// user and are deliberately not in the infra ASN regex, so they are
+	// still treated as PII.
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "71.126.87.167"), "residential Verizon")
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "82.15.226.61"), "residential Virgin Media")
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
+
+	// Whitespace-trimming applies to the IP_ADDRESS path.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed unspecified")
 
 	// Other entity types are never filtered by this rule.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "8.8.8.8"))
+}
+
+// TestIsPresidioFalsePositive_EquivalentIPFormsMatch verifies that
+// catalogued exact IPs are caught regardless of how Presidio happens to
+// spell them. The exact lookup canonicalises via netip before matching,
+// so expanded zero-groups and uppercase hex resolve to the same entry as
+// the curated key.
+func TestIsPresidioFalsePositive_EquivalentIPFormsMatch(t *testing.T) {
+	t.Parallel()
+
+	// Cloudflare 2606:4700:4700::1111 spelled with explicit zero groups.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700:0:0:0:0:1111"), "compressed-zero variant")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700:0000:0000:0000:0000:1111"), "fully-expanded variant")
+	// Google 2001:4860:4860::8888 with explicit zero groups.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2001:4860:4860:0:0:0:0:8888"), "Google DNS expanded")
+	// AdGuard 2a10:50c0::bad1:ff in uppercase hex.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2A10:50C0::BAD1:FF"), "uppercase hex variant")
+}
+
+// TestNonPIIIPExactKeysAreCanonical locks the invariant that every key in
+// nonPIIIPExact is already in netip canonical form. The exact lookup keys
+// off addr.String(), so a non-canonical key would silently never match.
+func TestNonPIIIPExactKeysAreCanonical(t *testing.T) {
+	t.Parallel()
+
+	for key := range nonPIIIPExact {
+		addr, err := netip.ParseAddr(key)
+		require.NoErrorf(t, err, "key %q must parse as an IP", key)
+		assert.Equalf(t, key, addr.String(), "key %q must be in canonical netip form", key)
+	}
 }
 
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {

@@ -19,23 +19,69 @@ import type {
   ThreadAssistantMessagePart,
   TextMessagePart,
 } from "@assistant-ui/react";
-import type {
-  Message,
-  UserMessage,
-  AssistantMessage,
-  ToolResponseMessage,
-} from "@openrouter/sdk/models";
 import { UIMessage } from "ai";
 
 /**
- * Represents a chat message from the Gram API.
- * This mirrors the ChatMessage type from @gram/sdk without requiring the SDK dependency.
+ * A single text part of a multi-modal chat message.
  */
-export type GramChatMessage = Message & {
+export interface GramChatTextPart {
+  type: "text";
+  text: string;
+}
+
+/**
+ * A single image part of a multi-modal chat message. The wire shape mirrors the
+ * upstream OpenAI/OpenRouter chat schema (`image_url.url`) so the converter can
+ * read it without normalisation.
+ */
+export interface GramChatImagePart {
+  type: "image_url";
+  image_url?: { url?: string };
+}
+
+/**
+ * A single audio part of a multi-modal chat message. Mirrors the OpenAI/OpenRouter
+ * `input_audio.{data, format}` shape on the wire.
+ */
+export interface GramChatAudioPart {
+  type: "input_audio";
+  input_audio?: { data?: string; format?: string };
+}
+
+/**
+ * Content part of a multi-modal chat message.
+ */
+export type GramChatContentPart =
+  | GramChatTextPart
+  | GramChatImagePart
+  | GramChatAudioPart;
+
+/**
+ * Content of a chat message — either a plain string or an array of parts for
+ * multi-modal messages.
+ */
+export type GramChatContent = string | GramChatContentPart[];
+
+/**
+ * Represents a chat message from the Gram API. Only fields actually surfaced
+ * through Elements' public converters are modelled; provider-specific extras
+ * remain on the wire shape but are intentionally not part of the contract.
+ *
+ * `tool_calls` is the JSON-encoded string the Gram chat service stores on
+ * assistant rows; `tool_call_id` is the id the corresponding tool-response row
+ * carries when `role === "tool"`.
+ */
+export interface GramChatMessage {
   id: string;
   model: string;
   created_at: Date | string;
-};
+  role: "system" | "developer" | "user" | "assistant" | "tool";
+  content?: GramChatContent | null;
+  name?: string;
+  tool_calls?: string;
+  tool_call_id?: string;
+  reasoning?: string | null;
+}
 
 /**
  * Represents a chat from the Gram API.
@@ -96,29 +142,23 @@ function buildUserContentParts(msg: GramChatMessage): ThreadUserMessagePart[] {
           text: item.text,
         });
         break;
-      case "image_url":
+      case "image_url": {
+        const url = item.image_url?.url ?? "";
         parts.push({
           type: "image",
-          image: (item as any).image_url?.url as FIXME<
-            string,
-            "Fixed by switching to Gram TS SDK."
-          >,
+          image: url,
         });
         break;
+      }
       case "input_audio": {
-        const format = (item as any).input_audio?.format as FIXME<
-          string,
-          "Fixed by switching to Gram TS SDK."
-        >;
-        if (format === "mp3" || format === "wav") {
+        const format = item.input_audio?.format;
+        const data = item.input_audio?.data;
+        if ((format === "mp3" || format === "wav") && data) {
           parts.push({
             type: "audio",
             audio: {
-              data: (item as any).input_audio.data as FIXME<
-                string,
-                "Fixed by switching to Gram TS SDK."
-              >,
-              format: format,
+              data,
+              format,
             },
           });
         }
@@ -155,12 +195,7 @@ function buildAssistantContentParts(
     });
   }
 
-  const toolCallsJSON = (msg as any).tool_calls as FIXME<
-    string | undefined,
-    "Fixed by switching to Gram TS SDK."
-  >;
-
-  let toolCalls = tryParseJSON(toolCallsJSON || "[]");
+  let toolCalls = tryParseJSON(msg.tool_calls || "[]");
   if (!Array.isArray(toolCalls)) {
     console.warn("Invalid tool_calls format, expected an array.");
     toolCalls = [];
@@ -280,8 +315,10 @@ function convertGramMessageToThreadMessage(
  * Converts an array of Gram ChatMessages to an ExportedMessageRepository.
  * Creates parent-child relationships based on message order.
  *
- * Note: System messages are filtered out because assistant-ui's
- * `fromThreadMessageLike` doesn't support them in the exported format.
+ * Note: system, developer, and tool messages are filtered out. assistant-ui's
+ * exported format only models user/assistant turns; system/developer rows are
+ * pre-prompt instructions the UI doesn't render, and tool rows are folded into
+ * the preceding assistant message as `tool-call` parts via `tool_calls`.
  */
 export function convertGramMessagesToExported(
   messages: GramChatMessage[],
@@ -294,8 +331,11 @@ export function convertGramMessagesToExported(
   let prevId: string | null = null;
 
   for (const msg of messages) {
-    // Skip system messages - they're not supported in the exported message format
-    if (msg.role === "system") {
+    if (
+      msg.role === "system" ||
+      msg.role === "developer" ||
+      msg.role === "tool"
+    ) {
       continue;
     }
 
@@ -322,17 +362,17 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
     return { messages: [], headId: null };
   }
 
-  const toolCallResults = new Map<string, ToolResponseMessage>();
+  const toolCallResults = new Map<string, GramChatMessage>();
   for (const msg of messages) {
     if (msg.role !== "tool") {
       continue;
     }
-    const id = (msg as any).tool_call_id;
+    const id = msg.tool_call_id;
     if (typeof id !== "string") {
       continue;
     }
 
-    toolCallResults.set(id, msg as ToolResponseMessage);
+    toolCallResults.set(id, msg);
   }
 
   const uiMessages: { parentId: string | null; message: UIMessage }[] = [];
@@ -415,9 +455,19 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
   };
 }
 
+/**
+ * Parsed shape of a single entry inside an assistant message's `tool_calls`
+ * JSON string. Mirrors the OpenAI/OpenRouter tool-call wire format.
+ */
+interface GramToolCall {
+  id: string;
+  type?: "function";
+  function?: { name?: string; arguments?: string | Record<string, unknown> };
+}
+
 export function convertGramMessagePartsToUIMessageParts(
-  msg: UserMessage | AssistantMessage,
-  toolResults: Map<string, ToolResponseMessage>,
+  msg: GramChatMessage,
+  toolResults: Map<string, GramChatMessage>,
   seenToolCallIds?: Set<string>,
 ): UIMessage["parts"] {
   const uiparts: UIMessage["parts"] = [];
@@ -440,10 +490,7 @@ export function convertGramMessagePartsToUIMessageParts(
         break;
       }
       case "image_url": {
-        const url = (p as any).image_url?.url as FIXME<
-          string | undefined,
-          "Fixed by switching to Gram TS SDK."
-        >;
+        const url = p.image_url?.url;
         if (!url) {
           break;
         }
@@ -456,10 +503,7 @@ export function convertGramMessagePartsToUIMessageParts(
         break;
       }
       case "input_audio": {
-        const url = (p as any).input_audio?.data as FIXME<
-          string | undefined,
-          "Fixed by switching to Gram TS SDK."
-        >;
+        const url = p.input_audio?.data;
         if (!url) {
           break;
         }
@@ -481,14 +525,8 @@ export function convertGramMessagePartsToUIMessageParts(
     });
   }
 
-  if (msg.role === "assistant" && (msg as any).tool_calls) {
-    const toolCallsJSON = (msg as any).tool_calls as FIXME<
-      string,
-      "Fixed by switching to Gram TS SDK."
-    >;
-    let toolCalls = tryParseJSON<AssistantMessage["toolCalls"]>(
-      toolCallsJSON || "[]",
-    );
+  if (msg.role === "assistant" && msg.tool_calls) {
+    let toolCalls = tryParseJSON<GramToolCall[]>(msg.tool_calls || "[]");
     if (!Array.isArray(toolCalls)) {
       console.warn("Invalid tool_calls format, expected an array.");
       toolCalls = [];

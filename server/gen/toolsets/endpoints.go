@@ -22,6 +22,7 @@ type Endpoints struct {
 	UpdateToolset            goa.Endpoint
 	DeleteToolset            goa.Endpoint
 	GetToolset               goa.Endpoint
+	ListToolFilters          goa.Endpoint
 	CheckMCPSlugAvailability goa.Endpoint
 	CloneToolset             goa.Endpoint
 	AddExternalOAuthServer   goa.Endpoint
@@ -43,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateToolset:            NewUpdateToolsetEndpoint(s, a.APIKeyAuth),
 		DeleteToolset:            NewDeleteToolsetEndpoint(s, a.APIKeyAuth),
 		GetToolset:               NewGetToolsetEndpoint(s, a.APIKeyAuth),
+		ListToolFilters:          NewListToolFiltersEndpoint(s, a.APIKeyAuth),
 		CheckMCPSlugAvailability: NewCheckMCPSlugAvailabilityEndpoint(s, a.APIKeyAuth),
 		CloneToolset:             NewCloneToolsetEndpoint(s, a.APIKeyAuth),
 		AddExternalOAuthServer:   NewAddExternalOAuthServerEndpoint(s, a.APIKeyAuth),
@@ -62,6 +64,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateToolset = m(e.UpdateToolset)
 	e.DeleteToolset = m(e.DeleteToolset)
 	e.GetToolset = m(e.GetToolset)
+	e.ListToolFilters = m(e.ListToolFilters)
 	e.CheckMCPSlugAvailability = m(e.CheckMCPSlugAvailability)
 	e.CloneToolset = m(e.CloneToolset)
 	e.AddExternalOAuthServer = m(e.AddExternalOAuthServer)
@@ -399,6 +402,65 @@ func NewGetToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.GetToolset(ctx, p)
+	}
+}
+
+// NewListToolFiltersEndpoint returns an endpoint function that calls the
+// method "listToolFilters" of service "toolsets".
+func NewListToolFiltersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListToolFiltersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListToolFilters(ctx, p)
 	}
 }
 

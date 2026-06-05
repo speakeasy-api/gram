@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -98,7 +99,7 @@ func handleToolsCall(
 	// filtered-out tool surfaces as method-not-found.
 	if len(payload.tags) > 0 {
 		before := len(toolset.Tools)
-		toolset.Tools = filterToolsByTags(toolset.Tools, payload.tags)
+		toolset.Tools = toolfilter.FilterToolsByTags(toolset.Tools, payload.tags)
 		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
