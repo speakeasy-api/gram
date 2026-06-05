@@ -644,20 +644,20 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 //     (X.0.0.0 /8 network address, sparse IPv6 like 1::, b::, dead::).
 //   - EMAIL_ADDRESS → nonPIIEmailReason in falsepositives_email.go,
 //     primarily covering well-known fixture / placeholder domains
-//     (`@example.com`, `@acme.com`, `@acmecorp.com`, etc.), plus KV /
-//     env wrappers (`DB_USERNAME=...`, `identity=...`), GCP
+//     (`@example.com`, `@acme.com`, `@acmecorp.com`, etc.), GCP
 //     service-account machine identities (`.gserviceaccount.com`),
-//     and two RFC-shape sanity checks: a `/` anywhere in the
-//     candidate (invalid in an addr-spec, so the match is a URL or
-//     package path) and a digit at the end of the domain (TLDs are
-//     letters, so this catches `pkg@v1.2.3` and other
-//     version-suffixed module paths).
+//     two RFC-shape sanity checks (any `/` in the candidate; trailing
+//     digit on the domain — catches `pkg@v1.2.3` and other
+//     version-suffixed module paths), and template-only / automated
+//     local-parts (`first.last`, `firstname.lastname`, `noreply`,
+//     `no-reply`).
 //
 // Cloud / CDN attribution by AS organisation (the fp_infra_asn bucket
 // in the offline IP classifier) and lower-confidence email buckets
-// (JSON-escaped angle brackets, ANSI colour codes, Faker localparts,
-// fictional company domains, generic role aliases, noreply addresses)
-// are deliberately out of scope; they need a runtime ASN lookup or a
+// (KV / env wrappers like `DB_USERNAME=…`, JSON-escaped angle
+// brackets, ANSI colour codes, Faker localparts, fictional company
+// domains, generic role aliases, hashed noreply addresses) are
+// deliberately out of scope; they need a runtime ASN lookup or a
 // per-customer policy decision respectively.
 func isPresidioFalsePositive(entityType, match string) bool {
 	switch entityType {

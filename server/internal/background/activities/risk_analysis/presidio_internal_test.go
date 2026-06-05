@@ -145,23 +145,22 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice@acme.io"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.smith@acmecorp.com"))
 
-	// KV / env / config fragments.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "DB_USERNAME=adam@speakeasy.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "email='Chadrick_Quigley52@yahoo.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "email_addr='Kurtis20@yahoo.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "identity=adam@speakeasy.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user=david@speakeasyapi.dev"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "author=david@speakeasyapi.dev"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-account=slack-deploy-bot-runtime@speakeasy-prod-354914.iam.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "smtp.mailfrom=mail@hgstrust.org"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "OU=danielkov@Mac.chello.hu"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "nCLAUDE_CODE_USER_EMAIL=ecorella@moonpay.com"))
+	// KV / env / config wrappers are NOT filtered: they usually wrap
+	// real production emails, so dropping them would mask PII.
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "DB_USERNAME=adam@speakeasy.com"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "identity=adam@speakeasy.com"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user=david@speakeasyapi.dev"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "smtp.mailfrom=mail@hgstrust.org"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "nCLAUDE_CODE_USER_EMAIL=ecorella@moonpay.com"))
 
-	// GCP service accounts (machine identities, not PII).
+	// GCP service accounts (machine identities, not PII). The
+	// `service-account=...` wrapper survives because the suffix layer
+	// still fires on `.gserviceaccount.com`.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "argocd-image-updater@moonpay-sre.iam.gserviceaccount.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "502133085207@cloudservices.gserviceaccount.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "{project_number}@cloudbuild.gserviceaccount.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-{{PROJECT_NUMBER}}@gcp-sa-pubsub.iam.gserviceaccount.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-account=slack-deploy-bot-runtime@speakeasy-prod-354914.iam.gserviceaccount.com"))
 
 	// Any '/' makes the string a URL or path, not an addr-spec.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "medium.com/@abdelghani.alhijawi"))
