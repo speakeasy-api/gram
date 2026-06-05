@@ -61,25 +61,40 @@ func TestFPSplit(t *testing.T) {
 	sort.Strings(real)
 	real = dedupe(real)
 
-	out, err := os.Create(outPath)
-	if err != nil {
-		t.Fatalf("create %q: %v", outPath, err)
-	}
-	defer func() { _ = out.Close() }()
-	w := bufio.NewWriter(out)
-	defer func() { _ = w.Flush() }()
-	for _, ip := range fp {
-		if _, err := fmt.Fprintln(w, ip); err != nil {
-			t.Fatalf("write: %v", err)
-		}
+	if err := writeLines(outPath, fp); err != nil {
+		t.Fatalf("write fp-ip: %v", err)
 	}
 
-	t.Logf("input:  %s", *fpSplitInput)
-	t.Logf("fp-ip:  %s (%d ips)", outPath, len(fp))
-	t.Logf("real:   %d ips not in catalog (printed below; spot-check before promoting):", len(real))
-	for _, ip := range real {
-		t.Logf("  %s", ip)
+	// Residual IPs are real production user data, so we never log them or
+	// check them into the repo: write to a sibling file under /tmp so the
+	// operator can inspect locally and discard.
+	residualPath := filepath.Join(os.TempDir(), "fp_split_residual.txt")
+	if err := writeLines(residualPath, real); err != nil {
+		t.Fatalf("write residual: %v", err)
 	}
+
+	t.Logf("input:    %s", *fpSplitInput)
+	t.Logf("fp-ip:    %s (%d ips)", outPath, len(fp))
+	t.Logf("residual: %s (%d ips, not logged)", residualPath, len(real))
+}
+
+func writeLines(path string, lines []string) (err error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	w := bufio.NewWriter(f)
+	for _, line := range lines {
+		if _, werr := fmt.Fprintln(w, line); werr != nil {
+			return werr
+		}
+	}
+	return w.Flush()
 }
 
 func dedupe(xs []string) []string {
