@@ -1626,7 +1626,7 @@ CREATE TABLE IF NOT EXISTS user_attributes (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT user_attributes_pkey PRIMARY KEY (id),
-  CONSTRAINT user_attributes_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id)
+  CONSTRAINT user_attributes_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 -- The current attributes for a user are the most recent version. This index
