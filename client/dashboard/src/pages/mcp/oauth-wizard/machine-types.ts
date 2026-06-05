@@ -78,7 +78,7 @@ export function parseScopes(raw: string): string[] {
 }
 
 /** Token endpoint auth methods, ordered by our preference. */
-export const TOKEN_AUTH_METHODS_PRIORITY = [
+const TOKEN_AUTH_METHODS_PRIORITY = [
   "client_secret_basic",
   "client_secret_post",
   "none",
