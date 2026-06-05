@@ -48,6 +48,16 @@ func TestStripLeadingEnvelopesLeavesUnknownLeadingTag(t *testing.T) {
 	require.Equal(t, input, stripLeadingEnvelopes(input))
 }
 
+// Each allowlisted envelope must match its own close tag — a mismatched pair
+// (open from one envelope, close from another) is not a real envelope and must
+// be left intact.
+func TestStripLeadingEnvelopesLeavesMismatchedTags(t *testing.T) {
+	t.Parallel()
+
+	input := "<message-context>hmm</notification> what is this?"
+	require.Equal(t, input, stripLeadingEnvelopes(input))
+}
+
 // The regex is anchored to the start of the message: only leading framing is
 // removed. A user who happens to type tags mid-message keeps that text —
 // stripping it would distort the title.

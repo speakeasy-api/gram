@@ -119,10 +119,12 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 // The tag is an allowlist of envelopes we know about rather than any
 // <tag>…</tag>: a fully-generic match would also eat legitimate leading user
 // markup (a message that starts with <details> or a pasted code block), which
-// distorts the title. Add new harnesses to the alternation as they appear.
-// Anchored to the start, so a tag a user types mid-message is preserved; the
-// non-greedy body stops at the first close tag.
-var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:\s*<(?:message-context|notification)>.*?</(?:message-context|notification)>\s*)+`)
+// distorts the title. Add new harnesses as another `<tag>…</tag>` alternative.
+// Each alternative pairs an open tag with its own close tag (RE2 has no
+// backreferences), so a mismatched `<message-context>…</notification>` is left
+// alone. Anchored to the start, so a tag a user types mid-message is preserved;
+// the non-greedy body stops at the first close tag.
+var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:\s*<message-context>.*?</message-context>\s*|\s*<notification>.*?</notification>\s*)+`)
 
 // stripLeadingEnvelopes removes any leading harness framing so the title model
 // sees only the human-authored turn text.

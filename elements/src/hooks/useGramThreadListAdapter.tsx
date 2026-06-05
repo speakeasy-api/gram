@@ -61,6 +61,14 @@ async function waitForMappedId(
   }
 }
 
+/**
+ * Transforms or drops a persisted chat message before it is rendered from
+ * history. Return the (possibly rewritten) message, or `null` to omit it.
+ */
+export type ChatMessageTransform = (
+  message: GramChatMessage,
+) => GramChatMessage | null;
+
 export interface ThreadListAdapterOptions {
   apiUrl: string;
   headers: Record<string, string>;
@@ -85,7 +93,7 @@ export interface ThreadListAdapterOptions {
    * or `null` to omit it. Keeps product-specific transcript conventions out of
    * the library — see {@link HistoryConfig.transformChatMessage}.
    */
-  transformChatMessage?: (message: GramChatMessage) => GramChatMessage | null;
+  transformChatMessage?: ChatMessageTransform;
 }
 
 interface ListChatsResponse {
@@ -101,29 +109,30 @@ class GramThreadHistoryAdapter {
   private apiUrl: string;
   private headers: Record<string, string>;
   private store: AssistantApi;
-  private transformChatMessage?: (
-    message: GramChatMessage,
-  ) => GramChatMessage | null;
+  // Read lazily rather than captured: the adapter is constructed once, but the
+  // consumer may swap `transformChatMessage` across renders, so resolve it from
+  // the live options on every load instead of snapshotting it here.
+  private getTransformChatMessage?: () => ChatMessageTransform | undefined;
 
   constructor(
     apiUrl: string,
     headers: Record<string, string>,
     store: AssistantApi,
-    transformChatMessage?: (message: GramChatMessage) => GramChatMessage | null,
+    getTransformChatMessage?: () => ChatMessageTransform | undefined,
   ) {
     this.apiUrl = apiUrl;
     this.headers = headers;
     this.store = store;
-    this.transformChatMessage = transformChatMessage;
+    this.getTransformChatMessage = getTransformChatMessage;
   }
 
   /**
-   * Applies the consumer-supplied {@link transformChatMessage} hook to a loaded
+   * Applies the consumer-supplied `transformChatMessage` hook to a loaded
    * transcript: rewrites each message and drops any the hook returns `null` for.
    * Without a hook configured the messages pass through untouched.
    */
   private applyTransform(messages: GramChatMessage[]): GramChatMessage[] {
-    const transform = this.transformChatMessage;
+    const transform = this.getTransformChatMessage?.();
     if (!transform) {
       return messages;
     }
@@ -246,7 +255,7 @@ function useGramThreadHistoryAdapter(
         optionsRef.current.apiUrl,
         optionsRef.current.headers,
         store,
-        optionsRef.current.transformChatMessage,
+        () => optionsRef.current.transformChatMessage,
       ),
   );
   // Cast to ThreadHistoryAdapter - the withFormat generic doesn't match but works at runtime
