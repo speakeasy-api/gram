@@ -37,9 +37,10 @@ use agentkit_provider_openrouter::OpenRouterProvider;
 use agentkit_tools_core::{CompositePermissionChecker, PermissionDecision};
 use async_trait::async_trait;
 use serde::{Deserialize, Deserializer};
-use tokio::sync::mpsc::UnboundedSender;
 
 use crate::errors::RunnerError;
+use crate::gram_client::GramBootstrapClient;
+use crate::http_layer::TokenRegistry;
 use crate::wire::{RunnerMessage, RunnerToolCall};
 
 const COMPACTION_SYSTEM_PROMPT: &str = "You are a compaction agent. Compress the transcript that follows into a durable context note for an assistant that has lost the original messages. Preserve every named person, every year and date, every place, every decision the assistant committed to, every tool the assistant invoked, and every actionable fact in the tool results. Drop chatter, narration, and chain-of-thought. Return only the compacted note as plain text.";
@@ -138,20 +139,36 @@ fn build_trigger(policy: &CompactionPolicy, context_window: u64) -> Option<Trigg
     }
 }
 
-/// Wraps a [`StrategyCompactor`] and taps every successful compaction onto
-/// a channel so a sibling persistence task can POST the post-compaction
-/// transcript to the server. The in-memory mutation alone doesn't reach
-/// `chat_messages` (the compactor's adapter sends `Gram-Skip-Capture: 1`),
-/// so without this tap a cold cron bootstrap would re-load the
-/// un-compacted prior generation and growth would persist across fires.
+/// Wraps a [`StrategyCompactor`] and synchronously POSTs the post-
+/// compaction transcript to the server inside `compact()`. Persisting
+/// before `compact()` returns serialises with the agent loop: the next
+/// turn cannot dispatch a captured `/chat/completions` request until the
+/// new generation row is in `chat_messages`, so a follow-up capture
+/// cannot race ahead and write a newer generation that the compaction
+/// row would then overwrite. Without this in-line tap the in-memory
+/// mutation alone wouldn't reach the DB (the compactor's adapter sends
+/// `Gram-Skip-Capture: 1`), and a cold cron bootstrap would re-load the
+/// un-compacted prior generation.
 pub struct PersistingCompactor {
     inner: StrategyCompactor,
-    persist_tx: UnboundedSender<Vec<Item>>,
+    client: GramBootstrapClient,
+    tokens: TokenRegistry,
+    thread_id: String,
 }
 
 impl PersistingCompactor {
-    pub fn new(inner: StrategyCompactor, persist_tx: UnboundedSender<Vec<Item>>) -> Self {
-        Self { inner, persist_tx }
+    pub fn new(
+        inner: StrategyCompactor,
+        client: GramBootstrapClient,
+        tokens: TokenRegistry,
+        thread_id: String,
+    ) -> Self {
+        Self {
+            inner,
+            client,
+            tokens,
+            thread_id,
+        }
     }
 }
 
@@ -172,8 +189,24 @@ impl Compactor for PersistingCompactor {
         cancellation: Option<TurnCancellation>,
     ) -> Result<Vec<Item>, CompactionError> {
         let compacted = self.inner.compact(transcript, reason, cancellation).await?;
-        if let Err(err) = self.persist_tx.send(compacted.clone()) {
-            tracing::warn!(error = %err, "compaction persistence channel closed; skipping persist");
+        let messages = denormalize_transcript(&compacted);
+        if !messages.is_empty() {
+            match self
+                .client
+                .record_compacted_generation(&self.thread_id, &self.tokens, &messages)
+                .await
+            {
+                Ok(()) => tracing::info!(
+                    thread_id = %self.thread_id,
+                    rows = messages.len(),
+                    "compacted generation persisted"
+                ),
+                Err(err) => tracing::warn!(
+                    thread_id = %self.thread_id,
+                    error = %err,
+                    "failed to persist compacted generation; next cold bootstrap will see un-compacted history"
+                ),
+            }
         }
         Ok(compacted)
     }
@@ -181,15 +214,18 @@ impl Compactor for PersistingCompactor {
 
 /// Builds the compactor to attach to the agent via
 /// [`agentkit_compaction::AgentBuilderCompactorExt::compactor`]. Returns
-/// `None` when [`build_trigger`] declines. The returned compactor taps
-/// successful runs onto `persist_tx` so a sibling task can persist the
-/// compacted transcript as a new chat_messages generation.
+/// `None` when [`build_trigger`] declines. The returned compactor POSTs
+/// the post-compaction transcript to the server synchronously inside
+/// `compact()` so the new chat_messages generation is durable before the
+/// loop accepts the next turn.
 pub fn build_compactor(
     policy: &CompactionPolicy,
     chat_id: &str,
+    thread_id: &str,
     context_window: u64,
     compactor_adapter: CompletionsAdapter<OpenRouterProvider>,
-    persist_tx: UnboundedSender<Vec<Item>>,
+    client: GramBootstrapClient,
+    tokens: TokenRegistry,
 ) -> Result<Option<PersistingCompactor>, RunnerError> {
     let Some(trigger) = build_trigger(policy, context_window) else {
         return Ok(None);
@@ -222,27 +258,42 @@ pub fn build_compactor(
         .backend(backend)
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
-    Ok(Some(PersistingCompactor::new(inner, persist_tx)))
+    Ok(Some(PersistingCompactor::new(
+        inner,
+        client,
+        tokens,
+        thread_id.to_string(),
+    )))
 }
 
 /// Converts an agentkit transcript back into the wire shape the server
-/// persists. Mirrors `runtime::normalize_history` in reverse:
+/// persists. Mirrors `runtime::normalize_history` in reverse with one
+/// twist: `ItemKind::Context` items (including the summary
+/// [`AgentCompactor`] produces) collapse to `role=user` because
+/// `ServiceCore.loadChatHistory` drops `system` rows on the next
+/// bootstrap. Mapping Context to `user` keeps the compaction summary
+/// alive across the cold cron bootstrap that this whole persistence
+/// path exists to support.
 ///
-/// * `System`, `Developer`, `Context` items collapse to `role=system`.
-/// * `User` and `Notification` items collapse to `role=user`.
-/// * `Assistant` items emit a single row with concatenated text and any
-///   tool_calls extracted from `Part::ToolCall` parts.
-/// * `Tool` items emit a single row per `Part::ToolResult` with the
-///   referenced `call_id`.
+/// Specifically:
+///
+/// * `System`, `Developer` items → `role=system` (loadChatHistory drops
+///   these on bootstrap; the server-composed system prompt replaces
+///   them anyway).
+/// * `Context` items → `role=user` so the summary persists and replays.
+/// * `User` and `Notification` items → `role=user`.
+/// * `Assistant` items → single row with concatenated text and any
+///   tool_calls from `Part::ToolCall` parts.
+/// * `Tool` items → one row per `Part::ToolResult` with its `call_id`.
 ///
 /// Non-text content (media, file, structured, reasoning, custom) is
-/// dropped — the next bootstrap doesn't need to round-trip these through
-/// the runner, and the strategy pipeline already strips reasoning.
+/// dropped — the strategy pipeline already strips reasoning, and the
+/// other kinds don't round-trip through the runner today.
 pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
     let mut out = Vec::with_capacity(items.len());
     for item in items {
         match item.kind {
-            ItemKind::System | ItemKind::Developer | ItemKind::Context => {
+            ItemKind::System | ItemKind::Developer => {
                 out.push(RunnerMessage {
                     role: "system".to_string(),
                     content: concat_text(&item.parts),
@@ -250,7 +301,7 @@ pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
                     tool_call_id: None,
                 });
             }
-            ItemKind::User | ItemKind::Notification => {
+            ItemKind::Context | ItemKind::User | ItemKind::Notification => {
                 out.push(RunnerMessage {
                     role: "user".to_string(),
                     content: concat_text(&item.parts),
@@ -450,7 +501,10 @@ mod tests {
         assert_eq!(out.len(), 7);
         assert_eq!(out[0].role, "system");
         assert_eq!(out[1].role, "system");
-        assert_eq!(out[2].role, "system");
+        // Context maps to "user" so loadChatHistory preserves the
+        // AgentCompactor summary across cold bootstraps.
+        assert_eq!(out[2].role, "user");
+        assert_eq!(out[2].content, "ambient");
         assert_eq!(out[3].role, "user");
         assert_eq!(out[3].content, "hello");
         assert_eq!(out[4].role, "user");
