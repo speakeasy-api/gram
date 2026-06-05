@@ -131,12 +131,11 @@ if err != nil || !enabled {
 
 ### Checking in the React dashboard
 
-Use the PostHog JS SDK directly (already initialized in the dashboard):
+Use the `useTelemetry()` hook from `client/dashboard/src/contexts/Telemetry.tsx` — never import PostHog hooks directly:
 
 ```tsx
-import { useFeatureFlagEnabled } from "posthog-js/react";
-
-const myFeatureEnabled = useFeatureFlagEnabled("my-new-feature");
+const telemetry = useTelemetry();
+const myFeatureEnabled = telemetry.isFeatureEnabled("my-new-feature") ?? false;
 ```
 
 ---
