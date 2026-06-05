@@ -21,6 +21,16 @@ func TestStripMessageContextLeavesPlainTextUntouched(t *testing.T) {
 	require.Equal(t, "just a normal message", stripMessageContext("just a normal message"))
 }
 
+// The regex is anchored to the start of the message: only the leading framing
+// the backend prepends is removed. A user who happens to type the literal tags
+// mid-message keeps that text — stripping it would distort the title.
+func TestStripMessageContextOnlyStripsLeadingBlock(t *testing.T) {
+	t.Parallel()
+
+	input := "why does my agent emit <message-context>foo</message-context> in its output?"
+	require.Equal(t, input, stripMessageContext(input))
+}
+
 func TestBuildTitleContextStripsMessageContextFraming(t *testing.T) {
 	t.Parallel()
 

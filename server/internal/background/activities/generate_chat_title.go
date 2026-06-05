@@ -108,13 +108,16 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 }
 
 // messageContextBlockRE matches the <message-context>…</message-context>
-// framing that assistant source adapters prepend to a turn's input (EventID /
-// UserID lines, MCP auth events). The runner needs that block for replay, but
-// it is noise for title generation — left in, the title model fixates on the
-// structured boilerplate and every thread ends up with the same generic title.
-var messageContextBlockRE = regexp.MustCompile(`(?s)<message-context>.*?</message-context>\s*`)
+// framing that the backend's source adapters prepend to a turn's input
+// (EventID / UserID lines, MCP auth events) when constructing the message for
+// the runtime. The runner needs that block for replay, but it is noise for
+// title generation — left in, the title model fixates on the structured
+// boilerplate and every thread ends up with the same generic title. Anchored
+// to the start so only the leading framing is removed; a user who happens to
+// type "<message-context>" mid-message keeps their text intact.
+var messageContextBlockRE = regexp.MustCompile(`(?s)^\s*<message-context>.*?</message-context>\s*`)
 
-// stripMessageContext removes any leading source-adapter framing so the title
+// stripMessageContext removes the leading source-adapter framing so the title
 // model sees only the human-authored turn text.
 func stripMessageContext(s string) string {
 	return strings.TrimSpace(messageContextBlockRE.ReplaceAllString(s, ""))

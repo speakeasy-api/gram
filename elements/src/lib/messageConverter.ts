@@ -115,12 +115,13 @@ function parseDate(date: Date | string): Date {
   return typeof date === "string" ? new Date(date) : date;
 }
 
-// The assistant runtime wraps each turn's input in a `<message-context>…</message-context>`
-// block (event metadata, MCP-auth events, etc.) that the model reads but the
-// user shouldn't see. It's persisted verbatim in the transcript, so strip the
-// leading block when rendering — and skip turns that are *only* a context block
-// (e.g. an injected `assistant_mcp_auth_required` event), which would otherwise
-// render as a raw bubble exposing internals like AuthURLs.
+// The backend wraps each turn's input in a `<message-context>…</message-context>`
+// block (event metadata, MCP-auth events, etc.) when constructing the message
+// the runtime consumes — the model reads it but the user shouldn't see it. It's
+// persisted verbatim in the transcript, so strip the leading block when
+// rendering — and skip turns that are *only* a context block (e.g. an injected
+// `assistant_mcp_auth_required` event), which would otherwise render as a raw
+// bubble exposing internals like AuthURLs.
 const MESSAGE_CONTEXT_RE = /^<message-context>[\s\S]*?<\/message-context>\s*/;
 
 function stripMessageContext(text: string): string {
