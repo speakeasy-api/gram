@@ -1488,6 +1488,14 @@ type User struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type UserAttribute struct {
+	ID          string
+	UserID      string
+	Attributes  []byte
+	ContentHash string
+	CreatedAt   pgtype.Timestamptz
+}
+
 type UserOauthToken struct {
 	ID                    uuid.UUID
 	UserID                string
