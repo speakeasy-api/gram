@@ -2,11 +2,14 @@ package hooks
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -46,7 +49,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		return "", false
 	}
 
-	requestURL, _, err := risk.GeneratePolicyBypassRequestURL(s.siteURL, s.jwtSecret, risk.PolicyBypassRequestTokenInput{
+	token, _, err := access.GenerateShadowMCPApprovalRequestToken(s.jwtSecret, access.ShadowMCPApprovalRequestTokenInput{
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              params.ProjectID,
 		RequesterUserID:        params.RequesterUserID,
@@ -57,7 +60,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		ToolName:               stringPtrOrNil(params.ToolName),
 		ToolCall:               nil,
 		BlockReason:            stringPtrOrNil(params.AuditReason),
-		RiskPolicyID:           params.RiskPolicyID,
+		RiskPolicyID:           uuidStringPtrOrNil(params.RiskPolicyID),
 		RiskResultID:           nil,
 	}, shadowMCPApprovalRequestTokenTTL)
 	if err != nil {
@@ -68,7 +71,12 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		)
 		return "", false
 	}
-	return requestURL, true
+
+	requestURL := s.siteURL.JoinPath("shadow-mcp", "request")
+	query := url.Values{}
+	query.Set("request_token", token)
+	requestURL.Fragment = query.Encode()
+	return requestURL.String(), true
 }
 
 func observedShadowMCPName(evidence shadowmcp.AccessEvidence, toolName string) *string {
@@ -121,6 +129,17 @@ func humanizeShadowMCPServerIdentityWord(value string) string {
 func stringPtrOrNil(value string) *string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func uuidStringPtrOrNil(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	if _, err := uuid.Parse(trimmed); err != nil {
 		return nil
 	}
 	return &trimmed
