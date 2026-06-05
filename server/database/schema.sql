@@ -1618,6 +1618,25 @@ ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
+CREATE TABLE IF NOT EXISTS user_attributes (
+  id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  attributes JSONB NOT NULL,
+  content_hash TEXT NOT NULL,
+  is_current BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT user_attributes_pkey PRIMARY KEY (id),
+  CONSTRAINT user_attributes_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_attributes_current
+ON user_attributes (user_id)
+WHERE is_current;
+
+CREATE INDEX IF NOT EXISTS user_attributes_user_history
+ON user_attributes (user_id, created_at DESC);
+
 -- global_roles stores environment-level WorkOS roles (e.g. "admin", "member").
 -- These are not scoped to any organization.
 CREATE TABLE IF NOT EXISTS global_roles (
