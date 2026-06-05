@@ -670,6 +670,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
+			Body(RiskIDRequestBody)
 			Response(StatusOK)
 		})
 
@@ -699,6 +700,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
+			Body(RiskIDRequestBody)
 			Response(StatusOK)
 		})
 
@@ -728,6 +730,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
+			Body(RiskIDRequestBody)
 			Response(StatusOK)
 		})
 
@@ -909,6 +912,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
+			Body(RiskIDRequestBody)
 			Response(StatusOK)
 		})
 
@@ -1179,6 +1183,15 @@ var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
 		Format(FormatDateTime)
 	})
 	Required("id", "policy_id", "target_dimensions", "requester_user_id", "status", "granted_principal_urns", "created_at", "updated_at")
+})
+
+var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
+	Meta("openapi:typename", "RiskIDRequestBody")
+
+	Attribute("id", String, "The resource ID.", func() {
+		Format(FormatUUID)
+	})
+	Required("id")
 })
 
 var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResult", func() {

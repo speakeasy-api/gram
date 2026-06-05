@@ -20900,7 +20900,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApproveRiskPolicyBypassRequestRequestBody'
+              $ref: '#/components/schemas/RiskIDRequestBody'
         required: true
       responses:
         "200":
@@ -21404,7 +21404,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApproveRiskPolicyBypassRequestRequestBody'
+              $ref: '#/components/schemas/RiskIDRequestBody'
         required: true
       responses:
         "200":
@@ -21932,7 +21932,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApproveRiskPolicyBypassRequestRequestBody'
+              $ref: '#/components/schemas/RiskIDRequestBody'
         required: true
       responses:
         "200":
@@ -23722,7 +23722,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApproveRiskPolicyBypassRequestRequestBody'
+              $ref: '#/components/schemas/RiskIDRequestBody'
         required: true
       responses:
         "200":
@@ -32200,15 +32200,6 @@ components:
         - status
         - created_at
         - updated_at
-    ApproveRiskPolicyBypassRequestRequestBody:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The bypass request ID.
-          format: uuid
-      required:
-        - id
     ApproveShadowMCPApprovalRequestForm:
       type: object
       properties:
@@ -40410,6 +40401,15 @@ components:
         - severity
         - created_at
         - updated_at
+    RiskIDRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The resource ID.
+          format: uuid
+      required:
+        - id
     RiskOverviewCategory:
       type: object
       properties:

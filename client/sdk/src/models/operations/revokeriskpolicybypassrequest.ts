@@ -34,8 +34,7 @@ export type RevokeRiskPolicyBypassRequestRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  approveRiskPolicyBypassRequestRequestBody:
-    components.ApproveRiskPolicyBypassRequestRequestBody;
+  riskIDRequestBody: components.RiskIDRequestBody;
 };
 
 /** @internal */
@@ -155,8 +154,7 @@ export type RevokeRiskPolicyBypassRequestRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  ApproveRiskPolicyBypassRequestRequestBody:
-    components.ApproveRiskPolicyBypassRequestRequestBody$Outbound;
+  RiskIDRequestBody: components.RiskIDRequestBody$Outbound;
 };
 
 /** @internal */
@@ -168,16 +166,14 @@ export const RevokeRiskPolicyBypassRequestRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    approveRiskPolicyBypassRequestRequestBody:
-      components.ApproveRiskPolicyBypassRequestRequestBody$outboundSchema,
+    riskIDRequestBody: components.RiskIDRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      approveRiskPolicyBypassRequestRequestBody:
-        "ApproveRiskPolicyBypassRequestRequestBody",
+      riskIDRequestBody: "RiskIDRequestBody",
     });
   }),
 );

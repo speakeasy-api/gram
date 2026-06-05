@@ -15,6 +15,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const (
@@ -161,7 +163,7 @@ func validatePolicyBypassRequestClaims(claims *policyBypassRequestClaims) error 
 }
 
 func validatePolicyBypassEvidence(fullURL, _, _ *string) error {
-	if optionalStringValue(fullURL) == "" {
+	if strings.TrimSpace(conv.PtrValOr(fullURL, "")) == "" {
 		return fmt.Errorf("observed_full_url is required")
 	}
 	return nil
@@ -238,11 +240,4 @@ func normalizeOptionalLowerString(value *string) *string {
 	}
 	lowered := strings.ToLower(*trimmed)
 	return &lowered
-}
-
-func optionalStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return strings.TrimSpace(*value)
 }

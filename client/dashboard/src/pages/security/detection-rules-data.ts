@@ -278,7 +278,7 @@ export function useDetectionRulesStore() {
       if (!rule) return;
       deleteMutation.mutate({
         request: {
-          deleteCustomDetectionRuleRequestBody: {
+          riskIDRequestBody: {
             id: rule.dbId,
           },
         },

@@ -99,21 +99,21 @@ type CreateRiskPolicyBypassRequestRequestBody struct {
 // ApproveRiskPolicyBypassRequestRequestBody is the type of the "risk" service
 // "approveRiskPolicyBypassRequest" endpoint HTTP request body.
 type ApproveRiskPolicyBypassRequestRequestBody struct {
-	// The bypass request ID.
+	// The resource ID.
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
 // DenyRiskPolicyBypassRequestRequestBody is the type of the "risk" service
 // "denyRiskPolicyBypassRequest" endpoint HTTP request body.
 type DenyRiskPolicyBypassRequestRequestBody struct {
-	// The bypass request ID.
+	// The resource ID.
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
 // RevokeRiskPolicyBypassRequestRequestBody is the type of the "risk" service
 // "revokeRiskPolicyBypassRequest" endpoint HTTP request body.
 type RevokeRiskPolicyBypassRequestRequestBody struct {
-	// The bypass request ID.
+	// The resource ID.
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
@@ -161,7 +161,7 @@ type UpdateCustomDetectionRuleRequestBody struct {
 // DeleteCustomDetectionRuleRequestBody is the type of the "risk" service
 // "deleteCustomDetectionRule" endpoint HTTP request body.
 type DeleteCustomDetectionRuleRequestBody struct {
-	// The custom detection rule ID.
+	// The resource ID.
 	ID string `form:"id" json:"id" xml:"id"`
 }
 

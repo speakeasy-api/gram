@@ -126,7 +126,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		TargetDimensions: target.dimensions,
 		RequesterUserID:  authCtx.UserID,
 		RequesterEmail:   conv.ToPGTextEmpty(conv.PtrValOrEmpty(authCtx.Email, "")),
-		Note:             conv.ToPGTextEmpty(optionalStringValue(claims.BlockReason)),
+		Note:             conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(claims.BlockReason, ""))),
 		Status:           riskPolicyBypassRequestStatusRequested,
 	})
 	if err != nil {
@@ -310,33 +310,25 @@ type riskPolicyBypassRequestTarget struct {
 }
 
 func riskPolicyBypassTargetFromClaims(claims *policyBypassRequestClaims) (riskPolicyBypassRequestTarget, error) {
-	var kind string
-	var key string
-	dimensions := []byte("{}")
-
-	switch {
-	case optionalStringValue(claims.ObservedFullURL) != "":
-		kind = authz.SelectorKeyServerURL
-		key = optionalStringValue(claims.ObservedFullURL)
-
-		rawDimensions, err := json.Marshal(map[string]string{
-			authz.SelectorKeyServerURL: key,
-		})
-		if err != nil {
-			return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
-		}
-		dimensions = rawDimensions
-	default:
+	key := strings.TrimSpace(conv.PtrValOr(claims.ObservedFullURL, ""))
+	if key == "" {
 		return riskPolicyBypassRequestTarget{}, fmt.Errorf("observed_full_url is required")
 	}
 
-	label := optionalStringValue(claims.ObservedName)
+	dimensions, err := json.Marshal(map[string]string{
+		authz.SelectorKeyServerURL: key,
+	})
+	if err != nil {
+		return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
+	}
+
+	label := strings.TrimSpace(conv.PtrValOr(claims.ObservedName, ""))
 	if label == "" {
 		label = key
 	}
 
 	return riskPolicyBypassRequestTarget{
-		kind:       kind,
+		kind:       authz.SelectorKeyServerURL,
 		label:      label,
 		key:        key,
 		dimensions: dimensions,
