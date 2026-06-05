@@ -2,7 +2,6 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import type {
   Selector,
   Disposition,
-  ResourceKind,
 } from "@gram/client/models/components/selector.js";
 
 export { Scope };

@@ -1,5 +1,4 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useEffect, useState } from "react";
 
 export function useMcpSlugValidation(

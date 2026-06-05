@@ -5,15 +5,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { VariantProps, cva } from "class-variance-authority";
 import * as React from "react";
 import {
   SidebarContext,

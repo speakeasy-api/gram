@@ -89,7 +89,3 @@ function SeverityBadge({ severity }: { severity: string }) {
       );
   }
 }
-
-interface SpanTypeBadgeProps {
-  urn: string;
-}

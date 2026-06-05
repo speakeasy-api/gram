@@ -1,52 +1,24 @@
 "use client";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@speakeasy-api/moonshine";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { cn } from "@/lib/utils";
 import type { ChatStatus, FileUIPart } from "ai";
 import { ArrowUpIcon, Loader2Icon, SquareIcon, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 import {
   type ChangeEventHandler,
-  Children,
   type ClipboardEventHandler,
   type ComponentProps,
   type FormEvent,
   type FormEventHandler,
   type HTMLAttributes,
   type KeyboardEventHandler,
-  type PropsWithChildren,
-  type ReactNode,
-  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -61,32 +33,6 @@ import {
 } from "./prompt-input-utils";
 
 export type { AttachmentsContext } from "./prompt-input-utils";
-
-type PromptInputProviderProps = PropsWithChildren<{
-  initialInput?: string;
-}>;
-
-// ============================================================================
-// Component Context & Hooks
-// ============================================================================
-
-type PromptInputAttachmentProps = HTMLAttributes<HTMLDivElement> & {
-  data: FileUIPart & { id: string };
-  className?: string;
-};
-
-type PromptInputAttachmentsProps = Omit<
-  HTMLAttributes<HTMLDivElement>,
-  "children"
-> & {
-  children: (attachment: FileUIPart & { id: string }) => ReactNode;
-};
-
-type PromptInputActionAddAttachmentsProps = ComponentProps<
-  typeof DropdownMenuItem
-> & {
-  label?: string;
-};
 
 type PromptInputMessage = {
   text?: string;
@@ -572,11 +518,6 @@ export const PromptInputTextarea = ({
   );
 };
 
-type PromptInputHeaderProps = Omit<
-  ComponentProps<typeof InputGroupAddon>,
-  "align"
->;
-
 export type PromptInputFooterProps = Omit<
   ComponentProps<typeof InputGroupAddon>,
   "align"
@@ -601,38 +542,6 @@ export const PromptInputTools = ({
 }: PromptInputToolsProps) => (
   <div className={cn("flex items-center gap-1", className)} {...props} />
 );
-
-type PromptInputButtonProps = ComponentProps<typeof InputGroupButton>;
-
-const PromptInputButton = ({
-  variant = "ghost",
-  className,
-  size,
-  ...props
-}: PromptInputButtonProps) => {
-  const newSize =
-    size ?? (Children.count(props.children) > 1 ? "sm" : "icon-sm");
-
-  return (
-    <InputGroupButton
-      className={cn(className)}
-      size={newSize}
-      type="button"
-      variant={variant}
-      {...props}
-    />
-  );
-};
-
-type PromptInputActionMenuProps = ComponentProps<typeof DropdownMenu>;
-
-type PromptInputActionMenuTriggerProps = PromptInputButtonProps;
-
-type PromptInputActionMenuContentProps = ComponentProps<
-  typeof DropdownMenuContent
->;
-
-type PromptInputActionMenuItemProps = ComponentProps<typeof DropdownMenuItem>;
 
 // Note: Actions that perform side-effects (like opening a file dialog)
 // are provided in opt-in modules (e.g., prompt-input-attachments).
@@ -727,48 +636,3 @@ declare global {
     };
   }
 }
-
-type PromptInputSpeechButtonProps = ComponentProps<typeof PromptInputButton> & {
-  textareaRef?: RefObject<HTMLTextAreaElement | null>;
-  onTranscriptionChange?: (text: string) => void;
-};
-
-type PromptInputModelSelectProps = ComponentProps<typeof Select>;
-
-type PromptInputModelSelectTriggerProps = ComponentProps<typeof SelectTrigger>;
-
-type PromptInputModelSelectContentProps = ComponentProps<typeof SelectContent>;
-
-type PromptInputModelSelectItemProps = ComponentProps<typeof SelectItem>;
-
-type PromptInputModelSelectValueProps = ComponentProps<typeof SelectValue>;
-
-type PromptInputHoverCardProps = ComponentProps<typeof HoverCard>;
-
-type PromptInputHoverCardTriggerProps = ComponentProps<typeof HoverCardTrigger>;
-
-type PromptInputHoverCardContentProps = ComponentProps<typeof HoverCardContent>;
-
-type PromptInputTabsListProps = HTMLAttributes<HTMLDivElement>;
-
-type PromptInputTabProps = HTMLAttributes<HTMLDivElement>;
-
-type PromptInputTabLabelProps = HTMLAttributes<HTMLHeadingElement>;
-
-type PromptInputTabBodyProps = HTMLAttributes<HTMLDivElement>;
-
-type PromptInputTabItemProps = HTMLAttributes<HTMLDivElement>;
-
-type PromptInputCommandProps = ComponentProps<typeof Command>;
-
-type PromptInputCommandInputProps = ComponentProps<typeof CommandInput>;
-
-type PromptInputCommandListProps = ComponentProps<typeof CommandList>;
-
-type PromptInputCommandEmptyProps = ComponentProps<typeof CommandEmpty>;
-
-type PromptInputCommandGroupProps = ComponentProps<typeof CommandGroup>;
-
-type PromptInputCommandItemProps = ComponentProps<typeof CommandItem>;
-
-type PromptInputCommandSeparatorProps = ComponentProps<typeof CommandSeparator>;

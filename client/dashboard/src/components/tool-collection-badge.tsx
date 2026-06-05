@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { ToolsetEntry } from "@gram/client/models/components";
 import {
   Badge,
   Icon,
@@ -9,9 +8,6 @@ import {
   TooltipPortal,
   TooltipTrigger,
 } from "@speakeasy-api/moonshine";
-
-// Define minimal types for badge components
-type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
 
 export const ToolCollectionBadge = ({
   toolNames,

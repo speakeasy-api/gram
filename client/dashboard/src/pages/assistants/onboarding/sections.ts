@@ -1,5 +1,4 @@
-const SECTION_NAMES = ["Personality", "Behavior", "Tasks"] as const;
-export type SectionName = (typeof SECTION_NAMES)[number];
+export type SectionName = "Personality" | "Behavior" | "Tasks";
 
 const HEADING_RE = /^# (Personality|Behavior|Tasks)[ \t]*\r?$/gm;
 

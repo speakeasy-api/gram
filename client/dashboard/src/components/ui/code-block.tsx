@@ -165,10 +165,3 @@ export function CodeBlock({ content, title, className }: CodeBlockProps) {
     </div>
   );
 }
-
-/** Collapsible section with code block - similar to Elements ToolUISection */
-interface CollapsibleCodeSectionProps {
-  title: string;
-  content: string | Record<string, unknown> | unknown;
-  defaultExpanded?: boolean;
-}

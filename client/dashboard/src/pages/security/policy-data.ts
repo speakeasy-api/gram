@@ -31,29 +31,6 @@ export type DetectionRule = {
   hidden?: boolean;
 };
 
-type McpServerScope = {
-  slug: string;
-  allTools: boolean;
-  selectedTools: string[];
-};
-
-type McpScope =
-  | { mode: "all" }
-  | { mode: "selected"; servers: McpServerScope[] };
-
-type DlpPolicy = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  ruleCategories: RuleCategory[];
-  selectedRules: string[];
-  action: PolicyAction;
-  types: PolicyMessageType[];
-  mcpScope: McpScope;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 export const RULE_CATEGORY_META: Record<
   RuleCategory,
   { label: string; description: string; icon: string }

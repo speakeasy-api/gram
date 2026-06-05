@@ -1,6 +1,5 @@
 import { useProject } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { generateObject } from "ai";
 import { useEffect, useState } from "react";
 import { z } from "zod";
