@@ -33,7 +33,7 @@ func (s *ListRiskResultsByChat) Descriptor() core.ToolDescriptor {
 			core.WithPropertyNumberRange("limit", 1, 200),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -46,7 +46,7 @@ func (s *ListRiskResultsByChat) Call(ctx context.Context, _ toolconfig.ToolCallE
 	}
 
 	input := listRiskResultsByChatInput{Cursor: nil, Limit: nil}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 
@@ -61,5 +61,5 @@ func (s *ListRiskResultsByChat) Call(ctx context.Context, _ toolconfig.ToolCallE
 		return fmt.Errorf("list risk results by chat: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

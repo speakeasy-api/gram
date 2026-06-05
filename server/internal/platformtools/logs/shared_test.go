@@ -7,18 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A tool can be dispatched with no request body — decodeToolInput must treat a
-// nil payload as empty input rather than panicking on io.ReadAll(nil).
-func TestDecodeToolInputHandlesNilPayload(t *testing.T) {
-	t.Parallel()
-
-	var dst struct {
-		A string `json:"a"`
-	}
-	require.NoError(t, decodeToolInput(nil, &dst))
-	require.Empty(t, dst.A)
-}
-
 // A past `to` with an omitted `from` must yield a forward 7-day window ending at
 // `to` — not `now-7d`, which would put `from` after `to` (a backward window that
 // the telemetry layer rejects). Regression for the cubic finding on #3218.
@@ -38,7 +26,6 @@ func TestDefaultTimeWindowAnchorsDefaultFromToProvidedEnd(t *testing.T) {
 	require.True(t, fromT.Before(toT), "defaulted window must run forward (from before to)")
 }
 
-// Explicit values pass through untouched.
 func TestDefaultTimeWindowPreservesExplicitRange(t *testing.T) {
 	t.Parallel()
 

@@ -28,7 +28,7 @@ func (s *ListRiskPolicies) Descriptor() core.ToolDescriptor {
 		Description: "List the risk analysis policies configured for the current project.",
 		InputSchema: core.BuildInputSchema[listRiskPoliciesInput](),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -41,7 +41,7 @@ func (s *ListRiskPolicies) Call(ctx context.Context, _ toolconfig.ToolCallEnv, p
 	}
 
 	input := listRiskPoliciesInput{}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 
@@ -54,5 +54,5 @@ func (s *ListRiskPolicies) Call(ctx context.Context, _ toolconfig.ToolCallEnv, p
 		return fmt.Errorf("list risk policies: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

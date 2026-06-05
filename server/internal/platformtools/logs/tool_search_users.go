@@ -44,7 +44,7 @@ func (s *SearchUsers) Descriptor() core.ToolDescriptor {
 			core.WithPropertyNumberRange("limit", 1, 1000),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -57,7 +57,7 @@ func (s *SearchUsers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 	}
 
 	input := searchUsersInput{Filter: nil, UserType: "internal", GroupBy: "employee", Cursor: nil, Sort: "desc", Limit: 50}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	if input.Limit == 0 {
@@ -93,5 +93,5 @@ func (s *SearchUsers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 		return fmt.Errorf("search users: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

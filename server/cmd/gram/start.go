@@ -773,12 +773,9 @@ func newStartCommand() *cli.Command {
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
-			// Managed-assistant insights tools span multiple services. Telemetry is
-			// available now; chat, organizations, risk, and deployments are built
-			// further down (chat in particular needs mcpService and so cannot move
-			// up). We hand mcpService a map ref now and merge the materialized
-			// toolsets in once every backing service exists; mcpService only reads
-			// from the map at request time, well after population completes.
+			// mcpService captures this map by reference now; the remaining
+			// insights tools (chat/orgs/risk/deployments) are merged in once
+			// their backing services exist further down.
 			managedInsightsTools := append([]platformtools.ExternalTool{}, platformtoolsruntime.ManagedAssistantLogsTools(telemSvc)...)
 			platformToolsets := map[string]platformtools.Toolset{}
 			// Runner-callable platform tools the runtime must be able to execute
@@ -1082,9 +1079,6 @@ func newStartCommand() *cli.Command {
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
-			// Now that every service the managed-assistant insights toolset wraps
-			// exists, finish the toolset bundle and merge it into the map mcpService
-			// already references.
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService)...)

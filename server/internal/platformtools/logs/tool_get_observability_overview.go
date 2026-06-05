@@ -44,7 +44,7 @@ func (s *GetObservabilityOverview) Descriptor() core.ToolDescriptor {
 			core.WithPropertyFormat("to", "date-time"),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -70,7 +70,7 @@ func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCa
 		HookSource:        nil,
 		IncludeTimeSeries: true,
 	}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	from, to := defaultTimeWindow(input.From, input.To)
@@ -97,5 +97,5 @@ func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCa
 		return fmt.Errorf("get observability overview: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

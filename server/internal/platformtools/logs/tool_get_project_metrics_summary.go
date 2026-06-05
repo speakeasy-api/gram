@@ -36,7 +36,7 @@ func (s *GetProjectMetricsSummary) Descriptor() core.ToolDescriptor {
 			core.WithPropertyFormat("to", "date-time"),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -49,7 +49,7 @@ func (s *GetProjectMetricsSummary) Call(ctx context.Context, _ toolconfig.ToolCa
 	}
 
 	input := getProjectMetricsSummaryInput{From: "", To: ""}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	from, to := defaultTimeWindow(input.From, input.To)
@@ -68,5 +68,5 @@ func (s *GetProjectMetricsSummary) Call(ctx context.Context, _ toolconfig.ToolCa
 		return fmt.Errorf("get project metrics summary: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

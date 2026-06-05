@@ -36,7 +36,7 @@ func (s *ListAttributeKeys) Descriptor() core.ToolDescriptor {
 			core.WithPropertyFormat("to", "date-time"),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -49,7 +49,7 @@ func (s *ListAttributeKeys) Call(ctx context.Context, _ toolconfig.ToolCallEnv, 
 	}
 
 	input := listAttributeKeysInput{From: "", To: ""}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	from, to := defaultTimeWindow(input.From, input.To)
@@ -68,5 +68,5 @@ func (s *ListAttributeKeys) Call(ctx context.Context, _ toolconfig.ToolCallEnv, 
 		return fmt.Errorf("list attribute keys: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

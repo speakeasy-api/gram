@@ -31,7 +31,7 @@ func (s *LoadChat) Descriptor() core.ToolDescriptor {
 		Description: "Load a chat's messages by ID. Returns the latest generation by default; pass `generation` to page through history.",
 		InputSchema: core.BuildInputSchema[loadChatInput](),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -44,7 +44,7 @@ func (s *LoadChat) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 	}
 
 	input := loadChatInput{ID: "", Generation: nil}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	if input.ID == "" {
@@ -65,5 +65,5 @@ func (s *LoadChat) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		return fmt.Errorf("load chat: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

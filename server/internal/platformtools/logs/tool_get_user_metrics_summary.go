@@ -40,7 +40,7 @@ func (s *GetUserMetricsSummary) Descriptor() core.ToolDescriptor {
 			core.WithPropertyFormat("to", "date-time"),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -60,7 +60,7 @@ func (s *GetUserMetricsSummary) Call(ctx context.Context, _ toolconfig.ToolCallE
 		EventSource:    nil,
 		HookSource:     nil,
 	}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	from, to := defaultTimeWindow(input.From, input.To)
@@ -83,5 +83,5 @@ func (s *GetUserMetricsSummary) Call(ctx context.Context, _ toolconfig.ToolCallE
 		return fmt.Errorf("get user metrics summary: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

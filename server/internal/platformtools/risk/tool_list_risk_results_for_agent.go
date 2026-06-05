@@ -45,7 +45,7 @@ func (s *ListRiskResultsForAgent) Descriptor() core.ToolDescriptor {
 			core.WithPropertyNumberRange("limit", 1, 200),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -69,7 +69,7 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 		Cursor:      nil,
 		Limit:       nil,
 	}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 
@@ -92,5 +92,5 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 		return fmt.Errorf("list risk results for agent: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

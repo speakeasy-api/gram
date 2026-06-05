@@ -28,7 +28,7 @@ func (s *ListOrganizationUsers) Descriptor() core.ToolDescriptor {
 		Description: "List the Gram users linked to the current organization (the internal directory the assistant resolves names against).",
 		InputSchema: core.BuildInputSchema[listOrganizationUsersInput](),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -41,7 +41,7 @@ func (s *ListOrganizationUsers) Call(ctx context.Context, _ toolconfig.ToolCallE
 	}
 
 	input := listOrganizationUsersInput{}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 
@@ -52,5 +52,5 @@ func (s *ListOrganizationUsers) Call(ctx context.Context, _ toolconfig.ToolCallE
 		return fmt.Errorf("list organization users: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

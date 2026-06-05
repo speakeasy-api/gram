@@ -47,7 +47,7 @@ func (s *ListChats) Descriptor() core.ToolDescriptor {
 			core.WithPropertyNumberRange("limit", 1, 100),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -71,7 +71,7 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		SortBy:         "created_at",
 		SortOrder:      "desc",
 	}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	if input.Limit == 0 {
@@ -103,5 +103,5 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		return fmt.Errorf("list chats: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

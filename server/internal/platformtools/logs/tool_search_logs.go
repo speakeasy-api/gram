@@ -46,7 +46,7 @@ func (s *SearchLogs) Descriptor() core.ToolDescriptor {
 			core.WithPropertyNumberRange("limit", 1, 1000),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -67,7 +67,7 @@ func (s *SearchLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 		Sort:    "desc",
 		Limit:   50,
 	}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	if input.Limit == 0 {
@@ -96,5 +96,5 @@ func (s *SearchLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 		return fmt.Errorf("search logs: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

@@ -32,7 +32,7 @@ func (s *GetRiskPolicyStatus) Descriptor() core.ToolDescriptor {
 			core.WithPropertyFormat("id", "uuid"),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -45,7 +45,7 @@ func (s *GetRiskPolicyStatus) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 	}
 
 	input := getRiskPolicyStatusInput{ID: ""}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	if input.ID == "" {
@@ -62,5 +62,5 @@ func (s *GetRiskPolicyStatus) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		return fmt.Errorf("get risk policy status: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }

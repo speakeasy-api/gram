@@ -208,12 +208,9 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 	}
 
-	// The managed assistant's platform_list_chats tool reaches us with no
-	// session but a registered assistant principal — the principal is set
-	// only on the assistant runtime path, and the managed-assistant platform
-	// toolset slug is the only path that surfaces chat tools to an assistant,
-	// so its presence is sufficient evidence of a managed-assistant call.
-	// Treat it as admin-equivalent so the sidebar sees project-wide chats.
+	// An assistant principal is set only on the assistant runtime path and
+	// only the managed-assistant platform toolset surfaces chat tools, so
+	// treat it as admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 
 	var fromTime, toTime pgtype.Timestamptz
@@ -236,8 +233,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 
-	// Determine user scope based on auth context; payload filters only apply
-	// for admin users and the managed-assistant runtime.
+	// Payload filters only apply for admin users and the managed-assistant runtime.
 	var externalUserID, userID string
 	switch {
 	case authCtx.ExternalUserID != "":
@@ -341,9 +337,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// If this isn't coming from the dashboard or the managed-assistant runtime,
-	// make sure the external user ID matches. See ListChats for the rationale
-	// behind treating an assistant principal as admin-equivalent here.
+	// Off-dashboard callers must match the chat owner unless they're the
+	// managed-assistant runtime (see ListChats).
 	if authCtx.SessionID == nil {
 		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {

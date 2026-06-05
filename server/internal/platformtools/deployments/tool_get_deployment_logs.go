@@ -33,7 +33,7 @@ func (s *GetDeploymentLogs) Descriptor() core.ToolDescriptor {
 			core.WithPropertyFormat("deployment_id", "uuid"),
 		),
 		Variables:   nil,
-		Annotations: readOnlyToolAnnotations(),
+		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
 		OwnerKind:   nil,
 		OwnerID:     nil,
@@ -46,7 +46,7 @@ func (s *GetDeploymentLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, 
 	}
 
 	input := getDeploymentLogsInput{DeploymentID: "", Cursor: nil}
-	if err := decodeToolInput(payload, &input); err != nil {
+	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}
 	if input.DeploymentID == "" {
@@ -64,5 +64,5 @@ func (s *GetDeploymentLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, 
 		return fmt.Errorf("get deployment logs: %w", err)
 	}
 
-	return encodeToolResult(wr, result)
+	return core.EncodeResult(wr, result)
 }
