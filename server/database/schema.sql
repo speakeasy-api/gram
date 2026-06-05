@@ -2648,11 +2648,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
   ON plugins (organization_id, project_id, slug)
   WHERE deleted IS FALSE;
 
--- Links a plugin to a toolset-backed MCP server.
+-- Links a plugin to an MCP server, backed by either a toolset or an
+-- mcp_servers row (exactly one, enforced by the exclusivity check below).
 CREATE TABLE IF NOT EXISTS plugin_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   plugin_id uuid NOT NULL,
-  toolset_id uuid NOT NULL,
+  toolset_id uuid,
+  mcp_server_id uuid,
   display_name TEXT NOT NULL CHECK (display_name <> ''),
   policy TEXT NOT NULL DEFAULT 'required',
   sort_order INT NOT NULL DEFAULT 0,
@@ -2669,7 +2671,13 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   -- If a hard-delete path is added later, it must purge soft-deleted
   -- plugin_servers referencing the target first.
   CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
-  CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional'))
+  -- RESTRICT mirrors the toolset_id FK above (not the CASCADE used by the
+  -- collections attachment table): mcp_servers soft-delete, so RESTRICT only
+  -- blocks manual hard deletes. SET NULL is not viable under the XOR check.
+  CONSTRAINT plugin_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
+  -- Exactly one backend must be set: either a toolset or an mcp_server.
+  CONSTRAINT plugin_servers_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
@@ -2678,6 +2686,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_toolset_id_key
   ON plugin_servers (plugin_id, toolset_id)
+  WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_mcp_server_id_key
+  ON plugin_servers (plugin_id, mcp_server_id)
   WHERE deleted IS FALSE;
 
 -- Controls who receives a plugin. Reuses the RBAC principal URN pattern
