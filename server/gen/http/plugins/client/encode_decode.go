@@ -3328,6 +3328,480 @@ func DecodePublishPluginsResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildGetMarketplaceSettingsRequest instantiates a HTTP request object with
+// method and path set to call the "plugins" service "getMarketplaceSettings"
+// endpoint
+func (c *Client) BuildGetMarketplaceSettingsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMarketplaceSettingsPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "getMarketplaceSettings", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMarketplaceSettingsRequest returns an encoder for requests sent to
+// the plugins getMarketplaceSettings server.
+func EncodeGetMarketplaceSettingsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.GetMarketplaceSettingsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "getMarketplaceSettings", "*plugins.GetMarketplaceSettingsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetMarketplaceSettingsResponse returns a decoder for responses
+// returned by the plugins getMarketplaceSettings endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetMarketplaceSettingsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMarketplaceSettingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMarketplaceSettingsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			res := NewGetMarketplaceSettingsMarketplaceSettingsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMarketplaceSettingsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMarketplaceSettingsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMarketplaceSettingsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMarketplaceSettingsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMarketplaceSettingsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMarketplaceSettingsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMarketplaceSettingsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMarketplaceSettingsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+				}
+				err = ValidateGetMarketplaceSettingsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+				}
+				return nil, NewGetMarketplaceSettingsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMarketplaceSettingsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+				}
+				err = ValidateGetMarketplaceSettingsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+				}
+				return nil, NewGetMarketplaceSettingsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "getMarketplaceSettings", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMarketplaceSettingsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getMarketplaceSettings", err)
+			}
+			err = ValidateGetMarketplaceSettingsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getMarketplaceSettings", err)
+			}
+			return nil, NewGetMarketplaceSettingsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "getMarketplaceSettings", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateMarketplaceSettingsRequest instantiates a HTTP request object
+// with method and path set to call the "plugins" service
+// "updateMarketplaceSettings" endpoint
+func (c *Client) BuildUpdateMarketplaceSettingsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateMarketplaceSettingsPluginsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "updateMarketplaceSettings", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateMarketplaceSettingsRequest returns an encoder for requests sent
+// to the plugins updateMarketplaceSettings server.
+func EncodeUpdateMarketplaceSettingsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.UpdateMarketplaceSettingsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "updateMarketplaceSettings", "*plugins.UpdateMarketplaceSettingsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateMarketplaceSettingsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("plugins", "updateMarketplaceSettings", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateMarketplaceSettingsResponse returns a decoder for responses
+// returned by the plugins updateMarketplaceSettings endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeUpdateMarketplaceSettingsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateMarketplaceSettingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateMarketplaceSettingsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			res := NewUpdateMarketplaceSettingsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateMarketplaceSettingsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateMarketplaceSettingsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateMarketplaceSettingsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateMarketplaceSettingsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateMarketplaceSettingsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateMarketplaceSettingsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateMarketplaceSettingsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateMarketplaceSettingsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+				}
+				err = ValidateUpdateMarketplaceSettingsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+				}
+				return nil, NewUpdateMarketplaceSettingsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateMarketplaceSettingsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+				}
+				err = ValidateUpdateMarketplaceSettingsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+				}
+				return nil, NewUpdateMarketplaceSettingsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "updateMarketplaceSettings", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateMarketplaceSettingsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "updateMarketplaceSettings", err)
+			}
+			err = ValidateUpdateMarketplaceSettingsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "updateMarketplaceSettings", err)
+			}
+			return nil, NewUpdateMarketplaceSettingsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "updateMarketplaceSettings", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalPluginResponseBodyToPluginsPlugin builds a value of type
 // *plugins.Plugin from a value of type *PluginResponseBody.
 func unmarshalPluginResponseBodyToPluginsPlugin(v *PluginResponseBody) *plugins.Plugin {
@@ -3394,6 +3868,19 @@ func unmarshalPluginAssignmentResponseBodyToPluginsPluginAssignment(v *PluginAss
 		ID:           *v.ID,
 		PrincipalUrn: *v.PrincipalUrn,
 		CreatedAt:    *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalMarketplaceSettingsResultResponseBodyToPluginsMarketplaceSettingsResult
+// builds a value of type *plugins.MarketplaceSettingsResult from a value of
+// type *MarketplaceSettingsResultResponseBody.
+func unmarshalMarketplaceSettingsResultResponseBodyToPluginsMarketplaceSettingsResult(v *MarketplaceSettingsResultResponseBody) *plugins.MarketplaceSettingsResult {
+	res := &plugins.MarketplaceSettingsResult{
+		MarketplaceName: v.MarketplaceName,
+		DefaultName:     *v.DefaultName,
+		EffectiveName:   *v.EffectiveName,
 	}
 
 	return res

@@ -38,8 +38,8 @@ describe("getModelContextLimit", () => {
     expect(getModelContextLimit("anthropic/claude-sonnet-4.6")).toBe(1_000_000);
   });
 
-  it("returns known mapping for Claude 4 (non-1M)", () => {
-    expect(getModelContextLimit("anthropic/claude-sonnet-4")).toBe(200_000);
+  it("returns known mapping for Claude Sonnet 4", () => {
+    expect(getModelContextLimit("anthropic/claude-sonnet-4")).toBe(1_000_000);
   });
 
   it("returns DEFAULT_CONTEXT_LIMIT for unknown models", () => {

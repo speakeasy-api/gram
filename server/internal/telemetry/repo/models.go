@@ -97,6 +97,19 @@ type HookTraceSummary struct {
 	SkillName         *string `ch:"skill_name"`           // String - skill name from materialized column (only for Skill tool)
 }
 
+// RecentHookEvent represents a single hook event row from telemetry_logs,
+// shaped for the onboarding wizard's confirm-traffic verification step.
+type RecentHookEvent struct {
+	TimeUnixNano  int64   `ch:"time_unix_nano"`
+	GramProjectID string  `ch:"gram_project_id"`
+	GramChatID    *string `ch:"gram_chat_id"`
+	HookSource    string  `ch:"hook_source"` // materialized from attributes.gram.hook.source — "claude-code", "cursor", "codex"
+	ToolName      *string `ch:"tool_name"`   // materialized
+	UserEmail     *string `ch:"user_email"`  // materialized
+	EventName     *string `ch:"event_name"`  // extracted from attributes.gram.hook.event_name
+	Status        string  `ch:"status"`      // "blocked" if hook_block_reason set, else "received"
+}
+
 // ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).
 // Used for displaying a list of chat sessions in the UI.
 type ChatSummary struct {

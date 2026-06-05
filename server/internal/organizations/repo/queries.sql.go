@@ -98,6 +98,18 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const clearWorkosOrgID = `-- name: ClearWorkosOrgID :exec
+UPDATE organization_metadata
+SET workos_id = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) ClearWorkosOrgID(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, clearWorkosOrgID, id)
+	return err
+}
+
 const createInvitation = `-- name: CreateInvitation :one
 INSERT INTO organization_invitations (
     organization_id,

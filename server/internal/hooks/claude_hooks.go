@@ -204,6 +204,14 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		attr.SlogProjectID(projectID),
 	)
 
+	// Codex reports token usage on its OTEL logs stream (codex.sse_event /
+	// response.completed) rather than as metrics like Claude Code. Route those
+	// payloads to the usage writer; they carry no Claude session to seed.
+	if isCodexLogsPayload(payload) {
+		s.writeCodexUsageToClickHouse(ctx, payload, orgID, projectID)
+		return nil
+	}
+
 	if claudeMetadata.SessionID == "" {
 		logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
 			attr.SlogEvent("claude_logs_no_session"),
@@ -386,6 +394,8 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	switch payload.HookEventName {
 	case "SessionStart":
 		result, err = s.handleSessionStart(ctx, payload)
+	case "ConfigChange":
+		result, err = s.handleConfigChange(ctx, payload)
 	case "PreToolUse":
 		result, err = s.handlePreToolUse(ctx, payload)
 	case "PostToolUse":
@@ -418,11 +428,23 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePay
 	return result, nil
 }
 
+// handleConfigChange re-syncs the cached MCP inventory when Claude reports a
+// settings file change mid-session (e.g. an MCP server was added or removed).
+// The mcp_inventory.sh hook ships a fresh inventory in the payload, just as
+// it does for SessionStart, so we reuse the same capture path. ConfigChange
+// carries no allow/deny decision and must not block, so we never set a
+// blocking result.
+func (s *Service) handleConfigChange(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	s.captureMCPListSnapshot(ctx, payload)
+	return makeHookResult(payload.HookEventName), nil
+}
+
 // captureMCPListSnapshot parses the MCP inventory shipped by the
-// SessionStart hook script and caches it under sessionMCPListCacheKey.
-// SessionStart re-fires on startup/resume/clear/compact, so this re-syncs
-// whenever Claude reloads the session — which is the closest thing to a
-// config-change signal the CLI offers today.
+// mcp_inventory.sh hook script and caches it under sessionMCPListCacheKey.
+// The script is registered against both SessionStart (which re-fires on
+// startup/resume/clear/compact) and ConfigChange (which fires when a
+// settings file changes mid-session), so the cached inventory re-syncs
+// whenever Claude reloads the session or its configuration changes.
 //
 // Two payload shapes are supported, set by the hook script depending on
 // the execution environment it detected:

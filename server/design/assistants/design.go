@@ -130,7 +130,7 @@ var _ = Service("assistants", func() {
 	})
 
 	Method("sendMessage", func() {
-		Description("Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.")
+		Description("Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.")
 
 		Payload(func() {
 			Attribute("assistant_id", String, "The assistant to send the message to.", func() {
@@ -140,14 +140,13 @@ var _ = Service("assistants", func() {
 				MinLength(1)
 				MaxLength(10000)
 			})
-			Attribute("correlation_id", String, "Conversation key the message is threaded under. Send the user id for one continuing thread per user, or a fresh value to start a new conversation.", func() {
-				MinLength(1)
-				MaxLength(255)
+			Attribute("chat_id", String, "The conversation to continue (from listChats or a prior sendMessage). Omit to start a new conversation; the server mints and returns a fresh chat id.", func() {
+				Format(FormatUUID)
 			})
 			Attribute("idempotency_key", String, "Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.", func() {
 				MaxLength(255)
 			})
-			Required("assistant_id", "message", "correlation_id")
+			Required("assistant_id", "message")
 
 			security.SessionPayload()
 			security.ProjectPayload()
@@ -165,6 +164,28 @@ var _ = Service("assistants", func() {
 		Meta("openapi:operationId", "sendAssistantMessage")
 		Meta("openapi:extension:x-speakeasy-name-override", "sendMessage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SendAssistantMessage"}`)
+	})
+
+	Method("ensureManagedAssistant", func() {
+		Description("Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Assistant)
+
+		HTTP(func() {
+			POST("/rpc/assistants.ensureManagedAssistant")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "ensureManagedAssistant")
+		Meta("openapi:extension:x-speakeasy-name-override", "ensureManaged")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnsureManagedAssistant", "type": "mutation"}`)
 	})
 })
 
@@ -208,9 +229,9 @@ var SendMessageResult = Type("SendMessageResult", func() {
 	Attribute("chat_id", String, "The chat to poll for the assistant's reply.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("thread_id", String, "The assistant thread the message was enqueued on.", func() {
+	Attribute("thread_id", String, "The assistant thread the message was enqueued on, when the ingest produced one.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("accepted", Boolean, "Whether the message was accepted and enqueued for processing.")
-	Required("chat_id", "thread_id", "accepted")
+	Required("chat_id", "accepted")
 })

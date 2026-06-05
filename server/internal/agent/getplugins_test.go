@@ -14,7 +14,7 @@ import (
 // helpers the publish path uses, so the test pins the actual cross-surface
 // contract rather than a hardcoded string.
 var (
-	wantMarketplace   = naming.MarketplaceName(mockidp.MockOrgName)   // local-dev-org-gram
+	wantMarketplace   = naming.MarketplaceName(mockidp.MockOrgName)   // local-dev-org-speakeasy
 	wantObservability = naming.ObservabilitySlug(mockidp.MockOrgName) // local-dev-org-observability
 )
 
@@ -102,7 +102,7 @@ func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
 	require.Len(t, res.Marketplaces, 1, "only the caller's org marketplace")
 	require.Equal(t, wantMarketplace, res.Marketplaces[0].Name)
 	for _, m := range res.Marketplaces {
-		require.NotEqual(t, "other-org-gram", m.Name)
+		require.NotEqual(t, "other-org-speakeasy", m.Name)
 	}
 	require.NotContains(t, pluginSlugs(res), "other-plugin", "another org's plugin must not leak")
 }

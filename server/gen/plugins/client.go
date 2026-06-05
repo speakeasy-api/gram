@@ -30,10 +30,12 @@ type Client struct {
 	DownloadCodexInstallScriptEndpoint  goa.Endpoint
 	GetPublishStatusEndpoint            goa.Endpoint
 	PublishPluginsEndpoint              goa.Endpoint
+	GetMarketplaceSettingsEndpoint      goa.Endpoint
+	UpdateMarketplaceSettingsEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "plugins" service client given the endpoints.
-func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, downloadPluginPackage, downloadObservabilityPlugin, downloadCodexInstallScript, getPublishStatus, publishPlugins goa.Endpoint) *Client {
+func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, downloadPluginPackage, downloadObservabilityPlugin, downloadCodexInstallScript, getPublishStatus, publishPlugins, getMarketplaceSettings, updateMarketplaceSettings goa.Endpoint) *Client {
 	return &Client{
 		ListPluginsEndpoint:                 listPlugins,
 		GetPluginEndpoint:                   getPlugin,
@@ -49,6 +51,8 @@ func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin,
 		DownloadCodexInstallScriptEndpoint:  downloadCodexInstallScript,
 		GetPublishStatusEndpoint:            getPublishStatus,
 		PublishPluginsEndpoint:              publishPlugins,
+		GetMarketplaceSettingsEndpoint:      getMarketplaceSettings,
+		UpdateMarketplaceSettingsEndpoint:   updateMarketplaceSettings,
 	}
 }
 
@@ -361,4 +365,50 @@ func (c *Client) PublishPlugins(ctx context.Context, p *PublishPluginsPayload) (
 		return
 	}
 	return ires.(*PublishPluginsResult), nil
+}
+
+// GetMarketplaceSettings calls the "getMarketplaceSettings" endpoint of the
+// "plugins" service.
+// GetMarketplaceSettings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMarketplaceSettings(ctx context.Context, p *GetMarketplaceSettingsPayload) (res *MarketplaceSettingsResult, err error) {
+	var ires any
+	ires, err = c.GetMarketplaceSettingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MarketplaceSettingsResult), nil
+}
+
+// UpdateMarketplaceSettings calls the "updateMarketplaceSettings" endpoint of
+// the "plugins" service.
+// UpdateMarketplaceSettings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateMarketplaceSettings(ctx context.Context, p *UpdateMarketplaceSettingsPayload) (res *UpdateMarketplaceSettingsResult, err error) {
+	var ires any
+	ires, err = c.UpdateMarketplaceSettingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*UpdateMarketplaceSettingsResult), nil
 }

@@ -20,16 +20,20 @@ import (
 //   - Shape heuristics: network address of a public /8 (X.0.0.0), and
 //     sparse IPv6 with at most two non-zero bytes (e.g. 1::, dead::).
 //
-// Cloud / CDN / hosting attribution (the fp_infra_asn category in the
-// offline classifier) needs an ASN lookup. Wiring MaxMind GeoLite2 into
-// the analyzer is a separate change; this layer only catches what code
-// alone can.
+// Cloud / CDN / managed-hosting attribution falls through to a DB-IP
+// ASN lookup (see falsepositives_ip_asn.go). Consumer ISP brands stay
+// out of the infra regex so residential IPs still flow through as PII.
 func nonPIIIPReason(s string) string {
 	addr, err := netip.ParseAddr(s)
 	if err != nil {
 		return ""
 	}
-	if d := nonPIIIPExact[s]; d != "" {
+	// Key the exact lookup off the parsed address's canonical form, not the
+	// raw input, so equivalent spellings (uppercase hex, expanded zero
+	// groups like 2606:4700:4700:0:0:0:0:1111, IPv4 in non-canonical form)
+	// still match the catalog. nonPIIIPExact keys are canonical netip
+	// strings; TestNonPIIIPExactKeysAreCanonical locks that invariant.
+	if d := nonPIIIPExact[addr.String()]; d != "" {
 		return d
 	}
 	for _, p := range nonPIIIPPrefixes {
@@ -37,7 +41,10 @@ func nonPIIIPReason(s string) string {
 			return p.description
 		}
 	}
-	return nonPIIIPHeuristic(addr)
+	if d := nonPIIIPHeuristic(addr); d != "" {
+		return d
+	}
+	return infraASNDescription(addr)
 }
 
 // nonPIIIPHeuristic returns a description for IPs that fit common
@@ -247,15 +254,22 @@ var nonPIIIPExact = map[string]string{
 	"182.254.116.116":  "Tencent DNSPod public",
 	"180.76.76.76":     "Baidu public DNS",
 
-	// Common placeholder / literal-example IPs (no real PII content)
-	"1.2.3.4":   "common placeholder address",
-	"1.2.1.1":   "common placeholder address",
-	"1.3.86.78": "common placeholder address",
-	"2.1.2.3":   "common placeholder address",
-	"2.2.2.2":   "common placeholder address",
-	"2.2.7.3":   "common placeholder address",
-	"25.8.3.66": "common placeholder address",
-	"9.3.15.0":  "common placeholder address",
-	"133.0.0.0": "common placeholder address",
-	"45.1.37.1": "common placeholder address",
+	// Common placeholder / literal-example IPs surfaced repeatedly by the
+	// offline FP classifier. All of these resolve to AS0 ("unrouted") in
+	// DB-IP, so the ASN fall-through in falsepositives_ip_asn.go cannot
+	// catch them and the explicit list is load-bearing.
+	//
+	// Other widely-cited literals (3.3.3.3, 4.4.4.4) deliberately stay
+	// out: DB-IP routes them to AS16509 Amazon and AS3356 Level 3
+	// respectively, so the ASN regex already drops them.
+	"1.2.3.4":   "common placeholder address", // canonical "example IP" in docs / tutorials
+	"1.2.1.1":   "common placeholder address", // frequent docs example, no allocation
+	"1.3.86.78": "common placeholder address", // recurring tutorial literal, unrouted
+	"2.1.2.3":   "common placeholder address", // sequence-style placeholder
+	"2.2.2.2":   "common placeholder address", // paired with 1.1.1.1 / 1.2.3.4 in examples
+	"2.2.7.3":   "common placeholder address", // recurring literal in scraped traffic
+	"25.8.3.66": "common placeholder address", // recurring literal in scraped traffic
+	"9.3.15.0":  "common placeholder address", // recurring literal in scraped traffic
+	"133.0.0.0": "common placeholder address", // legacy unrouted /8 boundary
+	"45.1.37.1": "common placeholder address", // recurring literal in scraped traffic
 }

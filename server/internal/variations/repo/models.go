@@ -32,3 +32,14 @@ type ToolVariation struct {
 	DeletedAt       pgtype.Timestamptz
 	Deleted         bool
 }
+
+type ToolVariationsGroup struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	Name        string
+	Description pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
+}

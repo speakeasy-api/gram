@@ -2689,3 +2689,121 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 
 	return &counts, nil
 }
+
+// ListRecentHookEventsForOnboardingParams contains the parameters for the
+// onboarding wizard's hook verification query.
+type ListRecentHookEventsForOnboardingParams struct {
+	// ProjectIDs is the set of Gram project IDs (uuid strings) to query across.
+	// Typically every project under the active organization.
+	ProjectIDs []string
+	// SinceUnixNano returns only events strictly greater than this value.
+	// Pass 0 to return the most recent events from any time.
+	SinceUnixNano int64
+	// Limit caps the number of returned rows.
+	Limit int
+}
+
+// ListRecentHookEventsForOnboarding returns the most recent hook events for the
+// given project IDs, newest first. It powers the onboarding wizard's
+// confirm-traffic step, which polls this endpoint to verify that Claude Code /
+// Cursor / Codex hooks are flowing into Gram after the user finishes
+// instrumentation.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListRecentHookEventsForOnboarding(ctx context.Context, arg ListRecentHookEventsForOnboardingParams) ([]RecentHookEvent, error) {
+	if len(arg.ProjectIDs) == 0 {
+		return nil, nil
+	}
+
+	sb := sq.Select(
+		"time_unix_nano",
+		"gram_project_id",
+		"gram_chat_id",
+		"hook_source",
+		"tool_name",
+		"user_email",
+		"toString(attributes.gram.hook.event) AS event_name",
+		"multiIf(hook_block_reason IS NOT NULL AND hook_block_reason != '', 'blocked', 'received') AS status",
+	).
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("event_source = 'hook'").
+		Where("toString(attributes.gram.hook.event) != ''")
+
+	if arg.SinceUnixNano > 0 {
+		sb = sb.Where("time_unix_nano > ?", arg.SinceUnixNano)
+	}
+
+	sb = sb.OrderBy("time_unix_nano DESC").
+		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list recent hook events query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []RecentHookEvent
+	for rows.Next() {
+		var ev RecentHookEvent
+		if err = rows.ScanStruct(&ev); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		events = append(events, ev)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
+// CountRecentHookEventsForOnboarding returns the total number of hook events
+// for the given projects with time_unix_nano > since_unix_nano. Used alongside
+// ListRecentHookEventsForOnboarding to report a total when the list is
+// truncated by Limit.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) CountRecentHookEventsForOnboarding(ctx context.Context, projectIDs []string, sinceUnixNano int64) (uint64, error) {
+	if len(projectIDs) == 0 {
+		return 0, nil
+	}
+
+	sb := sq.Select("count() AS cnt").
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": projectIDs}).
+		Where("event_source = 'hook'").
+		Where("toString(attributes.gram.hook.event) != ''")
+
+	if sinceUnixNano > 0 {
+		sb = sb.Where("time_unix_nano > ?", sinceUnixNano)
+	}
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building count recent hook events query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var cnt uint64
+	if rows.Next() {
+		if err := rows.Scan(&cnt); err != nil {
+			return 0, fmt.Errorf("scanning count row: %w", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	return cnt, nil
+}

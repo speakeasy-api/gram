@@ -89,6 +89,13 @@ func (u Principal) String() string {
 	return string(u.Type) + delimiter + u.ID
 }
 
+func (u Principal) Label() string {
+	if u.Type == "" || u.ID == "" {
+		return u.String()
+	}
+	return fmt.Sprintf("%s %q", u.Type, u.ID)
+}
+
 func (u Principal) MarshalJSON() ([]byte, error) {
 	if err := u.validate(); err != nil {
 		return nil, err

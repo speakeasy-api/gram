@@ -7,12 +7,15 @@ import { organizationsDisableWebhooks } from "../funcs/organizationsDisableWebho
 import { organizationsEnableWebhooks } from "../funcs/organizationsEnableWebhooks.js";
 import { organizationsGenerateWorkOSAdminPortalLink } from "../funcs/organizationsGenerateWorkOSAdminPortalLink.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
+import { organizationsGetOnboardingStatus } from "../funcs/organizationsGetOnboardingStatus.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
+import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
+import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -115,6 +118,25 @@ export class Organizations extends ClientSDK {
   }
 
   /**
+   * getOnboardingStatus organizations
+   *
+   * @remarks
+   * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+   */
+  async getOnboardingStatus(
+    request?: operations.GetOnboardingStatusRequest | undefined,
+    security?: operations.GetOnboardingStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.OnboardingStatusResult> {
+    return unwrapAsync(organizationsGetOnboardingStatus(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listInvites organizations
    *
    * @remarks
@@ -191,6 +213,27 @@ export class Organizations extends ClientSDK {
   }
 
   /**
+   * sendEnterpriseAdminOnboardingEmail organizations
+   *
+   * @remarks
+   * Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.
+   */
+  async sendEnterpriseAdminOnboardingEmail(
+    request: operations.SendEnterpriseAdminOnboardingEmailRequest,
+    security?:
+      | operations.SendEnterpriseAdminOnboardingEmailSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SendEnterpriseAdminOnboardingEmailResult> {
+    return unwrapAsync(organizationsSendEnterpriseAdminOnboardingEmail(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * sendInvite organizations
    *
    * @remarks
@@ -221,6 +264,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.OrganizationInvitation> {
     return unwrapAsync(organizationsUpdateInviteRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * verifyOnboardingHooksSetup organizations
+   *
+   * @remarks
+   * Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+   */
+  async verifyOnboardingHooksSetup(
+    request?: operations.VerifyOnboardingHooksSetupRequest | undefined,
+    security?: operations.VerifyOnboardingHooksSetupSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.VerifyOnboardingHooksSetupResult> {
+    return unwrapAsync(organizationsVerifyOnboardingHooksSetup(
       this,
       request,
       security,

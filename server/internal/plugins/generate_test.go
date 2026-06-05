@@ -563,7 +563,7 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	err = json.Unmarshal(files[".claude-plugin/marketplace.json"], &claudeManifest)
 	require.NoError(t, err)
 
-	require.Equal(t, "acme-gram", claudeManifest.Name)
+	require.Equal(t, "acme-speakeasy", claudeManifest.Name)
 	require.Equal(t, "Acme", claudeManifest.Owner.Name)
 	require.Len(t, claudeManifest.Plugins, 2)
 	require.Equal(t, "./a", claudeManifest.Plugins[0].Source)
@@ -573,10 +573,34 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	err = json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursorManifest)
 	require.NoError(t, err)
 
-	require.Equal(t, "acme-gram", cursorManifest.Name)
+	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
 	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
+}
+
+func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{Name: "A", Slug: "a"}}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:         "Acme",
+		ServerURL:       "https://app.getgram.ai",
+		MarketplaceName: "acme-custom",
+	})
+	require.NoError(t, err)
+
+	var claudeManifest marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claudeManifest))
+	require.Equal(t, "acme-custom", claudeManifest.Name)
+
+	var cursorManifest marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursorManifest))
+	require.Equal(t, "acme-custom", cursorManifest.Name)
+
+	var codexManifest codexMarketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codexManifest))
+	require.Equal(t, "acme-custom", codexManifest.Name)
 }
 
 func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
@@ -665,12 +689,12 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 	}
 }
 
-// SessionStart needs its own enrichment script (session_start.sh) so the
-// payload can be augmented with the active MCP server inventory before
+// SessionStart and ConfigChange share an enrichment script (mcp_inventory.sh)
+// so the payload can be augmented with the active MCP server inventory before
 // being forwarded. The standard hook.sh has no way to inject that, and the
 // downstream parser keys off additional_data.mcp_inventory_* fields that
-// only session_start.sh sets.
-func TestGenerateClaudeObservabilityRoutesSessionStartToOwnScript(t *testing.T) {
+// only mcp_inventory.sh sets.
+func TestGenerateClaudeObservabilityRoutesInventoryEventsToOwnScript(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
@@ -683,39 +707,47 @@ func TestGenerateClaudeObservabilityRoutesSessionStartToOwnScript(t *testing.T) 
 
 	slug := ClaudeObservabilitySlug(cfg)
 
-	sessionScript := files[slug+"/hooks/session_start.sh"]
-	require.NotNil(t, sessionScript, "claude observability hooks/session_start.sh missing")
+	inventoryScript := files[slug+"/hooks/mcp_inventory.sh"]
+	require.NotNil(t, inventoryScript, "claude observability hooks/mcp_inventory.sh missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(files[slug+"/hooks/hooks.json"], &parsed))
 
-	sessionStart, ok := parsed.Hooks["SessionStart"]
-	require.True(t, ok, "SessionStart must be registered")
-	require.Len(t, sessionStart, 1)
-	require.Len(t, sessionStart[0].Hooks, 1)
-	require.Contains(t, sessionStart[0].Hooks[0].Command, "hooks/session_start.sh", "SessionStart must point at session_start.sh, not the generic hook.sh")
-	require.NotContains(t, sessionStart[0].Hooks[0].Command, "hooks/hook.sh")
+	for _, event := range []string{"SessionStart", "ConfigChange"} {
+		matchers, ok := parsed.Hooks[event]
+		require.True(t, ok, "%s must be registered", event)
+		require.Len(t, matchers, 1)
+		require.Len(t, matchers[0].Hooks, 1)
+		require.Contains(t, matchers[0].Hooks[0].Command, "hooks/mcp_inventory.sh", "%s must point at mcp_inventory.sh, not the generic hook.sh", event)
+		require.NotContains(t, matchers[0].Hooks[0].Command, "hooks/hook.sh")
+	}
+
+	// ConfigChange is async (fire-and-forget): it has no allow/deny decision
+	// to honor, so Claude must not be held up while the MCP inventory is
+	// re-synced mid-session.
+	require.NotNil(t, parsed.Hooks["ConfigChange"][0].Hooks[0].Async)
+	require.True(t, *parsed.Hooks["ConfigChange"][0].Hooks[0].Async, "ConfigChange must be async")
 
 	for event, matchers := range parsed.Hooks {
-		if event == "SessionStart" {
+		if event == "SessionStart" || event == "ConfigChange" {
 			continue
 		}
-		require.Contains(t, matchers[0].Hooks[0].Command, "hooks/hook.sh", "non-SessionStart event %q should still use hook.sh", event)
+		require.Contains(t, matchers[0].Hooks[0].Command, "hooks/hook.sh", "event %q should still use hook.sh", event)
 	}
 }
 
-// session_start.sh enriches the payload with MCP inventory and posts to the
+// mcp_inventory.sh enriches the payload with MCP inventory and posts to the
 // Claude hooks endpoint. It must carry the same Gram-Key + Gram-Project
 // headers the regular hook script uses, otherwise server-side org/project
 // attribution falls back to OTEL session metadata and may misattribute.
-func TestRenderClaudeSessionStartScriptCarriesAuthAndEnrichesPayload(t *testing.T) {
+func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 		ProjectSlug: "acme-prod",
 	}
-	script := string(renderClaudeSessionStartScript(cfg))
+	script := string(renderClaudeMCPInventoryScript(cfg))
 
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
 	require.Contains(t, script, "Gram-Project: acme-prod")
@@ -731,7 +763,7 @@ func TestRenderClaudeSessionStartScriptCarriesAuthAndEnrichesPayload(t *testing.
 	// Fire-and-forget: SessionStart has no allow/deny path, so exit 0
 	// regardless of HTTP outcome to keep the hook latency invisible.
 	require.Contains(t, script, "exit 0")
-	require.NotContains(t, script, "exit 2", "session_start.sh must never block — SessionStart has no permission decision")
+	require.NotContains(t, script, "exit 2", "mcp_inventory.sh must never block — SessionStart/ConfigChange have no permission decision")
 }
 
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
@@ -826,7 +858,7 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	require.NoError(t, err, "python3 is required by the generated install script")
 
 	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
-	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
 	approvals, err := computeCodexHookApprovals(marketplace, plugin)

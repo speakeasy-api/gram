@@ -5,8 +5,6 @@ export type ReleaseStage = "preview" | "beta";
 
 type ReleaseStageBadgeProps = {
   stage: ReleaseStage;
-  /** Size is kept for API back-compat; both values map to the same Moonshine Badge. */
-  size?: "xs" | "sm";
   /** When true, omit the tooltip wrapper (e.g., inside a parent that already has a tooltip). */
   noTooltip?: boolean;
   className?: string;
@@ -40,6 +38,7 @@ export function ReleaseStageBadge({
 }: ReleaseStageBadgeProps) {
   const pill = (
     <Badge
+      size="sm"
       variant={stageVariant[stage]}
       background
       className={className}

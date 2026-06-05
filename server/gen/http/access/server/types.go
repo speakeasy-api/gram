@@ -34,8 +34,10 @@ type UpdateRoleRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Updated description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Updated scope grants.
-	Grants []*RoleGrantRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
+	// Scope grants to add.
+	AddGrants []*RoleGrantRequestBody `form:"add_grants,omitempty" json:"add_grants,omitempty" xml:"add_grants,omitempty"`
+	// Scope grants to remove.
+	RemoveGrants []*RoleGrantRequestBody `form:"remove_grants,omitempty" json:"remove_grants,omitempty" xml:"remove_grants,omitempty"`
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
@@ -4659,6 +4661,9 @@ type SelectorResponseBody struct {
 	// Project filter (MCP scopes only). When set with resource_id='*', grants
 	// access to all servers in the project.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only). Include the URI scheme, for
+	// example https://api.example.com.
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 }
 
 // ScopeDefinitionResponseBody is used to define fields on response body types.
@@ -4895,6 +4900,9 @@ type SelectorRequestBody struct {
 	// Project filter (MCP scopes only). When set with resource_id='*', grants
 	// access to all servers in the project.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only). Include the URI scheme, for
+	// example https://api.example.com.
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 }
 
 // NewListRolesResponseBody builds the HTTP response body from the result of
@@ -8693,14 +8701,24 @@ func NewUpdateRolePayload(body *UpdateRoleRequestBody, apikeyToken *string, sess
 		Name:        body.Name,
 		Description: body.Description,
 	}
-	if body.Grants != nil {
-		v.Grants = make([]*access.RoleGrant, len(body.Grants))
-		for i, val := range body.Grants {
+	if body.AddGrants != nil {
+		v.AddGrants = make([]*access.RoleGrant, len(body.AddGrants))
+		for i, val := range body.AddGrants {
 			if val == nil {
-				v.Grants[i] = nil
+				v.AddGrants[i] = nil
 				continue
 			}
-			v.Grants[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
+			v.AddGrants[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	}
+	if body.RemoveGrants != nil {
+		v.RemoveGrants = make([]*access.RoleGrant, len(body.RemoveGrants))
+		for i, val := range body.RemoveGrants {
+			if val == nil {
+				v.RemoveGrants[i] = nil
+				continue
+			}
+			v.RemoveGrants[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
 		}
 	}
 	if body.MemberIds != nil {
@@ -9022,7 +9040,14 @@ func ValidateUpdateRoleRequestBody(body *UpdateRoleRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	for _, e := range body.Grants {
+	for _, e := range body.AddGrants {
+		if e != nil {
+			if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.RemoveGrants {
 		if e != nil {
 			if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
@@ -9221,8 +9246,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	if body.Effect != nil {
@@ -9250,14 +9275,17 @@ func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "risk_policy", "*"}))
 		}
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
 		}
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
 	}
 	return
 }

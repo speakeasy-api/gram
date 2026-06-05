@@ -665,7 +665,7 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "*")
+		Enum("project", "mcp", "org", "environment", "risk_policy", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
@@ -680,6 +680,10 @@ var SelectorModel = Type("Selector", func() {
 	Attribute("project_id", String, func() {
 		Description("Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.")
 	})
+	Attribute("server_url", String, func() {
+		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")
+		Format(FormatURI)
+	})
 })
 
 var RoleGrantModel = Type("RoleGrant", func() {
@@ -687,7 +691,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
 	})
 
 	Attribute("effect", String, func() {
@@ -707,7 +711,7 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
 	})
 
 	Attribute("effect", String, func() {
@@ -719,7 +723,7 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
+			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
 		})
 	})
 
@@ -756,12 +760,12 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment")
+		Enum("org", "project", "mcp", "environment", "risk_policy")
 	})
 })
 
@@ -785,7 +789,8 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("id", String, "The ID of the role to update.")
 	Attribute("name", String, "Updated display name.")
 	Attribute("description", String, "Updated description.")
-	Attribute("grants", ArrayOf(RoleGrantModel), "Updated scope grants.")
+	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
+	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
 })
 

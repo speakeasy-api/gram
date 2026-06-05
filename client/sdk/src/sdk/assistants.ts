@@ -4,6 +4,7 @@
 
 import { assistantsCreate } from "../funcs/assistantsCreate.js";
 import { assistantsDelete } from "../funcs/assistantsDelete.js";
+import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
@@ -53,6 +54,25 @@ export class Assistants extends ClientSDK {
   }
 
   /**
+   * ensureManagedAssistant assistants
+   *
+   * @remarks
+   * Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.
+   */
+  async ensureManaged(
+    request?: operations.EnsureManagedAssistantRequest | undefined,
+    security?: operations.EnsureManagedAssistantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Assistant> {
+    return unwrapAsync(assistantsEnsureManaged(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getAssistant assistants
    *
    * @remarks
@@ -94,7 +114,7 @@ export class Assistants extends ClientSDK {
    * sendMessage assistants
    *
    * @remarks
-   * Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.
+   * Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.
    */
   async sendMessage(
     request: operations.SendAssistantMessageRequest,

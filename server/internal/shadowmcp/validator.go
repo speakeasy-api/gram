@@ -119,6 +119,7 @@ func (c *Client) resolveToolsetCall(
 		mv.ProjectID(toolsetRow.ProjectID),
 		mv.ToolsetSlug(toolsetRow.Slug),
 		&c.toolsetCache,
+		nil,
 	)
 	if err != nil {
 		detail, failed := fail(fmt.Sprintf("failed to load toolset %s", toolsetID))

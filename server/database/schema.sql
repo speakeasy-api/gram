@@ -1182,6 +1182,33 @@ CREATE TABLE IF NOT EXISTS project_managed_assistants (
 
 CREATE INDEX IF NOT EXISTS project_managed_assistants_assistant_id_idx ON project_managed_assistants (assistant_id);
 
+-- assistant_dashboard_messages is the user-visible conversation log for a
+-- dashboard assistant chat: the user's messages and the assistant's delivered
+-- replies (written by the platform_dashboard_send_message egress tool). Kept
+-- separate from chat_messages, which holds the raw model/tool transcript — the
+-- dashboard renders only this clean log. Keyed by chat_id (the deterministic
+-- assistant thread chat) with a monotonic seq for incremental polling. user_id
+-- is the dashboard user the conversation belongs to, stamped on both the user's
+-- messages and the assistant's replies so reads scope to their owner.
+CREATE TABLE IF NOT EXISTS assistant_dashboard_messages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  seq BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT assistant_dashboard_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_dashboard_messages_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_dashboard_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+);
+
+-- (chat_id, seq) is the stable cursor for incremental polling.
+CREATE INDEX IF NOT EXISTS assistant_dashboard_messages_chat_id_seq_idx ON assistant_dashboard_messages (chat_id, seq);
+
 CREATE TABLE IF NOT EXISTS assistant_toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   assistant_id uuid NOT NULL,
@@ -2016,27 +2043,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_collect
   ON organization_mcp_collection_registries (collection_id)
   WHERE deleted IS FALSE;
 
--- Join table linking servers to collections (for catalog publishing)
-CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
-  published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  published_by TEXT,
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  collection_id uuid NOT NULL,
-  toolset_id uuid NOT NULL,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT organization_mcp_collection_server_attachments_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_mcp_collection_server_attachments_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
-  CONSTRAINT organization_mcp_collection_server_attachments_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_toolset_key
-  ON organization_mcp_collection_server_attachments (collection_id, toolset_id)
-  WHERE deleted IS FALSE;
-
 CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
@@ -2495,6 +2501,35 @@ CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)
 WHERE toolset_id IS NOT NULL;
 
+-- Join table linking servers to collections (for catalog publishing)
+CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
+  published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  published_by TEXT,
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  collection_id uuid NOT NULL,
+  toolset_id uuid,
+  mcp_server_id uuid,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT organization_mcp_collection_server_attachments_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_mcp_collection_server_attachments_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
+  CONSTRAINT organization_mcp_collection_server_attachments_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT organization_mcp_collection_server_attachments_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
+  -- Exactly one backend must be set: either a toolset or an mcp_server.
+  CONSTRAINT organization_mcp_collection_server_attachments_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_toolset_key
+  ON organization_mcp_collection_server_attachments (collection_id, toolset_id)
+  WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_mcp_server_key
+  ON organization_mcp_collection_server_attachments (collection_id, mcp_server_id)
+  WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   toolset_id UUID,
@@ -2751,6 +2786,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
+  message_types TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
@@ -2876,6 +2912,51 @@ ON authz_challenge_resolutions (organization_id, challenge_id);
 
 CREATE INDEX IF NOT EXISTS authz_challenge_resolutions_org_principal_idx
 ON authz_challenge_resolutions (organization_id, principal_urn);
+
+CREATE TABLE IF NOT EXISTS risk_policy_bypass_requests (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  risk_policy_id uuid NOT NULL,
+  target_kind TEXT,
+  target_label TEXT,
+  target_key TEXT,
+  target_dimensions JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  requester_user_id TEXT NOT NULL,
+  requester_email TEXT,
+  note TEXT,
+
+  status TEXT NOT NULL DEFAULT 'requested',
+  decided_by TEXT,
+  granted_principal_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  decided_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policy_bypass_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_bypass_requests_target_dimensions_check CHECK (jsonb_typeof(target_dimensions) = 'object'),
+  CONSTRAINT risk_policy_bypass_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_bypass_requests_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_bypass_requests_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE risk_policy_bypass_requests IS 'Risk-policy bypass request workflow. A block records a request here; an admin approves by granting risk_policy:bypass.';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_kind IS 'Generic target namespace for the bypass request, such as server_url. Empty means the whole policy.';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_key IS 'Stable canonical key for deduplicating bypass requests within the target namespace.';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_dimensions IS 'Selector dimensions for the target, such as {"server_url":"mcp.example.com"}.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_bypass_requests_current_key
+ON risk_policy_bypass_requests (project_id, requester_user_id, risk_policy_id, target_kind, target_key) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_bypass_requests_project_status_updated_idx
+ON risk_policy_bypass_requests (project_id, status, updated_at DESC)
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS outbox (
   id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,

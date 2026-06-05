@@ -221,7 +221,7 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	// Messages are sent as the calling user, so a user identity is required.
@@ -234,12 +234,35 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").Log(ctx, s.logger)
 	}
 
+	// chat_id names the conversation to continue; omit it to start a new one (the
+	// server mints and returns a fresh id).
+	var chatID uuid.UUID
+	if payload.ChatID != nil && *payload.ChatID != "" {
+		chatID, err = uuid.Parse(*payload.ChatID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id").Log(ctx, s.logger)
+		}
+	}
+
+	// Continuing a conversation requires the caller to own it: chat ids aren't
+	// user-namespaced, so without this gate one user could pin their next turn
+	// onto another user's chat. uuid.Nil mints a fresh chat, so skip the check.
+	// A miss is surfaced as not-found to avoid disclosing chat existence.
+	if chatID != uuid.Nil {
+		if err := s.core.CheckDashboardChatOwnership(ctx, *authCtx.ProjectID, chatID, authCtx.UserID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "chat not found").Log(ctx, s.logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve chat access").Log(ctx, s.logger)
+		}
+	}
+
 	idempotencyKey := ""
 	if payload.IdempotencyKey != nil {
 		idempotencyKey = *payload.IdempotencyKey
 	}
 
-	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, payload.CorrelationID, payload.Message, idempotencyKey)
+	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "assistant not found").Log(ctx, s.logger)
@@ -247,11 +270,42 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "send assistant message")
 	}
 
+	var threadID *string
+	if result.ThreadID != uuid.Nil {
+		threadID = new(result.ThreadID.String())
+	}
 	return &gen.SendMessageResult{
 		ChatID:   result.ChatID.String(),
-		ThreadID: result.ThreadID.String(),
+		ThreadID: threadID,
 		Accepted: result.Accepted,
 	}, nil
+}
+
+func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManagedAssistantPayload) (*types.Assistant, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	// Provisioning records the creating user, so a user identity is required.
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").Log(ctx, s.logger)
+	}
+
+	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
+	if err != nil {
+		if errors.Is(err, ErrManagedAssistantNameTaken) {
+			return nil, oops.E(oops.CodeConflict, err, "an assistant with the project assistant's name already exists — rename it to enable the built-in assistant").Log(ctx, s.logger)
+		}
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "ensure project assistant")
+	}
+	view, err := toHTTPAssistant(record)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
+	}
+	return view, nil
 }
 
 func (s *Service) Kind() string {

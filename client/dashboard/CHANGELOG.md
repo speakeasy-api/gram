@@ -1,5 +1,48 @@
 # dashboard
 
+## 0.68.0
+
+### Minor Changes
+
+- 69d8cdb: Add read-only tool filtering visibility on the MCP details page Tools tab. New `mcp:read`-scoped `listToolFilters` methods on the `toolsets` and `mcpServers` services resolve the effective tool variations group (`mcp_servers` then `toolsets`) and return the available filter scopes (tags) with their member tools plus the tools excluded from all filters, mirroring the runtime `?tags=` behavior. The dashboard Tools tab renders a scopes panel above the tool list when filtering is enabled, with per-tag tool membership and a tag chip that filters the list below.
+- 4feb400: Add the enterprise onboarding wizard at `/<org>/setup` that walks new orgs through five steps end-to-end: SSO setup via WorkOS, directory sync, publishing a private plugin marketplace to GitHub, instrumenting each agent platform (Claude Code, Claude Cowork, OpenAI Codex, Cursor) with the org's marketplace and observability plugin, and confirming traffic is flowing.
+
+  Includes:
+
+  - New `Create Plugin Marketplace` step that wraps the same GitHub publish flow as the Plugins page, with a typeahead-driven GitHub-user picker for collaborator access (replaces the old comma-separated input).
+  - `Instrument Agents` step that surfaces per-platform setup instructions with auto-generated API keys, marketplace URL / repo URL / plugin slug substitution, eligibility gating (Claude Teams/Enterprise check), and platform-specific screenshots. Coming-soon entries for GitHub Copilot, Gemini, Glean, and AWS Bedrock are rendered as a half-width muted grid and excluded from the configured/total count.
+  - Wizard resume logic backed by `organizations.getOnboardingStatus` and `plugins.getPublishStatus` — reloading lands on the deepest known-incomplete step instead of step 0.
+  - `organizations.sendEnterpriseAdminOnboardingEmail` endpoint and a super-admin "Onboarding" tab for dispatching the enterprise-admin invite email (Loops template `cmpqyxnzl00hj0jwtkibhyjdz`), which deep-links recipients into the active org's wizard.
+  - `organizations.verifyOnboardingHooksSetup` polling endpoint that surfaces recent hook events from ClickHouse for the `Confirm Traffic` step.
+  - Wizard chrome: header with Docs / Get Support (Pylon) / Go to Dashboard buttons, footer with the moonshine ThemeSwitcher, and a project-slug query-string override on the SDK provider so the wizard can hit project-scoped endpoints from org-level routes (falls back to the `default` project when unset).
+
+- 51fadba: Make the generated marketplace name configurable per-project. Adds `plugins.getMarketplaceSettings` and `plugins.updateMarketplaceSettings` on the management API plus a Marketplace settings dialog in the Plugins tab. The default is now `<org-slug>-speakeasy` (previously `<org-slug>-gram`); the org-slug prefix keeps defaults unique across customers so end users installing from two Gram marketplaces don't collide. Saving an override on a project that already has a published marketplace auto-republishes the new manifest to GitHub. References to "Gram" in the generated README, plugin descriptions, and hook scripts are rebranded to "Speakeasy"; URLs, env-var names, and HTTP header names are unchanged.
+
+### Patch Changes
+
+- f0b17a8: Auto-create a default MCP endpoint when importing a remote MCP server as a source. Previously the import created the server but required the user to add an endpoint by hand before it could serve traffic. The import flow and the detail-page re-link flow now pre-stage a default platform endpoint with slug `{orgSlug}-{random}`. Endpoint creation is best-effort: a failure leaves the source intact and surfaces a warning toast, and the server stays disabled so the endpoint begins serving once the user enables it.
+- 9bdb3cd: Fix inconsistent results in the filter dropdowns on the Insights and Logs pages (e.g. "Filter by user email"). `MultiSelect` filtered its own option list while cmdk's built-in filter was also enabled, so the two raced as the user typed: valid matches could fall into the "No results found" empty state and it could stay stuck when characters were deleted. The component's own filter is now the single source of truth.
+- d33c557: Fix dashboard release-stage badges so preview/beta labels render consistently in side nav and tab navigation.
+- 1b2edcd: Insights now only counts workspace members across the Employees and Role views, excluding activity from impersonating superadmins that previously showed up as a raw UUID.
+- f2072b1: Improve confirmation dialog for deleting Shadow MCP access rules
+- Updated dependencies [e39ea7e]
+  - @gram-ai/elements@1.34.0
+
+## 0.67.0
+
+### Minor Changes
+
+- 55a25ac: Add management APIs and dashboard UI for enabling and configuring MCP server tool filtering via tool variation groups.
+- 254158e: Add an org-level Device Agent page (`/<org>/device-agent`) under the Secure nav group: per-OS install instructions for the Speakeasy device agent, `managed.json` MDM configuration reference (schema, paths, example), and self-service `org_token` generation via the new `agent` API-key scope (mint/rotate from the page, with a ready-to-paste `managed.json` copied to the clipboard).
+
+  Also patches the CLI loopback callback (`CliCallback.tsx`) to append `&email=<userEmail>` to the redirect, which the device agent's one-shot OAuth-loopback enrollment requires.
+
+### Patch Changes
+
+- 1078e46: Add an optional `user_id` filter to the risk events list. The Risk Events page now exposes a "User contains..." search box that filters findings by the chat's external user id (case-insensitive substring match), alongside the existing policy and rule filters.
+- 1cb069e: Fix the audit logs page AI Insights setup so it no longer calls `toolsets.list` without a project slug from org-level routes.
+- a86651b: Fix the shared `Link` component so external links render inline with surrounding text. The external-link icon was wrapped in a block-level flex container, which stretched inline links to full width and pushed trailing punctuation to a new line; the icon now sits inline on the text baseline.
+
 ## 0.66.0
 
 ### Minor Changes

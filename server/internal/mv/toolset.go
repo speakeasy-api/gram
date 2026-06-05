@@ -333,6 +333,12 @@ func DescribeToolsetEntry(
 	}, nil
 }
 
+// DescribeToolset builds the full view of a toolset including its tools with
+// variation overrides applied. toolVariationsGroupID selects which variation
+// group supplies those overrides: a non-nil value resolves overrides from that
+// explicit group, while nil resolves from the project's default group. It does
+// not filter tools — callers that need tag-based filtering apply it on the
+// returned Tools slice.
 func DescribeToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -340,6 +346,7 @@ func DescribeToolset(
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
 	toolsetCache *cache.TypedCacheObject[ToolsetBaseContents],
+	toolVariationsGroupID *uuid.UUID,
 	platformExtras ...platformtools.ExternalTool,
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
@@ -403,7 +410,7 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
 	}
 
-	err = ApplyVariations(ctx, logger, tx, pid, toolsetTools.Tools)
+	err = ApplyVariations(ctx, logger, tx, pid, toolVariationsGroupID, toolsetTools.Tools)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").Log(ctx, logger)
 	}
@@ -615,6 +622,7 @@ func DescribeToolset(
 		OauthProxyServer:             oauthProxyServer,
 		UserSessionIssuerID:          userSessionIssuerID,
 		UserSessionIssuerSlug:        userSessionIssuerSlug,
+		ToolVariationsGroupID:        conv.FromNullableUUID(toolset.ToolVariationsGroupID),
 		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
 			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
 		},
@@ -1259,7 +1267,11 @@ func getToolsetOrigin(
 	}, nil
 }
 
-func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectID uuid.UUID, tools []*types.Tool) error {
+// ApplyVariations merges tool variation overrides onto the provided tools in
+// place. When toolVariationsGroupID is non-nil the overrides are resolved from
+// that explicit variation group; when nil they are resolved from the project's
+// default variation group (preserving the historical behavior).
+func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectID uuid.UUID, toolVariationsGroupID *uuid.UUID, tools []*types.Tool) error {
 	variationsRepo := vr.New(tx)
 
 	toolUrns := make([]string, 0, len(tools))
@@ -1272,12 +1284,22 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 		toolUrns = append(toolUrns, toolURN.String())
 	}
 
-	allVariations, err := variationsRepo.FindGlobalVariationsByToolURNs(ctx, vr.FindGlobalVariationsByToolURNsParams{
-		ProjectID: projectID,
-		ToolUrns:  toolUrns,
-	})
+	var allVariations []vr.ToolVariation
+	var err error
+	if toolVariationsGroupID != nil {
+		allVariations, err = variationsRepo.ListByGroupIDAndToolURNs(ctx, vr.ListByGroupIDAndToolURNsParams{
+			GroupID:   *toolVariationsGroupID,
+			ProjectID: projectID,
+			ToolUrns:  toolUrns,
+		})
+	} else {
+		allVariations, err = variationsRepo.FindGlobalVariationsByToolURNs(ctx, vr.FindGlobalVariationsByToolURNsParams{
+			ProjectID: projectID,
+			ToolUrns:  toolUrns,
+		})
+	}
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to list tool variations").Log(ctx, logger)
 	}
 
 	urnToVariation := make(map[string]types.ToolVariation, len(allVariations))

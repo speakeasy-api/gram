@@ -133,7 +133,11 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
   Object.keys(DETECTION_RULES) as RuleCategory[]
 ).reduce(
   (acc, category) => {
-    const catalog = DETECTION_RULES[category];
+    // Hidden rules (deprecated / unreliable upstream scanner) stay in
+    // DETECTION_RULES so legacy risk_results keep resolving their title via
+    // risk-utils, but they are dropped from the visible Detection Rules
+    // catalog so users never see them as a selectable/listed rule.
+    const catalog = DETECTION_RULES[category].filter((r) => !r.hidden);
     const description = CATEGORY_RULE_DESCRIPTION[category];
     const severity = CATEGORY_DEFAULT_SEVERITY[category];
     if (catalog.length > 0) {
@@ -165,12 +169,15 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
   {} as Record<RuleCategory, BuiltinRule[]>,
 );
 
-/** All builtin rule ids, used for custom rule id collision checks. */
-export const BUILTIN_RULE_IDS = new Set<string>(
-  Object.values(BUILTIN_RULES_BY_CATEGORY).flatMap((rules) =>
+/** All builtin rule ids, used for custom rule id collision checks. Includes
+ *  hidden/deprecated rule ids (which BUILTIN_RULES_BY_CATEGORY omits) so a
+ *  custom rule can never reuse an id that legacy findings still resolve. */
+export const BUILTIN_RULE_IDS = new Set<string>([
+  ...Object.values(BUILTIN_RULES_BY_CATEGORY).flatMap((rules) =>
     rules.map((r) => r.id),
   ),
-);
+  ...Object.values(DETECTION_RULES).flatMap((rules) => rules.map((r) => r.id)),
+]);
 
 export type CustomDetectionRule = {
   id: string;

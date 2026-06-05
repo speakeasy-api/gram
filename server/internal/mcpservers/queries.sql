@@ -8,6 +8,7 @@ INSERT INTO mcp_servers (
     user_session_issuer_id,
     remote_mcp_server_id,
     toolset_id,
+    tool_variations_group_id,
     visibility
 )
 VALUES (
@@ -19,6 +20,7 @@ VALUES (
     @user_session_issuer_id,
     @remote_mcp_server_id,
     @toolset_id,
+    @tool_variations_group_id,
     @visibility
 )
 RETURNING *;
@@ -51,6 +53,7 @@ SET
     user_session_issuer_id = @user_session_issuer_id,
     remote_mcp_server_id = @remote_mcp_server_id,
     toolset_id = @toolset_id,
+    tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE

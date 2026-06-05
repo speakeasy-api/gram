@@ -89,6 +89,54 @@ var _ = Service("variations", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listGlobal")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GlobalVariations"}`)
 	})
+
+	Method("listGroups", func() {
+		Description("List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListToolVariationGroupsResult)
+
+		HTTP(func() {
+			GET("/rpc/variations.listGroups")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listToolVariationGroups")
+		Meta("openapi:extension:x-speakeasy-name-override", "listGroups")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ToolVariationGroups"}`)
+	})
+
+	Method("createGlobal", func() {
+		Description("Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ToolVariationGroupResult)
+
+		HTTP(func() {
+			POST("/rpc/variations.createGlobal")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createGlobalToolVariationGroup")
+		Meta("openapi:extension:x-speakeasy-name-override", "createGlobal")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateGlobalToolVariationGroup"}`)
+	})
 })
 
 var UpsertGlobalToolVariationForm = Type("UpsertGlobalToolVariationForm", func() {
@@ -122,6 +170,18 @@ var ListVariationsResult = Type("ListVariationsResult", func() {
 	Required("variations")
 
 	Attribute("variations", ArrayOf(shared.ToolVariation))
+})
+
+var ListToolVariationGroupsResult = Type("ListToolVariationGroupsResult", func() {
+	Required("groups")
+
+	Attribute("groups", ArrayOf(shared.ToolVariationGroup))
+})
+
+var ToolVariationGroupResult = Type("ToolVariationGroupResult", func() {
+	Required("group")
+
+	Attribute("group", shared.ToolVariationGroup)
 })
 
 var DeleteGlobalToolVariationForm = Type("DeleteGlobalToolVariationForm", func() {

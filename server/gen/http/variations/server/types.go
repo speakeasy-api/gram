@@ -64,6 +64,18 @@ type ListGlobalResponseBody struct {
 	Variations []*ToolVariationResponseBody `form:"variations" json:"variations" xml:"variations"`
 }
 
+// ListGroupsResponseBody is the type of the "variations" service "listGroups"
+// endpoint HTTP response body.
+type ListGroupsResponseBody struct {
+	Groups []*ToolVariationGroupResponseBody `form:"groups" json:"groups" xml:"groups"`
+}
+
+// CreateGlobalResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body.
+type CreateGlobalResponseBody struct {
+	Group *ToolVariationGroupResponseBody `form:"group" json:"group" xml:"group"`
+}
+
 // UpsertGlobalUnauthorizedResponseBody is the type of the "variations" service
 // "upsertGlobal" endpoint HTTP response body for the "unauthorized" error.
 type UpsertGlobalUnauthorizedResponseBody struct {
@@ -610,6 +622,370 @@ type ListGlobalGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListGroupsUnauthorizedResponseBody is the type of the "variations" service
+// "listGroups" endpoint HTTP response body for the "unauthorized" error.
+type ListGroupsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsForbiddenResponseBody is the type of the "variations" service
+// "listGroups" endpoint HTTP response body for the "forbidden" error.
+type ListGroupsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsBadRequestResponseBody is the type of the "variations" service
+// "listGroups" endpoint HTTP response body for the "bad_request" error.
+type ListGroupsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsNotFoundResponseBody is the type of the "variations" service
+// "listGroups" endpoint HTTP response body for the "not_found" error.
+type ListGroupsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsConflictResponseBody is the type of the "variations" service
+// "listGroups" endpoint HTTP response body for the "conflict" error.
+type ListGroupsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsUnsupportedMediaResponseBody is the type of the "variations"
+// service "listGroups" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ListGroupsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsInvalidResponseBody is the type of the "variations" service
+// "listGroups" endpoint HTTP response body for the "invalid" error.
+type ListGroupsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsInvariantViolationResponseBody is the type of the "variations"
+// service "listGroups" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListGroupsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsUnexpectedResponseBody is the type of the "variations" service
+// "listGroups" endpoint HTTP response body for the "unexpected" error.
+type ListGroupsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGroupsGatewayErrorResponseBody is the type of the "variations" service
+// "listGroups" endpoint HTTP response body for the "gateway_error" error.
+type ListGroupsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalUnauthorizedResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body for the "unauthorized" error.
+type CreateGlobalUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalForbiddenResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body for the "forbidden" error.
+type CreateGlobalForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalBadRequestResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body for the "bad_request" error.
+type CreateGlobalBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalNotFoundResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body for the "not_found" error.
+type CreateGlobalNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalConflictResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body for the "conflict" error.
+type CreateGlobalConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalUnsupportedMediaResponseBody is the type of the "variations"
+// service "createGlobal" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateGlobalUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalInvalidResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body for the "invalid" error.
+type CreateGlobalInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalInvariantViolationResponseBody is the type of the "variations"
+// service "createGlobal" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateGlobalInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalUnexpectedResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body for the "unexpected" error.
+type CreateGlobalUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGlobalGatewayErrorResponseBody is the type of the "variations" service
+// "createGlobal" endpoint HTTP response body for the "gateway_error" error.
+type CreateGlobalGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ToolVariationResponseBody is used to define fields on response body types.
 type ToolVariationResponseBody struct {
 	// The ID of the tool variation
@@ -648,6 +1024,21 @@ type ToolVariationResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ToolVariationGroupResponseBody is used to define fields on response body
+// types.
+type ToolVariationGroupResponseBody struct {
+	// The ID of the tool variation group
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the tool variation group
+	Name string `form:"name" json:"name" xml:"name"`
+	// The description of the tool variation group
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The creation date of the tool variation group
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tool variation group
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // NewUpsertGlobalResponseBody builds the HTTP response body from the result of
 // the "upsertGlobal" endpoint of the "variations" service.
 func NewUpsertGlobalResponseBody(res *variations.UpsertGlobalToolVariationResult) *UpsertGlobalResponseBody {
@@ -682,6 +1073,35 @@ func NewListGlobalResponseBody(res *variations.ListVariationsResult) *ListGlobal
 		}
 	} else {
 		body.Variations = []*ToolVariationResponseBody{}
+	}
+	return body
+}
+
+// NewListGroupsResponseBody builds the HTTP response body from the result of
+// the "listGroups" endpoint of the "variations" service.
+func NewListGroupsResponseBody(res *variations.ListToolVariationGroupsResult) *ListGroupsResponseBody {
+	body := &ListGroupsResponseBody{}
+	if res.Groups != nil {
+		body.Groups = make([]*ToolVariationGroupResponseBody, len(res.Groups))
+		for i, val := range res.Groups {
+			if val == nil {
+				body.Groups[i] = nil
+				continue
+			}
+			body.Groups[i] = marshalTypesToolVariationGroupToToolVariationGroupResponseBody(val)
+		}
+	} else {
+		body.Groups = []*ToolVariationGroupResponseBody{}
+	}
+	return body
+}
+
+// NewCreateGlobalResponseBody builds the HTTP response body from the result of
+// the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalResponseBody(res *variations.ToolVariationGroupResult) *CreateGlobalResponseBody {
+	body := &CreateGlobalResponseBody{}
+	if res.Group != nil {
+		body.Group = marshalTypesToolVariationGroupToToolVariationGroupResponseBody(res.Group)
 	}
 	return body
 }
@@ -1106,6 +1526,286 @@ func NewListGlobalGatewayErrorResponseBody(res *goa.ServiceError) *ListGlobalGat
 	return body
 }
 
+// NewListGroupsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsUnauthorizedResponseBody(res *goa.ServiceError) *ListGroupsUnauthorizedResponseBody {
+	body := &ListGroupsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsForbiddenResponseBody(res *goa.ServiceError) *ListGroupsForbiddenResponseBody {
+	body := &ListGroupsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsBadRequestResponseBody(res *goa.ServiceError) *ListGroupsBadRequestResponseBody {
+	body := &ListGroupsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsNotFoundResponseBody(res *goa.ServiceError) *ListGroupsNotFoundResponseBody {
+	body := &ListGroupsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsConflictResponseBody builds the HTTP response body from the
+// result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsConflictResponseBody(res *goa.ServiceError) *ListGroupsConflictResponseBody {
+	body := &ListGroupsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListGroupsUnsupportedMediaResponseBody {
+	body := &ListGroupsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsInvalidResponseBody builds the HTTP response body from the
+// result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsInvalidResponseBody(res *goa.ServiceError) *ListGroupsInvalidResponseBody {
+	body := &ListGroupsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsInvariantViolationResponseBody(res *goa.ServiceError) *ListGroupsInvariantViolationResponseBody {
+	body := &ListGroupsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsUnexpectedResponseBody(res *goa.ServiceError) *ListGroupsUnexpectedResponseBody {
+	body := &ListGroupsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGroupsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listGroups" endpoint of the "variations" service.
+func NewListGroupsGatewayErrorResponseBody(res *goa.ServiceError) *ListGroupsGatewayErrorResponseBody {
+	body := &ListGroupsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalUnauthorizedResponseBody(res *goa.ServiceError) *CreateGlobalUnauthorizedResponseBody {
+	body := &CreateGlobalUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalForbiddenResponseBody builds the HTTP response body from the
+// result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalForbiddenResponseBody(res *goa.ServiceError) *CreateGlobalForbiddenResponseBody {
+	body := &CreateGlobalForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalBadRequestResponseBody builds the HTTP response body from the
+// result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalBadRequestResponseBody(res *goa.ServiceError) *CreateGlobalBadRequestResponseBody {
+	body := &CreateGlobalBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalNotFoundResponseBody builds the HTTP response body from the
+// result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalNotFoundResponseBody(res *goa.ServiceError) *CreateGlobalNotFoundResponseBody {
+	body := &CreateGlobalNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalConflictResponseBody builds the HTTP response body from the
+// result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalConflictResponseBody(res *goa.ServiceError) *CreateGlobalConflictResponseBody {
+	body := &CreateGlobalConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateGlobalUnsupportedMediaResponseBody {
+	body := &CreateGlobalUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalInvalidResponseBody builds the HTTP response body from the
+// result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalInvalidResponseBody(res *goa.ServiceError) *CreateGlobalInvalidResponseBody {
+	body := &CreateGlobalInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalInvariantViolationResponseBody(res *goa.ServiceError) *CreateGlobalInvariantViolationResponseBody {
+	body := &CreateGlobalInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalUnexpectedResponseBody builds the HTTP response body from the
+// result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalUnexpectedResponseBody(res *goa.ServiceError) *CreateGlobalUnexpectedResponseBody {
+	body := &CreateGlobalUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGlobalGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "createGlobal" endpoint of the "variations" service.
+func NewCreateGlobalGatewayErrorResponseBody(res *goa.ServiceError) *CreateGlobalGatewayErrorResponseBody {
+	body := &CreateGlobalGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpsertGlobalPayload builds a variations service upsertGlobal endpoint
 // payload.
 func NewUpsertGlobalPayload(body *UpsertGlobalRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *variations.UpsertGlobalPayload {
@@ -1152,6 +1852,27 @@ func NewDeleteGlobalPayload(variationID string, sessionToken *string, apikeyToke
 // NewListGlobalPayload builds a variations service listGlobal endpoint payload.
 func NewListGlobalPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *variations.ListGlobalPayload {
 	v := &variations.ListGlobalPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListGroupsPayload builds a variations service listGroups endpoint payload.
+func NewListGroupsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *variations.ListGroupsPayload {
+	v := &variations.ListGroupsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCreateGlobalPayload builds a variations service createGlobal endpoint
+// payload.
+func NewCreateGlobalPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *variations.CreateGlobalPayload {
+	v := &variations.CreateGlobalPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -66,12 +66,45 @@ func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Cont
 	return nil
 }
 
-func (m *MockOrganizationProvider) GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent thirdpartyworkos.PortalIntent, returnURL string) (string, error) {
-	args := m.Called(ctx, workosOrgID, intent, returnURL)
+func (m *MockOrganizationProvider) GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent thirdpartyworkos.PortalIntent, opts thirdpartyworkos.GenerateAdminPortalLinkOpts) (string, error) {
+	args := m.Called(ctx, workosOrgID, intent, opts)
 	if err := args.Error(1); err != nil {
 		return "", fmt.Errorf("mock GenerateAdminPortalLink: %w", err)
 	}
 	return args.String(0), nil
+}
+
+func (m *MockOrganizationProvider) ListConnections(ctx context.Context, organizationID string) ([]thirdpartyworkos.Connection, error) {
+	args := m.Called(ctx, organizationID)
+	if err := args.Error(1); err != nil {
+		return nil, fmt.Errorf("mock ListConnections: %w", err)
+	}
+	if conns, ok := args.Get(0).([]thirdpartyworkos.Connection); ok {
+		return conns, nil
+	}
+	return nil, nil
+}
+
+func (m *MockOrganizationProvider) ListDirectories(ctx context.Context, organizationID string) ([]thirdpartyworkos.Directory, error) {
+	args := m.Called(ctx, organizationID)
+	if err := args.Error(1); err != nil {
+		return nil, fmt.Errorf("mock ListDirectories: %w", err)
+	}
+	if dirs, ok := args.Get(0).([]thirdpartyworkos.Directory); ok {
+		return dirs, nil
+	}
+	return nil, nil
+}
+
+func (m *MockOrganizationProvider) ListRoles(ctx context.Context, workosOrgID string) ([]thirdpartyworkos.Role, error) {
+	args := m.Called(ctx, workosOrgID)
+	if err := args.Error(1); err != nil {
+		return nil, fmt.Errorf("mock ListRoles: %w", err)
+	}
+	if roles, ok := args.Get(0).([]thirdpartyworkos.Role); ok {
+		return roles, nil
+	}
+	return nil, nil
 }
 
 // stubUserProvisioner is a no-op implementation of UserProvisioner for tests

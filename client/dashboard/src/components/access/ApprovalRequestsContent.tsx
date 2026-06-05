@@ -40,6 +40,7 @@ import {
   Badge,
   Button,
   Column,
+  Dialog,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -52,7 +53,7 @@ import {
   TooltipTrigger,
 } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Ellipsis, Inbox, Plus, ShieldCheck } from "lucide-react";
+import { Ellipsis, Inbox, Loader2, Plus, ShieldCheck } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -850,6 +851,12 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
   const [editingRule, setEditingRule] = useState<ShadowMCPAccessRule | null>(
     null,
   );
+  const [rulePendingDelete, setRulePendingDelete] =
+    useState<ShadowMCPAccessRule | null>(null);
+
+  useEffect(() => {
+    setRulePendingDelete(null);
+  }, [projectId]);
 
   const ruleDisposition =
     ruleDispositionFilter === "all" ? undefined : ruleDispositionFilter;
@@ -982,6 +989,24 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
         queryKey: APPROVAL_REQUEST_RULES_QUERY_KEY,
       }),
     ]);
+  };
+
+  const closeDeleteRuleDialog = () => {
+    if (deleteRule.isPending) return;
+    setRulePendingDelete(null);
+  };
+
+  const confirmDeleteRule = async () => {
+    if (!rulePendingDelete || deleteRule.isPending) return;
+
+    try {
+      await deleteRule.mutateAsync({ request: { id: rulePendingDelete.id } });
+      await refreshApprovalRequestsData();
+      toast.success("Access Rule deleted");
+      setRulePendingDelete(null);
+    } catch {
+      toast.error("Access Rule delete failed");
+    }
   };
 
   const requestColumns: Column<ShadowMCPApprovalRequest>[] = [
@@ -1135,19 +1160,7 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
             setEditingRule(rule);
             setIsRuleSheetOpen(true);
           }}
-          onDelete={async () => {
-            if (!window.confirm(`Delete Access Rule "${rule.displayName}"?`)) {
-              return;
-            }
-
-            try {
-              await deleteRule.mutateAsync({ request: { id: rule.id } });
-              await refreshApprovalRequestsData();
-              toast.success("Access Rule deleted");
-            } catch {
-              toast.error("Access Rule delete failed");
-            }
-          }}
+          onDelete={() => setRulePendingDelete(rule)}
         />
       ),
     },
@@ -1419,6 +1432,51 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
           </div>
         )}
       </section>
+
+      <Dialog
+        open={rulePendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteRuleDialog();
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Delete access rule</Dialog.Title>
+          </Dialog.Header>
+          <Type variant="small">
+            This action cannot be undone. Are you sure you want to delete{" "}
+            <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              {rulePendingDelete?.displayName ?? "this access rule"}
+            </code>
+            ?
+          </Type>
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={closeDeleteRuleDialog}
+              disabled={deleteRule.isPending}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+            <Button
+              variant="destructive-primary"
+              onClick={confirmDeleteRule}
+              disabled={deleteRule.isPending}
+            >
+              {deleteRule.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Deleting</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Delete</Button.Text>
+              )}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </div>
   );
 }

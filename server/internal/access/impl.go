@@ -247,6 +247,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
 		{Slug: string(authz.ScopeEnvironmentRead), Description: "View environments and their entries within the project.", ResourceType: "environment"},
 		{Slug: string(authz.ScopeEnvironmentWrite), Description: "Add, edit, clone, and remove environments within the project.", ResourceType: "environment"},
+		{Slug: string(authz.ScopeRiskPolicyEvaluate), Description: "Evaluate risk policies.", ResourceType: "risk_policy"},
+		{Slug: string(authz.ScopeRiskPolicyBypass), Description: "Bypass risk policies.", ResourceType: "risk_policy"},
 	}}, nil
 }
 
@@ -441,6 +443,9 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ProjectID != nil {
 		sel["project_id"] = *s.ProjectID
 	}
+	if s.ServerURL != nil {
+		sel["server_url"] = *s.ServerURL
+	}
 	return sel
 }
 
@@ -451,6 +456,7 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 		Disposition:  nil,
 		Tool:         nil,
 		ProjectID:    nil,
+		ServerURL:    nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -460,6 +466,9 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel["project_id"]; ok {
 		s.ProjectID = &v
+	}
+	if v, ok := sel["server_url"]; ok {
+		s.ServerURL = &v
 	}
 	return s
 }
@@ -485,6 +494,8 @@ func allScopesGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil},
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 	}
 }
 
@@ -545,7 +556,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
 
-	if err := authz.SeedSystemRoleGrants(ctx, s.logger, s.db, ac.ActiveOrganizationID); err != nil {
+	if err := authz.SeedSystemRoleGrants(ctx, s.db, ac.ActiveOrganizationID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "seed system role grants").Log(ctx, logger)
 	}
 

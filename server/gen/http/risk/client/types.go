@@ -30,6 +30,9 @@ type CreateRiskPolicyRequestBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids to enable for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types this policy applies to. When empty or omitted, the policy
+	// scans all supported types.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -61,6 +64,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// Custom detection rule ids to enable for this policy. Omit to preserve the
 	// current selection.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types this policy applies to. Omit to preserve the current
+	// selection; send an empty array to apply to all types.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -177,6 +183,10 @@ type CreateRiskPolicyResponseBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types this policy applies to. When empty or omitted, applies to all
+	// types. Valid values: user_message, tool_request, tool_response,
+	// assistant_message.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -236,6 +246,10 @@ type GetRiskPolicyResponseBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types this policy applies to. When empty or omitted, applies to all
+	// types. Valid values: user_message, tool_request, tool_response,
+	// assistant_message.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -281,6 +295,10 @@ type UpdateRiskPolicyResponseBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types this policy applies to. When empty or omitted, applies to all
+	// types. Valid values: user_message, tool_request, tool_response,
+	// assistant_message.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -5207,6 +5225,10 @@ type RiskPolicyResponseBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types this policy applies to. When empty or omitted, applies to all
+	// types. Valid values: user_message, tool_request, tool_response,
+	// assistant_message.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -5486,6 +5508,12 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.CustomRuleIds[i] = val
 		}
 	}
+	if p.MessageTypes != nil {
+		body.MessageTypes = make([]string, len(p.MessageTypes))
+		for i, val := range p.MessageTypes {
+			body.MessageTypes[i] = val
+		}
+	}
 	{
 		var zero string
 		if body.Action == zero {
@@ -5534,6 +5562,12 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		body.CustomRuleIds = make([]string, len(p.CustomRuleIds))
 		for i, val := range p.CustomRuleIds {
 			body.CustomRuleIds[i] = val
+		}
+	}
+	if p.MessageTypes != nil {
+		body.MessageTypes = make([]string, len(p.MessageTypes))
+		for i, val := range p.MessageTypes {
+			body.MessageTypes[i] = val
 		}
 	}
 	return body
@@ -5680,6 +5714,12 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
+		}
+	}
+	if body.MessageTypes != nil {
+		v.MessageTypes = make([]string, len(body.MessageTypes))
+		for i, val := range body.MessageTypes {
+			v.MessageTypes[i] = val
 		}
 	}
 
@@ -6207,6 +6247,12 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 			v.CustomRuleIds[i] = val
 		}
 	}
+	if body.MessageTypes != nil {
+		v.MessageTypes = make([]string, len(body.MessageTypes))
+		for i, val := range body.MessageTypes {
+			v.MessageTypes[i] = val
+		}
+	}
 
 	return v
 }
@@ -6404,6 +6450,12 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
+		}
+	}
+	if body.MessageTypes != nil {
+		v.MessageTypes = make([]string, len(body.MessageTypes))
+		for i, val := range body.MessageTypes {
+			v.MessageTypes[i] = val
 		}
 	}
 

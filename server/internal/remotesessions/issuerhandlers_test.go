@@ -688,3 +688,165 @@ func TestDiscoverRemoteSessionIssuer_UnexpectedStatusSurfacesCode(t *testing.T) 
 	require.Contains(t, err.Error(), "Unexpected HTTP 503")
 	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
 }
+
+func TestDiscoverRemoteSessionIssuer_OpenIDConfigurationFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// Upstream advertises metadata only under the OpenID Connect Discovery
+	// path. Many IdPs (Auth0, Okta, Google) serve no oauth-authorization-server
+	// document, so discovery must fall back to openid-configuration.
+	var probedPaths []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probedPaths = append(probedPaths, r.URL.Path)
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                 server.URL,
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+			"jwks_uri":               server.URL + "/jwks",
+			"registration_endpoint":  server.URL + "/register",
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, draft.AuthorizationEndpoint)
+	require.NotNil(t, draft.TokenEndpoint)
+	require.Equal(t, []string{
+		"/.well-known/oauth-authorization-server",
+		"/.well-known/openid-configuration",
+	}, probedPaths, "oauth-authorization-server first, then openid-configuration")
+}
+
+func TestDiscoverRemoteSessionIssuer_OriginStyleFallbackStripsPath(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// Issuer carries a path component but the upstream serves metadata only at
+	// the origin-root well-known URL (a common gateway / SPA catch-all shape).
+	// The path-aware candidates 404, so discovery must fall back to the
+	// path-stripped origin-style location.
+	var probedPaths []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probedPaths = append(probedPaths, r.URL.Path)
+		if r.URL.Path != "/.well-known/oauth-authorization-server" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                 server.URL,
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+			"jwks_uri":               server.URL + "/jwks",
+			"registration_endpoint":  server.URL + "/register",
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL + "/tenant",
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, draft.AuthorizationEndpoint)
+	require.Equal(t, []string{
+		"/.well-known/oauth-authorization-server/tenant",
+		"/.well-known/openid-configuration/tenant",
+		"/tenant/.well-known/openid-configuration",
+		"/.well-known/oauth-authorization-server",
+	}, probedPaths, "path-aware candidates 404, fall back to origin-style")
+}
+
+func TestDiscoverRemoteSessionIssuer_SkipsCatchAll200WithoutEndpoints(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// A SPA/gateway catch-all answers every path-aware candidate with a 200
+	// that parses but carries no usable OAuth endpoints. Discovery must treat
+	// those as misses and keep probing until it reaches the origin-style
+	// oauth-authorization-server URL that serves the real document.
+	var probedPaths []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probedPaths = append(probedPaths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/.well-known/oauth-authorization-server" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                 server.URL,
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+				"jwks_uri":               server.URL + "/jwks",
+				"registration_endpoint":  server.URL + "/register",
+			})
+			return
+		}
+		// Catch-all: 200 with no authorization_endpoint / token_endpoint.
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL})
+	}))
+	t.Cleanup(server.Close)
+
+	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL + "/tenant",
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, draft.AuthorizationEndpoint)
+	require.NotNil(t, draft.TokenEndpoint)
+	require.Equal(t, []string{
+		"/.well-known/oauth-authorization-server/tenant",
+		"/.well-known/openid-configuration/tenant",
+		"/tenant/.well-known/openid-configuration",
+		"/.well-known/oauth-authorization-server",
+	}, probedPaths, "incomplete catch-all 200s skipped until the real document")
+}
+
+func TestDiscoverRemoteSessionIssuer_IncompleteDocReturnedAsLastResort(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// Every candidate answers 200 with a parseable but endpoint-less document.
+	// No candidate is usable, so discovery probes them all and surfaces the
+	// first incomplete document (with warnings) rather than failing outright.
+	var probedPaths []string
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probedPaths = append(probedPaths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL})
+	}))
+	t.Cleanup(server.Close)
+
+	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+		Issuer:           server.URL + "/tenant",
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, draft.AuthorizationEndpoint)
+	require.Nil(t, draft.TokenEndpoint)
+	require.NotEmpty(t, draft.DiscoveryWarnings)
+	require.Len(t, probedPaths, 5, "all candidates probed before falling back to the incomplete document")
+}

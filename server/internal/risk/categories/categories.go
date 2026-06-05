@@ -120,7 +120,6 @@ var Definitions = []Definition{
 		RuleIDs: []string{
 			"pii.us_ssn",
 			"pii.us_passport",
-			"pii.us_driver_license",
 			"pii.us_itin",
 			"pii.uk_nhs",
 			"pii.uk_nino",

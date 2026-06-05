@@ -53,7 +53,7 @@ func DescribePromptTemplate(
 	}
 
 	pt := fromPromptTemplateRow(row)
-	err = ApplyVariations(ctx, logger, tx, pid, []*types.Tool{{PromptTemplate: pt}})
+	err = ApplyVariations(ctx, logger, tx, pid, nil, []*types.Tool{{PromptTemplate: pt}})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to prompt template").Log(ctx, logger)
 	}
@@ -85,7 +85,7 @@ func DescribePromptTemplates(
 	templates := make([]*types.PromptTemplate, 0, len(rows))
 	for _, row := range rows {
 		pt := fromPromptTemplateRow(row)
-		err = ApplyVariations(ctx, logger, tx, pid, []*types.Tool{{PromptTemplate: pt}})
+		err = ApplyVariations(ctx, logger, tx, pid, nil, []*types.Tool{{PromptTemplate: pt}})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to prompt template").Log(ctx, logger)
 		}

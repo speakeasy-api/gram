@@ -259,7 +259,7 @@ func (c *Client) LoadToolsetTools(
 	toolsetSlug string,
 ) ([]AgentTool, error) {
 	// Get default environment for the toolset
-	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug), &c.toolsetCache)
+	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug), &c.toolsetCache, nil)
 	if err != nil {
 		return nil, err
 	}

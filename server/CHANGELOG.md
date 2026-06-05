@@ -1,5 +1,51 @@
 # server
 
+## 0.65.0
+
+### Minor Changes
+
+- 9565e61: The public `/mcp` handler now supports filtering exposed tools by variation tag via the `?tags=` URL query parameter (comma-separated, OR/union). Tool variation overrides are resolved from the MCP server's or toolset's configured tool variation group, falling back to the project default.
+- 69d8cdb: Add read-only tool filtering visibility on the MCP details page Tools tab. New `mcp:read`-scoped `listToolFilters` methods on the `toolsets` and `mcpServers` services resolve the effective tool variations group (`mcp_servers` then `toolsets`) and return the available filter scopes (tags) with their member tools plus the tools excluded from all filters, mirroring the runtime `?tags=` behavior. The dashboard Tools tab renders a scopes panel above the tool list when filtering is enabled, with per-tag tool membership and a tag chip that filters the list below.
+- 526bb14: Project Assistant turns sent from the dashboard now run under the sender's user identity instead of the user who first enabled the assistant for the project. MCP tool calls, audit attribution, and any per-user RBAC inside a turn reflect the user who actually sent the message. Non-interactive sources (cron, wake), Slack-sourced turns, and system-initiated MCP-auth resumptions continue to run under the assistant's creator.
+- e39ea7e: The dashboard Project Assistant now reads its conversation straight from the chat service instead of a separate mirror. `assistants.sendMessage` takes an optional `chat_id` to continue a conversation (from `chat.list`), or omits it to start a new one — the server mints and returns the chat id. The redundant `assistants.listMessages` endpoint is removed; clients poll `chat.load` for the assistant's replies, which now surface as plain assistant messages.
+- cdf7772: Add `POST /rpc/assistants.ensureManagedAssistant`: returns the project's built-in Project Assistant, provisioning it (idempotently) on first access so the dashboard sidebar can resolve it out of the box. Gated by project read access. Also renames the managed assistant to "Project Assistant for {project}" to match the dashboard's "Project Assistant" branding. Foundation for the AGE-2631 sidebar cutover.
+- 4feb400: Add the enterprise onboarding wizard at `/<org>/setup` that walks new orgs through five steps end-to-end: SSO setup via WorkOS, directory sync, publishing a private plugin marketplace to GitHub, instrumenting each agent platform (Claude Code, Claude Cowork, OpenAI Codex, Cursor) with the org's marketplace and observability plugin, and confirming traffic is flowing.
+
+  Includes:
+
+  - New `Create Plugin Marketplace` step that wraps the same GitHub publish flow as the Plugins page, with a typeahead-driven GitHub-user picker for collaborator access (replaces the old comma-separated input).
+  - `Instrument Agents` step that surfaces per-platform setup instructions with auto-generated API keys, marketplace URL / repo URL / plugin slug substitution, eligibility gating (Claude Teams/Enterprise check), and platform-specific screenshots. Coming-soon entries for GitHub Copilot, Gemini, Glean, and AWS Bedrock are rendered as a half-width muted grid and excluded from the configured/total count.
+  - Wizard resume logic backed by `organizations.getOnboardingStatus` and `plugins.getPublishStatus` — reloading lands on the deepest known-incomplete step instead of step 0.
+  - `organizations.sendEnterpriseAdminOnboardingEmail` endpoint and a super-admin "Onboarding" tab for dispatching the enterprise-admin invite email (Loops template `cmpqyxnzl00hj0jwtkibhyjdz`), which deep-links recipients into the active org's wizard.
+  - `organizations.verifyOnboardingHooksSetup` polling endpoint that surfaces recent hook events from ClickHouse for the `Confirm Traffic` step.
+  - Wizard chrome: header with Docs / Get Support (Pylon) / Go to Dashboard buttons, footer with the moonshine ThemeSwitcher, and a project-slug query-string override on the SDK provider so the wizard can hit project-scoped endpoints from org-level routes (falls back to the `default` project when unset).
+
+- 51fadba: Make the generated marketplace name configurable per-project. Adds `plugins.getMarketplaceSettings` and `plugins.updateMarketplaceSettings` on the management API plus a Marketplace settings dialog in the Plugins tab. The default is now `<org-slug>-speakeasy` (previously `<org-slug>-gram`); the org-slug prefix keeps defaults unique across customers so end users installing from two Gram marketplaces don't collide. Saving an override on a project that already has a published marketplace auto-republishes the new manifest to GitHub. References to "Gram" in the generated README, plugin descriptions, and hook scripts are rebranded to "Speakeasy"; URLs, env-var names, and HTTP header names are unchanged.
+- 51fadba: Add the `project_marketplace_settings` table to hold per-project marketplace configuration. Schema-only change; the table is consumed in a follow-up PR that exposes a configurable marketplace name on the plugins management API.
+
+### Patch Changes
+
+- 4856d7e: Preserve a configured Authorization header for external MCP passthrough tools instead of overwriting it with the gating OAuth token.
+- 938c251: Add the `platform_dashboard_send_message` egress tool so a dashboard assistant can deliver its reply to the conversation log: it resolves the target chat from the assistant principal's thread id and appends an `assistant` row to `assistant_dashboard_messages`. The user's turn is recorded as a `user` row at ingest, atomically with the thread event (idempotent on retry). Assistant-agnostic and keyed by the configurable correlation id. Foundation for AGE-2631.
+- 622cc7b: Fix `organizations.getOnboardingStatus` returning 500 in production by switching the WorkOS connection/directory lookups to the official WorkOS Go SDK (`sso.Client`, `directorysync.Client`). The previous raw-HTTP wrapper used the wrong path `/directory_sync/directories` (the correct WorkOS endpoint is `/directories`), which the type system could not catch.
+- fe4f5d2: Use a non-empty inviter fallback for organization invite emails when the inviter's stored display name is blank, preventing Loops from rejecting invites that require `inviter_name`.
+- 51c6acc: Add safe instrumentation for issuer-gated MCP OAuth registration, token exchange, and revocation flows to improve Datadog debugging of client credential and grant failures.
+
+## 0.64.0
+
+### Minor Changes
+
+- 55a25ac: Add management APIs and dashboard UI for enabling and configuring MCP server tool filtering via tool variation groups.
+
+### Patch Changes
+
+- 8f3591d: resolve /mcp/<slug> OAuth flow handlers via mcp_endpoints with toolset fallback
+- a1f25dc: Prepare RBAC grants for issuer-gated private remote MCP servers so `tools/list` and `tools/call` no longer fail for RBAC-enforced callers. Previously the issuer-gated path skipped grant preparation, causing the proxy's `mcp:connect` interceptors to reject the request with a missing-grants error and return zero tools.
+- 13551ec: Add the `assistant_dashboard_messages` table — the user-visible conversation log for the AI Insights sidebar (user messages + the assistant's delivered replies), kept separate from the raw `chat_messages` transcript. Keyed by chat with a monotonic `seq` for incremental polling. Foundation for AGE-2631.
+- 3011492: Add an endpoint for a dashboard user to send a message to an assistant. The reply is delivered asynchronously — the response returns the chat to poll for it. The caller chooses the conversation thread via a correlation key (send the user id for one continuing thread per user, or a fresh value to start over), and can pass an idempotency key so a retried send doesn't enqueue the message twice.
+- 1078e46: Add an optional `user_id` filter to the risk events list. The Risk Events page now exposes a "User contains..." search box that filters findings by the chat's external user id (case-insensitive substring match), alongside the existing policy and rule filters.
+- 3eaa1cf: Add `message_types` to risk policies so admins can target enforcement and batch scanning to user messages, tool requests, tool responses, or assistant text.
+
 ## 0.63.0
 
 ### Minor Changes
