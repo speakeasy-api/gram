@@ -633,6 +633,15 @@ func parseExclusionPolicyID(raw *string) (uuid.NullUUID, error) {
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
+// nullableText maps an optional filter string to a nullable column value:
+// empty string ("any") becomes SQL NULL.
+func nullableText(s string) pgtype.Text {
+	if s == "" {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return pgtype.Text{String: s, Valid: true}
+}
+
 func validateExclusionMatchValue(matchType, matchValue string) error {
 	if matchValue == "" {
 		return oops.E(oops.CodeInvalid, nil, "match_value must not be empty")
@@ -668,8 +677,8 @@ func exclusionToType(row repo.RiskExclusion) *types.RiskExclusion {
 		RiskPolicyID: policyID,
 		MatchType:    row.MatchType,
 		MatchValue:   row.MatchValue,
-		RuleIDFilter: row.RuleIDFilter,
-		SourceFilter: row.SourceFilter,
+		RuleIDFilter: row.RuleIDFilter.String,
+		SourceFilter: row.SourceFilter.String,
 		Enabled:      row.Enabled,
 		CreatedAt:    row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:    row.UpdatedAt.Time.Format(time.RFC3339),
@@ -771,8 +780,8 @@ func (s *Service) CreateRiskExclusion(ctx context.Context, payload *gen.CreateRi
 		RiskPolicyID:   policyID,
 		MatchType:      payload.MatchType,
 		MatchValue:     payload.MatchValue,
-		RuleIDFilter:   payload.RuleIDFilter,
-		SourceFilter:   payload.SourceFilter,
+		RuleIDFilter:   nullableText(payload.RuleIDFilter),
+		SourceFilter:   nullableText(payload.SourceFilter),
 		Enabled:        payload.Enabled,
 	})
 	if err != nil {
@@ -843,8 +852,8 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 		RiskPolicyID: policyID,
 		MatchType:    payload.MatchType,
 		MatchValue:   payload.MatchValue,
-		RuleIDFilter: payload.RuleIDFilter,
-		SourceFilter: payload.SourceFilter,
+		RuleIDFilter: nullableText(payload.RuleIDFilter),
+		SourceFilter: nullableText(payload.SourceFilter),
 		Enabled:      payload.Enabled,
 	})
 	if err != nil {

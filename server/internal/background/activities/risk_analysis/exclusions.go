@@ -45,8 +45,8 @@ func NewExclusionSet(exclusions []repo.RiskExclusion) ExclusionSet {
 		r := exclusionRule{
 			matchType:    e.MatchType,
 			value:        e.MatchValue,
-			ruleIDFilter: e.RuleIDFilter,
-			sourceFilter: e.SourceFilter,
+			ruleIDFilter: e.RuleIDFilter.String, // NULL -> "" (any)
+			sourceFilter: e.SourceFilter.String, // NULL -> "" (any)
 			re:           nil,
 		}
 		if e.MatchType == "regex" {

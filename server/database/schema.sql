@@ -2856,9 +2856,9 @@ CREATE TABLE IF NOT EXISTS risk_exclusions (
   match_type TEXT NOT NULL,
   match_value TEXT NOT NULL,
   -- Optional narrowing: an exact/regex exclusion only applies within this
-  -- rule_id and/or source. Empty string means "any".
-  rule_id_filter TEXT NOT NULL DEFAULT '',
-  source_filter TEXT NOT NULL DEFAULT '',
+  -- rule_id and/or source. NULL means "any".
+  rule_id_filter TEXT,
+  source_filter TEXT,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

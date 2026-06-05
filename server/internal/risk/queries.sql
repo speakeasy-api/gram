@@ -860,8 +860,8 @@ WHERE id IN (
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.match = @match_value
-    AND (@rule_id_filter = '' OR rr.rule_id = @rule_id_filter)
-    AND (@source_filter = '' OR rr.source = @source_filter)
+    AND (sqlc.narg(rule_id_filter)::text IS NULL OR rr.rule_id = sqlc.narg(rule_id_filter))
+    AND (sqlc.narg(source_filter)::text IS NULL OR rr.source = sqlc.narg(source_filter))
     AND rr.id > @cursor
   ORDER BY rr.id
   LIMIT @batch_limit
@@ -880,8 +880,8 @@ WHERE id IN (
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.match ~ @pattern
-    AND (@rule_id_filter = '' OR rr.rule_id = @rule_id_filter)
-    AND (@source_filter = '' OR rr.source = @source_filter)
+    AND (sqlc.narg(rule_id_filter)::text IS NULL OR rr.rule_id = sqlc.narg(rule_id_filter))
+    AND (sqlc.narg(source_filter)::text IS NULL OR rr.source = sqlc.narg(source_filter))
     AND rr.id > @cursor
   ORDER BY rr.id
   LIMIT @batch_limit
@@ -900,7 +900,7 @@ WHERE id IN (
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.rule_id = @match_value
-    AND (@source_filter = '' OR rr.source = @source_filter)
+    AND (sqlc.narg(source_filter)::text IS NULL OR rr.source = sqlc.narg(source_filter))
     AND rr.id > @cursor
   ORDER BY rr.id
   LIMIT @batch_limit
@@ -919,7 +919,7 @@ WHERE id IN (
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.source = @match_value
-    AND (@rule_id_filter = '' OR rr.rule_id = @rule_id_filter)
+    AND (sqlc.narg(rule_id_filter)::text IS NULL OR rr.rule_id = sqlc.narg(rule_id_filter))
     AND rr.id > @cursor
   ORDER BY rr.id
   LIMIT @batch_limit

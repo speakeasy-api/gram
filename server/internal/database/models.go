@@ -1230,8 +1230,8 @@ type RiskExclusion struct {
 	RiskPolicyID   uuid.NullUUID
 	MatchType      string
 	MatchValue     string
-	RuleIDFilter   string
-	SourceFilter   string
+	RuleIDFilter   pgtype.Text
+	SourceFilter   pgtype.Text
 	Enabled        bool
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz

@@ -24,8 +24,8 @@ WHERE id IN (
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.match = $4
-    AND ($5 = '' OR rr.rule_id = $5)
-    AND ($6 = '' OR rr.source = $6)
+    AND ($5::text IS NULL OR rr.rule_id = $5)
+    AND ($6::text IS NULL OR rr.source = $6)
     AND rr.id > $7
   ORDER BY rr.id
   LIMIT $8
@@ -38,8 +38,8 @@ type ApplyExactExclusionBatchParams struct {
 	ProjectID    uuid.UUID
 	PolicyID     uuid.NullUUID
 	MatchValue   pgtype.Text
-	RuleIDFilter interface{}
-	SourceFilter interface{}
+	RuleIDFilter pgtype.Text
+	SourceFilter pgtype.Text
 	Cursor       uuid.UUID
 	BatchLimit   int32
 }
@@ -85,8 +85,8 @@ WHERE id IN (
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.match ~ $4
-    AND ($5 = '' OR rr.rule_id = $5)
-    AND ($6 = '' OR rr.source = $6)
+    AND ($5::text IS NULL OR rr.rule_id = $5)
+    AND ($6::text IS NULL OR rr.source = $6)
     AND rr.id > $7
   ORDER BY rr.id
   LIMIT $8
@@ -99,8 +99,8 @@ type ApplyRegexExclusionBatchParams struct {
 	ProjectID    uuid.UUID
 	PolicyID     uuid.NullUUID
 	Pattern      pgtype.Text
-	RuleIDFilter interface{}
-	SourceFilter interface{}
+	RuleIDFilter pgtype.Text
+	SourceFilter pgtype.Text
 	Cursor       uuid.UUID
 	BatchLimit   int32
 }
@@ -146,7 +146,7 @@ WHERE id IN (
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.rule_id = $4
-    AND ($5 = '' OR rr.source = $5)
+    AND ($5::text IS NULL OR rr.source = $5)
     AND rr.id > $6
   ORDER BY rr.id
   LIMIT $7
@@ -159,7 +159,7 @@ type ApplyRuleIDExclusionBatchParams struct {
 	ProjectID    uuid.UUID
 	PolicyID     uuid.NullUUID
 	MatchValue   pgtype.Text
-	SourceFilter interface{}
+	SourceFilter pgtype.Text
 	Cursor       uuid.UUID
 	BatchLimit   int32
 }
@@ -204,7 +204,7 @@ WHERE id IN (
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
     AND rr.source = $4
-    AND ($5 = '' OR rr.rule_id = $5)
+    AND ($5::text IS NULL OR rr.rule_id = $5)
     AND rr.id > $6
   ORDER BY rr.id
   LIMIT $7
@@ -217,7 +217,7 @@ type ApplySourceExclusionBatchParams struct {
 	ProjectID    uuid.UUID
 	PolicyID     uuid.NullUUID
 	MatchValue   string
-	RuleIDFilter interface{}
+	RuleIDFilter pgtype.Text
 	Cursor       uuid.UUID
 	BatchLimit   int32
 }
@@ -480,8 +480,8 @@ type CreateRiskExclusionParams struct {
 	RiskPolicyID   uuid.NullUUID
 	MatchType      string
 	MatchValue     string
-	RuleIDFilter   string
-	SourceFilter   string
+	RuleIDFilter   pgtype.Text
+	SourceFilter   pgtype.Text
 	Enabled        bool
 }
 
@@ -2467,8 +2467,8 @@ type UpdateRiskExclusionParams struct {
 	RiskPolicyID uuid.NullUUID
 	MatchType    string
 	MatchValue   string
-	RuleIDFilter string
-	SourceFilter string
+	RuleIDFilter pgtype.Text
+	SourceFilter pgtype.Text
 	Enabled      bool
 	ID           uuid.UUID
 	ProjectID    uuid.UUID

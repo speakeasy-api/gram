@@ -3,18 +3,23 @@ package risk_analysis_test
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
+func nullableText(s string) pgtype.Text {
+	return pgtype.Text{String: s, Valid: s != ""}
+}
+
 func excl(matchType, matchValue, ruleFilter, sourceFilter string) repo.RiskExclusion {
 	return repo.RiskExclusion{
 		MatchType:    matchType,
 		MatchValue:   matchValue,
-		RuleIDFilter: ruleFilter,
-		SourceFilter: sourceFilter,
+		RuleIDFilter: nullableText(ruleFilter),
+		SourceFilter: nullableText(sourceFilter),
 	}
 }
 
