@@ -849,7 +849,7 @@ interface ToolCategory {
 // so it stays in sync with the autocomplete's own textarea handling. Hidden when
 // tool mentions are disabled or there are no tools.
 const ComposerToolMentionPicker: FC = () => {
-  const { config, mcpTools } = useElements();
+  const { config, mcpTools, mcpToolsLoading } = useElements();
   const api = useAssistantApi();
   // Read the composer text from the same reactive source the tool-mention
   // badges parse, so an inserted mention renders a pill just like the type-`@`
@@ -886,10 +886,11 @@ const ComposerToolMentionPicker: FC = () => {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [tools]);
 
-  // Render the button as soon as tool mentions are enabled — not gated on the
-  // async MCP tool list — so it appears immediately rather than popping in once
-  // tools resolve. The popover shows a loading/empty state until tools arrive.
-  if (!toolMentionsEnabled) {
+  // Show the button while tools are still loading (so it appears immediately
+  // rather than popping in once the async MCP list resolves) or once there are
+  // tools — but hide it when the list has loaded and is empty, so we don't
+  // expose a dead-end control.
+  if (!toolMentionsEnabled || (!mcpToolsLoading && tools.length === 0)) {
     return null;
   }
 
@@ -995,7 +996,7 @@ const ComposerToolMentionPicker: FC = () => {
           <div className="min-w-0 flex-1 overflow-y-auto p-2">
             {visibleTools.length === 0 ? (
               <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                {tools.length === 0 ? "No tools available" : "No tools found"}
+                {mcpToolsLoading ? "Loading tools…" : "No tools found"}
               </div>
             ) : (
               visibleTools.map((tool) => (

@@ -227,7 +227,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // State to expose the current chat ID via context
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
-  const { data: mcpTools, mcpHeaders } = useMCPTools({
+  const {
+    data: mcpTools,
+    mcpHeaders,
+    isLoading: mcpToolsLoading,
+  } = useMCPTools({
     auth,
     mcp: config.mcp,
     mcps: config.mcps,
@@ -582,8 +586,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       setIsOpen,
       plugins,
       mcpTools,
+      mcpToolsLoading,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools],
+    [config, model, isExpanded, isOpen, plugins, mcpTools, mcpToolsLoading],
   );
 
   const frontendTools = config.tools?.frontendTools ?? {};

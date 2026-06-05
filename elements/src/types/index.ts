@@ -1122,4 +1122,6 @@ export type ElementsContextType = {
   setIsOpen: (isOpen: boolean) => void;
   plugins: Plugin[];
   mcpTools: Record<string, unknown> | undefined;
+  /** True while the MCP tool list is actively being fetched. */
+  mcpToolsLoading: boolean;
 };

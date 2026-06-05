@@ -108,6 +108,7 @@ export const Replay = ({
       setIsOpen: () => {},
       plugins,
       mcpTools: undefined,
+      mcpToolsLoading: false,
     }),
     [config, plugins],
   );
