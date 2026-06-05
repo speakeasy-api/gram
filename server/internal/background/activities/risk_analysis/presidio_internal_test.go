@@ -175,6 +175,7 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice@acme.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice@acme.io"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.smith@acmecorp.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "sarah.chen@acmestore.com"))
 
 	// KV / env / config wrappers are NOT filtered: they usually wrap
 	// real production emails, so dropping them would mask PII.

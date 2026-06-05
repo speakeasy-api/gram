@@ -139,6 +139,7 @@ var placeholderSLDs = map[string]bool{
 	"yourorg":     true,
 	"acme":        true,
 	"acmecorp":    true,
+	"acmestore":   true,
 }
 
 // placeholderTLDs is the set of top-level domains placeholder SLDs

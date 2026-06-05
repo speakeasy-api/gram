@@ -75,6 +75,7 @@ d.kim@acme.com
 daniel@example.com
 dave@acme.com
 dave@example.com
+david.kim@acmestore.com
 delete@example.com
 deno.land/x/zod@v3.21.4
 deterministic@example.com
@@ -90,6 +91,7 @@ elena.russo@example.com
 email-match@example.com
 email=test@example.com
 emailok@example.com
+emily.r@acmestore.com
 empty@example.com
 enterprise@example.com
 esm.sh/v124/zod-to-json-schema@3.21.1
@@ -193,6 +195,7 @@ mail.google.com/mail/u/adamjamesbull@googlemail.com
 mallory@example.com
 marcelina.davis@example.com
 marcus.j@acme.com
+marcus.j@acmestore.com
 maya.chen@acme.com
 maya.ellison@example.com
 medium.com/@abdelghani.alhijawi
@@ -315,6 +318,7 @@ sagar@acme.dev
 sagar@example.com
 sandbox-api@moonpay-prod.iam.gserviceaccount.com
 sarah.chen@acme.com
+sarah.chen@acmestore.com
 sarah.johnson@acmecorp.com
 security@example.com
 seed@example.com
