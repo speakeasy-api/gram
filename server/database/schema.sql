@@ -2926,9 +2926,12 @@ CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE AND excluded_at IS NULL;
 
--- Drives the exact-match exclusion sweep.
+-- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
+-- rule. The verbatim match column is intentionally NOT indexed: it can exceed
+-- the btree row-size limit (2704 bytes), and the sweep queries apply
+-- match = value as a recheck filter over this narrowed set.
 CREATE INDEX IF NOT EXISTS risk_results_policy_match_idx
-ON risk_results (project_id, risk_policy_id, rule_id, match);
+ON risk_results (project_id, risk_policy_id, rule_id);
 
 -- Reversal lookup: unflag rows previously excluded by a given exclusion.
 CREATE INDEX IF NOT EXISTS risk_results_excluded_exclusion_idx
