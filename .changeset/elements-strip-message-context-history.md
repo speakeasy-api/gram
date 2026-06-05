@@ -1,5 +1,5 @@
 ---
-"@gram-ai/elements": patch
+"@gram-ai/elements": minor
 ---
 
-Strip `<message-context>` source-adapter framing when converting stored chat messages for display, and skip turns that are pure framing (e.g. an MCP auth event with no human text). Previously, reopening a historical assistant thread rendered the first message as a raw `<message-context>` block that exposed internal event/auth metadata.
+Add an optional `history.transformChatMessage` hook to `ElementsConfig`. It runs against every message loaded from `chat.load` before rendering: return a (possibly rewritten) message to render it, or `null` to omit it. This lets consumers keep product- or backend-specific transcript conventions (e.g. stripping a server-injected framing block, or hiding system events) out of the shared library — Elements itself stays agnostic to any such convention.
