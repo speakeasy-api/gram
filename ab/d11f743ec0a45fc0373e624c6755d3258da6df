@@ -1,0 +1,34 @@
+server/internal/risk/policy_bypass_token.go
+  s_e22b3b94346bf4::t_6f606dfd78d2a3 164-165
+  s_e22b3b94346bf4::t_92e060f70b2933 163
+server/internal/projects/repo/queries.sql.go
+  ai_agent 121-151
+server/internal/projects/queries.sql
+  s_e22b3b94346bf4::t_d3d53487b44891 43-49
+server/internal/risk/policy_bypass.go
+  s_e22b3b94346bf4::t_672373b4dd5fc1 101-104
+  s_e22b3b94346bf4::t_5878029dfad175 330
+  ai_agent 7,358
+server/internal/risk/policy_bypass_test.go
+  s_e22b3b94346bf4::t_cdc86480b8405e 104-167
+server/internal/risk/queries.sql
+  s_e22b3b94346bf4::t_d20bd87833367a 143-158
+server/internal/risk/repo/queries.sql.go
+  ai_agent 2163-2178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "abd11f743ec0a45fc0373e624c6755d3258da6df",
+  "prompts": {},
+  "sessions": {
+    "s_e22b3b94346bf4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9385-0ca9-70d3-97f9-9fdb17029cd4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
