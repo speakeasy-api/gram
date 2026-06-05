@@ -218,6 +218,114 @@ Wire the real or stub implementation in `deps.go` so the service always receives
 
 </good-example>
 
+## Transactional email (Loops)
+
+Sending transactional email goes through `server/internal/email`. The package wraps Loops and enforces a strongly typed `Template` interface.
+
+### Adding a new template
+
+Follow these four steps:
+
+1. Add a `TransactionalID` constant to `server/internal/email/templates.go` — single registry, grep-friendly.
+2. Create `server/internal/email/template_<name>.go` with a struct implementing the `Template` interface (`TransactionalID()`, `Variables()`, `AddToAudience()`).
+3. Append a zero value of the struct to `RegisteredTemplates` in `templates.go` so tests catch duplicate IDs (e.g. `AccessRequestCreated{}`).
+4. Write `server/internal/email/template_<name>_test.go` covering: `TransactionalID` returns the expected constant, `Variables` returns the correct snake_case keys with all keys present, `AddToAudience` returns the expected bool.
+
+To send: call `s.emailSvc.Send(ctx, recipientEmail, tmpl)` where `tmpl` is your populated template struct.
+
+### Variable key naming
+
+`Variables()` must return **snake_case** keys. Loops substitutes these keys directly into template variables — camelCase keys silently render as blank fields in the delivered email.
+
+Every declared key must be present in the returned map even when the value is empty. A missing key causes partial template rendering.
+
+<bad-example>
+
+```go
+func (t MyTemplate) Variables() map[string]string {
+    return map[string]string{
+        "approvalUrl":    t.ApprovalURL,
+        "requesterEmail": t.RequesterEmail,
+    }
+}
+```
+
+camelCase keys silently render as blank fields in Loops — no error, no warning.
+
+</bad-example>
+
+<good-example>
+
+```go
+func (t MyTemplate) Variables() map[string]string {
+    return map[string]string{
+        "approval_url":    t.ApprovalURL,
+        "requester_email": t.RequesterEmail,
+    }
+}
+```
+
+</good-example>
+
+### `AddToAudience` semantics
+
+Controls whether Loops upserts the recipient as a contact in the audience when the email is sent.
+
+- Return `true` for user-facing emails that are part of the recipient's product journey (team invites, onboarding).
+- Return `false` for operational/admin emails where the recipient is incidental (admin alerts, system notifications).
+
+### Testing patterns
+
+**Base test setup — never pass `nil` for `*email.Service`:**
+
+```go
+loopsClient := loops.New(ctx, logger, nil, "") // nil guardian policy is safe when key is empty; returns noop client
+noopEmailSvc := email.NewService(logger, loopsClient)
+```
+
+**Asserting on sent emails — use a capture client:**
+
+`loops.Client` is our own interface (not a vendor type), so a hand-rolled capture client is appropriate here. The capture pattern lets tests assert on the exact payload sent — use it instead of `testify/mock` for Loops email assertions.
+
+```go
+type captureLoopsClient struct {
+    mu   sync.Mutex
+    sent []loops.SendTransactionalInput
+}
+
+func (c *captureLoopsClient) SendTransactional(_ context.Context, input loops.SendTransactionalInput) error {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.sent = append(c.sent, input)
+    return nil
+}
+
+func (c *captureLoopsClient) Sent() []loops.SendTransactionalInput {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    out := make([]loops.SendTransactionalInput, len(c.sent))
+    copy(out, c.sent)
+    return out
+}
+```
+
+To use it in a test, declare an instance and swap it into the service:
+
+```go
+captured := &captureLoopsClient{}
+svc.emailSvc = email.NewService(testenv.NewLogger(t), captured)
+```
+
+(This assigns an unexported field — works from within the same package, which is the convention for `access` package tests.)
+
+**Optional display fields — use `conv.Default`:**
+
+```go
+DisplayName: conv.Default(request.DisplayName, "(unknown resource)"),
+```
+
+Never send a template with a blank field that produces broken email copy. Apply a meaningful fallback at the Go layer, not in the Loops template.
+
 ## Function shape
 
 - Avoid helper functions and methods that only forward to another method with no meaningful logic.
