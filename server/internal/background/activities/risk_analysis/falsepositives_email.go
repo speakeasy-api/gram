@@ -8,7 +8,7 @@ import (
 // email-shaped string should be treated as a non-PII false positive, or
 // "" if the string looks like it could be a real email address.
 //
-// Five layers, in order:
+// Six layers, in order:
 //
 //  1. Exact-match against `knownFPEmails` — one-off addresses that
 //     don't fit any of the structural categories below (e.g. SSH
@@ -29,12 +29,12 @@ import (
 //     asset URLs, npm / Go / Deno module paths) rather than an email
 //     with a slash in the local-part. We accept the theoretical miss
 //     for the URL-noise drop.
-//  4. Two narrow domain checks that survive the slash filter:
-//     a `.gserviceaccount.com` suffix (GCP machine identity) and a
-//     trailing digit on the right-hand side of the final `@` (TLDs are
-//     letters; a digit there is a package version suffix like
-//     `pkg@v1.2.3`).
-//  5. Local-parts that can never identify a real person: template
+//  4. `.gserviceaccount.com` suffix — GCP machine identity, never a
+//     human mailbox.
+//  5. Trailing digit on the right-hand side of the final `@`. TLDs are
+//     letters per IANA, so a digit there means the input is a package
+//     version suffix like `pkg@v1.2.3` rather than an email.
+//  6. Local-parts that can never identify a real person: template
 //     tokens (`first.last`, `firstname.lastname`) and the universally
 //     automated `noreply` / `no-reply` aliases. Canonical placeholder
 //     person names like `john.doe` or `joe.bloggs` are NOT in this set
