@@ -1,3 +1,4 @@
+import type { GramChatMessage } from "@/lib/messageConverter";
 import { MODELS } from "@/lib/models";
 import type { FrontendTool } from "@/lib/tools";
 import {
@@ -1080,6 +1081,26 @@ export interface HistoryConfig {
    * `adoptChatId`). Use with a server-backed `transport`.
    */
   deferThreadIdMinting?: boolean;
+
+  /**
+   * Optional hook to transform or drop each persisted message before it is
+   * rendered from history. Return a (possibly rewritten) message to render it,
+   * or `null` to omit it entirely. Elements applies this to every message
+   * returned by `chat.load` before conversion.
+   *
+   * Use this to keep product- or backend-specific transcript conventions out of
+   * the library — e.g. stripping a server-injected framing block from a turn's
+   * text, or hiding system events that carry no user-facing content. Elements
+   * itself stays agnostic to any such convention.
+   *
+   * @example
+   * // Strip a server-injected framing block and hide framing-only turns.
+   * transformChatMessage: (msg) => {
+   *   const cleaned = stripFraming(msg);
+   *   return isFramingOnly(cleaned) ? null : cleaned;
+   * }
+   */
+  transformChatMessage?: (message: GramChatMessage) => GramChatMessage | null;
 
   /**
    * Whether to show the thread list sidebar/panel.
