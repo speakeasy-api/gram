@@ -21,7 +21,7 @@ func TestResolveAssistantMCPServers_EmptyUserToolsetsStillGetsPlatformServer(t *
 	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 1)
 
-	require.Equal(t, "_"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
 	require.Equal(t,
 		"https://gram.test/platform/mcp/"+platformtools.AssistantsPlatformToolsetSlug,
 		servers[0].URL,
@@ -51,7 +51,7 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 	require.Equal(t, "https://gram.test/mcp/billing-mcp", servers[0].URL)
 	require.Equal(t, "prod", servers[0].Headers["Gram-Environment"])
 
-	require.Equal(t, "_"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
 	require.Equal(t,
 		"https://gram.test/platform/mcp/"+platformtools.AssistantsPlatformToolsetSlug,
 		servers[1].URL,
@@ -92,7 +92,7 @@ func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) 
 	require.Equal(t, "billing", servers[0].ID)
 	require.Equal(t, "https://gram.test/mcp/billing-mcp", servers[0].URL)
 
-	require.Equal(t, "_"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
 }
 
 // The managed assistant is granted the managed-assistant platform toolset (the
@@ -110,8 +110,8 @@ func TestResolveAssistantMCPServers_GrantsEachRequestedPlatformToolset(t *testin
 		platformtools.ManagedAssistantPlatformToolsetSlug,
 	})
 	require.Len(t, servers, 2)
-	require.Equal(t, "_"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
-	require.Equal(t, "_"+platformtools.ManagedAssistantPlatformToolsetSlug, servers[1].ID)
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
+	require.Equal(t, "_p-"+platformtools.ManagedAssistantPlatformToolsetSlug, servers[1].ID)
 	require.Equal(t,
 		"https://gram.test/platform/mcp/"+platformtools.ManagedAssistantPlatformToolsetSlug,
 		servers[1].URL,
