@@ -98,7 +98,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, accessStore, auditLogger, false, nil, nil)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, nil, shadowMCPClient, accessStore, auditLogger, false, nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,

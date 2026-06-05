@@ -139,6 +139,44 @@ type DeleteCustomDetectionRuleRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// CreateRiskExclusionRequestBody is the type of the "risk" service
+// "createRiskExclusion" endpoint HTTP request body.
+type CreateRiskExclusionRequestBody struct {
+	// Bind the exclusion to a single policy. Omit for a global (project-wide)
+	// exclusion.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// How match_value is interpreted.
+	MatchType *string `form:"match_type,omitempty" json:"match_type,omitempty" xml:"match_type,omitempty"`
+	// The value matched against findings, interpreted per match_type.
+	MatchValue *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	// Optional: only apply within this rule_id. Empty means any.
+	RuleIDFilter *string `form:"rule_id_filter,omitempty" json:"rule_id_filter,omitempty" xml:"rule_id_filter,omitempty"`
+	// Optional: only apply within this source. Empty means any.
+	SourceFilter *string `form:"source_filter,omitempty" json:"source_filter,omitempty" xml:"source_filter,omitempty"`
+	// Whether the exclusion is active.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
+// UpdateRiskExclusionRequestBody is the type of the "risk" service
+// "updateRiskExclusion" endpoint HTTP request body.
+type UpdateRiskExclusionRequestBody struct {
+	// The exclusion ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Bind the exclusion to a single policy. Omit for a global (project-wide)
+	// exclusion.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// How match_value is interpreted.
+	MatchType *string `form:"match_type,omitempty" json:"match_type,omitempty" xml:"match_type,omitempty"`
+	// The value matched against findings, interpreted per match_type.
+	MatchValue *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	// Optional: only apply within this rule_id. Empty means any.
+	RuleIDFilter *string `form:"rule_id_filter,omitempty" json:"rule_id_filter,omitempty" xml:"rule_id_filter,omitempty"`
+	// Optional: only apply within this source. Empty means any.
+	SourceFilter *string `form:"source_filter,omitempty" json:"source_filter,omitempty" xml:"source_filter,omitempty"`
+	// Whether the exclusion is active.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // SuggestCustomDetectionRuleRequestBody is the type of the "risk" service
 // "suggestCustomDetectionRule" endpoint HTTP request body.
 type SuggestCustomDetectionRuleRequestBody struct {
@@ -529,6 +567,73 @@ type UpdateCustomDetectionRuleResponseBody struct {
 	// When the custom detection rule was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the custom detection rule was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListRiskExclusionsResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body.
+type ListRiskExclusionsResponseBody struct {
+	// The list of risk exclusions.
+	Exclusions []*RiskExclusionResponseBody `form:"exclusions" json:"exclusions" xml:"exclusions"`
+}
+
+// CreateRiskExclusionResponseBody is the type of the "risk" service
+// "createRiskExclusion" endpoint HTTP response body.
+type CreateRiskExclusionResponseBody struct {
+	// The exclusion ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The policy this exclusion is bound to. Null/omitted means global: the
+	// exclusion applies to every policy in the project.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// How match_value is interpreted: exact (finding text), regex (RE2 pattern
+	// over finding text), rule_id, source, or entity_type (presidio entity,
+	// matched as rule_id 'pii.<entity>').
+	MatchType string `form:"match_type" json:"match_type" xml:"match_type"`
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string `form:"match_value" json:"match_value" xml:"match_value"`
+	// Optional narrowing: an exact/regex/source exclusion only applies to findings
+	// with this rule_id. Empty means any.
+	RuleIDFilter string `form:"rule_id_filter" json:"rule_id_filter" xml:"rule_id_filter"`
+	// Optional narrowing: an exact/regex/rule_id exclusion only applies to
+	// findings from this source. Empty means any.
+	SourceFilter string `form:"source_filter" json:"source_filter" xml:"source_filter"`
+	// Whether the exclusion is active.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// When the exclusion was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the exclusion was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateRiskExclusionResponseBody is the type of the "risk" service
+// "updateRiskExclusion" endpoint HTTP response body.
+type UpdateRiskExclusionResponseBody struct {
+	// The exclusion ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The policy this exclusion is bound to. Null/omitted means global: the
+	// exclusion applies to every policy in the project.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// How match_value is interpreted: exact (finding text), regex (RE2 pattern
+	// over finding text), rule_id, source, or entity_type (presidio entity,
+	// matched as rule_id 'pii.<entity>').
+	MatchType string `form:"match_type" json:"match_type" xml:"match_type"`
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string `form:"match_value" json:"match_value" xml:"match_value"`
+	// Optional narrowing: an exact/regex/source exclusion only applies to findings
+	// with this rule_id. Empty means any.
+	RuleIDFilter string `form:"rule_id_filter" json:"rule_id_filter" xml:"rule_id_filter"`
+	// Optional narrowing: an exact/regex/rule_id exclusion only applies to
+	// findings from this source. Empty means any.
+	SourceFilter string `form:"source_filter" json:"source_filter" xml:"source_filter"`
+	// Whether the exclusion is active.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// When the exclusion was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the exclusion was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
@@ -4832,6 +4937,745 @@ type DeleteCustomDetectionRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListRiskExclusionsUnauthorizedResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListRiskExclusionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsForbiddenResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body for the "forbidden" error.
+type ListRiskExclusionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsBadRequestResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body for the "bad_request" error.
+type ListRiskExclusionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsNotFoundResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body for the "not_found" error.
+type ListRiskExclusionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsConflictResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body for the "conflict" error.
+type ListRiskExclusionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsUnsupportedMediaResponseBody is the type of the "risk"
+// service "listRiskExclusions" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListRiskExclusionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsInvalidResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body for the "invalid" error.
+type ListRiskExclusionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsInvariantViolationResponseBody is the type of the "risk"
+// service "listRiskExclusions" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListRiskExclusionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsUnexpectedResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body for the "unexpected" error.
+type ListRiskExclusionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskExclusionsGatewayErrorResponseBody is the type of the "risk" service
+// "listRiskExclusions" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListRiskExclusionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionUnauthorizedResponseBody is the type of the "risk"
+// service "createRiskExclusion" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateRiskExclusionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionForbiddenResponseBody is the type of the "risk" service
+// "createRiskExclusion" endpoint HTTP response body for the "forbidden" error.
+type CreateRiskExclusionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionBadRequestResponseBody is the type of the "risk" service
+// "createRiskExclusion" endpoint HTTP response body for the "bad_request"
+// error.
+type CreateRiskExclusionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionNotFoundResponseBody is the type of the "risk" service
+// "createRiskExclusion" endpoint HTTP response body for the "not_found" error.
+type CreateRiskExclusionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionConflictResponseBody is the type of the "risk" service
+// "createRiskExclusion" endpoint HTTP response body for the "conflict" error.
+type CreateRiskExclusionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionUnsupportedMediaResponseBody is the type of the "risk"
+// service "createRiskExclusion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateRiskExclusionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionInvalidResponseBody is the type of the "risk" service
+// "createRiskExclusion" endpoint HTTP response body for the "invalid" error.
+type CreateRiskExclusionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionInvariantViolationResponseBody is the type of the "risk"
+// service "createRiskExclusion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateRiskExclusionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionUnexpectedResponseBody is the type of the "risk" service
+// "createRiskExclusion" endpoint HTTP response body for the "unexpected" error.
+type CreateRiskExclusionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskExclusionGatewayErrorResponseBody is the type of the "risk"
+// service "createRiskExclusion" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateRiskExclusionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionUnauthorizedResponseBody is the type of the "risk"
+// service "updateRiskExclusion" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateRiskExclusionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionForbiddenResponseBody is the type of the "risk" service
+// "updateRiskExclusion" endpoint HTTP response body for the "forbidden" error.
+type UpdateRiskExclusionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionBadRequestResponseBody is the type of the "risk" service
+// "updateRiskExclusion" endpoint HTTP response body for the "bad_request"
+// error.
+type UpdateRiskExclusionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionNotFoundResponseBody is the type of the "risk" service
+// "updateRiskExclusion" endpoint HTTP response body for the "not_found" error.
+type UpdateRiskExclusionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionConflictResponseBody is the type of the "risk" service
+// "updateRiskExclusion" endpoint HTTP response body for the "conflict" error.
+type UpdateRiskExclusionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionUnsupportedMediaResponseBody is the type of the "risk"
+// service "updateRiskExclusion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateRiskExclusionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionInvalidResponseBody is the type of the "risk" service
+// "updateRiskExclusion" endpoint HTTP response body for the "invalid" error.
+type UpdateRiskExclusionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionInvariantViolationResponseBody is the type of the "risk"
+// service "updateRiskExclusion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateRiskExclusionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionUnexpectedResponseBody is the type of the "risk" service
+// "updateRiskExclusion" endpoint HTTP response body for the "unexpected" error.
+type UpdateRiskExclusionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateRiskExclusionGatewayErrorResponseBody is the type of the "risk"
+// service "updateRiskExclusion" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateRiskExclusionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionUnauthorizedResponseBody is the type of the "risk"
+// service "deleteRiskExclusion" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeleteRiskExclusionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionForbiddenResponseBody is the type of the "risk" service
+// "deleteRiskExclusion" endpoint HTTP response body for the "forbidden" error.
+type DeleteRiskExclusionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionBadRequestResponseBody is the type of the "risk" service
+// "deleteRiskExclusion" endpoint HTTP response body for the "bad_request"
+// error.
+type DeleteRiskExclusionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionNotFoundResponseBody is the type of the "risk" service
+// "deleteRiskExclusion" endpoint HTTP response body for the "not_found" error.
+type DeleteRiskExclusionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionConflictResponseBody is the type of the "risk" service
+// "deleteRiskExclusion" endpoint HTTP response body for the "conflict" error.
+type DeleteRiskExclusionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionUnsupportedMediaResponseBody is the type of the "risk"
+// service "deleteRiskExclusion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DeleteRiskExclusionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionInvalidResponseBody is the type of the "risk" service
+// "deleteRiskExclusion" endpoint HTTP response body for the "invalid" error.
+type DeleteRiskExclusionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionInvariantViolationResponseBody is the type of the "risk"
+// service "deleteRiskExclusion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DeleteRiskExclusionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionUnexpectedResponseBody is the type of the "risk" service
+// "deleteRiskExclusion" endpoint HTTP response body for the "unexpected" error.
+type DeleteRiskExclusionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteRiskExclusionGatewayErrorResponseBody is the type of the "risk"
+// service "deleteRiskExclusion" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteRiskExclusionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SuggestCustomDetectionRuleUnauthorizedResponseBody is the type of the "risk"
 // service "suggestCustomDetectionRule" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -5448,6 +6292,35 @@ type RiskCustomDetectionRuleResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// RiskExclusionResponseBody is used to define fields on response body types.
+type RiskExclusionResponseBody struct {
+	// The exclusion ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The policy this exclusion is bound to. Null/omitted means global: the
+	// exclusion applies to every policy in the project.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// How match_value is interpreted: exact (finding text), regex (RE2 pattern
+	// over finding text), rule_id, source, or entity_type (presidio entity,
+	// matched as rule_id 'pii.<entity>').
+	MatchType string `form:"match_type" json:"match_type" xml:"match_type"`
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string `form:"match_value" json:"match_value" xml:"match_value"`
+	// Optional narrowing: an exact/regex/source exclusion only applies to findings
+	// with this rule_id. Empty means any.
+	RuleIDFilter string `form:"rule_id_filter" json:"rule_id_filter" xml:"rule_id_filter"`
+	// Optional narrowing: an exact/regex/rule_id exclusion only applies to
+	// findings from this source. Empty means any.
+	SourceFilter string `form:"source_filter" json:"source_filter" xml:"source_filter"`
+	// Whether the exclusion is active.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// When the exclusion was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the exclusion was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // TestDetectionRuleMatchResponseBody is used to define fields on response body
 // types.
 type TestDetectionRuleMatchResponseBody struct {
@@ -5988,6 +6861,61 @@ func NewUpdateCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule
 		Severity:    res.Severity,
 		CreatedAt:   res.CreatedAt,
 		UpdatedAt:   res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListRiskExclusionsResponseBody builds the HTTP response body from the
+// result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsResponseBody(res *risk.ListRiskExclusionsResult) *ListRiskExclusionsResponseBody {
+	body := &ListRiskExclusionsResponseBody{}
+	if res.Exclusions != nil {
+		body.Exclusions = make([]*RiskExclusionResponseBody, len(res.Exclusions))
+		for i, val := range res.Exclusions {
+			if val == nil {
+				body.Exclusions[i] = nil
+				continue
+			}
+			body.Exclusions[i] = marshalTypesRiskExclusionToRiskExclusionResponseBody(val)
+		}
+	} else {
+		body.Exclusions = []*RiskExclusionResponseBody{}
+	}
+	return body
+}
+
+// NewCreateRiskExclusionResponseBody builds the HTTP response body from the
+// result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionResponseBody(res *types.RiskExclusion) *CreateRiskExclusionResponseBody {
+	body := &CreateRiskExclusionResponseBody{
+		ID:           res.ID,
+		ProjectID:    res.ProjectID,
+		RiskPolicyID: res.RiskPolicyID,
+		MatchType:    res.MatchType,
+		MatchValue:   res.MatchValue,
+		RuleIDFilter: res.RuleIDFilter,
+		SourceFilter: res.SourceFilter,
+		Enabled:      res.Enabled,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionResponseBody builds the HTTP response body from the
+// result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionResponseBody(res *types.RiskExclusion) *UpdateRiskExclusionResponseBody {
+	body := &UpdateRiskExclusionResponseBody{
+		ID:           res.ID,
+		ProjectID:    res.ProjectID,
+		RiskPolicyID: res.RiskPolicyID,
+		MatchType:    res.MatchType,
+		MatchValue:   res.MatchValue,
+		RuleIDFilter: res.RuleIDFilter,
+		SourceFilter: res.SourceFilter,
+		Enabled:      res.Enabled,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	return body
 }
@@ -9364,6 +10292,574 @@ func NewDeleteCustomDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewListRiskExclusionsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsUnauthorizedResponseBody(res *goa.ServiceError) *ListRiskExclusionsUnauthorizedResponseBody {
+	body := &ListRiskExclusionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsForbiddenResponseBody(res *goa.ServiceError) *ListRiskExclusionsForbiddenResponseBody {
+	body := &ListRiskExclusionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsBadRequestResponseBody(res *goa.ServiceError) *ListRiskExclusionsBadRequestResponseBody {
+	body := &ListRiskExclusionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsNotFoundResponseBody(res *goa.ServiceError) *ListRiskExclusionsNotFoundResponseBody {
+	body := &ListRiskExclusionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsConflictResponseBody builds the HTTP response body from
+// the result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsConflictResponseBody(res *goa.ServiceError) *ListRiskExclusionsConflictResponseBody {
+	body := &ListRiskExclusionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listRiskExclusions" endpoint of the "risk"
+// service.
+func NewListRiskExclusionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListRiskExclusionsUnsupportedMediaResponseBody {
+	body := &ListRiskExclusionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsInvalidResponseBody builds the HTTP response body from
+// the result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsInvalidResponseBody(res *goa.ServiceError) *ListRiskExclusionsInvalidResponseBody {
+	body := &ListRiskExclusionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listRiskExclusions" endpoint of the "risk"
+// service.
+func NewListRiskExclusionsInvariantViolationResponseBody(res *goa.ServiceError) *ListRiskExclusionsInvariantViolationResponseBody {
+	body := &ListRiskExclusionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsUnexpectedResponseBody(res *goa.ServiceError) *ListRiskExclusionsUnexpectedResponseBody {
+	body := &ListRiskExclusionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskExclusionsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listRiskExclusions" endpoint of the "risk" service.
+func NewListRiskExclusionsGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskExclusionsGatewayErrorResponseBody {
+	body := &ListRiskExclusionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionUnauthorizedResponseBody(res *goa.ServiceError) *CreateRiskExclusionUnauthorizedResponseBody {
+	body := &CreateRiskExclusionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionForbiddenResponseBody builds the HTTP response body
+// from the result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionForbiddenResponseBody(res *goa.ServiceError) *CreateRiskExclusionForbiddenResponseBody {
+	body := &CreateRiskExclusionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionBadRequestResponseBody builds the HTTP response body
+// from the result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionBadRequestResponseBody(res *goa.ServiceError) *CreateRiskExclusionBadRequestResponseBody {
+	body := &CreateRiskExclusionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionNotFoundResponseBody builds the HTTP response body
+// from the result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionNotFoundResponseBody(res *goa.ServiceError) *CreateRiskExclusionNotFoundResponseBody {
+	body := &CreateRiskExclusionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionConflictResponseBody builds the HTTP response body
+// from the result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionConflictResponseBody(res *goa.ServiceError) *CreateRiskExclusionConflictResponseBody {
+	body := &CreateRiskExclusionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createRiskExclusion" endpoint of the "risk"
+// service.
+func NewCreateRiskExclusionUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateRiskExclusionUnsupportedMediaResponseBody {
+	body := &CreateRiskExclusionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionInvalidResponseBody builds the HTTP response body from
+// the result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionInvalidResponseBody(res *goa.ServiceError) *CreateRiskExclusionInvalidResponseBody {
+	body := &CreateRiskExclusionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createRiskExclusion" endpoint of the
+// "risk" service.
+func NewCreateRiskExclusionInvariantViolationResponseBody(res *goa.ServiceError) *CreateRiskExclusionInvariantViolationResponseBody {
+	body := &CreateRiskExclusionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionUnexpectedResponseBody(res *goa.ServiceError) *CreateRiskExclusionUnexpectedResponseBody {
+	body := &CreateRiskExclusionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskExclusionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createRiskExclusion" endpoint of the "risk" service.
+func NewCreateRiskExclusionGatewayErrorResponseBody(res *goa.ServiceError) *CreateRiskExclusionGatewayErrorResponseBody {
+	body := &CreateRiskExclusionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionUnauthorizedResponseBody(res *goa.ServiceError) *UpdateRiskExclusionUnauthorizedResponseBody {
+	body := &UpdateRiskExclusionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionForbiddenResponseBody builds the HTTP response body
+// from the result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionForbiddenResponseBody(res *goa.ServiceError) *UpdateRiskExclusionForbiddenResponseBody {
+	body := &UpdateRiskExclusionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionBadRequestResponseBody(res *goa.ServiceError) *UpdateRiskExclusionBadRequestResponseBody {
+	body := &UpdateRiskExclusionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionNotFoundResponseBody builds the HTTP response body
+// from the result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionNotFoundResponseBody(res *goa.ServiceError) *UpdateRiskExclusionNotFoundResponseBody {
+	body := &UpdateRiskExclusionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionConflictResponseBody builds the HTTP response body
+// from the result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionConflictResponseBody(res *goa.ServiceError) *UpdateRiskExclusionConflictResponseBody {
+	body := &UpdateRiskExclusionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateRiskExclusion" endpoint of the "risk"
+// service.
+func NewUpdateRiskExclusionUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateRiskExclusionUnsupportedMediaResponseBody {
+	body := &UpdateRiskExclusionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionInvalidResponseBody builds the HTTP response body from
+// the result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionInvalidResponseBody(res *goa.ServiceError) *UpdateRiskExclusionInvalidResponseBody {
+	body := &UpdateRiskExclusionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateRiskExclusion" endpoint of the
+// "risk" service.
+func NewUpdateRiskExclusionInvariantViolationResponseBody(res *goa.ServiceError) *UpdateRiskExclusionInvariantViolationResponseBody {
+	body := &UpdateRiskExclusionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionUnexpectedResponseBody(res *goa.ServiceError) *UpdateRiskExclusionUnexpectedResponseBody {
+	body := &UpdateRiskExclusionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateRiskExclusionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateRiskExclusion" endpoint of the "risk" service.
+func NewUpdateRiskExclusionGatewayErrorResponseBody(res *goa.ServiceError) *UpdateRiskExclusionGatewayErrorResponseBody {
+	body := &UpdateRiskExclusionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "deleteRiskExclusion" endpoint of the "risk" service.
+func NewDeleteRiskExclusionUnauthorizedResponseBody(res *goa.ServiceError) *DeleteRiskExclusionUnauthorizedResponseBody {
+	body := &DeleteRiskExclusionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionForbiddenResponseBody builds the HTTP response body
+// from the result of the "deleteRiskExclusion" endpoint of the "risk" service.
+func NewDeleteRiskExclusionForbiddenResponseBody(res *goa.ServiceError) *DeleteRiskExclusionForbiddenResponseBody {
+	body := &DeleteRiskExclusionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionBadRequestResponseBody builds the HTTP response body
+// from the result of the "deleteRiskExclusion" endpoint of the "risk" service.
+func NewDeleteRiskExclusionBadRequestResponseBody(res *goa.ServiceError) *DeleteRiskExclusionBadRequestResponseBody {
+	body := &DeleteRiskExclusionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionNotFoundResponseBody builds the HTTP response body
+// from the result of the "deleteRiskExclusion" endpoint of the "risk" service.
+func NewDeleteRiskExclusionNotFoundResponseBody(res *goa.ServiceError) *DeleteRiskExclusionNotFoundResponseBody {
+	body := &DeleteRiskExclusionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionConflictResponseBody builds the HTTP response body
+// from the result of the "deleteRiskExclusion" endpoint of the "risk" service.
+func NewDeleteRiskExclusionConflictResponseBody(res *goa.ServiceError) *DeleteRiskExclusionConflictResponseBody {
+	body := &DeleteRiskExclusionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "deleteRiskExclusion" endpoint of the "risk"
+// service.
+func NewDeleteRiskExclusionUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteRiskExclusionUnsupportedMediaResponseBody {
+	body := &DeleteRiskExclusionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionInvalidResponseBody builds the HTTP response body from
+// the result of the "deleteRiskExclusion" endpoint of the "risk" service.
+func NewDeleteRiskExclusionInvalidResponseBody(res *goa.ServiceError) *DeleteRiskExclusionInvalidResponseBody {
+	body := &DeleteRiskExclusionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "deleteRiskExclusion" endpoint of the
+// "risk" service.
+func NewDeleteRiskExclusionInvariantViolationResponseBody(res *goa.ServiceError) *DeleteRiskExclusionInvariantViolationResponseBody {
+	body := &DeleteRiskExclusionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "deleteRiskExclusion" endpoint of the "risk" service.
+func NewDeleteRiskExclusionUnexpectedResponseBody(res *goa.ServiceError) *DeleteRiskExclusionUnexpectedResponseBody {
+	body := &DeleteRiskExclusionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteRiskExclusionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "deleteRiskExclusion" endpoint of the "risk" service.
+func NewDeleteRiskExclusionGatewayErrorResponseBody(res *goa.ServiceError) *DeleteRiskExclusionGatewayErrorResponseBody {
+	body := &DeleteRiskExclusionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSuggestCustomDetectionRuleUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "suggestCustomDetectionRule" endpoint
 // of the "risk" service.
@@ -10066,6 +11562,97 @@ func NewDeleteCustomDetectionRulePayload(body *DeleteCustomDetectionRuleRequestB
 	return v
 }
 
+// NewListRiskExclusionsPayload builds a risk service listRiskExclusions
+// endpoint payload.
+func NewListRiskExclusionsPayload(riskPolicyID *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskExclusionsPayload {
+	v := &risk.ListRiskExclusionsPayload{}
+	v.RiskPolicyID = riskPolicyID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCreateRiskExclusionPayload builds a risk service createRiskExclusion
+// endpoint payload.
+func NewCreateRiskExclusionPayload(body *CreateRiskExclusionRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskExclusionPayload {
+	v := &risk.CreateRiskExclusionPayload{
+		RiskPolicyID: body.RiskPolicyID,
+		MatchType:    *body.MatchType,
+		MatchValue:   *body.MatchValue,
+	}
+	if body.RuleIDFilter != nil {
+		v.RuleIDFilter = *body.RuleIDFilter
+	}
+	if body.SourceFilter != nil {
+		v.SourceFilter = *body.SourceFilter
+	}
+	if body.Enabled != nil {
+		v.Enabled = *body.Enabled
+	}
+	if body.RuleIDFilter == nil {
+		v.RuleIDFilter = ""
+	}
+	if body.SourceFilter == nil {
+		v.SourceFilter = ""
+	}
+	if body.Enabled == nil {
+		v.Enabled = true
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdateRiskExclusionPayload builds a risk service updateRiskExclusion
+// endpoint payload.
+func NewUpdateRiskExclusionPayload(body *UpdateRiskExclusionRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdateRiskExclusionPayload {
+	v := &risk.UpdateRiskExclusionPayload{
+		ID:           *body.ID,
+		RiskPolicyID: body.RiskPolicyID,
+		MatchType:    *body.MatchType,
+		MatchValue:   *body.MatchValue,
+	}
+	if body.RuleIDFilter != nil {
+		v.RuleIDFilter = *body.RuleIDFilter
+	}
+	if body.SourceFilter != nil {
+		v.SourceFilter = *body.SourceFilter
+	}
+	if body.Enabled != nil {
+		v.Enabled = *body.Enabled
+	}
+	if body.RuleIDFilter == nil {
+		v.RuleIDFilter = ""
+	}
+	if body.SourceFilter == nil {
+		v.SourceFilter = ""
+	}
+	if body.Enabled == nil {
+		v.Enabled = true
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeleteRiskExclusionPayload builds a risk service deleteRiskExclusion
+// endpoint payload.
+func NewDeleteRiskExclusionPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.DeleteRiskExclusionPayload {
+	v := &risk.DeleteRiskExclusionPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewSuggestCustomDetectionRulePayload builds a risk service
 // suggestCustomDetectionRule endpoint payload.
 func NewSuggestCustomDetectionRulePayload(body *SuggestCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.SuggestCustomDetectionRulePayload {
@@ -10217,6 +11804,52 @@ func ValidateDeleteCustomDetectionRuleRequestBody(body *DeleteCustomDetectionRul
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCreateRiskExclusionRequestBody runs the validations defined on
+// CreateRiskExclusionRequestBody
+func ValidateCreateRiskExclusionRequestBody(body *CreateRiskExclusionRequestBody) (err error) {
+	if body.MatchType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_type", "body"))
+	}
+	if body.MatchValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
+	}
+	if body.RiskPolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+	}
+	if body.MatchType != nil {
+		if !(*body.MatchType == "exact" || *body.MatchType == "regex" || *body.MatchType == "rule_id" || *body.MatchType == "source" || *body.MatchType == "entity_type") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_type", *body.MatchType, []any{"exact", "regex", "rule_id", "source", "entity_type"}))
+		}
+	}
+	return
+}
+
+// ValidateUpdateRiskExclusionRequestBody runs the validations defined on
+// UpdateRiskExclusionRequestBody
+func ValidateUpdateRiskExclusionRequestBody(body *UpdateRiskExclusionRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.MatchType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_type", "body"))
+	}
+	if body.MatchValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RiskPolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+	}
+	if body.MatchType != nil {
+		if !(*body.MatchType == "exact" || *body.MatchType == "regex" || *body.MatchType == "rule_id" || *body.MatchType == "source" || *body.MatchType == "entity_type") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_type", *body.MatchType, []any{"exact", "regex", "rule_id", "source", "entity_type"}))
+		}
 	}
 	return
 }

@@ -7,6 +7,7 @@ import { Approvals } from "./approvals.js";
 import { Capabilities } from "./capabilities.js";
 import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
+import { Exclusions } from "./exclusions.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { Results } from "./results.js";
@@ -31,6 +32,11 @@ export class Risk extends ClientSDK {
   private _customRules?: CustomRules;
   get customRules(): CustomRules {
     return (this._customRules ??= new CustomRules(this._options));
+  }
+
+  private _exclusions?: Exclusions;
+  get exclusions(): Exclusions {
+    return (this._exclusions ??= new Exclusions(this._options));
   }
 
   private _overview?: Overview;

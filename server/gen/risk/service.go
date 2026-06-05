@@ -81,6 +81,16 @@ type Service interface {
 	UpdateCustomDetectionRule(context.Context, *UpdateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error)
 	// Delete a custom detection rule.
 	DeleteCustomDetectionRule(context.Context, *DeleteCustomDetectionRulePayload) (err error)
+	// List risk exclusions for the current project. Optionally filter to a single
+	// policy.
+	ListRiskExclusions(context.Context, *ListRiskExclusionsPayload) (res *ListRiskExclusionsResult, err error)
+	// Create a risk exclusion. Omit risk_policy_id to create a global exclusion
+	// that applies to every policy in the project.
+	CreateRiskExclusion(context.Context, *CreateRiskExclusionPayload) (res *types.RiskExclusion, err error)
+	// Update a risk exclusion.
+	UpdateRiskExclusion(context.Context, *UpdateRiskExclusionPayload) (res *types.RiskExclusion, err error)
+	// Delete a risk exclusion. Previously suppressed findings are restored.
+	DeleteRiskExclusion(context.Context, *DeleteRiskExclusionPayload) (err error)
 	// Suggest a custom detection rule (rule_id, title, description, regex,
 	// severity) from a natural-language prompt. Calls the configured LLM with a
 	// JSON-schema constrained response so the dashboard can prefill the create
@@ -113,7 +123,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [25]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [29]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -145,6 +155,27 @@ type CreateCustomDetectionRulePayload struct {
 	Regex string
 	// Severity level for findings produced by this rule.
 	Severity string
+}
+
+// CreateRiskExclusionPayload is the payload type of the risk service
+// createRiskExclusion method.
+type CreateRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Bind the exclusion to a single policy. Omit for a global (project-wide)
+	// exclusion.
+	RiskPolicyID *string
+	// How match_value is interpreted.
+	MatchType string
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string
+	// Optional: only apply within this rule_id. Empty means any.
+	RuleIDFilter string
+	// Optional: only apply within this source. Empty means any.
+	SourceFilter string
+	// Whether the exclusion is active.
+	Enabled bool
 }
 
 // CreateRiskPolicyPayload is the payload type of the risk service
@@ -188,6 +219,16 @@ type DeleteCustomDetectionRulePayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The custom detection rule ID.
+	ID string
+}
+
+// DeleteRiskExclusionPayload is the payload type of the risk service
+// deleteRiskExclusion method.
+type DeleteRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The exclusion ID.
 	ID string
 }
 
@@ -303,6 +344,24 @@ type ListRiskCategoriesPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// ListRiskExclusionsPayload is the payload type of the risk service
+// listRiskExclusions method.
+type ListRiskExclusionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Filter to exclusions bound to this policy. Omit to return all exclusions
+	// (global plus every policy).
+	RiskPolicyID *string
+}
+
+// ListRiskExclusionsResult is the result type of the risk service
+// listRiskExclusions method.
+type ListRiskExclusionsResult struct {
+	// The list of risk exclusions.
+	Exclusions []*types.RiskExclusion
 }
 
 // ListRiskPoliciesPayload is the payload type of the risk service
@@ -692,6 +751,29 @@ type UpdateCustomDetectionRulePayload struct {
 	Regex string
 	// Severity level for findings produced by this rule.
 	Severity string
+}
+
+// UpdateRiskExclusionPayload is the payload type of the risk service
+// updateRiskExclusion method.
+type UpdateRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The exclusion ID.
+	ID string
+	// Bind the exclusion to a single policy. Omit for a global (project-wide)
+	// exclusion.
+	RiskPolicyID *string
+	// How match_value is interpreted.
+	MatchType string
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string
+	// Optional: only apply within this rule_id. Empty means any.
+	RuleIDFilter string
+	// Optional: only apply within this source. Empty means any.
+	SourceFilter string
+	// Whether the exclusion is active.
+	Enabled bool
 }
 
 // UpdateRiskPolicyPayload is the payload type of the risk service

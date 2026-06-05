@@ -122,6 +122,26 @@ func DeleteCustomDetectionRuleRiskPath() string {
 	return "/rpc/risk.customRules.delete"
 }
 
+// ListRiskExclusionsRiskPath returns the URL path to the risk service listRiskExclusions HTTP endpoint.
+func ListRiskExclusionsRiskPath() string {
+	return "/rpc/risk.exclusions.list"
+}
+
+// CreateRiskExclusionRiskPath returns the URL path to the risk service createRiskExclusion HTTP endpoint.
+func CreateRiskExclusionRiskPath() string {
+	return "/rpc/risk.exclusions.create"
+}
+
+// UpdateRiskExclusionRiskPath returns the URL path to the risk service updateRiskExclusion HTTP endpoint.
+func UpdateRiskExclusionRiskPath() string {
+	return "/rpc/risk.exclusions.update"
+}
+
+// DeleteRiskExclusionRiskPath returns the URL path to the risk service deleteRiskExclusion HTTP endpoint.
+func DeleteRiskExclusionRiskPath() string {
+	return "/rpc/risk.exclusions.delete"
+}
+
 // SuggestCustomDetectionRuleRiskPath returns the URL path to the risk service suggestCustomDetectionRule HTTP endpoint.
 func SuggestCustomDetectionRuleRiskPath() string {
 	return "/rpc/risk.customRules.suggest"

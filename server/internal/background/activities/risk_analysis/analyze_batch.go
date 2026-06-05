@@ -193,6 +193,22 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		}
 	}
 
+	// Drop findings suppressed by exclusions (going-forward suppression). Loads
+	// the policy's own exclusions plus any global ones. The retroactive
+	// reconcile sweep flags already-stored findings using the same criteria.
+	exclusions, err := repo.New(a.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
+		ProjectID:    args.ProjectID,
+		RiskPolicyID: uuid.NullUUID{UUID: args.RiskPolicyID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list exclusions: %w", err)
+	}
+	if set := NewExclusionSet(exclusions); !set.Empty() {
+		for i, batch := range findings {
+			findings[i] = set.FilterFindings(batch)
+		}
+	}
+
 	rows, findingsCount := a.buildRows(ctx, args, messages, findings)
 
 	if err := a.writeResults(ctx, args, rows); err != nil {

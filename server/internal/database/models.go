@@ -1223,6 +1223,22 @@ type RiskCustomDetectionRule struct {
 	Deleted        bool
 }
 
+type RiskExclusion struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RiskPolicyID   uuid.NullUUID
+	MatchType      string
+	MatchValue     string
+	RuleIDFilter   string
+	SourceFilter   string
+	Enabled        bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
@@ -1247,23 +1263,25 @@ type RiskPolicy struct {
 }
 
 type RiskResult struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	OrganizationID    string
-	RiskPolicyID      uuid.UUID
-	RiskPolicyVersion int64
-	ChatMessageID     uuid.UUID
-	Source            string
-	Found             bool
-	RuleID            pgtype.Text
-	Description       pgtype.Text
-	Match             pgtype.Text
-	StartPos          pgtype.Int4
-	EndPos            pgtype.Int4
-	Confidence        pgtype.Float8
-	Tags              []string
-	DeadLetterReason  pgtype.Text
-	CreatedAt         pgtype.Timestamptz
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	RiskPolicyID        uuid.UUID
+	RiskPolicyVersion   int64
+	ChatMessageID       uuid.UUID
+	Source              string
+	Found               bool
+	RuleID              pgtype.Text
+	Description         pgtype.Text
+	Match               pgtype.Text
+	StartPos            pgtype.Int4
+	EndPos              pgtype.Int4
+	Confidence          pgtype.Float8
+	Tags                []string
+	DeadLetterReason    pgtype.Text
+	ExcludedAt          pgtype.Timestamptz
+	ExcludedExclusionID uuid.NullUUID
+	CreatedAt           pgtype.Timestamptz
 }
 
 type SlackApp struct {

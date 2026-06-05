@@ -113,7 +113,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-organization-remote-session-issuer|update-organization-remote-session-issuer|list-organization-remote-session-issuers|get-organization-remote-session-issuer|delete-organization-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|suggest-custom-detection-rule|test-detection-rule)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -1518,6 +1518,30 @@ func ParseEndpoint(
 		riskDeleteCustomDetectionRuleSessionTokenFlag     = riskDeleteCustomDetectionRuleFlags.String("session-token", "", "")
 		riskDeleteCustomDetectionRuleProjectSlugInputFlag = riskDeleteCustomDetectionRuleFlags.String("project-slug-input", "", "")
 
+		riskListRiskExclusionsFlags                = flag.NewFlagSet("list-risk-exclusions", flag.ExitOnError)
+		riskListRiskExclusionsRiskPolicyIDFlag     = riskListRiskExclusionsFlags.String("risk-policy-id", "", "")
+		riskListRiskExclusionsApikeyTokenFlag      = riskListRiskExclusionsFlags.String("apikey-token", "", "")
+		riskListRiskExclusionsSessionTokenFlag     = riskListRiskExclusionsFlags.String("session-token", "", "")
+		riskListRiskExclusionsProjectSlugInputFlag = riskListRiskExclusionsFlags.String("project-slug-input", "", "")
+
+		riskCreateRiskExclusionFlags                = flag.NewFlagSet("create-risk-exclusion", flag.ExitOnError)
+		riskCreateRiskExclusionBodyFlag             = riskCreateRiskExclusionFlags.String("body", "REQUIRED", "")
+		riskCreateRiskExclusionApikeyTokenFlag      = riskCreateRiskExclusionFlags.String("apikey-token", "", "")
+		riskCreateRiskExclusionSessionTokenFlag     = riskCreateRiskExclusionFlags.String("session-token", "", "")
+		riskCreateRiskExclusionProjectSlugInputFlag = riskCreateRiskExclusionFlags.String("project-slug-input", "", "")
+
+		riskUpdateRiskExclusionFlags                = flag.NewFlagSet("update-risk-exclusion", flag.ExitOnError)
+		riskUpdateRiskExclusionBodyFlag             = riskUpdateRiskExclusionFlags.String("body", "REQUIRED", "")
+		riskUpdateRiskExclusionApikeyTokenFlag      = riskUpdateRiskExclusionFlags.String("apikey-token", "", "")
+		riskUpdateRiskExclusionSessionTokenFlag     = riskUpdateRiskExclusionFlags.String("session-token", "", "")
+		riskUpdateRiskExclusionProjectSlugInputFlag = riskUpdateRiskExclusionFlags.String("project-slug-input", "", "")
+
+		riskDeleteRiskExclusionFlags                = flag.NewFlagSet("delete-risk-exclusion", flag.ExitOnError)
+		riskDeleteRiskExclusionIDFlag               = riskDeleteRiskExclusionFlags.String("id", "REQUIRED", "")
+		riskDeleteRiskExclusionApikeyTokenFlag      = riskDeleteRiskExclusionFlags.String("apikey-token", "", "")
+		riskDeleteRiskExclusionSessionTokenFlag     = riskDeleteRiskExclusionFlags.String("session-token", "", "")
+		riskDeleteRiskExclusionProjectSlugInputFlag = riskDeleteRiskExclusionFlags.String("project-slug-input", "", "")
+
 		riskSuggestCustomDetectionRuleFlags                = flag.NewFlagSet("suggest-custom-detection-rule", flag.ExitOnError)
 		riskSuggestCustomDetectionRuleBodyFlag             = riskSuggestCustomDetectionRuleFlags.String("body", "REQUIRED", "")
 		riskSuggestCustomDetectionRuleApikeyTokenFlag      = riskSuggestCustomDetectionRuleFlags.String("apikey-token", "", "")
@@ -2290,6 +2314,10 @@ func ParseEndpoint(
 	riskGetCustomDetectionRuleFlags.Usage = riskGetCustomDetectionRuleUsage
 	riskUpdateCustomDetectionRuleFlags.Usage = riskUpdateCustomDetectionRuleUsage
 	riskDeleteCustomDetectionRuleFlags.Usage = riskDeleteCustomDetectionRuleUsage
+	riskListRiskExclusionsFlags.Usage = riskListRiskExclusionsUsage
+	riskCreateRiskExclusionFlags.Usage = riskCreateRiskExclusionUsage
+	riskUpdateRiskExclusionFlags.Usage = riskUpdateRiskExclusionUsage
+	riskDeleteRiskExclusionFlags.Usage = riskDeleteRiskExclusionUsage
 	riskSuggestCustomDetectionRuleFlags.Usage = riskSuggestCustomDetectionRuleUsage
 	riskTestDetectionRuleFlags.Usage = riskTestDetectionRuleUsage
 
@@ -3389,6 +3417,18 @@ func ParseEndpoint(
 
 			case "delete-custom-detection-rule":
 				epf = riskDeleteCustomDetectionRuleFlags
+
+			case "list-risk-exclusions":
+				epf = riskListRiskExclusionsFlags
+
+			case "create-risk-exclusion":
+				epf = riskCreateRiskExclusionFlags
+
+			case "update-risk-exclusion":
+				epf = riskUpdateRiskExclusionFlags
+
+			case "delete-risk-exclusion":
+				epf = riskDeleteRiskExclusionFlags
 
 			case "suggest-custom-detection-rule":
 				epf = riskSuggestCustomDetectionRuleFlags
@@ -4566,6 +4606,18 @@ func ParseEndpoint(
 			case "delete-custom-detection-rule":
 				endpoint = c.DeleteCustomDetectionRule()
 				data, err = riskc.BuildDeleteCustomDetectionRulePayload(*riskDeleteCustomDetectionRuleBodyFlag, *riskDeleteCustomDetectionRuleApikeyTokenFlag, *riskDeleteCustomDetectionRuleSessionTokenFlag, *riskDeleteCustomDetectionRuleProjectSlugInputFlag)
+			case "list-risk-exclusions":
+				endpoint = c.ListRiskExclusions()
+				data, err = riskc.BuildListRiskExclusionsPayload(*riskListRiskExclusionsRiskPolicyIDFlag, *riskListRiskExclusionsApikeyTokenFlag, *riskListRiskExclusionsSessionTokenFlag, *riskListRiskExclusionsProjectSlugInputFlag)
+			case "create-risk-exclusion":
+				endpoint = c.CreateRiskExclusion()
+				data, err = riskc.BuildCreateRiskExclusionPayload(*riskCreateRiskExclusionBodyFlag, *riskCreateRiskExclusionApikeyTokenFlag, *riskCreateRiskExclusionSessionTokenFlag, *riskCreateRiskExclusionProjectSlugInputFlag)
+			case "update-risk-exclusion":
+				endpoint = c.UpdateRiskExclusion()
+				data, err = riskc.BuildUpdateRiskExclusionPayload(*riskUpdateRiskExclusionBodyFlag, *riskUpdateRiskExclusionApikeyTokenFlag, *riskUpdateRiskExclusionSessionTokenFlag, *riskUpdateRiskExclusionProjectSlugInputFlag)
+			case "delete-risk-exclusion":
+				endpoint = c.DeleteRiskExclusion()
+				data, err = riskc.BuildDeleteRiskExclusionPayload(*riskDeleteRiskExclusionIDFlag, *riskDeleteRiskExclusionApikeyTokenFlag, *riskDeleteRiskExclusionSessionTokenFlag, *riskDeleteRiskExclusionProjectSlugInputFlag)
 			case "suggest-custom-detection-rule":
 				endpoint = c.SuggestCustomDetectionRule()
 				data, err = riskc.BuildSuggestCustomDetectionRulePayload(*riskSuggestCustomDetectionRuleBodyFlag, *riskSuggestCustomDetectionRuleApikeyTokenFlag, *riskSuggestCustomDetectionRuleSessionTokenFlag, *riskSuggestCustomDetectionRuleProjectSlugInputFlag)
@@ -10280,6 +10332,10 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    get-custom-detection-rule: Get a custom detection rule by ID.`)
 	fmt.Fprintln(os.Stderr, `    update-custom-detection-rule: Update a custom detection rule.`)
 	fmt.Fprintln(os.Stderr, `    delete-custom-detection-rule: Delete a custom detection rule.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-exclusions: List risk exclusions for the current project. Optionally filter to a single policy.`)
+	fmt.Fprintln(os.Stderr, `    create-risk-exclusion: Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.`)
+	fmt.Fprintln(os.Stderr, `    update-risk-exclusion: Update a risk exclusion.`)
+	fmt.Fprintln(os.Stderr, `    delete-risk-exclusion: Delete a risk exclusion. Previously suppressed findings are restored.`)
 	fmt.Fprintln(os.Stderr, `    suggest-custom-detection-rule: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.`)
 	fmt.Fprintln(os.Stderr, `    test-detection-rule: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.`)
 	fmt.Fprintln(os.Stderr)
@@ -10878,6 +10934,102 @@ func riskDeleteCustomDetectionRuleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-custom-detection-rule --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListRiskExclusionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-exclusions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -risk-policy-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List risk exclusions for the current project. Optionally filter to a single policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -risk-policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-exclusions --risk-policy-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskCreateRiskExclusionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk create-risk-exclusion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-exclusion --body '{\n      \"enabled\": false,\n      \"match_type\": \"regex\",\n      \"match_value\": \"abc123\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"rule_id_filter\": \"abc123\",\n      \"source_filter\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskUpdateRiskExclusionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk update-risk-exclusion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a risk exclusion.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-exclusion --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_type\": \"regex\",\n      \"match_value\": \"abc123\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"rule_id_filter\": \"abc123\",\n      \"source_filter\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskDeleteRiskExclusionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk delete-risk-exclusion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a risk exclusion. Previously suppressed findings are restored.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-risk-exclusion --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskSuggestCustomDetectionRuleUsage() {
