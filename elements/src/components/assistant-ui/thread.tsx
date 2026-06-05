@@ -23,8 +23,8 @@ import {
   ImageMessagePartProps,
   MessagePrimitive,
   ThreadPrimitive,
+  useAssistantApi,
   useAssistantState,
-  useComposerRuntime,
 } from "@assistant-ui/react";
 
 import {
@@ -850,7 +850,11 @@ interface ToolCategory {
 // tool mentions are disabled or there are no tools.
 const ComposerToolMentionPicker: FC = () => {
   const { config, mcpTools } = useElements();
-  const composer = useComposerRuntime();
+  const api = useAssistantApi();
+  // Read the composer text from the same reactive source the tool-mention
+  // badges parse, so an inserted mention renders a pill just like the type-`@`
+  // autocomplete does.
+  const composerText = useAssistantState(({ composer }) => composer.text);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(
@@ -903,9 +907,11 @@ const ComposerToolMentionPicker: FC = () => {
     : inActiveCategory;
 
   const insertMention = (toolName: string) => {
-    const current = composer.getState().text;
-    const base = current && !/\s$/.test(current) ? `${current} ` : current;
-    composer.setText(`${base}@${toolName} `);
+    const base =
+      composerText && !/\s$/.test(composerText)
+        ? `${composerText} `
+        : composerText;
+    api.composer().setText(`${base}@${toolName} `);
     setOpen(false);
     setQuery("");
   };
