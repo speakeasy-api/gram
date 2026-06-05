@@ -28,7 +28,7 @@ use tokio::sync::{OnceCell, oneshot};
 use agentkit_compaction::AgentBuilderCompactorExt;
 
 use crate::clip::ClippedToolSource;
-use crate::compaction::build_compactor;
+use crate::compaction::{build_compactor, denormalize_transcript};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
@@ -342,11 +342,13 @@ async fn spawn_thread(
     let compactor_http = build_http(compactor_http_client, tokens.clone());
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
+    let (persist_tx, persist_rx) = mpsc::unbounded_channel::<Vec<Item>>();
     let compactor = build_compactor(
         &bootstrap.compaction,
         &bootstrap.chat_id,
         bootstrap.context_window.unwrap_or(0),
         compactor_adapter,
+        persist_tx,
     )?;
 
     let mut transcript = Vec::new();
@@ -405,6 +407,18 @@ async fn spawn_thread(
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
     let evict_thread_id = thread_id.clone();
+
+    // Persistence task: drains compacted transcripts off the channel and POSTs
+    // them to the server. Runs alongside the main loop so a slow persist call
+    // never blocks the next turn. On eviction the inbox closes, the main loop
+    // exits, the PersistingCompactor drops, the channel closes, and this task
+    // wakes once more with None and exits.
+    let persist_thread_id = thread_id.clone();
+    let persist_client = host.gram_client.clone();
+    let persist_tokens = tokens.clone();
+    tokio::spawn(async move {
+        run_persistence(persist_rx, persist_client, persist_tokens, persist_thread_id).await;
+    });
 
     let task_handle = tokio::spawn(async move {
         let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle))
@@ -616,6 +630,39 @@ where
                      not require approval in this environment"
                 );
                 pending.approve(&mut driver)?;
+            }
+        }
+    }
+}
+
+async fn run_persistence(
+    mut rx: mpsc::UnboundedReceiver<Vec<Item>>,
+    client: GramBootstrapClient,
+    tokens: TokenRegistry,
+    thread_id: String,
+) {
+    while let Some(items) = rx.recv().await {
+        let messages = denormalize_transcript(&items);
+        if messages.is_empty() {
+            continue;
+        }
+        match client
+            .record_compacted_generation(&thread_id, &tokens, &messages)
+            .await
+        {
+            Ok(()) => {
+                tracing::info!(
+                    thread_id = %thread_id,
+                    rows = messages.len(),
+                    "compacted generation persisted"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    thread_id = %thread_id,
+                    error = %err,
+                    "failed to persist compacted generation; next cold bootstrap will see un-compacted history"
+                );
             }
         }
     }

@@ -5,11 +5,16 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::http_layer::TokenRegistry;
-use crate::wire::ThreadBootstrap;
+use crate::wire::{RunnerMessage, ThreadBootstrap};
 
 const BOOTSTRAP_PATH: &str = "/rpc/assistants.getThreadBootstrap";
 const CREATE_MCP_AUTH_FLOW_PATH: &str = "/rpc/assistantMcpAuth.create";
+const RECORD_COMPACTED_GENERATION_PATH: &str = "/rpc/assistants.recordCompactedGeneration";
 const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
+// Compaction persistence runs off the loop's critical path, so a longer
+// budget is fine; the post-compaction call body can be sizable and the
+// server walks all rows in a single transaction.
+const RECORD_COMPACTION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Lightweight client used by the runner to pull a per-thread bootstrap
 /// from the management API. The underlying client carries
@@ -50,6 +55,12 @@ struct CreateMcpAuthFlowRequest<'a> {
     thread_id: &'a str,
     server_id: &'a str,
     url: &'a str,
+}
+
+#[derive(Serialize)]
+struct RecordCompactedGenerationRequest<'a> {
+    thread_id: &'a str,
+    messages: &'a [RunnerMessage],
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,5 +144,45 @@ impl GramBootstrapClient {
         }
         let flow: CreateMcpAuthFlowResponse = serde_json::from_str(&body)?;
         Ok(flow)
+    }
+
+    /// Persists a runner-produced compacted transcript as a new
+    /// chat_messages generation so the next cold cron bootstrap loads the
+    /// shorter history. The endpoint returns 204 on success; the body is
+    /// ignored.
+    pub async fn record_compacted_generation(
+        &self,
+        thread_id: &str,
+        tokens: &TokenRegistry,
+        messages: &[RunnerMessage],
+    ) -> Result<(), GramClientError> {
+        let endpoint = format!(
+            "{}{}",
+            self.base_url.trim_end_matches('/'),
+            RECORD_COMPACTED_GENERATION_PATH
+        );
+        let bearer = tokens.current().map_err(|_| GramClientError::Token)?;
+
+        let resp = self
+            .http
+            .post(&endpoint)
+            .timeout(RECORD_COMPACTION_TIMEOUT)
+            .bearer_auth(&bearer)
+            .json(&RecordCompactedGenerationRequest {
+                thread_id,
+                messages,
+            })
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await?;
+            return Err(GramClientError::Status {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        Ok(())
     }
 }

@@ -27,17 +27,20 @@ use std::sync::Arc;
 
 use agentkit_adapter_completions::CompletionsAdapter;
 use agentkit_compaction::{
-    AgentCompactor, CompactionPipeline, CompactionReason, DropFailedToolResultsStrategy,
-    DropReasoningStrategy, StrategyCompactor, SummarizeOlderStrategy, TriggerFn,
-    context_window_trigger,
+    AgentCompactor, CompactionError, CompactionPipeline, CompactionReason, Compactor,
+    DropFailedToolResultsStrategy, DropReasoningStrategy, StrategyCompactor,
+    SummarizeOlderStrategy, TriggerFn, context_window_trigger,
 };
-use agentkit_core::{Item, ItemKind, SessionId};
+use agentkit_core::{Item, ItemKind, Part, SessionId, ToolOutput, TurnCancellation};
 use agentkit_loop::{Agent, MutationPoint};
 use agentkit_provider_openrouter::OpenRouterProvider;
 use agentkit_tools_core::{CompositePermissionChecker, PermissionDecision};
+use async_trait::async_trait;
 use serde::{Deserialize, Deserializer};
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::errors::RunnerError;
+use crate::wire::{RunnerMessage, RunnerToolCall};
 
 const COMPACTION_SYSTEM_PROMPT: &str = "You are a compaction agent. Compress the transcript that follows into a durable context note for an assistant that has lost the original messages. Preserve every named person, every year and date, every place, every decision the assistant committed to, every tool the assistant invoked, and every actionable fact in the tool results. Drop chatter, narration, and chain-of-thought. Return only the compacted note as plain text.";
 
@@ -135,15 +138,59 @@ fn build_trigger(policy: &CompactionPolicy, context_window: u64) -> Option<Trigg
     }
 }
 
-/// Builds the [`StrategyCompactor`] to attach to the agent via
+/// Wraps a [`StrategyCompactor`] and taps every successful compaction onto
+/// a channel so a sibling persistence task can POST the post-compaction
+/// transcript to the server. The in-memory mutation alone doesn't reach
+/// `chat_messages` (the compactor's adapter sends `Gram-Skip-Capture: 1`),
+/// so without this tap a cold cron bootstrap would re-load the
+/// un-compacted prior generation and growth would persist across fires.
+pub struct PersistingCompactor {
+    inner: StrategyCompactor,
+    persist_tx: UnboundedSender<Vec<Item>>,
+}
+
+impl PersistingCompactor {
+    pub fn new(inner: StrategyCompactor, persist_tx: UnboundedSender<Vec<Item>>) -> Self {
+        Self { inner, persist_tx }
+    }
+}
+
+#[async_trait]
+impl Compactor for PersistingCompactor {
+    fn should_compact(
+        &self,
+        transcript: &[Item],
+        point: MutationPoint,
+    ) -> Option<CompactionReason> {
+        self.inner.should_compact(transcript, point)
+    }
+
+    async fn compact(
+        &self,
+        transcript: &[Item],
+        reason: CompactionReason,
+        cancellation: Option<TurnCancellation>,
+    ) -> Result<Vec<Item>, CompactionError> {
+        let compacted = self.inner.compact(transcript, reason, cancellation).await?;
+        if let Err(err) = self.persist_tx.send(compacted.clone()) {
+            tracing::warn!(error = %err, "compaction persistence channel closed; skipping persist");
+        }
+        Ok(compacted)
+    }
+}
+
+/// Builds the compactor to attach to the agent via
 /// [`agentkit_compaction::AgentBuilderCompactorExt::compactor`]. Returns
-/// `None` when [`build_trigger`] declines.
+/// `None` when [`build_trigger`] declines. The returned compactor taps
+/// successful runs onto `persist_tx` so a sibling task can persist the
+/// compacted transcript as a new chat_messages generation.
 pub fn build_compactor(
     policy: &CompactionPolicy,
     chat_id: &str,
     context_window: u64,
     compactor_adapter: CompletionsAdapter<OpenRouterProvider>,
-) -> Result<Option<StrategyCompactor>, RunnerError> {
+    persist_tx: UnboundedSender<Vec<Item>>,
+) -> Result<Option<PersistingCompactor>, RunnerError> {
     let Some(trigger) = build_trigger(policy, context_window) else {
         return Ok(None);
     };
@@ -160,7 +207,7 @@ pub fn build_compactor(
         .system_prompt(COMPACTION_SYSTEM_PROMPT)
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
-    let compactor = StrategyCompactor::builder()
+    let inner = StrategyCompactor::builder()
         .trigger(trigger)
         .strategy(
             CompactionPipeline::new()
@@ -175,7 +222,100 @@ pub fn build_compactor(
         .backend(backend)
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
-    Ok(Some(compactor))
+    Ok(Some(PersistingCompactor::new(inner, persist_tx)))
+}
+
+/// Converts an agentkit transcript back into the wire shape the server
+/// persists. Mirrors `runtime::normalize_history` in reverse:
+///
+/// * `System`, `Developer`, `Context` items collapse to `role=system`.
+/// * `User` and `Notification` items collapse to `role=user`.
+/// * `Assistant` items emit a single row with concatenated text and any
+///   tool_calls extracted from `Part::ToolCall` parts.
+/// * `Tool` items emit a single row per `Part::ToolResult` with the
+///   referenced `call_id`.
+///
+/// Non-text content (media, file, structured, reasoning, custom) is
+/// dropped — the next bootstrap doesn't need to round-trip these through
+/// the runner, and the strategy pipeline already strips reasoning.
+pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        match item.kind {
+            ItemKind::System | ItemKind::Developer | ItemKind::Context => {
+                out.push(RunnerMessage {
+                    role: "system".to_string(),
+                    content: concat_text(&item.parts),
+                    tool_calls: Vec::new(),
+                    tool_call_id: None,
+                });
+            }
+            ItemKind::User | ItemKind::Notification => {
+                out.push(RunnerMessage {
+                    role: "user".to_string(),
+                    content: concat_text(&item.parts),
+                    tool_calls: Vec::new(),
+                    tool_call_id: None,
+                });
+            }
+            ItemKind::Assistant => {
+                let content = concat_text(&item.parts);
+                let tool_calls: Vec<RunnerToolCall> = item
+                    .parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        Part::ToolCall(call) => Some(RunnerToolCall {
+                            id: call.id.to_string(),
+                            name: call.name.clone(),
+                            arguments: call.input.to_string(),
+                        }),
+                        _ => None,
+                    })
+                    .collect();
+                out.push(RunnerMessage {
+                    role: "assistant".to_string(),
+                    content,
+                    tool_calls,
+                    tool_call_id: None,
+                });
+            }
+            ItemKind::Tool => {
+                for part in &item.parts {
+                    if let Part::ToolResult(result) = part {
+                        out.push(RunnerMessage {
+                            role: "tool".to_string(),
+                            content: tool_output_text(&result.output),
+                            tool_calls: Vec::new(),
+                            tool_call_id: Some(result.call_id.to_string()),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+fn concat_text(parts: &[Part]) -> String {
+    let mut buf = String::new();
+    for part in parts {
+        if let Part::Text(t) = part {
+            if !buf.is_empty() {
+                buf.push('\n');
+            }
+            buf.push_str(&t.text);
+        }
+    }
+    buf
+}
+
+fn tool_output_text(output: &ToolOutput) -> String {
+    match output {
+        ToolOutput::Text(s) => s.clone(),
+        ToolOutput::Structured(v) => v.to_string(),
+        ToolOutput::Parts(parts) => concat_text(parts),
+        ToolOutput::Files(_) => String::new(),
+    }
 }
 
 #[cfg(test)]
@@ -275,5 +415,66 @@ mod tests {
             build_trigger(&policy, 1_000_000).is_some(),
             "Threshold + known window must produce a trigger"
         );
+    }
+
+    #[test]
+    fn denormalize_kinds_map_to_wire_roles() {
+        use agentkit_core::{Part, ToolCallPart, ToolOutput, ToolResultPart};
+
+        let items = vec![
+            Item::text(ItemKind::System, "rules"),
+            Item::text(ItemKind::Developer, "dev rules"),
+            Item::text(ItemKind::Context, "ambient"),
+            Item::text(ItemKind::User, "hello"),
+            Item::text(ItemKind::Notification, "background done"),
+            Item::new(
+                ItemKind::Assistant,
+                vec![
+                    Part::text("calling"),
+                    Part::ToolCall(ToolCallPart::new(
+                        "call-1",
+                        "fs_read",
+                        serde_json::json!({"path": "/x"}),
+                    )),
+                ],
+            ),
+            Item::new(
+                ItemKind::Tool,
+                vec![Part::ToolResult(ToolResultPart::success(
+                    "call-1",
+                    ToolOutput::text("ok"),
+                ))],
+            ),
+        ];
+        let out = denormalize_transcript(&items);
+        assert_eq!(out.len(), 7);
+        assert_eq!(out[0].role, "system");
+        assert_eq!(out[1].role, "system");
+        assert_eq!(out[2].role, "system");
+        assert_eq!(out[3].role, "user");
+        assert_eq!(out[3].content, "hello");
+        assert_eq!(out[4].role, "user");
+        assert_eq!(out[4].content, "background done");
+        assert_eq!(out[5].role, "assistant");
+        assert_eq!(out[5].content, "calling");
+        assert_eq!(out[5].tool_calls.len(), 1);
+        assert_eq!(out[5].tool_calls[0].id, "call-1");
+        assert_eq!(out[5].tool_calls[0].name, "fs_read");
+        assert_eq!(out[6].role, "tool");
+        assert_eq!(out[6].tool_call_id.as_deref(), Some("call-1"));
+        assert_eq!(out[6].content, "ok");
+    }
+
+    #[test]
+    fn denormalize_assistant_concatenates_multiple_text_parts() {
+        use agentkit_core::Part;
+
+        let item = Item::new(
+            ItemKind::Assistant,
+            vec![Part::text("line one"), Part::text("line two")],
+        );
+        let out = denormalize_transcript(&[item]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].content, "line one\nline two");
     }
 }
