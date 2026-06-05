@@ -23,6 +23,13 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+} from "@/components/ui/tabs";
+import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import {
   Button,
   type Column,
   DropdownMenu,
@@ -274,6 +281,12 @@ function PolicyCenterContent() {
   const [formUserMessage, setFormUserMessage] = useState("");
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
+
+  const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
+    "policies",
+  );
+  const [exclusionSheet, setExclusionSheet] =
+    useState<ExclusionSheetState | null>(null);
 
   const invalidate = useCallback(() => {
     invalidateAllRiskListPolicies(queryClient);
@@ -624,6 +637,14 @@ function PolicyCenterContent() {
     },
   ];
 
+  const headerAction =
+    activeTab === "policies"
+      ? { label: "New Policy", onClick: handleCreate }
+      : {
+          label: "Create Exclusion",
+          onClick: () => setExclusionSheet({ mode: "create" }),
+        };
+
   return (
     <Page>
       <Page.Header>
@@ -644,20 +665,42 @@ function PolicyCenterContent() {
               information in agent session interactions.
             </p>
           </div>
-          <Button onClick={handleCreate}>
+          <Button onClick={headerAction.onClick}>
             <Button.LeftIcon>
               <Plus className="mr-2 h-4 w-4" />
             </Button.LeftIcon>
-            <Button.Text>New Policy</Button.Text>
+            <Button.Text>{headerAction.label}</Button.Text>
           </Button>
         </div>
 
-        <Table
-          columns={policyColumns}
-          data={policies}
-          rowKey={(policy) => policy.id}
-          onRowClick={handleEdit}
-        />
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as "policies" | "exclusions")
+          }
+        >
+          <div className="border-b">
+            <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+              <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
+              <PageTabsTrigger value="exclusions">Exclusions</PageTabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="policies" className="mt-6">
+            <Table
+              columns={policyColumns}
+              data={policies}
+              rowKey={(policy) => policy.id}
+              onRowClick={handleEdit}
+            />
+          </TabsContent>
+          <TabsContent value="exclusions" className="mt-6">
+            <ExclusionsTab
+              policies={policies}
+              sheet={exclusionSheet}
+              onSheetChange={setExclusionSheet}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
