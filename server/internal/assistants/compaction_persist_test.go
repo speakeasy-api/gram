@@ -1,6 +1,7 @@
 package assistants
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -103,10 +104,14 @@ func TestRecordCompactedGenerationRejectsForeignAssistant(t *testing.T) {
 	require.Error(t, err, "principal must own the thread's assistant")
 }
 
-func TestRecordCompactedGenerationRejectsMalformedMessages(t *testing.T) {
-	t.Parallel()
+// recordCompactedGenerationMalformedFixture builds a self-contained
+// fixture for the malformed-message rejection tests. Each malformed-shape
+// scenario lives in its own Test* function to comply with the project's
+// no-t.Run convention.
+func recordCompactedGenerationMalformedFixture(t *testing.T, slug string) (*ServiceCore, uuid.UUID, uuid.UUID, uuid.UUID, context.Context) {
+	t.Helper()
 
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_record_compacted_malformed")
+	conn, err := assistantsInfra.CloneTestDatabase(t, slug)
 	require.NoError(t, err)
 
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
@@ -118,24 +123,41 @@ func TestRecordCompactedGenerationRejectsMalformedMessages(t *testing.T) {
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
 
-	cases := map[string][]runtimeMessage{
-		"tool row missing tool_call_id": {{Role: "tool", Content: "x"}},
-		"unknown role":                  {{Role: "narrator", Content: "x"}},
-		"assistant tool_call missing id": {{
-			Role:      "assistant",
-			ToolCalls: []runtimeToolCall{{ID: "", Name: "x", Arguments: "{}"}},
-		}},
-		"assistant tool_call missing name": {{
-			Role:      "assistant",
-			ToolCalls: []runtimeToolCall{{ID: "c", Name: "", Arguments: "{}"}},
-		}},
-	}
-	for name, msgs := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			require.Error(t, core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, msgs), "malformed transcript must be rejected")
-		})
-	}
+	return core, projectID, assistantID, threadID, ctx
+}
+
+func TestRecordCompactedGenerationRejectsToolRowMissingToolCallID(t *testing.T) {
+	t.Parallel()
+	core, projectID, assistantID, threadID, ctx := recordCompactedGenerationMalformedFixture(t, "assistants_record_compacted_malformed_tool_id")
+	msgs := []runtimeMessage{{Role: "tool", Content: "x"}}
+	require.Error(t, core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, msgs), "tool row without tool_call_id must be rejected")
+}
+
+func TestRecordCompactedGenerationRejectsUnknownRole(t *testing.T) {
+	t.Parallel()
+	core, projectID, assistantID, threadID, ctx := recordCompactedGenerationMalformedFixture(t, "assistants_record_compacted_malformed_role")
+	msgs := []runtimeMessage{{Role: "narrator", Content: "x"}}
+	require.Error(t, core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, msgs), "unknown role must be rejected")
+}
+
+func TestRecordCompactedGenerationRejectsAssistantToolCallMissingID(t *testing.T) {
+	t.Parallel()
+	core, projectID, assistantID, threadID, ctx := recordCompactedGenerationMalformedFixture(t, "assistants_record_compacted_malformed_tc_id")
+	msgs := []runtimeMessage{{
+		Role:      "assistant",
+		ToolCalls: []runtimeToolCall{{ID: "", Name: "x", Arguments: "{}"}},
+	}}
+	require.Error(t, core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, msgs), "assistant tool_call without id must be rejected")
+}
+
+func TestRecordCompactedGenerationRejectsAssistantToolCallMissingName(t *testing.T) {
+	t.Parallel()
+	core, projectID, assistantID, threadID, ctx := recordCompactedGenerationMalformedFixture(t, "assistants_record_compacted_malformed_tc_name")
+	msgs := []runtimeMessage{{
+		Role:      "assistant",
+		ToolCalls: []runtimeToolCall{{ID: "c", Name: "", Arguments: "{}"}},
+	}}
+	require.Error(t, core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, msgs), "assistant tool_call without name must be rejected")
 }
 
 func TestRecordCompactedGenerationRejectsEmptyMessages(t *testing.T) {

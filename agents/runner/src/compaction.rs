@@ -188,7 +188,26 @@ impl Compactor for PersistingCompactor {
         reason: CompactionReason,
         cancellation: Option<TurnCancellation>,
     ) -> Result<Vec<Item>, CompactionError> {
-        let raw = self.inner.compact(transcript, reason, cancellation).await?;
+        // Only `Cancelled` should propagate — that's the loop tearing the
+        // turn down deliberately. Backend/provider failures during the
+        // summarisation call (timeouts, OpenRouter 5xx) would otherwise
+        // surface through `agentkit_compaction::CompactorMutator` as a
+        // `LoopError::Mutator` and kill the per-thread runner task even
+        // though the user-visible turn already succeeded. Log and keep
+        // the un-compacted transcript so the thread stays alive; the
+        // trigger fires again on the next AfterTurnEnded and retries.
+        let raw = match self.inner.compact(transcript, reason, cancellation).await {
+            Ok(items) => items,
+            Err(CompactionError::Cancelled) => return Err(CompactionError::Cancelled),
+            Err(err) => {
+                tracing::warn!(
+                    thread_id = %self.thread_id,
+                    error = %err,
+                    "compaction summarisation failed; keeping un-compacted transcript and will retry on next trigger"
+                );
+                return Ok(transcript.to_vec());
+            }
+        };
         // AgentCompactor emits its summary as `ItemKind::Context`, which
         // agentkit-adapter-completions serialises as a `system` chat message.
         // We persist Context as `role="user"` so it survives loadChatHistory's
