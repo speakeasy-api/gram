@@ -882,7 +882,10 @@ const ComposerToolMentionPicker: FC = () => {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [tools]);
 
-  if (!toolMentionsEnabled || tools.length === 0) {
+  // Render the button as soon as tool mentions are enabled — not gated on the
+  // async MCP tool list — so it appears immediately rather than popping in once
+  // tools resolve. The popover shows a loading/empty state until tools arrive.
+  if (!toolMentionsEnabled) {
     return null;
   }
 
@@ -944,7 +947,7 @@ const ComposerToolMentionPicker: FC = () => {
             aria-label="Search tools"
           />
         </div>
-        <div className="flex max-h-72">
+        <div className="flex h-72">
           <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
             <div className="px-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
               Categories
@@ -986,7 +989,7 @@ const ComposerToolMentionPicker: FC = () => {
           <div className="min-w-0 flex-1 overflow-y-auto p-2">
             {visibleTools.length === 0 ? (
               <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                No tools found
+                {tools.length === 0 ? "No tools available" : "No tools found"}
               </div>
             ) : (
               visibleTools.map((tool) => (
