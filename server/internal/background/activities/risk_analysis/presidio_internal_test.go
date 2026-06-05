@@ -186,14 +186,11 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "smtp.mailfrom=mail@hgstrust.org"))
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "nCLAUDE_CODE_USER_EMAIL=ecorella@moonpay.com"))
 
-	// GCP service accounts (machine identities, not PII). The
-	// `service-account=...` wrapper survives because the suffix layer
-	// still fires on `.gserviceaccount.com`.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "argocd-image-updater@moonpay-sre.iam.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "502133085207@cloudservices.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "{project_number}@cloudbuild.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-{{PROJECT_NUMBER}}@gcp-sa-pubsub.iam.gserviceaccount.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "service-account=slack-deploy-bot-runtime@speakeasy-prod-354914.iam.gserviceaccount.com"))
+	// GCP service accounts are NOT filtered: the `@…gserviceaccount.com`
+	// shape can carry IAM context worth flagging on first review, so we
+	// over-report rather than drop the bucket wholesale.
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "argocd-image-updater@moonpay-sre.iam.gserviceaccount.com"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "{project_number}@cloudbuild.gserviceaccount.com"))
 
 	// Any '/' makes the string a URL or path, not an addr-spec.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "medium.com/@abdelghani.alhijawi"))
