@@ -82,7 +82,7 @@ func UsageCommands() []string {
 		"ai-integrations (get-config|upsert-config|delete-config)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
-		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message)",
+		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|delete-chat|submit-feedback)",
@@ -100,11 +100,11 @@ func UsageCommands() []string {
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
-		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
-		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|generate-work-os-admin-portal-link)",
+		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|list-tool-filters|delete-mcp-server)",
+		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server)",
@@ -118,14 +118,14 @@ func UsageCommands() []string {
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"user-sessions (list-user-sessions|mint-user-session|revoke-user-session)",
-		"variations (upsert-global|delete-global|list-global)",
+		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
 }
 
@@ -474,6 +474,10 @@ func ParseEndpoint(
 		assistantsSendMessageBodyFlag             = assistantsSendMessageFlags.String("body", "REQUIRED", "")
 		assistantsSendMessageSessionTokenFlag     = assistantsSendMessageFlags.String("session-token", "", "")
 		assistantsSendMessageProjectSlugInputFlag = assistantsSendMessageFlags.String("project-slug-input", "", "")
+
+		assistantsEnsureManagedAssistantFlags                = flag.NewFlagSet("ensure-managed-assistant", flag.ExitOnError)
+		assistantsEnsureManagedAssistantSessionTokenFlag     = assistantsEnsureManagedAssistantFlags.String("session-token", "", "")
+		assistantsEnsureManagedAssistantProjectSlugInputFlag = assistantsEnsureManagedAssistantFlags.String("project-slug-input", "", "")
 
 		auditlogsFlags = flag.NewFlagSet("auditlogs", flag.ContinueOnError)
 
@@ -948,6 +952,13 @@ func ParseEndpoint(
 		mcpServersUpdateMcpServerApikeyTokenFlag      = mcpServersUpdateMcpServerFlags.String("apikey-token", "", "")
 		mcpServersUpdateMcpServerProjectSlugInputFlag = mcpServersUpdateMcpServerFlags.String("project-slug-input", "", "")
 
+		mcpServersListToolFiltersFlags                = flag.NewFlagSet("list-tool-filters", flag.ExitOnError)
+		mcpServersListToolFiltersIDFlag               = mcpServersListToolFiltersFlags.String("id", "", "")
+		mcpServersListToolFiltersSlugFlag             = mcpServersListToolFiltersFlags.String("slug", "", "")
+		mcpServersListToolFiltersSessionTokenFlag     = mcpServersListToolFiltersFlags.String("session-token", "", "")
+		mcpServersListToolFiltersApikeyTokenFlag      = mcpServersListToolFiltersFlags.String("apikey-token", "", "")
+		mcpServersListToolFiltersProjectSlugInputFlag = mcpServersListToolFiltersFlags.String("project-slug-input", "", "")
+
 		mcpServersDeleteMcpServerFlags                = flag.NewFlagSet("delete-mcp-server", flag.ExitOnError)
 		mcpServersDeleteMcpServerIDFlag               = mcpServersDeleteMcpServerFlags.String("id", "REQUIRED", "")
 		mcpServersDeleteMcpServerSessionTokenFlag     = mcpServersDeleteMcpServerFlags.String("session-token", "", "")
@@ -989,6 +1000,17 @@ func ParseEndpoint(
 
 		organizationsCreatePortalSessionFlags            = flag.NewFlagSet("create-portal-session", flag.ExitOnError)
 		organizationsCreatePortalSessionSessionTokenFlag = organizationsCreatePortalSessionFlags.String("session-token", "", "")
+
+		organizationsGetOnboardingStatusFlags            = flag.NewFlagSet("get-onboarding-status", flag.ExitOnError)
+		organizationsGetOnboardingStatusSessionTokenFlag = organizationsGetOnboardingStatusFlags.String("session-token", "", "")
+
+		organizationsVerifyOnboardingHooksSetupFlags             = flag.NewFlagSet("verify-onboarding-hooks-setup", flag.ExitOnError)
+		organizationsVerifyOnboardingHooksSetupSinceUnixNanoFlag = organizationsVerifyOnboardingHooksSetupFlags.String("since-unix-nano", "", "")
+		organizationsVerifyOnboardingHooksSetupSessionTokenFlag  = organizationsVerifyOnboardingHooksSetupFlags.String("session-token", "", "")
+
+		organizationsSendEnterpriseAdminOnboardingEmailFlags            = flag.NewFlagSet("send-enterprise-admin-onboarding-email", flag.ExitOnError)
+		organizationsSendEnterpriseAdminOnboardingEmailBodyFlag         = organizationsSendEnterpriseAdminOnboardingEmailFlags.String("body", "REQUIRED", "")
+		organizationsSendEnterpriseAdminOnboardingEmailSessionTokenFlag = organizationsSendEnterpriseAdminOnboardingEmailFlags.String("session-token", "", "")
 
 		organizationsGenerateWorkOSAdminPortalLinkFlags            = flag.NewFlagSet("generate-work-os-admin-portal-link", flag.ExitOnError)
 		organizationsGenerateWorkOSAdminPortalLinkBodyFlag         = organizationsGenerateWorkOSAdminPortalLinkFlags.String("body", "REQUIRED", "")
@@ -1110,6 +1132,15 @@ func ParseEndpoint(
 		pluginsPublishPluginsBodyFlag             = pluginsPublishPluginsFlags.String("body", "REQUIRED", "")
 		pluginsPublishPluginsSessionTokenFlag     = pluginsPublishPluginsFlags.String("session-token", "", "")
 		pluginsPublishPluginsProjectSlugInputFlag = pluginsPublishPluginsFlags.String("project-slug-input", "", "")
+
+		pluginsGetMarketplaceSettingsFlags                = flag.NewFlagSet("get-marketplace-settings", flag.ExitOnError)
+		pluginsGetMarketplaceSettingsSessionTokenFlag     = pluginsGetMarketplaceSettingsFlags.String("session-token", "", "")
+		pluginsGetMarketplaceSettingsProjectSlugInputFlag = pluginsGetMarketplaceSettingsFlags.String("project-slug-input", "", "")
+
+		pluginsUpdateMarketplaceSettingsFlags                = flag.NewFlagSet("update-marketplace-settings", flag.ExitOnError)
+		pluginsUpdateMarketplaceSettingsBodyFlag             = pluginsUpdateMarketplaceSettingsFlags.String("body", "REQUIRED", "")
+		pluginsUpdateMarketplaceSettingsSessionTokenFlag     = pluginsUpdateMarketplaceSettingsFlags.String("session-token", "", "")
+		pluginsUpdateMarketplaceSettingsProjectSlugInputFlag = pluginsUpdateMarketplaceSettingsFlags.String("project-slug-input", "", "")
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
@@ -1726,6 +1757,12 @@ func ParseEndpoint(
 		toolsetsGetToolsetApikeyTokenFlag      = toolsetsGetToolsetFlags.String("apikey-token", "", "")
 		toolsetsGetToolsetProjectSlugInputFlag = toolsetsGetToolsetFlags.String("project-slug-input", "", "")
 
+		toolsetsListToolFiltersFlags                = flag.NewFlagSet("list-tool-filters", flag.ExitOnError)
+		toolsetsListToolFiltersSlugFlag             = toolsetsListToolFiltersFlags.String("slug", "REQUIRED", "")
+		toolsetsListToolFiltersSessionTokenFlag     = toolsetsListToolFiltersFlags.String("session-token", "", "")
+		toolsetsListToolFiltersApikeyTokenFlag      = toolsetsListToolFiltersFlags.String("apikey-token", "", "")
+		toolsetsListToolFiltersProjectSlugInputFlag = toolsetsListToolFiltersFlags.String("project-slug-input", "", "")
+
 		toolsetsCheckMCPSlugAvailabilityFlags                = flag.NewFlagSet("check-mcp-slug-availability", flag.ExitOnError)
 		toolsetsCheckMCPSlugAvailabilitySlugFlag             = toolsetsCheckMCPSlugAvailabilityFlags.String("slug", "REQUIRED", "")
 		toolsetsCheckMCPSlugAvailabilitySessionTokenFlag     = toolsetsCheckMCPSlugAvailabilityFlags.String("session-token", "", "")
@@ -1771,6 +1808,13 @@ func ParseEndpoint(
 		toolsetsSetUserSessionIssuerSessionTokenFlag     = toolsetsSetUserSessionIssuerFlags.String("session-token", "", "")
 		toolsetsSetUserSessionIssuerApikeyTokenFlag      = toolsetsSetUserSessionIssuerFlags.String("apikey-token", "", "")
 		toolsetsSetUserSessionIssuerProjectSlugInputFlag = toolsetsSetUserSessionIssuerFlags.String("project-slug-input", "", "")
+
+		toolsetsSetToolVariationsGroupFlags                = flag.NewFlagSet("set-tool-variations-group", flag.ExitOnError)
+		toolsetsSetToolVariationsGroupBodyFlag             = toolsetsSetToolVariationsGroupFlags.String("body", "REQUIRED", "")
+		toolsetsSetToolVariationsGroupSlugFlag             = toolsetsSetToolVariationsGroupFlags.String("slug", "REQUIRED", "")
+		toolsetsSetToolVariationsGroupSessionTokenFlag     = toolsetsSetToolVariationsGroupFlags.String("session-token", "", "")
+		toolsetsSetToolVariationsGroupApikeyTokenFlag      = toolsetsSetToolVariationsGroupFlags.String("apikey-token", "", "")
+		toolsetsSetToolVariationsGroupProjectSlugInputFlag = toolsetsSetToolVariationsGroupFlags.String("project-slug-input", "", "")
 
 		triggersFlags = flag.NewFlagSet("triggers", flag.ContinueOnError)
 
@@ -1942,6 +1986,16 @@ func ParseEndpoint(
 		variationsListGlobalSessionTokenFlag     = variationsListGlobalFlags.String("session-token", "", "")
 		variationsListGlobalApikeyTokenFlag      = variationsListGlobalFlags.String("apikey-token", "", "")
 		variationsListGlobalProjectSlugInputFlag = variationsListGlobalFlags.String("project-slug-input", "", "")
+
+		variationsListGroupsFlags                = flag.NewFlagSet("list-groups", flag.ExitOnError)
+		variationsListGroupsSessionTokenFlag     = variationsListGroupsFlags.String("session-token", "", "")
+		variationsListGroupsApikeyTokenFlag      = variationsListGroupsFlags.String("apikey-token", "", "")
+		variationsListGroupsProjectSlugInputFlag = variationsListGroupsFlags.String("project-slug-input", "", "")
+
+		variationsCreateGlobalFlags                = flag.NewFlagSet("create-global", flag.ExitOnError)
+		variationsCreateGlobalSessionTokenFlag     = variationsCreateGlobalFlags.String("session-token", "", "")
+		variationsCreateGlobalApikeyTokenFlag      = variationsCreateGlobalFlags.String("apikey-token", "", "")
+		variationsCreateGlobalProjectSlugInputFlag = variationsCreateGlobalFlags.String("project-slug-input", "", "")
 	)
 	externalFlags.Usage = externalUsage
 	externalReceiveWorkOSWebhookFlags.Usage = externalReceiveWorkOSWebhookUsage
@@ -2019,6 +2073,7 @@ func ParseEndpoint(
 	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
 	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
 	assistantsSendMessageFlags.Usage = assistantsSendMessageUsage
+	assistantsEnsureManagedAssistantFlags.Usage = assistantsEnsureManagedAssistantUsage
 
 	auditlogsFlags.Usage = auditlogsUsage
 	auditlogsListFlags.Usage = auditlogsListUsage
@@ -2135,6 +2190,7 @@ func ParseEndpoint(
 	mcpServersGetMcpServerFlags.Usage = mcpServersGetMcpServerUsage
 	mcpServersListMcpServersFlags.Usage = mcpServersListMcpServersUsage
 	mcpServersUpdateMcpServerFlags.Usage = mcpServersUpdateMcpServerUsage
+	mcpServersListToolFiltersFlags.Usage = mcpServersListToolFiltersUsage
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
 
 	organizationsFlags.Usage = organizationsUsage
@@ -2148,6 +2204,9 @@ func ParseEndpoint(
 	organizationsEnableWebhooksFlags.Usage = organizationsEnableWebhooksUsage
 	organizationsDisableWebhooksFlags.Usage = organizationsDisableWebhooksUsage
 	organizationsCreatePortalSessionFlags.Usage = organizationsCreatePortalSessionUsage
+	organizationsGetOnboardingStatusFlags.Usage = organizationsGetOnboardingStatusUsage
+	organizationsVerifyOnboardingHooksSetupFlags.Usage = organizationsVerifyOnboardingHooksSetupUsage
+	organizationsSendEnterpriseAdminOnboardingEmailFlags.Usage = organizationsSendEnterpriseAdminOnboardingEmailUsage
 	organizationsGenerateWorkOSAdminPortalLinkFlags.Usage = organizationsGenerateWorkOSAdminPortalLinkUsage
 
 	otelForwardingFlags.Usage = otelForwardingUsage
@@ -2177,6 +2236,8 @@ func ParseEndpoint(
 	pluginsDownloadCodexInstallScriptFlags.Usage = pluginsDownloadCodexInstallScriptUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
+	pluginsGetMarketplaceSettingsFlags.Usage = pluginsGetMarketplaceSettingsUsage
+	pluginsUpdateMarketplaceSettingsFlags.Usage = pluginsUpdateMarketplaceSettingsUsage
 
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
@@ -2301,6 +2362,7 @@ func ParseEndpoint(
 	toolsetsUpdateToolsetFlags.Usage = toolsetsUpdateToolsetUsage
 	toolsetsDeleteToolsetFlags.Usage = toolsetsDeleteToolsetUsage
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
+	toolsetsListToolFiltersFlags.Usage = toolsetsListToolFiltersUsage
 	toolsetsCheckMCPSlugAvailabilityFlags.Usage = toolsetsCheckMCPSlugAvailabilityUsage
 	toolsetsCloneToolsetFlags.Usage = toolsetsCloneToolsetUsage
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
@@ -2308,6 +2370,7 @@ func ParseEndpoint(
 	toolsetsAddOAuthProxyServerFlags.Usage = toolsetsAddOAuthProxyServerUsage
 	toolsetsUpdateOAuthProxyServerFlags.Usage = toolsetsUpdateOAuthProxyServerUsage
 	toolsetsSetUserSessionIssuerFlags.Usage = toolsetsSetUserSessionIssuerUsage
+	toolsetsSetToolVariationsGroupFlags.Usage = toolsetsSetToolVariationsGroupUsage
 
 	triggersFlags.Usage = triggersUsage
 	triggersListTriggerDefinitionsFlags.Usage = triggersListTriggerDefinitionsUsage
@@ -2351,6 +2414,8 @@ func ParseEndpoint(
 	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
 	variationsDeleteGlobalFlags.Usage = variationsDeleteGlobalUsage
 	variationsListGlobalFlags.Usage = variationsListGlobalUsage
+	variationsListGroupsFlags.Usage = variationsListGroupsUsage
+	variationsCreateGlobalFlags.Usage = variationsCreateGlobalUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -2697,6 +2762,9 @@ func ParseEndpoint(
 			case "send-message":
 				epf = assistantsSendMessageFlags
 
+			case "ensure-managed-assistant":
+				epf = assistantsEnsureManagedAssistantFlags
+
 			}
 
 		case "auditlogs":
@@ -3009,6 +3077,9 @@ func ParseEndpoint(
 			case "update-mcp-server":
 				epf = mcpServersUpdateMcpServerFlags
 
+			case "list-tool-filters":
+				epf = mcpServersListToolFiltersFlags
+
 			case "delete-mcp-server":
 				epf = mcpServersDeleteMcpServerFlags
 
@@ -3045,6 +3116,15 @@ func ParseEndpoint(
 
 			case "create-portal-session":
 				epf = organizationsCreatePortalSessionFlags
+
+			case "get-onboarding-status":
+				epf = organizationsGetOnboardingStatusFlags
+
+			case "verify-onboarding-hooks-setup":
+				epf = organizationsVerifyOnboardingHooksSetupFlags
+
+			case "send-enterprise-admin-onboarding-email":
+				epf = organizationsSendEnterpriseAdminOnboardingEmailFlags
 
 			case "generate-work-os-admin-portal-link":
 				epf = organizationsGenerateWorkOSAdminPortalLinkFlags
@@ -3126,6 +3206,12 @@ func ParseEndpoint(
 
 			case "publish-plugins":
 				epf = pluginsPublishPluginsFlags
+
+			case "get-marketplace-settings":
+				epf = pluginsGetMarketplaceSettingsFlags
+
+			case "update-marketplace-settings":
+				epf = pluginsUpdateMarketplaceSettingsFlags
 
 			}
 
@@ -3471,6 +3557,9 @@ func ParseEndpoint(
 			case "get-toolset":
 				epf = toolsetsGetToolsetFlags
 
+			case "list-tool-filters":
+				epf = toolsetsListToolFiltersFlags
+
 			case "check-mcp-slug-availability":
 				epf = toolsetsCheckMCPSlugAvailabilityFlags
 
@@ -3491,6 +3580,9 @@ func ParseEndpoint(
 
 			case "set-user-session-issuer":
 				epf = toolsetsSetUserSessionIssuerFlags
+
+			case "set-tool-variations-group":
+				epf = toolsetsSetToolVariationsGroupFlags
 
 			}
 
@@ -3606,6 +3698,12 @@ func ParseEndpoint(
 
 			case "list-global":
 				epf = variationsListGlobalFlags
+
+			case "list-groups":
+				epf = variationsListGroupsFlags
+
+			case "create-global":
+				epf = variationsCreateGlobalFlags
 
 			}
 
@@ -3855,6 +3953,9 @@ func ParseEndpoint(
 			case "send-message":
 				endpoint = c.SendMessage()
 				data, err = assistantsc.BuildSendMessagePayload(*assistantsSendMessageBodyFlag, *assistantsSendMessageSessionTokenFlag, *assistantsSendMessageProjectSlugInputFlag)
+			case "ensure-managed-assistant":
+				endpoint = c.EnsureManagedAssistant()
+				data, err = assistantsc.BuildEnsureManagedAssistantPayload(*assistantsEnsureManagedAssistantSessionTokenFlag, *assistantsEnsureManagedAssistantProjectSlugInputFlag)
 			}
 		case "auditlogs":
 			c := auditlogsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4167,6 +4268,9 @@ func ParseEndpoint(
 			case "update-mcp-server":
 				endpoint = c.UpdateMcpServer()
 				data, err = mcpserversc.BuildUpdateMcpServerPayload(*mcpServersUpdateMcpServerBodyFlag, *mcpServersUpdateMcpServerSessionTokenFlag, *mcpServersUpdateMcpServerApikeyTokenFlag, *mcpServersUpdateMcpServerProjectSlugInputFlag)
+			case "list-tool-filters":
+				endpoint = c.ListToolFilters()
+				data, err = mcpserversc.BuildListToolFiltersPayload(*mcpServersListToolFiltersIDFlag, *mcpServersListToolFiltersSlugFlag, *mcpServersListToolFiltersSessionTokenFlag, *mcpServersListToolFiltersApikeyTokenFlag, *mcpServersListToolFiltersProjectSlugInputFlag)
 			case "delete-mcp-server":
 				endpoint = c.DeleteMcpServer()
 				data, err = mcpserversc.BuildDeleteMcpServerPayload(*mcpServersDeleteMcpServerIDFlag, *mcpServersDeleteMcpServerSessionTokenFlag, *mcpServersDeleteMcpServerApikeyTokenFlag, *mcpServersDeleteMcpServerProjectSlugInputFlag)
@@ -4204,6 +4308,15 @@ func ParseEndpoint(
 			case "create-portal-session":
 				endpoint = c.CreatePortalSession()
 				data, err = organizationsc.BuildCreatePortalSessionPayload(*organizationsCreatePortalSessionSessionTokenFlag)
+			case "get-onboarding-status":
+				endpoint = c.GetOnboardingStatus()
+				data, err = organizationsc.BuildGetOnboardingStatusPayload(*organizationsGetOnboardingStatusSessionTokenFlag)
+			case "verify-onboarding-hooks-setup":
+				endpoint = c.VerifyOnboardingHooksSetup()
+				data, err = organizationsc.BuildVerifyOnboardingHooksSetupPayload(*organizationsVerifyOnboardingHooksSetupSinceUnixNanoFlag, *organizationsVerifyOnboardingHooksSetupSessionTokenFlag)
+			case "send-enterprise-admin-onboarding-email":
+				endpoint = c.SendEnterpriseAdminOnboardingEmail()
+				data, err = organizationsc.BuildSendEnterpriseAdminOnboardingEmailPayload(*organizationsSendEnterpriseAdminOnboardingEmailBodyFlag, *organizationsSendEnterpriseAdminOnboardingEmailSessionTokenFlag)
 			case "generate-work-os-admin-portal-link":
 				endpoint = c.GenerateWorkOSAdminPortalLink()
 				data, err = organizationsc.BuildGenerateWorkOSAdminPortalLinkPayload(*organizationsGenerateWorkOSAdminPortalLinkBodyFlag, *organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag)
@@ -4285,6 +4398,12 @@ func ParseEndpoint(
 			case "publish-plugins":
 				endpoint = c.PublishPlugins()
 				data, err = pluginsc.BuildPublishPluginsPayload(*pluginsPublishPluginsBodyFlag, *pluginsPublishPluginsSessionTokenFlag, *pluginsPublishPluginsProjectSlugInputFlag)
+			case "get-marketplace-settings":
+				endpoint = c.GetMarketplaceSettings()
+				data, err = pluginsc.BuildGetMarketplaceSettingsPayload(*pluginsGetMarketplaceSettingsSessionTokenFlag, *pluginsGetMarketplaceSettingsProjectSlugInputFlag)
+			case "update-marketplace-settings":
+				endpoint = c.UpdateMarketplaceSettings()
+				data, err = pluginsc.BuildUpdateMarketplaceSettingsPayload(*pluginsUpdateMarketplaceSettingsBodyFlag, *pluginsUpdateMarketplaceSettingsSessionTokenFlag, *pluginsUpdateMarketplaceSettingsProjectSlugInputFlag)
 			}
 		case "features":
 			c := featuresc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4629,6 +4748,9 @@ func ParseEndpoint(
 			case "get-toolset":
 				endpoint = c.GetToolset()
 				data, err = toolsetsc.BuildGetToolsetPayload(*toolsetsGetToolsetSlugFlag, *toolsetsGetToolsetSessionTokenFlag, *toolsetsGetToolsetApikeyTokenFlag, *toolsetsGetToolsetProjectSlugInputFlag)
+			case "list-tool-filters":
+				endpoint = c.ListToolFilters()
+				data, err = toolsetsc.BuildListToolFiltersPayload(*toolsetsListToolFiltersSlugFlag, *toolsetsListToolFiltersSessionTokenFlag, *toolsetsListToolFiltersApikeyTokenFlag, *toolsetsListToolFiltersProjectSlugInputFlag)
 			case "check-mcp-slug-availability":
 				endpoint = c.CheckMCPSlugAvailability()
 				data, err = toolsetsc.BuildCheckMCPSlugAvailabilityPayload(*toolsetsCheckMCPSlugAvailabilitySlugFlag, *toolsetsCheckMCPSlugAvailabilitySessionTokenFlag, *toolsetsCheckMCPSlugAvailabilityApikeyTokenFlag, *toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag)
@@ -4650,6 +4772,9 @@ func ParseEndpoint(
 			case "set-user-session-issuer":
 				endpoint = c.SetUserSessionIssuer()
 				data, err = toolsetsc.BuildSetUserSessionIssuerPayload(*toolsetsSetUserSessionIssuerBodyFlag, *toolsetsSetUserSessionIssuerSlugFlag, *toolsetsSetUserSessionIssuerSessionTokenFlag, *toolsetsSetUserSessionIssuerApikeyTokenFlag, *toolsetsSetUserSessionIssuerProjectSlugInputFlag)
+			case "set-tool-variations-group":
+				endpoint = c.SetToolVariationsGroup()
+				data, err = toolsetsc.BuildSetToolVariationsGroupPayload(*toolsetsSetToolVariationsGroupBodyFlag, *toolsetsSetToolVariationsGroupSlugFlag, *toolsetsSetToolVariationsGroupSessionTokenFlag, *toolsetsSetToolVariationsGroupApikeyTokenFlag, *toolsetsSetToolVariationsGroupProjectSlugInputFlag)
 			}
 		case "triggers":
 			c := triggersc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4764,6 +4889,12 @@ func ParseEndpoint(
 			case "list-global":
 				endpoint = c.ListGlobal()
 				data, err = variationsc.BuildListGlobalPayload(*variationsListGlobalSessionTokenFlag, *variationsListGlobalApikeyTokenFlag, *variationsListGlobalProjectSlugInputFlag)
+			case "list-groups":
+				endpoint = c.ListGroups()
+				data, err = variationsc.BuildListGroupsPayload(*variationsListGroupsSessionTokenFlag, *variationsListGroupsApikeyTokenFlag, *variationsListGroupsProjectSlugInputFlag)
+			case "create-global":
+				endpoint = c.CreateGlobal()
+				data, err = variationsc.BuildCreateGlobalPayload(*variationsCreateGlobalSessionTokenFlag, *variationsCreateGlobalApikeyTokenFlag, *variationsCreateGlobalProjectSlugInputFlag)
 			}
 		}
 	}
@@ -4923,7 +5054,7 @@ func accessCreateRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"effect\": \"deny\",\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"effect\": \"deny\",\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessUpdateRoleUsage() {
@@ -4945,7 +5076,7 @@ func accessUpdateRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"effect\": \"deny\",\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"add_grants\": [\n         {\n            \"effect\": \"deny\",\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"description\": \"abc123\",\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"remove_grants\": [\n         {\n            \"effect\": \"deny\",\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessDeleteRoleUsage() {
@@ -6106,7 +6237,8 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
-	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.`)
+	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
+	fmt.Fprintln(os.Stderr, `    ensure-managed-assistant: Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s assistants COMMAND --help\n", os.Args[0])
@@ -6229,7 +6361,7 @@ func assistantsSendMessageUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.`)
+	fmt.Fprintln(os.Stderr, `Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -6238,7 +6370,27 @@ func assistantsSendMessageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants send-message --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"correlation_id\": \"aa\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants send-message --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsEnsureManagedAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants ensure-managed-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants ensure-managed-assistant --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // auditlogsUsage displays the usage of the auditlogs command and its
@@ -7684,7 +7836,7 @@ func hooksClaudeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\"")
 }
 
 func hooksCursorUsage() {
@@ -8226,6 +8378,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.`)
+	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
 	fmt.Fprintln(os.Stderr, `    delete-mcp-server: Delete an MCP server`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -8252,7 +8405,7 @@ func mcpServersCreateMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers create-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers create-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersGetMcpServerUsage() {
@@ -8328,7 +8481,33 @@ func mcpServersUpdateMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersListToolFiltersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers list-tool-filters", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers list-tool-filters --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersDeleteMcpServerUsage() {
@@ -8371,6 +8550,9 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    enable-webhooks: Enable  webhooks for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    disable-webhooks: Disable  webhooks for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    create-portal-session: Create a webhook portal session.`)
+	fmt.Fprintln(os.Stderr, `    get-onboarding-status: Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.`)
+	fmt.Fprintln(os.Stderr, `    verify-onboarding-hooks-setup: Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.`)
+	fmt.Fprintln(os.Stderr, `    send-enterprise-admin-onboarding-email: Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.`)
 	fmt.Fprintln(os.Stderr, `    generate-work-os-admin-portal-link: Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -8564,6 +8746,64 @@ func organizationsCreatePortalSessionUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations create-portal-session --session-token \"abc123\"")
 }
 
+func organizationsGetOnboardingStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations get-onboarding-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-onboarding-status --session-token \"abc123\"")
+}
+
+func organizationsVerifyOnboardingHooksSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations verify-onboarding-hooks-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -since-unix-nano STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -since-unix-nano STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations verify-onboarding-hooks-setup --since-unix-nano \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsSendEnterpriseAdminOnboardingEmailUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations send-enterprise-admin-onboarding-email", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations send-enterprise-admin-onboarding-email --body '{\n      \"recipients\": [\n         \"alice@example.com\",\n         \"alice@example.com\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
 func organizationsGenerateWorkOSAdminPortalLinkUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organizations generate-work-os-admin-portal-link", os.Args[0])
@@ -8581,7 +8821,7 @@ func organizationsGenerateWorkOSAdminPortalLinkUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations generate-work-os-admin-portal-link --body '{\n      \"intent\": \"sso\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations generate-work-os-admin-portal-link --body '{\n      \"intent\": \"sso\",\n      \"intent_options\": {\n         \"domain_verification\": {\n            \"domain_name\": \"abc123\"\n         },\n         \"sso\": {\n            \"bookmark_slug\": \"abc123\",\n            \"provider_type\": \"abc123\"\n         }\n      },\n      \"it_contact_emails\": [\n         \"abc123\"\n      ],\n      \"return_url\": \"https://example.com/foo\",\n      \"success_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
 }
 
 // otelForwardingUsage displays the usage of the otel-forwarding command and
@@ -8810,6 +9050,8 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    download-codex-install-script: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
+	fmt.Fprintln(os.Stderr, `    get-marketplace-settings: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.`)
+	fmt.Fprintln(os.Stderr, `    update-marketplace-settings: Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s plugins COMMAND --help\n", os.Args[0])
@@ -9118,6 +9360,48 @@ func pluginsPublishPluginsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --body '{\n      \"github_usernames\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsGetMarketplaceSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-marketplace-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-marketplace-settings --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsUpdateMarketplaceSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins update-marketplace-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-marketplace-settings --body '{\n      \"marketplace_name\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.
@@ -10164,7 +10448,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -10256,7 +10540,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
@@ -11532,6 +11816,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-toolset: Update a toolset's properties including name, description, and HTTP tools`)
 	fmt.Fprintln(os.Stderr, `    delete-toolset: Delete a toolset by its ID`)
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
+	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
 	fmt.Fprintln(os.Stderr, `    check-mcp-slug-availability: Check if a MCP slug is available`)
 	fmt.Fprintln(os.Stderr, `    clone-toolset: Clone an existing toolset with a new name`)
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
@@ -11539,6 +11824,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    addoauth-proxy-server: Associate an OAuth proxy server with a toolset (admin only)`)
 	fmt.Fprintln(os.Stderr, `    updateoauth-proxy-server: Update an existing OAuth proxy server associated with a toolset`)
 	fmt.Fprintln(os.Stderr, `    set-user-session-issuer: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `    set-tool-variations-group: Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s toolsets COMMAND --help\n", os.Args[0])
@@ -11681,6 +11967,30 @@ func toolsetsGetToolsetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets get-toolset --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func toolsetsListToolFiltersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets list-tool-filters", os.Args[0])
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-tool-filters --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsCheckMCPSlugAvailabilityUsage() {
@@ -11857,6 +12167,32 @@ func toolsetsSetUserSessionIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets set-user-session-issuer --body '{\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func toolsetsSetToolVariationsGroupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets set-tool-variations-group", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets set-tool-variations-group --body '{\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // triggersUsage displays the usage of the triggers command and its subcommands.
@@ -12544,6 +12880,8 @@ func variationsUsage() {
 	fmt.Fprintln(os.Stderr, `    upsert-global: Create or update a globally defined tool variation.`)
 	fmt.Fprintln(os.Stderr, `    delete-global: Create or update a globally defined tool variation.`)
 	fmt.Fprintln(os.Stderr, `    list-global: List globally defined tool variations.`)
+	fmt.Fprintln(os.Stderr, `    list-groups: List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.`)
+	fmt.Fprintln(os.Stderr, `    create-global: Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s variations COMMAND --help\n", os.Args[0])
@@ -12616,4 +12954,48 @@ func variationsListGlobalUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations list-global --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func variationsListGroupsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] variations list-groups", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations list-groups --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func variationsCreateGlobalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] variations create-global", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations create-global --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }

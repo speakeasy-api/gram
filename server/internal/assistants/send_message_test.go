@@ -17,8 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func projectReadGrant(projectID uuid.UUID) authz.Grant {
-	return authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String())}
+func projectWriteGrant(projectID uuid.UUID) authz.Grant {
+	return authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String())}
 }
 
 // fakeDashboardIngestor stands in for the triggers App: it records the call and
@@ -62,7 +62,7 @@ func TestSendMessageEnqueues(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message")
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
@@ -70,15 +70,16 @@ func TestSendMessageEnqueues(t *testing.T) {
 	ingestor := &fakeDashboardIngestor{core: svc.core, assistantID: managed.ID}
 	svc.core.SetDashboardIngestor(ingestor)
 
+	// No chat id: starts a new conversation; the server mints and returns one.
 	res, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
-		AssistantID:   managed.ID.String(),
-		Message:       "what are my top errors?",
-		CorrelationID: "user-test",
+		AssistantID: managed.ID.String(),
+		Message:     "what are my top errors?",
 	})
 	require.NoError(t, err)
 	require.True(t, res.Accepted)
 	require.NotEmpty(t, res.ChatID)
-	require.NotEmpty(t, res.ThreadID)
+	require.NotNil(t, res.ThreadID)
+	require.NotEmpty(t, *res.ThreadID)
 
 	// Routed through the assistant's dashboard trigger instance, carrying the
 	// user's message.
@@ -86,34 +87,64 @@ func TestSendMessageEnqueues(t *testing.T) {
 	require.Contains(t, string(ingestor.lastPayload), "what are my top errors?")
 }
 
-// A different correlation_id threads the message onto a separate conversation,
-// so a client can start fresh without losing the per-user default.
-func TestSendMessageCorrelationStartsNewThread(t *testing.T) {
+// Each send without a chat id starts a fresh conversation with its own
+// server-minted chat + thread.
+func TestSendMessageNewConversationsGetDistinctChats(t *testing.T) {
 	t.Parallel()
 
-	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_correlation")
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_distinct")
+	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 
 	first, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
-		AssistantID:   managed.ID.String(),
-		Message:       "hello",
-		CorrelationID: "user-test",
+		AssistantID: managed.ID.String(),
+		Message:     "hello",
 	})
 	require.NoError(t, err)
 
-	fresh, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
-		AssistantID:   managed.ID.String(),
-		Message:       "starting over",
-		CorrelationID: "user-test:session-2",
+	second, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "starting over",
 	})
 	require.NoError(t, err)
 
-	require.NotEqual(t, first.ThreadID, fresh.ThreadID, "a new correlation id opens a new thread")
-	require.NotEqual(t, first.ChatID, fresh.ChatID)
+	require.NotEqual(t, first.ChatID, second.ChatID, "each new conversation mints a distinct chat id")
+	require.NotNil(t, first.ThreadID)
+	require.NotNil(t, second.ThreadID)
+	require.NotEqual(t, *first.ThreadID, *second.ThreadID)
+}
+
+// Passing a chat id (what listChats exposes) continues that conversation: the
+// server uses the id directly, landing on the same chat + thread.
+func TestSendMessageContinuesByChatID(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_chatid")
+	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
+
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	first, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "hello",
+	})
+	require.NoError(t, err)
+
+	again, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "follow up",
+		ChatID:      new(first.ChatID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.ChatID, again.ChatID, "chat_id continues the same conversation")
+	require.NotNil(t, first.ThreadID)
+	require.NotNil(t, again.ThreadID)
+	require.Equal(t, *first.ThreadID, *again.ThreadID)
 }
 
 func TestSendMessageRequiresAssistant(t *testing.T) {
@@ -121,12 +152,11 @@ func TestSendMessageRequiresAssistant(t *testing.T) {
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_404")
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core})
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
 
 	_, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
-		AssistantID:   uuid.New().String(),
-		Message:       "hello",
-		CorrelationID: "user-test",
+		AssistantID: uuid.New().String(),
+		Message:     "hello",
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
@@ -138,9 +168,8 @@ func TestSendMessageRequiresProjectGrant(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx) // no grants
 
 	_, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
-		AssistantID:   uuid.New().String(),
-		Message:       "hello",
-		CorrelationID: "user-test",
+		AssistantID: uuid.New().String(),
+		Message:     "hello",
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

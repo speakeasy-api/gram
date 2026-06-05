@@ -740,6 +740,482 @@ func DecodeListGlobalResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildListGroupsRequest instantiates a HTTP request object with method and
+// path set to call the "variations" service "listGroups" endpoint
+func (c *Client) BuildListGroupsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListGroupsVariationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("variations", "listGroups", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListGroupsRequest returns an encoder for requests sent to the
+// variations listGroups server.
+func EncodeListGroupsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*variations.ListGroupsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("variations", "listGroups", "*variations.ListGroupsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListGroupsResponse returns a decoder for responses returned by the
+// variations listGroups endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListGroupsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListGroupsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListGroupsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			res := NewListGroupsListToolVariationGroupsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListGroupsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			return nil, NewListGroupsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListGroupsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			return nil, NewListGroupsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListGroupsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			return nil, NewListGroupsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListGroupsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			return nil, NewListGroupsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListGroupsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			return nil, NewListGroupsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListGroupsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			return nil, NewListGroupsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListGroupsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			return nil, NewListGroupsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListGroupsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+				}
+				err = ValidateListGroupsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+				}
+				return nil, NewListGroupsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListGroupsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+				}
+				err = ValidateListGroupsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+				}
+				return nil, NewListGroupsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("variations", "listGroups", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListGroupsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "listGroups", err)
+			}
+			err = ValidateListGroupsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "listGroups", err)
+			}
+			return nil, NewListGroupsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("variations", "listGroups", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreateGlobalRequest instantiates a HTTP request object with method and
+// path set to call the "variations" service "createGlobal" endpoint
+func (c *Client) BuildCreateGlobalRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateGlobalVariationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("variations", "createGlobal", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateGlobalRequest returns an encoder for requests sent to the
+// variations createGlobal server.
+func EncodeCreateGlobalRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*variations.CreateGlobalPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("variations", "createGlobal", "*variations.CreateGlobalPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateGlobalResponse returns a decoder for responses returned by the
+// variations createGlobal endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeCreateGlobalResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateGlobalResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateGlobalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			res := NewCreateGlobalToolVariationGroupResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateGlobalUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			return nil, NewCreateGlobalUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateGlobalForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			return nil, NewCreateGlobalForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateGlobalBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			return nil, NewCreateGlobalBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateGlobalNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			return nil, NewCreateGlobalNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateGlobalConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			return nil, NewCreateGlobalConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateGlobalUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			return nil, NewCreateGlobalUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateGlobalInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			return nil, NewCreateGlobalInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateGlobalInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+				}
+				err = ValidateCreateGlobalInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+				}
+				return nil, NewCreateGlobalInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateGlobalUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+				}
+				err = ValidateCreateGlobalUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+				}
+				return nil, NewCreateGlobalUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("variations", "createGlobal", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateGlobalGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("variations", "createGlobal", err)
+			}
+			err = ValidateCreateGlobalGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("variations", "createGlobal", err)
+			}
+			return nil, NewCreateGlobalGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("variations", "createGlobal", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalToolVariationResponseBodyToTypesToolVariation builds a value of
 // type *types.ToolVariation from a value of type *ToolVariationResponseBody.
 func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResponseBody) *types.ToolVariation {
@@ -766,6 +1242,21 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalToolVariationGroupResponseBodyToTypesToolVariationGroup builds a
+// value of type *types.ToolVariationGroup from a value of type
+// *ToolVariationGroupResponseBody.
+func unmarshalToolVariationGroupResponseBodyToTypesToolVariationGroup(v *ToolVariationGroupResponseBody) *types.ToolVariationGroup {
+	res := &types.ToolVariationGroup{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		Description: v.Description,
+		CreatedAt:   *v.CreatedAt,
+		UpdatedAt:   *v.UpdatedAt,
 	}
 
 	return res

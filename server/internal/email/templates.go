@@ -22,7 +22,8 @@ type TransactionalID string
 // Loops transactional template IDs. Keep all IDs declared here so the
 // registry is grep-friendly.
 const (
-	transactionalIDTeamInvite TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
+	transactionalIDTeamInvite                TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
+	transactionalIDEnterpriseAdminOnboarding TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -53,5 +54,8 @@ var RegisteredTemplates = []Template{
 		InviterName:      "",
 		InviterEmail:     "",
 		OrganizationName: "",
+	},
+	EnterpriseAdminOnboarding{
+		SetupLink: "",
 	},
 }

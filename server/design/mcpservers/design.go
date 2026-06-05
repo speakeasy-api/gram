@@ -127,6 +127,36 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMcpServer"}`)
 	})
 
+	Method("listToolFilters", func() {
+		Description("List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the MCP server. Mutually exclusive with slug.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("slug", String, "The slug of the MCP server. Mutually exclusive with id.")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.ListToolFiltersResult)
+
+		HTTP(func() {
+			GET("/rpc/mcpServers.listToolFilters")
+			Param("id")
+			Param("slug")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMcpServerToolFilters")
+		Meta("openapi:extension:x-speakeasy-name-override", "listToolFilters")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMcpServerToolFilters"}`)
+	})
+
 	Method("deleteMcpServer", func() {
 		Description("Delete an MCP server")
 
@@ -177,6 +207,9 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
 		Format(FormatUUID)
 	})
+	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to leave filtering disabled.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 
 	Required("name", "visibility")
@@ -199,6 +232,9 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset to use as the backend", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server. Omit to disable filtering (cleared to null, consistent with the full-record replace semantics of the other UUID references).", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
@@ -229,6 +265,9 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, "The ID of the toolset used as the backend", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")

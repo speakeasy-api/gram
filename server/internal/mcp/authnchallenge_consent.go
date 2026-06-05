@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -92,7 +93,8 @@ func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
-	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
 	if err != nil {
 		return err
 	}

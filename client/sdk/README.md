@@ -193,6 +193,7 @@ run();
 
 * [create](docs/sdks/assistants/README.md#create) - createAssistant assistants
 * [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+* [ensureManaged](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 * [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
 * [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
 * [sendMessage](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
@@ -336,6 +337,7 @@ run();
 * [delete](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
 * [get](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 * [list](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
+* [listToolFilters](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 * [update](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 
 ### [OrganizationRemoteSessionIssuers](docs/sdks/organizationremotesessionissuers/README.md)
@@ -353,12 +355,15 @@ run();
 * [enableWebhooks](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
 * [generateWorkOSAdminPortalLink](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 * [get](docs/sdks/organizations/README.md#get) - get organizations
+* [getOnboardingStatus](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 * [listInvites](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 * [listUsers](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 * [removeUser](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 * [revokeInvite](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+* [sendEnterpriseAdminOnboardingEmail](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 * [sendInvite](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 * [updateInviteRole](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+* [verifyOnboardingHooksSetup](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 
 ### [OtelForwarding](docs/sdks/otelforwarding/README.md)
 
@@ -382,12 +387,14 @@ run();
 * [downloadCodexInstallScript](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 * [downloadObservabilityPlugin](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+* [getMarketplaceSettings](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 * [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 * [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 * [publishPlugins](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 * [removePluginServer](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 * [setPluginAssignments](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
+* [updateMarketplaceSettings](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 * [updatePlugin](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 * [updatePluginServer](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 
@@ -539,7 +546,9 @@ run();
 * [getBySlug](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [listForOrg](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+* [listToolFilters](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+* [setToolVariationsGroup](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 * [setUserSessionIssuer](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 * [updateOAuthProxyServer](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
@@ -590,8 +599,10 @@ run();
 
 ### [Variations](docs/sdks/variations/README.md)
 
+* [createGlobal](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 * [deleteGlobal](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 * [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+* [listGroups](docs/sdks/variations/README.md#listgroups) - listGroups variations
 * [upsertGlobal](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
@@ -656,6 +667,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assistantMemoriesList`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`assistantsCreate`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+- [`assistantsEnsureManaged`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
 - [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`assistantsSendMessage`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
@@ -742,6 +754,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersDelete`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
 - [`mcpServersGet`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
+- [`mcpServersListToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`organizationRemoteSessionIssuersCreate`](docs/sdks/organizationremotesessionissuers/README.md#create) - createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersDelete`](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
@@ -753,12 +766,15 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`organizationsEnableWebhooks`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
 - [`organizationsGenerateWorkOSAdminPortalLink`](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 - [`organizationsGet`](docs/sdks/organizations/README.md#get) - get organizations
+- [`organizationsGetOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`organizationsRemoveUser`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`organizationsRevokeInvite`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`organizationsSendEnterpriseAdminOnboardingEmail`](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 - [`organizationsSendInvite`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`organizationsUpdateInviteRole`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+- [`organizationsVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 - [`otelForwardingDeleteConfig`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`otelForwardingGetConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`otelForwardingUpsertConfig`](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding
@@ -773,12 +789,14 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`pluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+- [`pluginsGetMarketplaceSettings`](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 - [`pluginsPublishPlugins`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 - [`pluginsRemovePluginServer`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`pluginsSetPluginAssignments`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
+- [`pluginsUpdateMarketplaceSettings`](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 - [`pluginsUpdatePlugin`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`pluginsUpdatePluginServer`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
@@ -872,7 +890,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsListForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+- [`toolsetsListToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`toolsetsSetToolVariationsGroup`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`toolsetsSetUserSessionIssuer`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsetsUpdateOAuthProxyServer`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
@@ -903,8 +923,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`userSessionsMint`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`userSessionsRevoke`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
+- [`variationsCreateGlobal`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+- [`variationsListGroups`](docs/sdks/variations/README.md#listgroups) - listGroups variations
 - [`variationsUpsertGlobal`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
@@ -971,6 +993,7 @@ To learn about this feature and how to get started, check
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
 - [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#create) - createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
@@ -1023,6 +1046,7 @@ To learn about this feature and how to get started, check
 - [`useDiscoverRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
 - [`useEnableRBACMutation`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`useEnableWebhooksMutation`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+- [`useEnsureManagedAssistantMutation`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
@@ -1074,6 +1098,7 @@ To learn about this feature and how to get started, check
 - [`useListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+- [`useListMcpServerToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`useListOrganizationUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
@@ -1083,9 +1108,11 @@ To learn about this feature and how to get started, check
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+- [`useListToolsetToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useMarketplaceSettings`](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 - [`useMcpEndpoints`](docs/sdks/mcpendpoints/README.md#list) - listMcpEndpoints mcpEndpoints
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
@@ -1093,6 +1120,7 @@ To learn about this feature and how to get started, check
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
+- [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
 - [`useOrganizationRemoteSessionIssuer`](docs/sdks/organizationremotesessionissuers/README.md#get) - getOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`useOrganizationRemoteSessionIssuers`](docs/sdks/organizationremotesessionissuers/README.md#list) - listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
@@ -1164,6 +1192,7 @@ To learn about this feature and how to get started, check
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 - [`useSearchUsers`](docs/sdks/telemetry/README.md#searchusers) - searchUsers telemetry
 - [`useSendAssistantMessageMutation`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
+- [`useSendEnterpriseAdminOnboardingEmailMutation`](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 - [`useSendInviteMutation`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`useServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
@@ -1175,6 +1204,7 @@ To learn about this feature and how to get started, check
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
+- [`useSetToolsetToolVariationsGroupMutation`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`useSetToolsetUserSessionIssuerMutation`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
@@ -1183,12 +1213,14 @@ To learn about this feature and how to get started, check
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
+- [`useToolVariationGroups`](docs/sdks/variations/README.md#listgroups) - listGroups variations
 - [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
 - [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+- [`useUpdateMarketplaceSettingsMutation`](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 - [`useUpdateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
 - [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`useUpdateMemberRolesMutation`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
@@ -1222,6 +1254,7 @@ To learn about this feature and how to get started, check
 - [`useUserSessionIssuers`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
 - [`useUserSessions`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`useVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 - [`useVerifyRemoteMcpURLMutation`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 
 </details>

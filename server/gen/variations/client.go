@@ -18,14 +18,18 @@ type Client struct {
 	UpsertGlobalEndpoint goa.Endpoint
 	DeleteGlobalEndpoint goa.Endpoint
 	ListGlobalEndpoint   goa.Endpoint
+	ListGroupsEndpoint   goa.Endpoint
+	CreateGlobalEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "variations" service client given the endpoints.
-func NewClient(upsertGlobal, deleteGlobal, listGlobal goa.Endpoint) *Client {
+func NewClient(upsertGlobal, deleteGlobal, listGlobal, listGroups, createGlobal goa.Endpoint) *Client {
 	return &Client{
 		UpsertGlobalEndpoint: upsertGlobal,
 		DeleteGlobalEndpoint: deleteGlobal,
 		ListGlobalEndpoint:   listGlobal,
+		ListGroupsEndpoint:   listGroups,
+		CreateGlobalEndpoint: createGlobal,
 	}
 }
 
@@ -93,4 +97,48 @@ func (c *Client) ListGlobal(ctx context.Context, p *ListGlobalPayload) (res *Lis
 		return
 	}
 	return ires.(*ListVariationsResult), nil
+}
+
+// ListGroups calls the "listGroups" endpoint of the "variations" service.
+// ListGroups may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListGroups(ctx context.Context, p *ListGroupsPayload) (res *ListToolVariationGroupsResult, err error) {
+	var ires any
+	ires, err = c.ListGroupsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListToolVariationGroupsResult), nil
+}
+
+// CreateGlobal calls the "createGlobal" endpoint of the "variations" service.
+// CreateGlobal may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateGlobal(ctx context.Context, p *CreateGlobalPayload) (res *ToolVariationGroupResult, err error) {
+	var ires any
+	ires, err = c.CreateGlobalEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ToolVariationGroupResult), nil
 }

@@ -605,6 +605,9 @@ type Selector struct {
 	// Project filter (MCP scopes only). When set with resource_id='*', grants
 	// access to all servers in the project.
 	ProjectID *string
+	// Server URL filter (risk policy scopes only). Include the URI scheme, for
+	// example https://api.example.com.
+	ServerURL *string
 }
 
 // ShadowMCPAccessRule is the result type of the access service
@@ -691,8 +694,10 @@ type UpdateRolePayload struct {
 	Name *string
 	// Updated description.
 	Description *string
-	// Updated scope grants.
-	Grants []*RoleGrant
+	// Scope grants to add.
+	AddGrants []*RoleGrant
+	// Scope grants to remove.
+	RemoveGrants []*RoleGrant
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string

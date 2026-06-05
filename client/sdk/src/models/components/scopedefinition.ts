@@ -17,6 +17,7 @@ export const ResourceType = {
   Project: "project",
   Mcp: "mcp",
   Environment: "environment",
+  RiskPolicy: "risk_policy",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -36,6 +37,8 @@ export const Slug = {
   McpConnect: "mcp:connect",
   EnvironmentRead: "environment:read",
   EnvironmentWrite: "environment:write",
+  RiskPolicyEvaluate: "risk_policy:evaluate",
+  RiskPolicyBypass: "risk_policy:bypass",
 } as const;
 /**
  * Unique scope identifier.

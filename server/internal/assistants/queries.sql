@@ -85,6 +85,22 @@ WHERE project_id = @project_id
   AND correlation_id = @correlation_id
   AND deleted IS FALSE;
 
+-- name: CallerOwnsDashboardChat :one
+-- Read gate for a dashboard conversation: returns a row only when the caller
+-- owns the chat. The conversation key (chat id) is client-chosen and not
+-- user-namespaced, so without scoping by user_id one caller could read or
+-- continue another's chat. Ownership is stamped on the chats row at
+-- UpsertAssistantChat time; no row means the caller has nothing here (chat
+-- doesn't exist for them), which the handler surfaces as not-found so existence
+-- isn't disclosed.
+SELECT 1 AS ok
+FROM chats
+WHERE id = @chat_id
+  AND project_id = @project_id
+  AND user_id = @user_id
+  AND deleted IS FALSE
+LIMIT 1;
+
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
 FROM toolsets
@@ -259,9 +275,18 @@ WHERE id = @assistant_id
   AND deleted IS FALSE;
 
 -- name: UpsertAssistantChat :exec
+-- user_id is the conversation owner — stamped on first insert so reads can
+-- scope to the user who started the chat. The dashboard source passes the
+-- Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+-- the existing user_id is preserved when already set so a later NULL-user-id
+-- retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
+-- backfilled on first owned send so dashboard ownership checks accept the
+-- legitimate owner.
 INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES (@chat_id, @project_id, @organization_id, NULL, NULL, @title, NOW(), NOW())
-ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id;
+VALUES (@chat_id, @project_id, @organization_id, sqlc.narg('user_id')::TEXT, NULL, @title, NOW(), NOW())
+ON CONFLICT (id) DO UPDATE SET
+  user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  updated_at = NOW();
 
 -- name: UpsertAssistantThread :one
 INSERT INTO assistant_threads (

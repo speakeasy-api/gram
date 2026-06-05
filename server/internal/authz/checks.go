@@ -12,13 +12,13 @@ type MCPToolCallDimensions struct {
 func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 	dimensions := map[string]string{}
 	if dims.Tool != "" {
-		dimensions["tool"] = dims.Tool
+		dimensions[SelectorKeyTool] = dims.Tool
 	}
 	if dims.Disposition != "" {
-		dimensions["disposition"] = dims.Disposition
+		dimensions[SelectorKeyDisposition] = dims.Disposition
 	}
 	if dims.ProjectID != "" {
-		dimensions["project_id"] = dims.ProjectID
+		dimensions[SelectorKeyProjectID] = dims.ProjectID
 	}
 	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, expanded: false}
 }
@@ -28,7 +28,19 @@ func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	var dimensions map[string]string
 	if projectID != "" {
-		dimensions = map[string]string{"project_id": projectID}
+		dimensions = map[string]string{SelectorKeyProjectID: projectID}
 	}
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, expanded: false}
+}
+
+type RiskPolicyBypassDimensions struct {
+	ServerURL string
+}
+
+func RiskPolicyBypassCheck(policyID string, dims RiskPolicyBypassDimensions) Check {
+	var dimensions map[string]string
+	if dims.ServerURL != "" {
+		dimensions = map[string]string{SelectorKeyServerURL: dims.ServerURL}
+	}
+	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, expanded: false}
 }

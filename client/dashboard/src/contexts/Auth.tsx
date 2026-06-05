@@ -6,7 +6,13 @@ import {
 import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
 import { createContext, useContext, useEffect } from "react";
+import { useLocation } from "react-router";
 import { initializePylon, PYLON_APP_ID } from "@/lib/pylon";
+import {
+  initializeFermat,
+  setFermatProperties,
+  trackFermatEvent,
+} from "@/lib/fermat";
 
 // We don't include accountType here because it is actively confusing. See useProductTier
 type Session = Omit<
@@ -192,4 +198,37 @@ export function usePylonInAppChat(user: User | undefined) {
     localStorage.setItem("pylon_user_email", email);
     localStorage.setItem("pylon_user_display_name", displayName);
   }, [user]);
+}
+
+/**
+ * Boot the Claire de Fermat pixel and emit a `page_view` on each route
+ * change. The pixel is gated to production builds so we don't pollute
+ * Fermat with local/dev traffic (matching Pylon and PostHog).
+ */
+export function useFermatPixel(user: User | undefined, accountId: string) {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!import.meta.env.PROD) {
+      return;
+    }
+    initializeFermat();
+    trackFermatEvent("page_view", {
+      dashboard_route: location.pathname,
+      page_title: document.title,
+    });
+  }, [location.pathname]);
+
+  // Attach stable identifiers once the user is hydrated so Fermat can
+  // attribute activity to the user and their workspace across sessions.
+  useEffect(() => {
+    if (!import.meta.env.PROD || !user?.id) {
+      return;
+    }
+    initializeFermat();
+    setFermatProperties({
+      dashboard_user_id: user.id,
+      ...(accountId && { account_id: accountId }),
+    });
+  }, [user?.id, accountId]);
 }

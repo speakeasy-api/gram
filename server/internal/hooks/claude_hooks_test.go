@@ -19,7 +19,7 @@ import (
 // without standing up the real risk-policy stack.
 type stubBlockingShadowMCPScanner struct{}
 
-func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ uuid.UUID, _ string) (*risk.ScanResult, error) {
+func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ uuid.UUID, _ string, _ string) (*risk.ScanResult, error) {
 	return nil, nil
 }
 

@@ -12,7 +12,9 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
@@ -160,7 +162,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	now := time.Now().UTC()
-	createdRow, err := repo.New(tx).UpsertOrganizationRole(ctx, repo.UpsertOrganizationRoleParams{
+	createdRow, err := repo.New(tx).CreateOrganizationRole(ctx, repo.CreateOrganizationRoleParams{
 		OrganizationID:    gramOrgID,
 		WorkosSlug:        roleSlug,
 		WorkosName:        payload.Name,
@@ -169,10 +171,17 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
 		WorkosLastEventID: conv.ToPGTextEmpty(""),
 	})
-	if err != nil {
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return roleCreateResult{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).Log(ctx, r.logger)
+	case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation:
+		return roleCreateResult{}, oops.E(oops.CodeConflict, err, "role %q already exists", payload.Name).Log(ctx, r.logger)
+	case err != nil:
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").Log(ctx, r.logger)
+		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "create local role record").Log(ctx, r.logger)
 	}
+
 	createdRole := localRole{
 		ID:           createdRow.ID.String(),
 		PrincipalURN: createdRow.RoleUrn,
@@ -185,8 +194,8 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
-	if _, err := authz.SyncGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, roleGrantPayloads(payload.Grants)); err != nil {
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, r.logger)
+	if _, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, roleGrantPayloads(payload.Grants), nil); err != nil {
+		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "add grants for created role").Log(ctx, r.logger)
 	}
 
 	workosSyncs := []workosSync{func(ctx context.Context) {
@@ -274,7 +283,7 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 
 	sysRole := isSystemRole(currentRole.Slug)
-	if sysRole && (payload.Name != nil || payload.Description != nil || payload.Grants != nil) {
+	if sysRole && (payload.Name != nil || payload.Description != nil || payload.AddGrants != nil || payload.RemoveGrants != nil) {
 		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, nil, "system role properties cannot be updated, only member assignment is allowed").Log(ctx, r.logger)
 	}
 	if sysRole && payload.MemberIds == nil {
@@ -328,10 +337,10 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			MemberCount:  int(updatedRow.MemberCount),
 		}
 
-		if payload.Grants != nil {
-			syncedGrants, err := authz.SyncGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, roleGrantPayloads(payload.Grants))
+		if payload.AddGrants != nil || payload.RemoveGrants != nil {
+			syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, roleGrantPayloads(payload.AddGrants), roleGrantPayloads(payload.RemoveGrants))
 			if err != nil {
-				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, r.logger)
+				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").Log(ctx, r.logger)
 			}
 			updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 			for _, grant := range syncedGrants {

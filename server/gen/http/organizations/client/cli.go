@@ -197,6 +197,86 @@ func BuildCreatePortalSessionPayload(organizationsCreatePortalSessionSessionToke
 	return v, nil
 }
 
+// BuildGetOnboardingStatusPayload builds the payload for the organizations
+// getOnboardingStatus endpoint from CLI flags.
+func BuildGetOnboardingStatusPayload(organizationsGetOnboardingStatusSessionToken string) (*organizations.GetOnboardingStatusPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsGetOnboardingStatusSessionToken != "" {
+			sessionToken = &organizationsGetOnboardingStatusSessionToken
+		}
+	}
+	v := &organizations.GetOnboardingStatusPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildVerifyOnboardingHooksSetupPayload builds the payload for the
+// organizations verifyOnboardingHooksSetup endpoint from CLI flags.
+func BuildVerifyOnboardingHooksSetupPayload(organizationsVerifyOnboardingHooksSetupSinceUnixNano string, organizationsVerifyOnboardingHooksSetupSessionToken string) (*organizations.VerifyOnboardingHooksSetupPayload, error) {
+	var sinceUnixNano *string
+	{
+		if organizationsVerifyOnboardingHooksSetupSinceUnixNano != "" {
+			sinceUnixNano = &organizationsVerifyOnboardingHooksSetupSinceUnixNano
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsVerifyOnboardingHooksSetupSessionToken != "" {
+			sessionToken = &organizationsVerifyOnboardingHooksSetupSessionToken
+		}
+	}
+	v := &organizations.VerifyOnboardingHooksSetupPayload{}
+	v.SinceUnixNano = sinceUnixNano
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSendEnterpriseAdminOnboardingEmailPayload builds the payload for the
+// organizations sendEnterpriseAdminOnboardingEmail endpoint from CLI flags.
+func BuildSendEnterpriseAdminOnboardingEmailPayload(organizationsSendEnterpriseAdminOnboardingEmailBody string, organizationsSendEnterpriseAdminOnboardingEmailSessionToken string) (*organizations.SendEnterpriseAdminOnboardingEmailPayload, error) {
+	var err error
+	var body SendEnterpriseAdminOnboardingEmailRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsSendEnterpriseAdminOnboardingEmailBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"recipients\": [\n         \"alice@example.com\",\n         \"alice@example.com\"\n      ]\n   }'")
+		}
+		if body.Recipients == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("recipients", "body"))
+		}
+		if len(body.Recipients) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.recipients", body.Recipients, len(body.Recipients), 1, true))
+		}
+		for _, e := range body.Recipients {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.recipients[*]", e, goa.FormatEmail))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsSendEnterpriseAdminOnboardingEmailSessionToken != "" {
+			sessionToken = &organizationsSendEnterpriseAdminOnboardingEmailSessionToken
+		}
+	}
+	v := &organizations.SendEnterpriseAdminOnboardingEmailPayload{}
+	if body.Recipients != nil {
+		v.Recipients = make([]string, len(body.Recipients))
+		for i, val := range body.Recipients {
+			v.Recipients[i] = val
+		}
+	} else {
+		v.Recipients = []string{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGenerateWorkOSAdminPortalLinkPayload builds the payload for the
 // organizations generateWorkOSAdminPortalLink endpoint from CLI flags.
 func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminPortalLinkBody string, organizationsGenerateWorkOSAdminPortalLinkSessionToken string) (*organizations.GenerateWorkOSAdminPortalLinkPayload, error) {
@@ -205,10 +285,16 @@ func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminP
 	{
 		err = json.Unmarshal([]byte(organizationsGenerateWorkOSAdminPortalLinkBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"intent\": \"sso\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"intent\": \"sso\",\n      \"intent_options\": {\n         \"domain_verification\": {\n            \"domain_name\": \"abc123\"\n         },\n         \"sso\": {\n            \"bookmark_slug\": \"abc123\",\n            \"provider_type\": \"abc123\"\n         }\n      },\n      \"it_contact_emails\": [\n         \"abc123\"\n      ],\n      \"return_url\": \"https://example.com/foo\",\n      \"success_url\": \"https://example.com/foo\"\n   }'")
 		}
 		if !(body.Intent == "dsync" || body.Intent == "sso" || body.Intent == "audit_logs" || body.Intent == "domain_verification" || body.Intent == "log_streams") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.intent", body.Intent, []any{"dsync", "sso", "audit_logs", "domain_verification", "log_streams"}))
+		}
+		if body.ReturnURL != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.return_url", *body.ReturnURL, goa.FormatURI))
+		}
+		if body.SuccessURL != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.success_url", *body.SuccessURL, goa.FormatURI))
 		}
 		if err != nil {
 			return nil, err
@@ -221,7 +307,18 @@ func BuildGenerateWorkOSAdminPortalLinkPayload(organizationsGenerateWorkOSAdminP
 		}
 	}
 	v := &organizations.GenerateWorkOSAdminPortalLinkPayload{
-		Intent: body.Intent,
+		Intent:     body.Intent,
+		ReturnURL:  body.ReturnURL,
+		SuccessURL: body.SuccessURL,
+	}
+	if body.ItContactEmails != nil {
+		v.ItContactEmails = make([]string, len(body.ItContactEmails))
+		for i, val := range body.ItContactEmails {
+			v.ItContactEmails[i] = val
+		}
+	}
+	if body.IntentOptions != nil {
+		v.IntentOptions = marshalWorkOSIntentOptionsRequestBodyToOrganizationsWorkOSIntentOptions(body.IntentOptions)
 	}
 	v.SessionToken = sessionToken
 

@@ -76,7 +76,7 @@ func handleResourcesRead(
 	projectID := mv.ProjectID(payload.projectID)
 
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), nil, platformExtras...)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), nil, nil, platformExtras...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, logger)
 	}

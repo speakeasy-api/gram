@@ -10,6 +10,7 @@ import {
   type AuthedFetch,
   proxyRegisterUpstreamClient,
 } from "@/lib/proxyRegisterUpstreamClient";
+import { randomSlugSuffix } from "@/lib/slug";
 import { getServerURL } from "@/lib/utils";
 
 function narrowTokenEndpointAuthMethod(
@@ -349,10 +350,4 @@ function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function randomSlugSuffix(): string {
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }

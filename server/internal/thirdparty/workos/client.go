@@ -9,10 +9,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/workos/workos-go/v6/pkg/directorysync"
 	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/organizations"
+	"github.com/workos/workos-go/v6/pkg/sso"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 
@@ -61,6 +64,8 @@ type Client struct {
 	orgs       *organizations.Client
 	um         *usermanagement.Client
 	events     *events.Client
+	sso        *sso.Client
+	dsync      *directorysync.Client
 }
 
 // ClientOpts configures optional overrides for New.
@@ -106,6 +111,8 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:         um,
 		events:     &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+		sso:        &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
+		dsync:      &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 	}
 }
 
@@ -146,10 +153,18 @@ func (wc *Client) do(ctx context.Context, method, path string, body []byte, out 
 }
 
 // newRequest builds an authenticated HTTP request targeting the WorkOS API.
+// The path may include a query string (e.g. "/connections?organization_id=abc");
+// the query is preserved after joining with the base endpoint.
 func (wc *Client) newRequest(ctx context.Context, method, path string, body []byte) (*http.Request, error) {
-	reqURL, err := url.JoinPath(wc.endpoint, path)
+	// Split path from query string before JoinPath (which escapes '?').
+	pathOnly, query, _ := strings.Cut(path, "?")
+
+	reqURL, err := url.JoinPath(wc.endpoint, pathOnly)
 	if err != nil {
 		return nil, fmt.Errorf("build url: %w", err)
+	}
+	if query != "" {
+		reqURL += "?" + query
 	}
 
 	var bodyReader io.Reader

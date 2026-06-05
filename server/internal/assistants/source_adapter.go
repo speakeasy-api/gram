@@ -4,18 +4,34 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 type sourceAdapter interface {
 	ThreadContext(sourceRefJSON []byte) (string, error)
 	OutputChannelGuidance() string
 	DecodeTurn(event assistantThreadEventRecord) (string, error)
+	// ChatID derives the conversation identity from a turn's correlation key.
+	// External sources hash an opaque correlation key into a stable id; the
+	// dashboard's correlation key already IS the chat id (server-minted on the
+	// first turn and round-tripped by the client).
+	ChatID(assistantID uuid.UUID, correlationID string) uuid.UUID
+}
+
+// deterministicChatIDAdapter is the default ChatID strategy embedded by every
+// source whose correlation key is opaque (Slack, cron, wake). The dashboard
+// source overrides ChatID because its correlation key already IS the chat id.
+type deterministicChatIDAdapter struct{}
+
+func (deterministicChatIDAdapter) ChatID(assistantID uuid.UUID, correlationID string) uuid.UUID {
+	return deterministicChatID(assistantID, correlationID)
 }
 
 var sourceAdapters = map[string]sourceAdapter{
-	sourceKindSlack:     slackAdapter{},
-	sourceKindCron:      cronAdapter{},
-	sourceKindWake:      wakeAdapter{},
+	sourceKindSlack:     slackAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindCron:      cronAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
+	sourceKindWake:      wakeAdapter{deterministicChatIDAdapter: deterministicChatIDAdapter{}},
 	sourceKindDashboard: dashboardAdapter{},
 }
 
@@ -57,7 +73,7 @@ type slackEventPayload struct {
 	BlockID      string `json:"block_id,omitempty"`
 }
 
-type slackAdapter struct{}
+type slackAdapter struct{ deterministicChatIDAdapter }
 
 func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	var ref slackSourceRef
@@ -85,7 +101,9 @@ func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (slackAdapter) OutputChannelGuidance() string {
 	return `## Slack output preferences
 
-When relaying an "assistant_mcp_auth_required" AuthURL, prefer platform_slack_post_ephemeral so only the requesting user sees it, and render the AuthURL as a Block Kit actions block containing a single primary button rather than as plain text.`
+Text responses are not delivered to the user. To communicate, call a Slack post tool (e.g. platform_slack_post_message, platform_slack_post_ephemeral). If no suitable tool is available, the user will not see your reply.
+
+When relaying an "assistant_mcp_auth_required" AuthURL, prefer platform_slack_post_ephemeral so only the requesting user sees it, and render the AuthURL as a Block Kit actions block containing a single primary button rather than as plain text. If ephemeral isn't available in the current channel, DM the owner instead — but AuthURL expires, so first ask if they're ready to authenticate now and only then re-attempt the tool call to mint a fresh URL for the DM. If neither ephemeral nor DM is reachable, don't post the URL.`
 }
 
 func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
@@ -152,7 +170,7 @@ type cronEventPayload struct {
 	Note              string `json:"note,omitempty"`
 }
 
-type cronAdapter struct{}
+type cronAdapter struct{ deterministicChatIDAdapter }
 
 func (cronAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	var ref cronSourceRef
@@ -171,7 +189,11 @@ func (cronAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
-func (cronAdapter) OutputChannelGuidance() string { return "" }
+func (cronAdapter) OutputChannelGuidance() string {
+	return `## Cron output preferences
+
+Text responses are not delivered to anyone — no human is watching the cron tick. To produce a side effect or notify someone, call a tool (e.g. post a Slack message, send an email, write to an external system). If no suitable tool is available for the work this tick requires, log the situation and stop.`
+}
 
 func (cronAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
 	var payload cronEventPayload
@@ -211,7 +233,7 @@ type wakeEventPayload struct {
 	Note              string `json:"note,omitempty"`
 }
 
-type wakeAdapter struct{}
+type wakeAdapter struct{ deterministicChatIDAdapter }
 
 func (wakeAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	var ref wakeSourceRef
@@ -230,7 +252,11 @@ func (wakeAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	return b.String(), nil
 }
 
-func (wakeAdapter) OutputChannelGuidance() string { return "" }
+func (wakeAdapter) OutputChannelGuidance() string {
+	return `## Wake output preferences
+
+Text responses are not delivered to anyone — the wake trigger fired against a thread you scheduled earlier. To make progress visible, call a tool (e.g. post to the original channel, send a follow-up message). If no suitable tool is available, log the situation and stop.`
+}
 
 func (wakeAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
 	var payload wakeEventPayload
@@ -255,9 +281,9 @@ func (wakeAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) 
 }
 
 type dashboardSourceRef struct {
-	// UserID is the Gram dashboard user driving the conversation. It doubles as
-	// the thread correlation id (one continuing conversation per user per
-	// managed assistant), so sidebar history persists across opens.
+	// UserID is the Gram dashboard user driving the conversation (attribution).
+	// The conversation thread is keyed by the caller-supplied correlation id,
+	// not the user id, so a user can start a fresh thread at will.
 	UserID string `json:"user_id"`
 }
 
@@ -275,7 +301,7 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	}
 	var b bytes.Buffer
 	b.WriteString("## Conversation context\n\n")
-	b.WriteString("Conversation originated on: Gram dashboard (AI Insights sidebar)\n")
+	b.WriteString("Conversation originated on: Gram dashboard\n")
 	if ref.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", ref.UserID)
 	}
@@ -285,7 +311,19 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (dashboardAdapter) OutputChannelGuidance() string {
 	return `## Dashboard output preferences
 
-You are answering a Gram user in the AI Insights sidebar of the web dashboard. Reply conversationally and concisely in Markdown — the user reads your response directly in the sidebar. Prefer compact tables and short summaries over long prose; this is an analyst's side panel, not a chat app.`
+You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.
+
+When relaying an "assistant_mcp_auth_required" AuthURL, render it as a clickable Markdown link in your reply (e.g. ` + "`[Authorize](<AuthURL>)`" + `) — the dashboard reader IS the owner, no tool call is needed.`
+}
+
+// ChatID: the dashboard's correlation key already IS the server-minted chat id
+// (round-tripped by the client). Use it directly; fall back to a deterministic
+// hash if a non-UUID correlation key ever slips through.
+func (dashboardAdapter) ChatID(assistantID uuid.UUID, correlationID string) uuid.UUID {
+	if parsed, err := uuid.Parse(correlationID); err == nil {
+		return parsed
+	}
+	return deterministicChatID(assistantID, correlationID)
 }
 
 func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {

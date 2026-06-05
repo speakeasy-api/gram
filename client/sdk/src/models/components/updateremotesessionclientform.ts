@@ -12,6 +12,7 @@ import { ClosedEnum } from "../../types/enums.js";
 export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
+  None: "none",
 } as const;
 /**
  * Change how the client authenticates at the issuer's token endpoint.

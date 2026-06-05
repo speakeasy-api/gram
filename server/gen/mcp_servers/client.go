@@ -20,16 +20,18 @@ type Client struct {
 	GetMcpServerEndpoint    goa.Endpoint
 	ListMcpServersEndpoint  goa.Endpoint
 	UpdateMcpServerEndpoint goa.Endpoint
+	ListToolFiltersEndpoint goa.Endpoint
 	DeleteMcpServerEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "mcpServers" service client given the endpoints.
-func NewClient(createMcpServer, getMcpServer, listMcpServers, updateMcpServer, deleteMcpServer goa.Endpoint) *Client {
+func NewClient(createMcpServer, getMcpServer, listMcpServers, updateMcpServer, listToolFilters, deleteMcpServer goa.Endpoint) *Client {
 	return &Client{
 		CreateMcpServerEndpoint: createMcpServer,
 		GetMcpServerEndpoint:    getMcpServer,
 		ListMcpServersEndpoint:  listMcpServers,
 		UpdateMcpServerEndpoint: updateMcpServer,
+		ListToolFiltersEndpoint: listToolFilters,
 		DeleteMcpServerEndpoint: deleteMcpServer,
 	}
 }
@@ -123,6 +125,29 @@ func (c *Client) UpdateMcpServer(ctx context.Context, p *UpdateMcpServerPayload)
 		return
 	}
 	return ires.(*types.McpServer), nil
+}
+
+// ListToolFilters calls the "listToolFilters" endpoint of the "mcpServers"
+// service.
+// ListToolFilters may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListToolFilters(ctx context.Context, p *ListToolFiltersPayload) (res *types.ListToolFiltersResult, err error) {
+	var ires any
+	ires, err = c.ListToolFiltersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.ListToolFiltersResult), nil
 }
 
 // DeleteMcpServer calls the "deleteMcpServer" endpoint of the "mcpServers"

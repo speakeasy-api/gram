@@ -5,6 +5,7 @@ type HookEvent string
 const (
 	HookEventUnknown            HookEvent = ""
 	HookEventSessionStart       HookEvent = "SessionStart"
+	HookEventConfigChange       HookEvent = "ConfigChange"
 	HookEventPreToolUse         HookEvent = "PreToolUse"
 	HookEventPostToolUse        HookEvent = "PostToolUse"
 	HookEventPostToolUseFailure HookEvent = "PostToolUseFailure"
@@ -24,6 +25,8 @@ func parseClaudeHookEvent(raw string) (HookEvent, bool) {
 	switch raw {
 	case string(HookEventSessionStart):
 		return HookEventSessionStart, true
+	case string(HookEventConfigChange):
+		return HookEventConfigChange, true
 	case string(HookEventPreToolUse):
 		return HookEventPreToolUse, true
 	case string(HookEventPostToolUse):

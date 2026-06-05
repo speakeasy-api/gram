@@ -64,6 +64,30 @@ type GenerateConfig struct {
 	// the manifest as new and refresh installed copies. Empty falls back to
 	// the static default, preserving test ergonomics.
 	Version string
+	// MarketplaceName is the identifier users type into Claude Code or Codex
+	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
+	// marketplace.json. Empty falls back to DefaultMarketplaceName.
+	MarketplaceName string
+}
+
+// DefaultMarketplaceName returns the marketplace identifier used when no
+// per-project override is configured: the slugified org name with a
+// "-speakeasy" suffix. Shows up as the `name` field in the generated
+// Claude/Cursor/Codex marketplace.json and as the marketplace half of
+// `<plugin>@<marketplace>` install strings. Suffixing by org keeps the
+// default unique across customers so Claude Code installs from two Gram
+// orgs don't collide on the marketplace identifier.
+//
+// Delegates to naming.MarketplaceName so the publish path and the device-agent
+// endpoint stay on the identical formula — the cross-surface contract that
+// package documents. A per-project override (resolveMarketplaceName) layers on
+// top of this default.
+func DefaultMarketplaceName(orgName string) string {
+	return naming.MarketplaceName(orgName)
+}
+
+func resolveMarketplaceName(cfg GenerateConfig) string {
+	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName))
 }
 
 // pluginManifestVersion returns the version to stamp into generated
@@ -134,8 +158,10 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 // deny/allow decision. Stop must also be blocking: when async=true,
 // Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
 // — an apparent bug on the client side. Marking it synchronous is the
-// only reliable way to get Stop events to fire. All other events return
-// true for fire-and-forget telemetry so Claude is not held up.
+// only reliable way to get Stop events to fire. All other events
+// (including ConfigChange, which has no allow/deny decision to honor)
+// return true for fire-and-forget telemetry so Claude is not held up while
+// the MCP inventory is re-synced mid-session.
 func claudeHookAsyncFlag(event string) *bool {
 	switch event {
 	case "UserPromptSubmit", "PreToolUse", "Stop":
@@ -158,6 +184,7 @@ var ClaudeObservabilityHookEvents = []string{
 	"PostToolUse",
 	"PostToolUseFailure",
 	"SessionStart",
+	"ConfigChange",
 	"SessionEnd",
 	"UserPromptSubmit",
 	"Stop",
@@ -206,13 +233,13 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        claudeObservability,
 			Source:      "./" + claudeObservability,
-			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
+			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		cursorObservability := CursorObservabilitySlug(cfg)
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        cursorObservability,
 			Source:      "./" + cursorObservability,
-			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
+			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		codexObservability := CodexObservabilitySlug(cfg)
 		codexPlugins = append(codexPlugins, codexMarketplaceEntry{
@@ -262,7 +289,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	}
 
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
-	marketplaceName := naming.MarketplaceName(cfg.OrgName)
+	marketplaceName := resolveMarketplaceName(cfg)
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
 		Name:    marketplaceName,
@@ -320,14 +347,14 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
-	b.WriteString("This repository contains plugin packages managed by [Gram](https://getgram.ai). ")
+	b.WriteString("This repository contains plugin packages managed by [Speakeasy](https://getgram.ai). ")
 	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code, Cursor, and Codex marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
 	b.WriteString("- **Read-only access.** Collaborators are granted pull permission only. You can clone and inspect the repository, but you cannot push to it.\n")
-	b.WriteString("- **Auto-managed by Gram.** Each publish from the Gram dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Gram instead.\n\n")
+	b.WriteString("- **Auto-managed by Speakeasy.** Each publish from the Speakeasy dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Speakeasy instead.\n\n")
 
 	if cfg.HooksAPIKey != "" {
-		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Gram observability. Without it, your team will install MCP servers but tool events will not be reported to your Gram dashboard.\n\n", ClaudeObservabilitySlug(cfg))
+		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Speakeasy observability. Without it, your team will install MCP servers but tool events will not be reported to your Speakeasy dashboard.\n\n", ClaudeObservabilitySlug(cfg))
 	}
 
 	if len(plugins) > 0 {
@@ -353,7 +380,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	if cfg.HooksAPIKey != "" {
 		obs := ClaudeObservabilitySlug(cfg)
 		fmt.Fprintf(&b, "\nMark the `%s` plugin as required so observability is on by default for all team members:\n\n", obs)
-		fmt.Fprintf(&b, "```json\n{\n  \"plugins\": {\n    \"required\": [\"%s@%s-gram\"]\n  }\n}\n```\n", obs, conv.ToSlug(cfg.OrgName))
+		fmt.Fprintf(&b, "```json\n{\n  \"plugins\": {\n    \"required\": [\"%s@%s\"]\n  }\n}\n```\n", obs, resolveMarketplaceName(cfg))
 	}
 	b.WriteString("\n### Cursor\n\n")
 	b.WriteString("1. Open your team's [Cursor dashboard](https://cursor.com/dashboard)\n")
@@ -530,7 +557,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        name,
-		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
@@ -546,16 +573,19 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	// flat layout (hooks.json + hook.sh at root) Claude registers the plugin
 	// silently but never wires the hooks up.
 	//
-	// SessionStart is routed to a separate script (session_start.sh) that
-	// enriches the payload with an MCP server inventory before forwarding to
-	// Gram. The inventory is sourced from cmux's per-run local_<rid>.json in
-	// cowork environments, falling back to `claude mcp list` output when run
-	// under stock Claude Code. All other events use the standard hook.sh.
+	// SessionStart and ConfigChange are routed to a separate script
+	// (mcp_inventory.sh) that enriches the payload with an MCP server
+	// inventory before forwarding to Gram, so the server can re-sync its
+	// cached inventory whenever Claude (re)loads the session or a settings
+	// file changes mid-session. The inventory is sourced from cmux's per-run
+	// local_<rid>.json in cowork environments, falling back to
+	// `claude mcp list` output when run under stock Claude Code. All other
+	// events use the standard hook.sh.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
 		script := "hook.sh"
-		if event == "SessionStart" {
-			script = "session_start.sh"
+		if event == "SessionStart" || event == "ConfigChange" {
+			script = "mcp_inventory.sh"
 		}
 		hookEvents[event] = []claudeHookMatcher{
 			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event)}}},
@@ -568,7 +598,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
-	files[path.Join(subdir, "hooks/session_start.sh")] = renderClaudeSessionStartScript(cfg)
+	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
 
 	return nil
 }
@@ -594,7 +624,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
-		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
@@ -640,7 +670,7 @@ func generateCodexObservabilityPluginFlat(files map[string][]byte, cfg GenerateC
 	// marketplace root (containing .agents/plugins/marketplace.json), not a bare
 	// plugin root. path "." points back to the plugin at the ZIP root.
 	marketplaceJSON, err := marshalJSON(codexMarketplaceManifest{
-		Name:      naming.MarketplaceName(cfg.OrgName),
+		Name:      resolveMarketplaceName(cfg),
 		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: ""},
 		Plugins: []codexMarketplaceEntry{{
 			Name: CodexObservabilitySlug(cfg),
@@ -679,12 +709,12 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
 		Version:     pluginManifestVersion(cfg),
-		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
 		Interface: &codexInterface{
 			DisplayName:      "Observability (Codex)",
-			ShortDescription: "Gram observability hooks",
+			ShortDescription: "Speakeasy observability hooks",
 		},
 	})
 	if err != nil {
@@ -692,7 +722,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	marketplace := naming.MarketplaceName(cfg.OrgName)
+	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
@@ -770,10 +800,10 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	// Both platforms treat exit 2 as a block; the reason goes to stderr.
 	if platform == "codex" {
 		return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Gram. Do not edit - overwritten on every publish.
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
 # Key prefix: %s (correlate with the dashboard's API Keys page).
 
-# Send a hook event to Gram. The server is the sole authority on whether to block:
+# Send a hook event to Speakeasy. The server is the sole authority on whether to block:
 #   HTTP 2xx -> allow (exit 0, no stdout — Codex allow = empty stdout).
 #   HTTP 4xx/5xx -> block (exit 2). Server message relayed to stderr.
 # The script never makes the allow/deny decision — only the server does.
@@ -836,7 +866,7 @@ http_code=$(echo "$response" | tail -1)
 body=$(echo "$response" | sed '$d')
 
 # curl returns 000 on connection failure — treat as block so an unreachable
-# Gram server cannot silently bypass blocking policies.
+# Speakeasy server cannot silently bypass blocking policies.
 if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
   exit 0
 fi
@@ -852,16 +882,16 @@ except Exception:
 " 2>/dev/null) || true
 fi
 
-echo "${reason:-Gram hook returned HTTP ${http_code}}" >&2
+echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
 `, keyPrefix, cfg.ServerURL, authHeaders)
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Gram. Do not edit - overwritten on every publish.
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
 # Key prefix: %s (correlate with the dashboard's API Keys page).
 
-# Send a hook event to Gram. The server is the sole authority on whether to block:
+# Send a hook event to Speakeasy. The server is the sole authority on whether to block:
 #   HTTP 2xx -> allow (exit 0). Body forwarded to stdout; for PreToolUse,
 #               Claude reads hookSpecificOutput.permissionDecision from it.
 #   HTTP 4xx/5xx -> block (exit 2). Server message relayed to stderr.
@@ -890,7 +920,7 @@ body=$(echo "$response" | sed '$d')
 echo "$body"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
-# Gram server cannot silently bypass blocking policies.
+# Speakeasy server cannot silently bypass blocking policies.
 if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
   exit 0
 fi
@@ -906,7 +936,7 @@ except Exception:
 " 2>/dev/null) || true
 fi
 
-echo "${reason:-Gram hook returned HTTP ${http_code}}" >&2
+echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
 `, keyPrefix, cfg.ServerURL, authHeaders, platform)
 }
@@ -938,9 +968,10 @@ exit 0
 `)
 }
 
-// renderClaudeSessionStartScript produces the SessionStart-specific Claude
-// hook script. It enriches the payload with an MCP server inventory before
-// forwarding to Gram, picking the source by what the sandbox can see:
+// renderClaudeMCPInventoryScript produces the Claude hook script registered
+// against SessionStart and ConfigChange. It enriches the payload with an MCP
+// server inventory before forwarding to Gram, picking the source by what the
+// sandbox can see:
 //
 //   - cowork: when cmux's per-run config file (local_<rid>.json) is reachable
 //     via CLAUDE_PROJECT_DIR/.., we ship its remoteMcpServersConfig array
@@ -949,13 +980,14 @@ exit 0
 //   - Claude Code (default): shell out to `claude mcp list` and ship its raw
 //     output as `additional_data.mcp_inventory_claude_code`.
 //
-// The script is fire-and-forget (async=true in hooks.json): SessionStart has
-// no allow/deny decision to honor, so we always exit 0 and discard the
-// response body to keep latency invisible to Claude.
+// The script is fire-and-forget: neither SessionStart nor ConfigChange has
+// an allow/deny decision to honor, so we always exit 0 and discard the
+// response body to keep latency invisible to Claude. Both events run async
+// so Claude is never held up while the inventory is gathered.
 //
 // Auth headers match renderHookScript so server-side attribution works:
 // Gram-Key always, Gram-Project when ProjectSlug is set.
-func renderClaudeSessionStartScript(cfg GenerateConfig) []byte {
+func renderClaudeMCPInventoryScript(cfg GenerateConfig) []byte {
 	keyPrefix := cfg.HooksAPIKey
 	if len(keyPrefix) > 12 {
 		keyPrefix = keyPrefix[:12]
@@ -967,12 +999,15 @@ func renderClaudeSessionStartScript(cfg GenerateConfig) []byte {
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Gram. Do not edit — overwritten on every publish.
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
 # Key prefix: %s (correlate with the dashboard's API Keys page).
 #
-# SessionStart-specific hook: enriches the payload with the active MCP
-# server list and forwards it to Gram. Runs async, so we fire-and-forget —
-# SessionStart has no allow/deny decision to honor.
+# MCP inventory hook: enriches the payload with the active MCP server list
+# and forwards it to Gram. Registered against both SessionStart and
+# ConfigChange so the server re-syncs its cached inventory whenever Claude
+# (re)loads the session or a settings file changes mid-session. Neither
+# event has an allow/deny decision to honor, so we always exit 0 and
+# fire-and-forget.
 #
 # Two execution environments are supported:
 #   - cowork: detected by the presence of cmux's per-run local_<rid>.json
@@ -1204,7 +1239,7 @@ func codexHookCommandString(marketplace, plugin, script string) string {
 // the marketplace source (suitable for the ZIP-bundled install.sh). When
 // marketplaceURL is non-empty the script registers the remote URL instead.
 func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]byte, error) {
-	marketplace := naming.MarketplaceName(cfg.OrgName)
+	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
 
 	approvals, err := computeCodexHookApprovals(marketplace, plugin)
@@ -1219,7 +1254,7 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "#!/usr/bin/env bash\n")
-	fmt.Fprintf(&b, "# Gram Codex Observability Plugin — Install Script\n")
+	fmt.Fprintf(&b, "# Speakeasy Codex Observability Plugin — Install Script\n")
 	fmt.Fprintf(&b, "# Marketplace: %s\n\n", marketplace)
 	b.WriteString("set -euo pipefail\n\n")
 	fmt.Fprintf(&b, "MARKETPLACE_KEY=%q\n", marketplace)
@@ -1229,7 +1264,7 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
 	if marketplaceURL != "" {
 		fmt.Fprintf(&b, "MARKETPLACE_URL=%q\n\n", marketplaceURL)
 		b.WriteString(`# ── 1. Register & sync marketplace ──────────────────────────────────────────
-echo "→ Registering Gram marketplace..."
+echo "→ Registering Speakeasy marketplace..."
 if command -v codex >/dev/null 2>&1; then
   # add is idempotent (no-ops if already registered); upgrade pulls any new commits.
   codex plugin marketplace add "${MARKETPLACE_URL}" || true
@@ -1243,7 +1278,7 @@ fi
 	} else {
 		b.WriteString(`# ── 1. Register marketplace (local ZIP install) ──────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "→ Registering Gram marketplace from ${SCRIPT_DIR}..."
+echo "→ Registering Speakeasy marketplace from ${SCRIPT_DIR}..."
 if command -v codex >/dev/null 2>&1; then
   codex plugin marketplace add "${SCRIPT_DIR}"
 else
@@ -1328,7 +1363,7 @@ print("  ✓ Config updated.")
 PYTHON
 
 echo ""
-echo "✓ Gram observability plugin installed. Restart Codex to activate."
+echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 `)
 
 	return []byte(b.String())
@@ -1355,7 +1390,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	if needsGramKeyPrompt {
 		userConfig["GRAM_API_KEY"] = userConfigEntry{
-			Description: "Your Gram API key for authenticating MCP server connections",
+			Description: "Your Speakeasy API key for authenticating MCP server connections",
 			Sensitive:   true,
 		}
 	}

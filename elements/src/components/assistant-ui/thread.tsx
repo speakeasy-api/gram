@@ -950,6 +950,8 @@ const AssistantActionBar: FC = () => {
 
 const UserMessage: FC = () => {
   const r = useRadius();
+  const { config } = useElements();
+  const allowEdit = config.allowMessageEdit !== false;
   return (
     <MessagePrimitive.Root asChild>
       <div
@@ -967,9 +969,11 @@ const UserMessage: FC = () => {
           >
             <MessagePrimitive.Parts />
           </div>
-          <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
-            <UserActionBar />
-          </div>
+          {allowEdit && (
+            <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
+              <UserActionBar />
+            </div>
+          )}
         </div>
 
         <BranchPicker className="aui-user-branch-picker col-span-full col-start-1 row-start-3 -mr-1 justify-end" />

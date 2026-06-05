@@ -147,12 +147,15 @@ func (e *ProtectedResourceDiscoveryError) UserMessage() string {
 // Per RFC 9728 §3.1, when the resource URL includes a path component the
 // well-known document may live at either "<origin>/.well-known/oauth-protected-resource<path>"
 // (path-style) or "<origin>/.well-known/oauth-protected-resource" (origin-style).
-// This helper attempts the path-style candidate first; a 404 falls through to
-// the origin-style candidate. Any other status (2xx, 5xx, etc.) returns the
-// first attempt's result directly — 5xx in particular must not be masked by a
-// fallback probe. Resource URLs without a path component skip straight to
-// origin-style. The whole sequence shares a single discoverProtectedResourceTimeout
-// budget.
+// This helper attempts the path-style candidate first; any failure there — 404,
+// other 4xx, 5xx, a malformed body, or a transport error — falls through to the
+// origin-style candidate. The path-style URL is our own speculative guess, not a
+// canonical location, and non-compliant upstreams (notably SPA catch-alls) answer
+// it with a 500 or an HTML page rather than a 404. Only the final, origin-style
+// candidate's error is surfaced, so a genuine fault at the canonical location is
+// never masked by a fallback probe. Resource URLs without a path component skip
+// straight to origin-style. The whole sequence shares a single
+// discoverProtectedResourceTimeout budget.
 func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Policy, resourceURL string) (OAuthProtectedResourceMetadata, []string, error) {
 	candidates, err := protectedResourceProbeCandidates(resourceURL)
 	if err != nil {
@@ -175,12 +178,9 @@ func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Pol
 			return doc, collectProtectedResourceWarnings(resourceURL, doc), nil
 		}
 
-		// Only a 404 at one candidate falls through to the next. Every other
-		// failure mode — including 5xx, transport errors, and timeouts —
-		// returns immediately so the caller sees the upstream's real signal.
-		if attemptErr.Status != http.StatusNotFound {
-			return OAuthProtectedResourceMetadata{}, nil, attemptErr
-		}
+		// Non-final candidates are speculative; only the final candidate's
+		// error survives the loop, so a genuine fault at the canonical
+		// origin-style URL is never masked by a fallback probe.
 		lastErr = attemptErr
 	}
 

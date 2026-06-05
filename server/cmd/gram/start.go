@@ -772,10 +772,15 @@ func newStartCommand() *cli.Command {
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
+			managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemSvc)
 			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-				AssistantMemoryTools:  memoryTools,
-				AssistantTriggerTools: triggerTools,
+				AssistantMemoryTools:     memoryTools,
+				AssistantTriggerTools:    triggerTools,
+				ManagedAssistantLogTools: managedLogsTools,
 			})
+			// Runner-callable platform tools the runtime must be able to execute
+			// (trigger tools are wired separately via WithTriggerTools).
+			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 
 			platformSvc := platformtoolsruntime.NewService(
 				logger,
@@ -785,7 +790,7 @@ func newStartCommand() *cli.Command {
 				platformtoolsruntime.WithTriggerTools(triggerApp),
 				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
-				platformtoolsruntime.WithExternalTools(memoryTools),
+				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
 			)
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(
@@ -838,7 +843,7 @@ func newStartCommand() *cli.Command {
 				assistantTokenManager,
 				shadowMCPClient,
 				auditLogger,
-				memoryTools,
+				assistantPlatformExtras,
 				platformFeatureChecker,
 				platformToolsets,
 				identityResolver,
@@ -1010,7 +1015,7 @@ func newStartCommand() *cli.Command {
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
 			))
-			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient))
+			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
@@ -1046,7 +1051,7 @@ func newStartCommand() *cli.Command {
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
 			xmcp.Attach(mux, xmcp.NewService(logger, db, encryptionClient, mcpService), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
-			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, memoryTools))
+			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)

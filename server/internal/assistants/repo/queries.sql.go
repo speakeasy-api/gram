@@ -130,6 +130,36 @@ func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpi
 	return i, err
 }
 
+const callerOwnsDashboardChat = `-- name: CallerOwnsDashboardChat :one
+SELECT 1 AS ok
+FROM chats
+WHERE id = $1
+  AND project_id = $2
+  AND user_id = $3
+  AND deleted IS FALSE
+LIMIT 1
+`
+
+type CallerOwnsDashboardChatParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	UserID    pgtype.Text
+}
+
+// Read gate for a dashboard conversation: returns a row only when the caller
+// owns the chat. The conversation key (chat id) is client-chosen and not
+// user-namespaced, so without scoping by user_id one caller could read or
+// continue another's chat. Ownership is stamped on the chats row at
+// UpsertAssistantChat time; no row means the caller has nothing here (chat
+// doesn't exist for them), which the handler surfaces as not-found so existence
+// isn't disclosed.
+func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDashboardChatParams) (int32, error) {
+	row := q.db.QueryRow(ctx, callerOwnsDashboardChat, arg.ChatID, arg.ProjectID, arg.UserID)
+	var ok int32
+	err := row.Scan(&ok)
+	return ok, err
+}
+
 const claimNextPendingEvent = `-- name: ClaimNextPendingEvent :one
 WITH next_event AS (
   SELECT e.id
@@ -2520,22 +2550,33 @@ func (q *Queries) UpdateAssistantRuntimeMetadata(ctx context.Context, arg Update
 
 const upsertAssistantChat = `-- name: UpsertAssistantChat :exec
 INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES ($1, $2, $3, NULL, NULL, $4, NOW(), NOW())
-ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+VALUES ($1, $2, $3, $4::TEXT, NULL, $5, NOW(), NOW())
+ON CONFLICT (id) DO UPDATE SET
+  user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  updated_at = NOW()
 `
 
 type UpsertAssistantChatParams struct {
 	ChatID         uuid.UUID
 	ProjectID      uuid.UUID
 	OrganizationID string
+	UserID         pgtype.Text
 	Title          pgtype.Text
 }
 
+// user_id is the conversation owner — stamped on first insert so reads can
+// scope to the user who started the chat. The dashboard source passes the
+// Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+// the existing user_id is preserved when already set so a later NULL-user-id
+// retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
+// backfilled on first owned send so dashboard ownership checks accept the
+// legitimate owner.
 func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantChatParams) error {
 	_, err := q.db.Exec(ctx, upsertAssistantChat,
 		arg.ChatID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.UserID,
 		arg.Title,
 	)
 	return err

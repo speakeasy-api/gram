@@ -35,6 +35,8 @@ type Server struct {
 	DownloadCodexInstallScript  http.Handler
 	GetPublishStatus            http.Handler
 	PublishPlugins              http.Handler
+	GetMarketplaceSettings      http.Handler
+	UpdateMarketplaceSettings   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -78,6 +80,8 @@ func New(
 			{"DownloadCodexInstallScript", "GET", "/rpc/plugins.downloadCodexInstallScript"},
 			{"GetPublishStatus", "GET", "/rpc/plugins.getPublishStatus"},
 			{"PublishPlugins", "POST", "/rpc/plugins.publishPlugins"},
+			{"GetMarketplaceSettings", "GET", "/rpc/plugins.getMarketplaceSettings"},
+			{"UpdateMarketplaceSettings", "POST", "/rpc/plugins.updateMarketplaceSettings"},
 		},
 		ListPlugins:                 NewListPluginsHandler(e.ListPlugins, mux, decoder, encoder, errhandler, formatter),
 		GetPlugin:                   NewGetPluginHandler(e.GetPlugin, mux, decoder, encoder, errhandler, formatter),
@@ -93,6 +97,8 @@ func New(
 		DownloadCodexInstallScript:  NewDownloadCodexInstallScriptHandler(e.DownloadCodexInstallScript, mux, decoder, encoder, errhandler, formatter),
 		GetPublishStatus:            NewGetPublishStatusHandler(e.GetPublishStatus, mux, decoder, encoder, errhandler, formatter),
 		PublishPlugins:              NewPublishPluginsHandler(e.PublishPlugins, mux, decoder, encoder, errhandler, formatter),
+		GetMarketplaceSettings:      NewGetMarketplaceSettingsHandler(e.GetMarketplaceSettings, mux, decoder, encoder, errhandler, formatter),
+		UpdateMarketplaceSettings:   NewUpdateMarketplaceSettingsHandler(e.UpdateMarketplaceSettings, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -115,6 +121,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DownloadCodexInstallScript = m(s.DownloadCodexInstallScript)
 	s.GetPublishStatus = m(s.GetPublishStatus)
 	s.PublishPlugins = m(s.PublishPlugins)
+	s.GetMarketplaceSettings = m(s.GetMarketplaceSettings)
+	s.UpdateMarketplaceSettings = m(s.UpdateMarketplaceSettings)
 }
 
 // MethodNames returns the methods served.
@@ -136,6 +144,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDownloadCodexInstallScriptHandler(mux, h.DownloadCodexInstallScript)
 	MountGetPublishStatusHandler(mux, h.GetPublishStatus)
 	MountPublishPluginsHandler(mux, h.PublishPlugins)
+	MountGetMarketplaceSettingsHandler(mux, h.GetMarketplaceSettings)
+	MountUpdateMarketplaceSettingsHandler(mux, h.UpdateMarketplaceSettings)
 }
 
 // Mount configures the mux to serve the plugins endpoints.
@@ -969,6 +979,113 @@ func NewPublishPluginsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "publishPlugins")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMarketplaceSettingsHandler configures the mux to serve the "plugins"
+// service "getMarketplaceSettings" endpoint.
+func MountGetMarketplaceSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/plugins.getMarketplaceSettings", f)
+}
+
+// NewGetMarketplaceSettingsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "plugins" service "getMarketplaceSettings" endpoint.
+func NewGetMarketplaceSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMarketplaceSettingsRequest(mux, decoder)
+		encodeResponse = EncodeGetMarketplaceSettingsResponse(encoder)
+		encodeError    = EncodeGetMarketplaceSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMarketplaceSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateMarketplaceSettingsHandler configures the mux to serve the
+// "plugins" service "updateMarketplaceSettings" endpoint.
+func MountUpdateMarketplaceSettingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/plugins.updateMarketplaceSettings", f)
+}
+
+// NewUpdateMarketplaceSettingsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "plugins" service "updateMarketplaceSettings"
+// endpoint.
+func NewUpdateMarketplaceSettingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateMarketplaceSettingsRequest(mux, decoder)
+		encodeResponse = EncodeUpdateMarketplaceSettingsResponse(encoder)
+		encodeError    = EncodeUpdateMarketplaceSettingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateMarketplaceSettings")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
 		payload, err := decodeRequest(r)
 		if err != nil {

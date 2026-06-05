@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { Stack } from "@speakeasy-api/moonshine";
 import { ExternalLinkIcon } from "lucide-react";
 import { LinkProps, Link as RouterLink } from "react-router";
 
@@ -15,10 +14,10 @@ export function Link({
 
   if (external && !noIcon) {
     content = (
-      <Stack direction="horizontal" gap={1} align="center">
+      <>
         {content}
-        <ExternalLinkIcon className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
-      </Stack>
+        <ExternalLinkIcon className="text-muted-foreground group-hover:text-foreground ml-1 inline h-4 w-4 align-[-0.125em]" />
+      </>
     );
   }
   return (

@@ -228,7 +228,7 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 	{
 		err = json.Unmarshal([]byte(assistantsSendMessageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"correlation_id\": \"aa\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", body.AssistantID, goa.FormatUUID))
 		if utf8.RuneCountInString(body.Message) < 1 {
@@ -237,11 +237,8 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 		if utf8.RuneCountInString(body.Message) > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", body.Message, utf8.RuneCountInString(body.Message), 10000, false))
 		}
-		if utf8.RuneCountInString(body.CorrelationID) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.correlation_id", body.CorrelationID, utf8.RuneCountInString(body.CorrelationID), 1, true))
-		}
-		if utf8.RuneCountInString(body.CorrelationID) > 255 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.correlation_id", body.CorrelationID, utf8.RuneCountInString(body.CorrelationID), 255, false))
+		if body.ChatID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
 		}
 		if body.IdempotencyKey != nil {
 			if utf8.RuneCountInString(*body.IdempotencyKey) > 255 {
@@ -267,9 +264,31 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 	v := &assistants.SendMessagePayload{
 		AssistantID:    body.AssistantID,
 		Message:        body.Message,
-		CorrelationID:  body.CorrelationID,
+		ChatID:         body.ChatID,
 		IdempotencyKey: body.IdempotencyKey,
 	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildEnsureManagedAssistantPayload builds the payload for the assistants
+// ensureManagedAssistant endpoint from CLI flags.
+func BuildEnsureManagedAssistantPayload(assistantsEnsureManagedAssistantSessionToken string, assistantsEnsureManagedAssistantProjectSlugInput string) (*assistants.EnsureManagedAssistantPayload, error) {
+	var sessionToken *string
+	{
+		if assistantsEnsureManagedAssistantSessionToken != "" {
+			sessionToken = &assistantsEnsureManagedAssistantSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsEnsureManagedAssistantProjectSlugInput != "" {
+			projectSlugInput = &assistantsEnsureManagedAssistantProjectSlugInput
+		}
+	}
+	v := &assistants.EnsureManagedAssistantPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
