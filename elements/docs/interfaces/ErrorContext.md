@@ -14,7 +14,7 @@
 
 ### source
 
-> **source**: `"custom"` \| `"streaming"` \| `"error-boundary"` \| `"stream-creation"`
+> **source**: `"streaming"` \| `"custom"` \| `"error-boundary"` \| `"stream-creation"`
 
 ***
 
