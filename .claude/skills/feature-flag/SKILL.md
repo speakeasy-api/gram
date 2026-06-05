@@ -47,12 +47,12 @@ If you're shipping a capability that some customers pay for and others don't →
 
 - Feature constants live in `server/internal/productfeatures/features.go` as typed string constants (`Feature` type).
 - State is stored in `organization_features` (PostgreSQL). Soft-deletes track removal.
-- `productfeatures.Client` checks Redis first (15 min TTL), falls back to Postgres, degrades gracefully to `false` on error.
+- `productfeatures.Client` checks Redis first (15 min TTL), falls back to Postgres, and returns errors on lookup failures — use `PlatformFeatureCheck` when you want silent false-on-error degradation.
 - The management API (`/rpc/productFeatures.get` and `/rpc/productFeatures.set`) exposes the state to the dashboard and Speakeasy ops.
 
 ### Adding a new product feature
 
-**1. Declare the constant** in [server/internal/productfeatures/features.go](server/internal/productfeatures/features.go):
+**1. Declare the constant** in [server/internal/productfeatures/features.go](../../../server/internal/productfeatures/features.go):
 
 ```go
 const (
@@ -60,7 +60,7 @@ const (
 )
 ```
 
-**2. Add it to the Goa design** in [server/design/productfeatures/design.go](server/design/productfeatures/design.go):
+**2. Add it to the Goa design** in [server/design/productfeatures/design.go](../../../server/design/productfeatures/design.go):
 
 ```go
 // In the setProductFeature method's Enum constraint:
@@ -70,7 +70,7 @@ Enum("logs", "tool_io_logs", ..., "my_new_feature")
 Attribute("my_new_feature_enabled", Boolean, "Whether my new feature is enabled")
 ```
 
-**3. Wire the result** in [server/internal/productfeatures/impl.go](server/internal/productfeatures/impl.go):
+**3. Wire the result** in [server/internal/productfeatures/impl.go](../../../server/internal/productfeatures/impl.go):
 
 ```go
 MyNewFeatureEnabled: isEnabled(FeatureMyNewFeature),
@@ -110,7 +110,7 @@ if (features?.myNewFeatureEnabled) { ... }
 
 ### Adding a new PostHog flag
 
-**1. Declare the constant** in [server/internal/feature/flags.go](server/internal/feature/flags.go):
+**1. Declare the constant** in [server/internal/feature/flags.go](../../../server/internal/feature/flags.go):
 
 ```go
 const (
