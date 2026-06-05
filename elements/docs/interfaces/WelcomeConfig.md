@@ -8,6 +8,15 @@
 
 ## Properties
 
+### logo?
+
+> `optional` **logo**: `string`
+
+Optional logo image URL shown above the title on the empty-thread welcome
+screen.
+
+***
+
 ### title?
 
 > `optional` **title**: `string`
