@@ -95,11 +95,11 @@ func New(
 			{"ListShadowMCPApprovals", "GET", "/rpc/risk.approvals.list"},
 			{"ApproveShadowMCP", "POST", "/rpc/risk.approvals.create"},
 			{"RevokeShadowMCPApproval", "DELETE", "/rpc/risk.approvals.delete"},
-			{"CreateRiskPolicyBypassRequest", "POST", "/rpc/risk.policyBypassRequests.create"},
-			{"ListRiskPolicyBypassRequests", "GET", "/rpc/risk.policyBypassRequests.list"},
-			{"ApproveRiskPolicyBypassRequest", "POST", "/rpc/risk.policyBypassRequests.approve"},
-			{"DenyRiskPolicyBypassRequest", "POST", "/rpc/risk.policyBypassRequests.deny"},
-			{"RevokeRiskPolicyBypassRequest", "POST", "/rpc/risk.policyBypassRequests.revoke"},
+			{"CreateRiskPolicyBypassRequest", "POST", "/rpc/risk.createPolicyBypassRequest"},
+			{"ListRiskPolicyBypassRequests", "GET", "/rpc/risk.listPolicyBypassRequests"},
+			{"ApproveRiskPolicyBypassRequest", "POST", "/rpc/risk.approvePolicyBypassRequest"},
+			{"DenyRiskPolicyBypassRequest", "POST", "/rpc/risk.denyPolicyBypassRequest"},
+			{"RevokeRiskPolicyBypassRequest", "POST", "/rpc/risk.revokePolicyBypassRequest"},
 			{"TriggerRiskAnalysis", "POST", "/rpc/risk.policies.trigger"},
 			{"CreateCustomDetectionRule", "POST", "/rpc/risk.customRules.create"},
 			{"ListCustomDetectionRules", "GET", "/rpc/risk.customRules.list"},
@@ -1131,7 +1131,7 @@ func MountCreateRiskPolicyBypassRequestHandler(mux goahttp.Muxer, h http.Handler
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.policyBypassRequests.create", f)
+	mux.Handle("POST", "/rpc/risk.createPolicyBypassRequest", f)
 }
 
 // NewCreateRiskPolicyBypassRequestHandler creates a HTTP handler which loads
@@ -1185,7 +1185,7 @@ func MountListRiskPolicyBypassRequestsHandler(mux goahttp.Muxer, h http.Handler)
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.policyBypassRequests.list", f)
+	mux.Handle("GET", "/rpc/risk.listPolicyBypassRequests", f)
 }
 
 // NewListRiskPolicyBypassRequestsHandler creates a HTTP handler which loads
@@ -1239,7 +1239,7 @@ func MountApproveRiskPolicyBypassRequestHandler(mux goahttp.Muxer, h http.Handle
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.policyBypassRequests.approve", f)
+	mux.Handle("POST", "/rpc/risk.approvePolicyBypassRequest", f)
 }
 
 // NewApproveRiskPolicyBypassRequestHandler creates a HTTP handler which loads
@@ -1293,7 +1293,7 @@ func MountDenyRiskPolicyBypassRequestHandler(mux goahttp.Muxer, h http.Handler) 
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.policyBypassRequests.deny", f)
+	mux.Handle("POST", "/rpc/risk.denyPolicyBypassRequest", f)
 }
 
 // NewDenyRiskPolicyBypassRequestHandler creates a HTTP handler which loads the
@@ -1347,7 +1347,7 @@ func MountRevokeRiskPolicyBypassRequestHandler(mux goahttp.Muxer, h http.Handler
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.policyBypassRequests.revoke", f)
+	mux.Handle("POST", "/rpc/risk.revokePolicyBypassRequest", f)
 }
 
 // NewRevokeRiskPolicyBypassRequestHandler creates a HTTP handler which loads

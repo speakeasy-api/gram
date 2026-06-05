@@ -94,27 +94,27 @@ func RevokeShadowMCPApprovalRiskPath() string {
 
 // CreateRiskPolicyBypassRequestRiskPath returns the URL path to the risk service createRiskPolicyBypassRequest HTTP endpoint.
 func CreateRiskPolicyBypassRequestRiskPath() string {
-	return "/rpc/risk.policyBypassRequests.create"
+	return "/rpc/risk.createPolicyBypassRequest"
 }
 
 // ListRiskPolicyBypassRequestsRiskPath returns the URL path to the risk service listRiskPolicyBypassRequests HTTP endpoint.
 func ListRiskPolicyBypassRequestsRiskPath() string {
-	return "/rpc/risk.policyBypassRequests.list"
+	return "/rpc/risk.listPolicyBypassRequests"
 }
 
 // ApproveRiskPolicyBypassRequestRiskPath returns the URL path to the risk service approveRiskPolicyBypassRequest HTTP endpoint.
 func ApproveRiskPolicyBypassRequestRiskPath() string {
-	return "/rpc/risk.policyBypassRequests.approve"
+	return "/rpc/risk.approvePolicyBypassRequest"
 }
 
 // DenyRiskPolicyBypassRequestRiskPath returns the URL path to the risk service denyRiskPolicyBypassRequest HTTP endpoint.
 func DenyRiskPolicyBypassRequestRiskPath() string {
-	return "/rpc/risk.policyBypassRequests.deny"
+	return "/rpc/risk.denyPolicyBypassRequest"
 }
 
 // RevokeRiskPolicyBypassRequestRiskPath returns the URL path to the risk service revokeRiskPolicyBypassRequest HTTP endpoint.
 func RevokeRiskPolicyBypassRequestRiskPath() string {
-	return "/rpc/risk.policyBypassRequests.revoke"
+	return "/rpc/risk.revokePolicyBypassRequest"
 }
 
 // TriggerRiskAnalysisRiskPath returns the URL path to the risk service triggerRiskAnalysis HTTP endpoint.

@@ -606,7 +606,7 @@ var _ = Service("risk", func() {
 		Result(RiskPolicyBypassRequest)
 
 		HTTP(func() {
-			POST("/rpc/risk.policyBypassRequests.create")
+			POST("/rpc/risk.createPolicyBypassRequest")
 			security.SessionHeader()
 			Response(StatusCreated)
 		})
@@ -635,7 +635,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskPolicyBypassRequestsResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.policyBypassRequests.list")
+			GET("/rpc/risk.listPolicyBypassRequests")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -666,7 +666,7 @@ var _ = Service("risk", func() {
 		Result(RiskPolicyBypassRequest)
 
 		HTTP(func() {
-			POST("/rpc/risk.policyBypassRequests.approve")
+			POST("/rpc/risk.approvePolicyBypassRequest")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -695,7 +695,7 @@ var _ = Service("risk", func() {
 		Result(RiskPolicyBypassRequest)
 
 		HTTP(func() {
-			POST("/rpc/risk.policyBypassRequests.deny")
+			POST("/rpc/risk.denyPolicyBypassRequest")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -724,7 +724,7 @@ var _ = Service("risk", func() {
 		Result(RiskPolicyBypassRequest)
 
 		HTTP(func() {
-			POST("/rpc/risk.policyBypassRequests.revoke")
+			POST("/rpc/risk.revokePolicyBypassRequest")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
