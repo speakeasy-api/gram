@@ -189,7 +189,9 @@ function updateToolCount() {
 
 function applyScope(tag) {
   if (!scopeVariants) return;
-  if (!(tag in scopeVariants)) tag = "";
+  // Use hasOwnProperty so prototype keys (constructor, __proto__, …) from a
+  // crafted ?tags= fall back to the unfiltered view instead of a bogus variant.
+  if (!Object.prototype.hasOwnProperty.call(scopeVariants, tag)) tag = "";
   activeScopeTag = tag;
 
   applyScopeToTree(document, tag);

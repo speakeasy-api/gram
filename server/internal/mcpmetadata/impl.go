@@ -1241,7 +1241,14 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 	if resolvedGroupID != nil {
 		tagCounts := map[string]int{}
 		for _, t := range tools {
+			// Dedupe a tool's tags so a tool that repeats a tag is counted once
+			// per scope, matching toolfilter.groupByEffectiveTags.
+			seen := map[string]struct{}{}
 			for _, tag := range t.Tags {
+				if _, ok := seen[tag]; ok {
+					continue
+				}
+				seen[tag] = struct{}{}
 				tagCounts[tag]++
 			}
 		}

@@ -196,6 +196,25 @@ func extractScopeVariants(t *testing.T, body string) map[string]map[string]strin
 	return variants
 }
 
+// scopeChipCount returns the rendered tool count shown on the scope chip for the
+// given tag.
+func scopeChipCount(t *testing.T, body, tag string) string {
+	t.Helper()
+
+	anchor := strings.Index(body, `data-scope-tag="`+tag+`"`)
+	require.GreaterOrEqual(t, anchor, 0, "scope chip for tag must be present")
+	rest := body[anchor:]
+
+	marker := `scope-chip-count">`
+	i := strings.Index(rest, marker)
+	require.GreaterOrEqual(t, i, 0)
+	rest = rest[i+len(marker):]
+
+	end := strings.Index(rest, "<")
+	require.GreaterOrEqual(t, end, 0)
+	return strings.TrimSpace(rest[:end])
+}
+
 // TestServeInstallPage_Scopes_NoGroup_RendersUnchanged verifies that a toolset
 // with no assigned variations group renders without any scope UI (regression
 // guard for the existing single-list page).
@@ -256,6 +275,29 @@ func TestServeInstallPage_Scopes_WithGroup(t *testing.T) {
 	require.NotEmpty(t, variants["read"]["cursor"], "cursor deep link should be built per scope")
 	require.NotEmpty(t, variants["read"]["vscode"], "vscode deep link should be built per scope")
 	require.Contains(t, variants["read"]["config"], "tags=read", "config snippet URL carries the filter")
+}
+
+// TestServeInstallPage_Scopes_DeduplicatesTagCounts verifies that a tool which
+// repeats a tag is counted once per scope, so chip counts are not inflated.
+func TestServeInstallPage_Scopes_DeduplicatesTagCounts(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, toolURNs := createPublicToolsetWithTools(t, ctx, ti, "scopes-dedupe", []string{"alpha", "beta"})
+
+	groupID := seedScopesToolVariationsGroup(t, ctx, ti, *authCtx.ProjectID)
+	// First tool repeats the "read" tag; it must still count once.
+	seedScopesTaggedVariation(t, ctx, ti, groupID, toolURNs[0], "alpha", "", []string{"read", "read"})
+	seedScopesTaggedVariation(t, ctx, ti, groupID, toolURNs[1], "beta", "", []string{"read"})
+	assignToolsetVariationsGroup(t, ctx, ti, slug, *authCtx.ProjectID, groupID)
+
+	body := serveInstallPageBody(t, ctx, ti, slug)
+
+	require.Equal(t, "2", scopeChipCount(t, body, "read"), "duplicate tags on one tool must not inflate the scope count")
 }
 
 // TestServeInstallPage_Scopes_EmptyGroup_FallsBack verifies that assigning a
