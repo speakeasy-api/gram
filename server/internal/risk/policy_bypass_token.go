@@ -160,9 +160,9 @@ func validatePolicyBypassRequestClaims(claims *policyBypassRequestClaims) error 
 	return validatePolicyBypassEvidence(claims.ObservedFullURL, claims.ObservedURLHost, claims.ObservedServerIdentity)
 }
 
-func validatePolicyBypassEvidence(fullURL, urlHost, serverIdentity *string) error {
-	if optionalStringValue(fullURL) == "" && optionalStringValue(urlHost) == "" && optionalStringValue(serverIdentity) == "" {
-		return fmt.Errorf("at least one observed server identity is required")
+func validatePolicyBypassEvidence(fullURL, _, _ *string) error {
+	if optionalStringValue(fullURL) == "" {
+		return fmt.Errorf("observed_full_url is required")
 	}
 	return nil
 }

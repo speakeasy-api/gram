@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -97,12 +98,11 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request policy id")
 	}
 
-	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
-	if err != nil {
+	if _, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+		ID:             projectID,
+		OrganizationID: claims.OrganizationID,
+	}); err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "project not found").Log(ctx, s.logger)
-	}
-	if project.OrganizationID != claims.OrganizationID {
-		return nil, oops.C(oops.CodeForbidden)
 	}
 	if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        policyID,
@@ -326,14 +326,8 @@ func riskPolicyBypassTargetFromClaims(claims *policyBypassRequestClaims) (riskPo
 			return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
 		}
 		dimensions = rawDimensions
-	case optionalStringValue(claims.ObservedURLHost) != "":
-		kind = "url_host"
-		key = optionalStringValue(claims.ObservedURLHost)
-	case optionalStringValue(claims.ObservedServerIdentity) != "":
-		kind = "server_identity"
-		key = optionalStringValue(claims.ObservedServerIdentity)
 	default:
-		return riskPolicyBypassRequestTarget{}, fmt.Errorf("target evidence is required")
+		return riskPolicyBypassRequestTarget{}, fmt.Errorf("observed_full_url is required")
 	}
 
 	label := optionalStringValue(claims.ObservedName)
@@ -361,9 +355,7 @@ func riskPolicyBypassGrantSelector(row repo.RiskPolicyBypassRequest) (authz.Sele
 	}
 
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, row.RiskPolicyID.String())
-	for k, v := range dimensions {
-		selector[k] = v
-	}
+	maps.Copy(selector, dimensions)
 
 	return selector, nil
 }

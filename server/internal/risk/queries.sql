@@ -140,10 +140,22 @@ SET target_label = EXCLUDED.target_label
   , target_dimensions = EXCLUDED.target_dimensions
   , requester_email = EXCLUDED.requester_email
   , note = EXCLUDED.note
-  , status = EXCLUDED.status
-  , decided_by = NULL
-  , granted_principal_urns = ARRAY[]::TEXT[]
-  , decided_at = NULL
+  , status = CASE
+      WHEN risk_policy_bypass_requests.status = 'approved' THEN risk_policy_bypass_requests.status
+      ELSE EXCLUDED.status
+    END
+  , decided_by = CASE
+      WHEN risk_policy_bypass_requests.status = 'approved' THEN risk_policy_bypass_requests.decided_by
+      ELSE NULL
+    END
+  , granted_principal_urns = CASE
+      WHEN risk_policy_bypass_requests.status = 'approved' THEN risk_policy_bypass_requests.granted_principal_urns
+      ELSE ARRAY[]::TEXT[]
+    END
+  , decided_at = CASE
+      WHEN risk_policy_bypass_requests.status = 'approved' THEN risk_policy_bypass_requests.decided_at
+      ELSE NULL
+    END
   , updated_at = clock_timestamp()
 RETURNING *;
 

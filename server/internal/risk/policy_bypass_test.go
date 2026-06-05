@@ -101,6 +101,70 @@ func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t 
 	assert.Empty(t, refreshed.GrantedPrincipalUrns)
 }
 
+func TestCreatePolicyBypassRequest_AfterApprove_PreservesApprovedStateAndGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass Approved Re-request"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/approved"
+	token := riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "approved", approved.Status)
+	require.NotNil(t, approved.DecidedBy)
+	require.NotNil(t, approved.DecidedAt)
+	require.Len(t, approved.GrantedPrincipalUrns, 1)
+
+	refreshed, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, request.ID, refreshed.ID)
+	assert.Equal(t, "approved", refreshed.Status)
+	assert.Equal(t, approved.DecidedBy, refreshed.DecidedBy)
+	assert.Equal(t, approved.DecidedAt, refreshed.DecidedAt)
+	assert.Equal(t, approved.GrantedPrincipalUrns, refreshed.GrantedPrincipalUrns)
+	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
+}
+
+func TestGeneratePolicyBypassRequestToken_RequiresFullURL(t *testing.T) {
+	t.Parallel()
+
+	host := "mcp.example.com"
+	_, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
+		OrganizationID:         "org_test",
+		ProjectID:              "00000000-0000-0000-0000-000000000001",
+		RequesterUserID:        "user_test",
+		ObservedName:           nil,
+		ObservedFullURL:        nil,
+		ObservedURLHost:        &host,
+		ObservedServerIdentity: nil,
+		ToolName:               nil,
+		ToolCall:               nil,
+		BlockReason:            nil,
+		RiskPolicyID:           "00000000-0000-0000-0000-000000000002",
+		RiskResultID:           nil,
+	}, 5*time.Minute)
+	require.ErrorContains(t, err, "observed_full_url is required")
+}
+
 func riskPolicyBypassRequestToken(t *testing.T, authCtx *contextvalues.AuthContext, policyID string, fullURL string) string {
 	t.Helper()
 
