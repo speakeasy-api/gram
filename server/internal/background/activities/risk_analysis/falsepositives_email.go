@@ -35,17 +35,17 @@ import (
 //     trailing digit on the right-hand side of the final `@` (TLDs are
 //     letters; a digit there is a package version suffix like
 //     `pkg@v1.2.3`).
-//  5. Canonical placeholder local-parts (`john.doe`, `jane.doe`,
-//     `joe.bloggs`, `first.last`, etc.) even on real-shape domains.
-//     These are widely-used textbook fixture names from documentation,
-//     Faker output, and tutorial seed data. Real people share these
-//     names, so we accept the theoretical miss for the noise drop.
+//  5. Local-parts that can never identify a real person: template
+//     tokens (`first.last`, `firstname.lastname`) and the universally
+//     automated `noreply` / `no-reply` aliases. Canonical placeholder
+//     person names like `john.doe` or `joe.bloggs` are NOT in this set
+//     because real people share them.
 //
 // Lower-confidence buckets from the offline analysis (JSON-escaped
-// angle brackets, ANSI colour codes, generic Faker localparts on
-// real-shape domains, role aliases, GitHub noreply, Anthropic
-// transactional no-reply, etc.) are intentionally NOT filtered: each
-// has plausible real-world matches we'd rather over-report than miss.
+// angle brackets, ANSI colour codes, Faker localparts on real-shape
+// domains, role aliases, GitHub noreply, Anthropic transactional
+// no-reply, etc.) are intentionally NOT filtered: each has plausible
+// real-world matches we'd rather over-report than miss.
 func nonPIIEmailReason(s string) string {
 	trimmed := strings.TrimSpace(s)
 	if trimmed == "" {
@@ -161,22 +161,20 @@ var placeholderTLDs = map[string]bool{
 	"io":    true,
 }
 
-// placeholderLocalParts is the set of canonical fixture / textbook
-// person-name local-parts conventionally used in documentation, Faker
-// output, tutorials, and seed data. Matched against the lowercased
-// local-part (everything before the final `@`).
+// placeholderLocalParts is the set of local-parts that can never
+// identify a real person: template tokens (`first.last`,
+// `firstname.lastname`) and the universally automated `noreply` /
+// `no-reply` aliases. Matched against the lowercased local-part
+// (everything before the final `@`).
 //
-// Real people share these names, so this is an explicit
-// precision-leaning miss for the noise drop. We only include
-// well-known placeholders, not generic Faker output like
-// `alice.brown` or `Chadrick_Quigley52`.
+// Canonical placeholder person names like `john.doe`, `jane.doe`, and
+// `joe.bloggs` are deliberately NOT included: real people share those
+// names and the corpus benefit is not worth the over-filter risk.
 var placeholderLocalParts = map[string]bool{
-	"john.doe":           true,
-	"jane.doe":           true,
-	"joe.bloggs":         true,
-	"joe.blogs":          true,
 	"first.last":         true,
 	"firstname.lastname": true,
+	"noreply":            true,
+	"no-reply":           true,
 }
 
 type emailPrefixHit struct {

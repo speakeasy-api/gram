@@ -122,7 +122,7 @@ func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 	t.Parallel()
 	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"Patient Alice Brown (alice.brown@hospital.org) has credit card 4111111111111111. Call 555-123-4567.",
+		"Patient Jane Doe (jane.doe@hospital.org) has credit card 4111111111111111. Call 555-123-4567.",
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)

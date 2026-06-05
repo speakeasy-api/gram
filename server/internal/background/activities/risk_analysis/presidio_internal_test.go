@@ -179,16 +179,21 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "pkg@v1.2.3"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "react@18.3.1"))
 
-	// Canonical placeholder / textbook fixture local-parts, even on
-	// real-shape domains. These appear overwhelmingly in documentation,
-	// Faker output, and tutorial seed data rather than as live mailboxes.
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.doe@gmail.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "Jane.Doe@hospital.org"), "case-insensitive")
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "joe.bloggs@somewhere.co.uk"))
-	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "joe.blogs@somewhere.co.uk"), "common misspelling")
+	// Template-style local-parts and universally automated aliases that
+	// can never identify a real person, even on real-shape domains.
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "first.last@company.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "First.Last@company.com"), "case-insensitive")
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "firstname.lastname@company.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "noreply@speakeasy.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "no-reply@speakeasy.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "NoReply@somewhere.io"), "case-insensitive")
+
+	// Canonical placeholder person names are NOT filtered: real people
+	// share these names so we accept the corpus noise to avoid the
+	// over-filter risk.
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.doe@gmail.com"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "joe.bloggs@somewhere.co.uk"))
 }
 
 // TestIsPresidioFalsePositive_EquivalentIPFormsMatch verifies that
