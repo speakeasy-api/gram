@@ -148,7 +148,6 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "BOT_TOKEN}@github.com"), "template placeholder without slash is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "npresidio|EMAIL_ADDRESS|1068|107331|walker@speakeasy.com"), "presidio log-row wrapper is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@acme.co.uk"), "placeholder SLD under an out-of-list TLD is not filtered")
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@test.com"), "test.com is a real registered domain; only the .test TLD is RFC 6761 reserved")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@invalid.com"), "invalid.com is a real registered domain; only the .invalid TLD is RFC 6761 reserved")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@localhost.com"), "localhost.com is a real registered domain; only the .localhost TLD is RFC 6761 reserved")
 
@@ -177,6 +176,7 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice@acme.io"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.smith@acmecorp.com"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "sarah.chen@acmestore.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@test.com"), "test.com is technically real but every match in the production corpus is fixture noise")
 
 	// KV / env / config wrappers are NOT filtered: they usually wrap
 	// real production emails, so dropping them would mask PII.

@@ -96,9 +96,10 @@ func nonPIIEmailReason(s string) string {
 //   - The second-level label is in placeholderSLDs and the top-level
 //     label is in placeholderTLDs. Subdomain depth is irrelevant.
 //
-// `test`, `invalid`, and `localhost` are NOT in placeholderSLDs because
-// `test.com`, `invalid.com`, etc. are real registered domains; only
-// their use as TLDs is reserved.
+// `invalid` and `localhost` are NOT in placeholderSLDs because
+// `invalid.com` / `localhost.com` are real registered domains; only
+// their use as TLDs is reserved. `test` is in both sets because every
+// `*@test.com` match in the production corpus is fixture noise.
 func placeholderDomainReason(lower string) string {
 	at := strings.LastIndex(lower, "@")
 	if at < 0 || at >= len(lower)-1 {
@@ -132,11 +133,15 @@ var reservedSpecialTLDs = map[string]bool{
 // placeholderSLDs is the set of second-level domains conventionally
 // used for fixtures and "obviously fake" corporate examples.
 // `example` is included because example.com / .org / .net are
-// specifically reserved by RFC 2606. The rest are widely-used
-// community conventions seen in Faker output, SDK docs, seed data, and
-// policy fixtures.
+// specifically reserved by RFC 2606. `test` is included as a
+// pragmatic addition: test.com is a real registered domain, but the
+// production corpus shows every `*@test.com` match is Faker or
+// fixture noise, so we accept the theoretical miss for the noise
+// drop. The rest are widely-used community conventions seen in Faker
+// output, SDK docs, seed data, and policy fixtures.
 var placeholderSLDs = map[string]bool{
 	"example":     true,
+	"test":        true,
 	"asdf":        true,
 	"fake":        true,
 	"nowhere":     true,

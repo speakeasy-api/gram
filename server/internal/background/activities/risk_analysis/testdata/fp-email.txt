@@ -107,6 +107,7 @@ filterall@example.com
 filtererr@example.com
 filternone@example.com
 foo@example.com
+foo@test.com
 frames@example.com
 frank@example.com
 friend_customer@example.com
@@ -361,6 +362,7 @@ test-null@example.com
 test.customer@example.com
 test2@example.com
 test@example.com
+test@test.com
 tester@example.com
 testuser@example.com
 tgithub.com/go-chi/chi/v5@v5.2.5
@@ -389,7 +391,10 @@ unpkg.com/react-dom@18.3.1
 unpkg.com/react@18.3.1
 user.name@example.com
 user1@example.com
+user1@test.com
 user2@example.com
+user2@test.com
+user3@test.com
 user@dev.example.com
 user@example.com
 victim@example.com
