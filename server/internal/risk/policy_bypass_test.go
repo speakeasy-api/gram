@@ -62,6 +62,7 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	require.NoError(t, err)
 	createMetadata, err := audittest.DecodeAuditData(createRecord.Metadata)
 	require.NoError(t, err)
+	assert.Equal(t, policy.Name, createRecord.SubjectDisplay)
 	assert.Equal(t, request.ID, createMetadata["request_id"])
 	assert.Equal(t, "requested", createMetadata["current_status"])
 	assert.Empty(t, createRecord.BeforeSnapshot)
@@ -82,6 +83,7 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	require.NoError(t, err)
 	approveMetadata, err := audittest.DecodeAuditData(approveRecord.Metadata)
 	require.NoError(t, err)
+	assert.Equal(t, policy.Name, approveRecord.SubjectDisplay)
 	assert.Equal(t, "requested", approveMetadata["previous_status"])
 	assert.Equal(t, "approved", approveMetadata["current_status"])
 	require.NotEmpty(t, approveRecord.BeforeSnapshot)
@@ -98,6 +100,9 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	afterRevokeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
 	require.NoError(t, err)
 	require.Equal(t, beforeRevokeAuditCount+1, afterRevokeAuditCount)
+	revokeRecord, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
+	require.NoError(t, err)
+	assert.Equal(t, policy.Name, revokeRecord.SubjectDisplay)
 }
 
 func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t *testing.T) {
@@ -138,6 +143,7 @@ func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t 
 	require.NoError(t, err)
 	denyMetadata, err := audittest.DecodeAuditData(denyRecord.Metadata)
 	require.NoError(t, err)
+	assert.Equal(t, policy.Name, denyRecord.SubjectDisplay)
 	assert.Equal(t, "requested", denyMetadata["previous_status"])
 	assert.Equal(t, "denied", denyMetadata["current_status"])
 

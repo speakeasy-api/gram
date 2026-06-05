@@ -588,6 +588,25 @@ func (q *Queries) GetRiskPolicyBypassRequest(ctx context.Context, arg GetRiskPol
 	return i, err
 }
 
+const getRiskPolicyNameIncludingDeleted = `-- name: GetRiskPolicyNameIncludingDeleted :one
+SELECT name
+FROM risk_policies
+WHERE id = $1
+  AND project_id = $2
+`
+
+type GetRiskPolicyNameIncludingDeletedParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetRiskPolicyNameIncludingDeleted(ctx context.Context, arg GetRiskPolicyNameIncludingDeletedParams) (string, error) {
+	row := q.db.QueryRow(ctx, getRiskPolicyNameIncludingDeleted, arg.ID, arg.ProjectID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const hardDeleteRiskPoliciesByProject = `-- name: HardDeleteRiskPoliciesByProject :exec
 DELETE FROM risk_policies WHERE project_id = $1
 `

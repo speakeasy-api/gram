@@ -3,12 +3,14 @@ package risk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -182,6 +184,10 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
+	policyName, err := riskPolicyNameForAudit(ctx, q, current.RiskPolicyID, current.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk policy name for audit").Log(ctx, s.logger)
+	}
 	principal := urn.NewPrincipal(urn.PrincipalTypeUser, current.RequesterUserID)
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
@@ -210,7 +216,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 		return nil, oops.E(oops.CodeUnexpected, err, "approve risk policy bypass request").Log(ctx, s.logger)
 	}
 
-	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestApprove, authCtx, current.RiskPolicyID, current.ProjectID, "", &current, &row); err != nil {
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestApprove, authCtx, current.RiskPolicyID, current.ProjectID, policyName, &current, &row); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request approval").Log(ctx, s.logger)
 	}
 
@@ -249,6 +255,10 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
+	policyName, err := riskPolicyNameForAudit(ctx, q, current.RiskPolicyID, current.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk policy name for audit").Log(ctx, s.logger)
+	}
 	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
 		Status:               riskPolicyBypassRequestStatusDenied,
 		DecidedBy:            conv.ToPGText(authCtx.UserID),
@@ -260,7 +270,7 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
 
-	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestDeny, authCtx, current.RiskPolicyID, current.ProjectID, "", &current, &row); err != nil {
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestDeny, authCtx, current.RiskPolicyID, current.ProjectID, policyName, &current, &row); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request denial").Log(ctx, s.logger)
 	}
 
@@ -299,6 +309,10 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
+	policyName, err := riskPolicyNameForAudit(ctx, q, current.RiskPolicyID, current.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk policy name for audit").Log(ctx, s.logger)
+	}
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").Log(ctx, s.logger)
@@ -326,7 +340,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass request").Log(ctx, s.logger)
 	}
 
-	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestRevoke, authCtx, current.RiskPolicyID, current.ProjectID, "", &current, &row); err != nil {
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestRevoke, authCtx, current.RiskPolicyID, current.ProjectID, policyName, &current, &row); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request revocation").Log(ctx, s.logger)
 	}
 
@@ -405,6 +419,21 @@ func (s *Service) logRiskPolicyBypassRequestAudit(
 	}
 
 	return nil
+}
+
+func riskPolicyNameForAudit(ctx context.Context, q *repo.Queries, policyID uuid.UUID, projectID uuid.UUID) (string, error) {
+	name, err := q.GetRiskPolicyNameIncludingDeleted(ctx, repo.GetRiskPolicyNameIncludingDeletedParams{
+		ID:        policyID,
+		ProjectID: projectID,
+	})
+	switch {
+	case err == nil:
+		return name, nil
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	default:
+		return "", fmt.Errorf("get risk policy name including deleted: %w", err)
+	}
 }
 
 func riskPolicyBypassRequestSnapshot(row repo.RiskPolicyBypassRequest) (*audit.RiskPolicyBypassRequestSnapshot, error) {
