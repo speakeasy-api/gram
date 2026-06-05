@@ -1618,6 +1618,9 @@ ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
+-- Append-only versioned log of a user's WorkOS directory-sync attributes. Each
+-- change is a new row; rows are never updated in place, so this table
+-- intentionally has no updated_at column (only created_at).
 CREATE TABLE IF NOT EXISTS user_attributes (
   id TEXT NOT NULL,
   user_id TEXT NOT NULL,
