@@ -9,6 +9,7 @@ import {
   CopyIcon,
   DownloadIcon,
   PencilIcon,
+  Search,
   Settings2,
   Square,
   Wrench,
@@ -71,7 +72,10 @@ import { useToolMentions } from "@/hooks/useToolMentions";
 import { getApiUrl } from "@/lib/api";
 import { EASE_OUT_QUINT } from "@/lib/easing";
 import { MODELS } from "@/lib/models";
-import { toolSetToMentionableTools } from "@/lib/tool-mentions";
+import {
+  type MentionableTool,
+  toolSetToMentionableTools,
+} from "@/lib/tool-mentions";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
@@ -811,15 +815,47 @@ const ComposerCassetteRecorder: FC = () => {
   );
 };
 
+// Sentinel for the "All" pseudo-category in the tool-mention picker.
+const TOOL_MENTION_ALL_CATEGORY = "__all__";
+
+function humanizeToolCategory(raw: string): string {
+  const cleaned = raw.replace(/[-_]+/g, " ").trim();
+  if (!cleaned) return "Tools";
+  return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Derive a grouping label for a tool. Tools from multiple MCP servers are
+// namespaced as `<server>__<tool>`; otherwise group by the first
+// underscore-delimited segment (e.g. `platform_search_logs` -> "Platform"),
+// falling back to a single "Tools" bucket.
+function deriveToolCategory(name: string): string {
+  const namespaceIdx = name.indexOf("__");
+  if (namespaceIdx > 0)
+    return humanizeToolCategory(name.slice(0, namespaceIdx));
+  const underscoreIdx = name.indexOf("_");
+  if (underscoreIdx > 0)
+    return humanizeToolCategory(name.slice(0, underscoreIdx));
+  return "Tools";
+}
+
+interface ToolCategory {
+  name: string;
+  tools: MentionableTool[];
+}
+
 // A discoverable counterpart to the type-`@` autocomplete: a composer button
-// that opens a picker of the available tools and inserts an @mention for the
-// chosen one. Inserts through the composer runtime so it stays in sync with the
-// autocomplete's own textarea handling. Hidden when tool mentions are disabled
-// or there are no tools.
+// that opens a searchable, category-grouped picker of the available tools and
+// inserts an @mention for the chosen one. Inserts through the composer runtime
+// so it stays in sync with the autocomplete's own textarea handling. Hidden when
+// tool mentions are disabled or there are no tools.
 const ComposerToolMentionPicker: FC = () => {
   const { config, mcpTools } = useElements();
   const composer = useComposerRuntime();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState(
+    TOOL_MENTION_ALL_CATEGORY,
+  );
 
   const composerConfig = config.composer;
   const toolMentionsEnabled =
@@ -830,19 +866,57 @@ const ComposerToolMentionPicker: FC = () => {
 
   const tools = useMemo(() => toolSetToMentionableTools(mcpTools), [mcpTools]);
 
+  const categories = useMemo<ToolCategory[]>(() => {
+    const grouped = new Map<string, MentionableTool[]>();
+    for (const tool of tools) {
+      const category = deriveToolCategory(tool.name);
+      const existing = grouped.get(category);
+      if (existing) {
+        existing.push(tool);
+      } else {
+        grouped.set(category, [tool]);
+      }
+    }
+    return [...grouped.entries()]
+      .map(([name, categoryTools]) => ({ name, tools: categoryTools }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [tools]);
+
   if (!toolMentionsEnabled || tools.length === 0) {
     return null;
   }
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const inActiveCategory =
+    activeCategory === TOOL_MENTION_ALL_CATEGORY
+      ? tools
+      : (categories.find((c) => c.name === activeCategory)?.tools ?? []);
+  const visibleTools = normalizedQuery
+    ? inActiveCategory.filter(
+        (tool) =>
+          tool.name.toLowerCase().includes(normalizedQuery) ||
+          (tool.description?.toLowerCase().includes(normalizedQuery) ?? false),
+      )
+    : inActiveCategory;
 
   const insertMention = (toolName: string) => {
     const current = composer.getState().text;
     const base = current && !/\s$/.test(current) ? `${current} ` : current;
     composer.setText(`${base}@${toolName} `);
     setOpen(false);
+    setQuery("");
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setQuery("");
+      setActiveCategory(TOOL_MENTION_ALL_CATEGORY);
+    }
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -854,28 +928,89 @@ const ComposerToolMentionPicker: FC = () => {
           <AtSign className="size-5 stroke-[1.5px]" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-64 p-1 shadow-none">
-        <div className="max-h-56 overflow-y-auto">
-          {tools.map((tool) => (
+      <PopoverContent
+        side="top"
+        align="start"
+        className="aui-composer-tool-mention-popover w-[420px] overflow-hidden p-0"
+      >
+        <div className="flex items-center gap-2 border-b border-input px-3 py-2">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search tools…"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Search tools"
+          />
+        </div>
+        <div className="flex max-h-72">
+          <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
+            <div className="px-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+              Categories
+            </div>
             <button
-              key={tool.id}
               type="button"
-              onClick={() => insertMention(tool.name)}
-              className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
+              onClick={() => setActiveCategory(TOOL_MENTION_ALL_CATEGORY)}
+              className={cn(
+                "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                activeCategory === TOOL_MENTION_ALL_CATEGORY
+                  ? "bg-muted font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-muted/60",
+              )}
             >
-              <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-foreground">
-                  {tool.name}
-                </span>
-                {tool.description && (
-                  <span className="line-clamp-2 text-xs text-muted-foreground">
-                    {tool.description}
-                  </span>
-                )}
+              <span className="truncate">All</span>
+              <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                {tools.length}
               </span>
             </button>
-          ))}
+            {categories.map((category) => (
+              <button
+                key={category.name}
+                type="button"
+                onClick={() => setActiveCategory(category.name)}
+                className={cn(
+                  "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                  activeCategory === category.name
+                    ? "bg-muted font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60",
+                )}
+              >
+                <span className="truncate">{category.name}</span>
+                <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                  {category.tools.length}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="min-w-0 flex-1 overflow-y-auto p-2">
+            {visibleTools.length === 0 ? (
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                No tools found
+              </div>
+            ) : (
+              visibleTools.map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  onClick={() => insertMention(tool.name)}
+                  className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
+                >
+                  <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">
+                      {tool.name}
+                    </span>
+                    {tool.description && (
+                      <span className="line-clamp-2 text-xs text-muted-foreground">
+                        {tool.description}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
         </div>
       </PopoverContent>
     </Popover>
