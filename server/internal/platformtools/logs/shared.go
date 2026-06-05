@@ -45,6 +45,11 @@ func readOnlyToolAnnotations() *types.ToolAnnotations {
 // decodeToolInput reads a tool's JSON request body into dst, tolerating an
 // empty body so callers can rely on the defaults they pre-populate dst with.
 func decodeToolInput(payload io.Reader, dst any) error {
+	// A tool may be invoked with no request body; treat that as empty input so
+	// callers fall back to their defaults rather than panicking on io.ReadAll(nil).
+	if payload == nil {
+		return nil
+	}
 	body, err := io.ReadAll(payload)
 	if err != nil {
 		return fmt.Errorf("read request body: %w", err)
