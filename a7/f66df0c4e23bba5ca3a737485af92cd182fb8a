@@ -1,0 +1,97 @@
+server/internal/hooks/shadow_mcp_request_link.go
+  s_9ba62b5b4f1264::t_6f23e99003d556 9,49,60,72
+  s_9ba62b5b4f1264::t_a6f2e76a2ca5ad 45
+server/internal/authz/engine_test.go
+  s_9ba62b5b4f1264::t_4f225dbef10489 89-110,115-120
+  s_9ba62b5b4f1264::t_9a5670074b05d0 111-114
+server/internal/risk/policy_bypass_test.go
+  s_9ba62b5b4f1264::t_612135e4aa50a8 241-243,250,258
+  s_9ba62b5b4f1264::t_84e2a82183536b 52,197,199-210,213-238
+server/internal/risk/policy_bypass.go
+  s_9ba62b5b4f1264::t_2e9343685039d2 167
+  s_9ba62b5b4f1264::t_42b2796780a298 522-525,528
+  s_9ba62b5b4f1264::t_64a85fcb44ba19 32,34-35
+  s_9ba62b5b4f1264::t_a305e0b187a4d3 31
+  s_9ba62b5b4f1264::t_4a305abf302ae3 38-39,47,57
+  s_9ba62b5b4f1264::t_89736b33114144 513,520-521,526-527,535-539,542-543
+  s_9ba62b5b4f1264::t_98044a21a6495a 33,40-46,48-56,58-66,168-169
+server/internal/authz/engine.go
+  s_9ba62b5b4f1264::t_64cbafa8ea2768 177,180-183
+  s_9ba62b5b4f1264::t_f9b1c95405cf3c 184-187
+server/internal/hooks/shadow_mcp_access.go
+  s_9ba62b5b4f1264::t_99b31defefaf50 34,58,63,80-82
+  s_9ba62b5b4f1264::t_a1f9dc9da7e400 35
+  s_9ba62b5b4f1264::t_812d978c738e93 113,115
+  s_9ba62b5b4f1264::t_dbd68f3711dec1 5,92-99
+  s_9ba62b5b4f1264::t_9e4ea1cf9e5e1a 6,11,21,36-41,44-46,53-57,61-62,64-77,79,83-84,89-91,100-112
+  s_9ba62b5b4f1264::t_b2dc4bba9c6ccf 12,42-43,52,59-60,78,85
+  s_9ba62b5b4f1264::t_e2cb9f5de406c6 86-88,114
+  s_9ba62b5b4f1264::t_341ff7e6898b04 116
+server/internal/hooks/cursor_test.go
+  s_9ba62b5b4f1264::t_f2ed6425f81479 199-200
+server/internal/hooks/cursor_hooks.go
+  s_9ba62b5b4f1264::t_b01450b626e2cb 96
+client/dashboard/src/components/access/ShadowMCPRequestAccessContent.test.tsx
+  s_9ba62b5b4f1264::t_64fc452493043c 206
+  s_9ba62b5b4f1264::t_32812a2a3b2d94 30-31,98-99,104,109,112-113,116-120,123,126,139,142,145,151-152,156,162,171-172,176,183,191-192,196,199,212,222-223,232
+.mise-tasks/zero/_default
+  s_9ba62b5b4f1264::t_809214ffa6a719 1-10
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_9ba62b5b4f1264::t_4b0f3fcad76fec 558,570
+  s_9ba62b5b4f1264::t_d737a7144fc684 23,25-26,30
+  s_9ba62b5b4f1264::t_bf7cfb9c7c2f87 364,473,480-481,491,496-497,500-503,507,510,513-515,518,535,541-543,626,638,642,664,667,669-671,679,686,688,693,696
+  s_9ba62b5b4f1264::t_64fc452493043c 24,153,164
+  s_9ba62b5b4f1264::t_395c5004077dfb 348,356-360,368-369,380-381,409,416-417,427,437-438,449-450,453,457,563,575
+  s_9ba62b5b4f1264::t_548ab912b1a97b 536-540
+  s_9ba62b5b4f1264::t_e2c2919071a5b3 16,18-22,34,106-120,124,129,135,140-141,144,146-149,154-161,165-184,196,201-202,214-215,220,222,243-244,254,256,261,267,270,275,278,323-326
+  s_9ba62b5b4f1264::t_b669dfc3d013f5 350,361-363,365,372-373,382,386,390,395,398-400,402,405
+server/internal/hooks/claude_hooks.go
+  s_9ba62b5b4f1264::t_f3b158ccae69fc 792
+  s_9ba62b5b4f1264::t_94571a2644874d 807-808
+  s_9ba62b5b4f1264::t_73209c483a66af 809,812,814-815,819-821
+  s_9ba62b5b4f1264::t_5bf080172093e5 800-802,804,806,824-827,830,832-844,846-877
+  h_2620cc60cfd1e9 831
+  s_9ba62b5b4f1264::t_a6054aa6aa333c 797-799
+client/dashboard/src/App.tsx
+  s_9ba62b5b4f1264::t_ee893a5221226f 254-257
+client/dashboard/src/contexts/AuthProvider.tsx
+  s_9ba62b5b4f1264::t_dab0337f069a77 52,59
+server/internal/hooks/claude_hooks_test.go
+  s_9ba62b5b4f1264::t_e29e6451ba57c2 27
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_9ba62b5b4f1264::t_12f6be340156b8 3,13,17,48-50,53-54,57-58,61-62,117,119-120,131-135,137,180-183,185-186,188-190,195-252,275-279,291-292,298,306,321-330,337-338,342-351,354-369,371,382,386-391,395,397-404,406,415,419,424,430,432-439,441,450,453,458,464-474,476-477,479,484,486-488,491-493,496-505,508,511,517,519-521,526,528-531,533,536-537,542-562,584,586-588
+server/internal/risk/policy_bypass_token.go
+  s_9ba62b5b4f1264::t_035e8caee66e3a 165,167-171,174-175,177-179
+  s_9ba62b5b4f1264::t_1d7c67bc234d51 166,173,176
+client/dashboard/src/components/access/ShadowMCPRequestAccessContent.tsx
+  s_9ba62b5b4f1264::t_6a207124511e8f 5,9,28,54
+server/internal/hooks/shadow_mcp_access_test.go
+  s_9ba62b5b4f1264::t_6f31158a89bf96 10,41,49-61,68-69,71,74-75,79,81-84,86-97,99-108,110-111
+  s_9ba62b5b4f1264::t_ed1ba973a5e60d 78
+server/internal/hooks/codex_hooks.go
+  s_9ba62b5b4f1264::t_8bd9d3e0ff6765 64
+server/internal/hooks/shadow_mcp_request_link_test.go
+  s_9ba62b5b4f1264::t_0718f3bf4698ee 55
+  s_9ba62b5b4f1264::t_1c3be81284f9d9 46,51,86-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "a7f66df0c4e23bba5ca3a737485af92cd182fb8a",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_9ba62b5b4f1264": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e97a0-a680-72d1-aa8d-7dc58b8e7d18",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
