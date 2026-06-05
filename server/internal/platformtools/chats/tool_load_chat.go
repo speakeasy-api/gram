@@ -50,6 +50,9 @@ func (s *LoadChat) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 	if input.ID == "" {
 		return fmt.Errorf("id is required")
 	}
+	if input.Generation != nil && *input.Generation < 0 {
+		return fmt.Errorf("generation must be >= 0")
+	}
 
 	result, err := s.chat.LoadChat(ctx, &chat.LoadChatPayload{
 		SessionToken:      nil,
