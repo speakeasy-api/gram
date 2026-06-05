@@ -8,7 +8,7 @@ import (
 // email-shaped string should be treated as a non-PII false positive, or
 // "" if the string looks like it could be a real email address.
 //
-// Four layers, in order:
+// Five layers, in order:
 //
 //  1. Reserved / placeholder domain — the primary reason this filter
 //     exists. Two sub-cases:
@@ -35,12 +35,17 @@ import (
 //     trailing digit on the right-hand side of the final `@` (TLDs are
 //     letters; a digit there is a package version suffix like
 //     `pkg@v1.2.3`).
+//  5. Canonical placeholder local-parts (`john.doe`, `jane.doe`,
+//     `joe.bloggs`, `first.last`, etc.) even on real-shape domains.
+//     These are widely-used textbook fixture names from documentation,
+//     Faker output, and tutorial seed data. Real people share these
+//     names, so we accept the theoretical miss for the noise drop.
 //
 // Lower-confidence buckets from the offline analysis (JSON-escaped
-// angle brackets, ANSI colour codes, Faker localparts on real-shape
-// domains, role aliases, GitHub noreply, Anthropic transactional
-// no-reply, etc.) are intentionally NOT filtered: each has plausible
-// real-world matches we'd rather over-report than miss.
+// angle brackets, ANSI colour codes, generic Faker localparts on
+// real-shape domains, role aliases, GitHub noreply, Anthropic
+// transactional no-reply, etc.) are intentionally NOT filtered: each
+// has plausible real-world matches we'd rather over-report than miss.
 func nonPIIEmailReason(s string) string {
 	trimmed := strings.TrimSpace(s)
 	if trimmed == "" {
@@ -69,6 +74,12 @@ func nonPIIEmailReason(s string) string {
 	if at := strings.LastIndex(trimmed, "@"); at >= 0 && at < len(trimmed)-1 {
 		if last := trimmed[len(trimmed)-1]; last >= '0' && last <= '9' {
 			return "domain ends in digit (likely version suffix)"
+		}
+	}
+
+	if at := strings.LastIndex(lower, "@"); at > 0 {
+		if placeholderLocalParts[lower[:at]] {
+			return "fixture / placeholder local-part"
 		}
 	}
 
@@ -148,6 +159,24 @@ var placeholderTLDs = map[string]bool{
 	"local": true,
 	"dev":   true,
 	"io":    true,
+}
+
+// placeholderLocalParts is the set of canonical fixture / textbook
+// person-name local-parts conventionally used in documentation, Faker
+// output, tutorials, and seed data. Matched against the lowercased
+// local-part (everything before the final `@`).
+//
+// Real people share these names, so this is an explicit
+// precision-leaning miss for the noise drop. We only include
+// well-known placeholders, not generic Faker output like
+// `alice.brown` or `Chadrick_Quigley52`.
+var placeholderLocalParts = map[string]bool{
+	"john.doe":           true,
+	"jane.doe":           true,
+	"joe.bloggs":         true,
+	"joe.blogs":          true,
+	"first.last":         true,
+	"firstname.lastname": true,
 }
 
 type emailPrefixHit struct {

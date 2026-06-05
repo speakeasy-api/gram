@@ -104,8 +104,8 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	// buckets we deliberately do NOT filter so we err on the side of
 	// over-reporting rather than missing PII.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "adam@speakeasy.com"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice.brown@techstartup.io"))
-	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"), "Faker-style name on a real domain is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "alice.brown@techstartup.io"), "generic Faker localpart on a real domain is not filtered")
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "chadrick_quigley52@yahoo.com"), "generic Faker localpart on a real domain is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "support@speakeasy.com"), "role alias is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "u003ealice@speakeasy.com"), "JSON-escape prefix is not filtered")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "170madam@speakeasy.com"), "ANSI prefix is not filtered")
@@ -178,6 +178,17 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "go.opentelemetry.io/otel/sdk@v1.43.0"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "pkg@v1.2.3"))
 	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "react@18.3.1"))
+
+	// Canonical placeholder / textbook fixture local-parts, even on
+	// real-shape domains. These appear overwhelmingly in documentation,
+	// Faker output, and tutorial seed data rather than as live mailboxes.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "john.doe@gmail.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "jane.doe@gmail.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "Jane.Doe@hospital.org"), "case-insensitive")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "joe.bloggs@somewhere.co.uk"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "joe.blogs@somewhere.co.uk"), "common misspelling")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "first.last@company.com"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "firstname.lastname@company.com"))
 }
 
 // TestIsPresidioFalsePositive_EquivalentIPFormsMatch verifies that
