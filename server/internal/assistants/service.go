@@ -2000,12 +2000,13 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 
 	// Platform toolsets granted to this runtime (caller-determined); not
 	// surfaced as user-managed toolsets and not persisted in
-	// assistant_toolsets so users can't detach them. The "_platform-" ID
-	// prefix can't collide with user toolset slugs because the slug grammar
-	// strips underscores.
+	// assistant_toolsets so users can't detach them. The leading "_" in the
+	// runtime server ID is reserved for platform use; the platform slug
+	// constants are kept short because this ID is concatenated into the
+	// agentkit MCP tool name, which has a 64-char cap.
 	for _, slug := range platformToolsets {
 		servers = append(servers, runtimeMCPServer{
-			ID:      "_platform-" + slug,
+			ID:      "_" + slug,
 			URL:     platformtools.PlatformToolsetURL(serverURL, slug),
 			Headers: nil,
 		})

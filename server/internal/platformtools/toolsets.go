@@ -3,14 +3,17 @@ package platformtools
 import "net/url"
 
 // AssistantsPlatformToolsetSlug is the reserved slug for the platform
-// toolset granted to every assistant runtime.
-const AssistantsPlatformToolsetSlug = "assistants"
+// toolset granted to every assistant runtime. Kept short because it
+// participates in the agentkit-side MCP tool name, which must fit the
+// provider 64-char `^[a-zA-Z0-9_-]$` cap.
+const AssistantsPlatformToolsetSlug = "a"
 
 // ManagedAssistantPlatformToolsetSlug is the reserved slug for the platform
 // toolset granted only to a project's managed assistant (the one powering the
 // dashboard sidebar). It carries tools that must not be reachable by any
-// other assistant.
-const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
+// other assistant. Kept short for the same reason as
+// [AssistantsPlatformToolsetSlug].
+const ManagedAssistantPlatformToolsetSlug = "mas"
 
 // Toolset is a virtual collection of platform tools exposed at runtime via a
 // dedicated MCP endpoint. Platform toolsets are not persisted; the slug is
