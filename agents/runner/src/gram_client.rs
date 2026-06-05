@@ -29,19 +29,19 @@ pub struct GramBootstrapClient {
 
 #[derive(Debug, Error)]
 pub enum GramClientError {
-    #[error("send bootstrap request: {0}")]
+    #[error("send request: {0}")]
     Send(#[from] reqwest_middleware::Error),
 
-    #[error("read bootstrap token")]
+    #[error("read token")]
     Token,
 
-    #[error("read bootstrap body: {0}")]
+    #[error("read response body: {0}")]
     Read(#[from] reqwest::Error),
 
-    #[error("bootstrap request failed: status={status} body={body}")]
+    #[error("request failed: status={status} body={body}")]
     Status { status: u16, body: String },
 
-    #[error("decode bootstrap response: {0}")]
+    #[error("decode response: {0}")]
     Decode(#[from] serde_json::Error),
 }
 

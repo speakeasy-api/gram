@@ -190,25 +190,36 @@ impl Compactor for PersistingCompactor {
     ) -> Result<Vec<Item>, CompactionError> {
         let compacted = self.inner.compact(transcript, reason, cancellation).await?;
         let messages = denormalize_transcript(&compacted);
-        if !messages.is_empty() {
-            match self
-                .client
-                .record_compacted_generation(&self.thread_id, &self.tokens, &messages)
-                .await
-            {
-                Ok(()) => tracing::info!(
+        if messages.is_empty() {
+            return Ok(compacted);
+        }
+        match self
+            .client
+            .record_compacted_generation(&self.thread_id, &self.tokens, &messages)
+            .await
+        {
+            Ok(()) => {
+                tracing::info!(
                     thread_id = %self.thread_id,
                     rows = messages.len(),
                     "compacted generation persisted"
-                ),
-                Err(err) => tracing::warn!(
+                );
+                Ok(compacted)
+            }
+            Err(err) => {
+                // Persisting failed — keep the in-memory transcript unchanged so
+                // it stays consistent with what a cold bootstrap will see, and
+                // retry on the next trigger. Returning the compacted vec here
+                // would diverge in-memory from the DB and silently mask the
+                // failure until the next cold bootstrap dropped the summary.
+                tracing::warn!(
                     thread_id = %self.thread_id,
                     error = %err,
-                    "failed to persist compacted generation; next cold bootstrap will see un-compacted history"
-                ),
+                    "failed to persist compacted generation; keeping un-compacted transcript and will retry on next trigger"
+                );
+                Ok(transcript.to_vec())
             }
         }
-        Ok(compacted)
     }
 }
 

@@ -103,6 +103,41 @@ func TestRecordCompactedGenerationRejectsForeignAssistant(t *testing.T) {
 	require.Error(t, err, "principal must own the thread's assistant")
 }
 
+func TestRecordCompactedGenerationRejectsMalformedMessages(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_record_compacted_malformed")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	ctx := t.Context()
+
+	logger := testenv.NewLogger(t)
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil)
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
+	core.SetChatMessageWriter(chatWriter)
+
+	cases := map[string][]runtimeMessage{
+		"tool row missing tool_call_id": {{Role: "tool", Content: "x"}},
+		"unknown role":                  {{Role: "narrator", Content: "x"}},
+		"assistant tool_call missing id": {{
+			Role:      "assistant",
+			ToolCalls: []runtimeToolCall{{ID: "", Name: "x", Arguments: "{}"}},
+		}},
+		"assistant tool_call missing name": {{
+			Role:      "assistant",
+			ToolCalls: []runtimeToolCall{{ID: "c", Name: "", Arguments: "{}"}},
+		}},
+	}
+	for name, msgs := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Error(t, core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, msgs), "malformed transcript must be rejected")
+		})
+	}
+}
+
 func TestRecordCompactedGenerationRejectsEmptyMessages(t *testing.T) {
 	t.Parallel()
 

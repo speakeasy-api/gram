@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -23,6 +24,36 @@ import (
 // compaction. Lets dashboards/queries distinguish a compacted-history
 // generation from a user-initiated turn.
 const compactionMessageSource = "assistant-compaction"
+
+// validateCompactedMessages rejects shapes that would later trip up the
+// runner's normalize_history step or leave an orphaned tool_use / tool_result
+// pair in the persisted generation. Validation runs before any DB write so a
+// malformed POST never lands in chat_messages.
+func validateCompactedMessages(messages []runtimeMessage) error {
+	for i, m := range messages {
+		switch m.Role {
+		case "system", "user", "assistant":
+			// Tool calls on assistant rows must carry both an ID and a name —
+			// the runner pairs the result back to the call via the ID and the
+			// provider rejects tool_use blocks without a function name.
+			for j, tc := range m.ToolCalls {
+				if tc.ID == "" {
+					return fmt.Errorf("message %d: tool_calls[%d] missing id", i, j)
+				}
+				if tc.Name == "" {
+					return fmt.Errorf("message %d: tool_calls[%d] missing name", i, j)
+				}
+			}
+		case "tool":
+			if m.ToolCallID == "" {
+				return fmt.Errorf("message %d: tool row missing tool_call_id", i)
+			}
+		default:
+			return fmt.Errorf("message %d: unsupported role %q", i, m.Role)
+		}
+	}
+	return nil
+}
 
 // RecordCompactedGeneration persists a runner-produced compacted transcript
 // as a new chat_messages generation. The runner calls this after the
@@ -43,6 +74,9 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	}
 	if len(messages) == 0 {
 		return oops.E(oops.CodeBadRequest, nil, "compacted transcript is empty").Log(ctx, s.logger, logAttrs...)
+	}
+	if err := validateCompactedMessages(messages); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "validate compacted transcript").Log(ctx, s.logger, logAttrs...)
 	}
 
 	threadRow, err := assistantrepo.New(s.db).LoadAssistantThreadForBootstrap(ctx, assistantrepo.LoadAssistantThreadForBootstrapParams{
@@ -67,7 +101,22 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		return oops.E(oops.CodeUnexpected, err, "load assistant chat").Log(ctx, s.logger, logAttrs...)
 	}
 
-	currentGen, err := chatrepo.New(s.db).GetMaxGenerationForChat(ctx, threadRow.ChatID)
+	// Concurrent compaction posts for the same chat must serialize so they
+	// don't both land at the same max+1 generation. A row-level lock on
+	// chats.id is the cheapest fence available here: it blocks racing
+	// compactions for this chat without affecting any other chat or any
+	// non-locking reader, and the lock releases on COMMIT/ROLLBACK.
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").Log(ctx, s.logger, logAttrs...)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if _, err := tx.Exec(ctx, "SELECT 1 FROM chats WHERE id = $1 FOR UPDATE", threadRow.ChatID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").Log(ctx, s.logger, logAttrs...)
+	}
+
+	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, threadRow.ChatID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load chat generation").Log(ctx, s.logger, logAttrs...)
 	}
@@ -107,8 +156,17 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		})
 	}
 
-	if _, err := s.chatWriter.Write(ctx, chatRow.ProjectID, params); err != nil {
+	n, err := s.chatWriter.WriteInTx(ctx, tx, params)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").Log(ctx, s.logger, logAttrs...)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit compaction transaction").Log(ctx, s.logger, logAttrs...)
+	}
+
+	if n > 0 {
+		s.chatWriter.NotifyStored(ctx, chatRow.ProjectID)
 	}
 
 	s.logger.LogAttrs(ctx, slog.LevelInfo, "assistant compacted generation persisted", logAttrs...)
