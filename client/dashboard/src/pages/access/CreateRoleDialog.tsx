@@ -575,11 +575,21 @@ export function CreateRoleDialog({
     setGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
+      const removed = grant.rules[ruleIndex];
+      if (!removed) return prev;
+
       let rules = grant.rules.filter((_, i) => i !== ruleIndex);
-      // No allows left → denies are orphaned, clear everything
-      if (!rules.some((r) => r.effect === "allow")) {
-        rules = [];
+
+      // Removing the last allow chip falls back to unrestricted instead of
+      // unchecking the scope. Any remaining denies were exceptions to the
+      // prior narrower allow, so they get dropped along with it.
+      if (
+        removed.effect === "allow" &&
+        !rules.some((r) => r.effect === "allow")
+      ) {
+        rules = [{ id: crypto.randomUUID(), effect: "allow", selectors: null }];
       }
+
       if (rules.length === 0) {
         const next = { ...prev };
         delete next[scopeSlug];
