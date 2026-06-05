@@ -91,7 +91,6 @@ func TestPluginsService_UpdateMarketplaceSettings_RejectsInvalidName(t *testing.
 	ctx, ti := newTestPluginsService(t)
 
 	for _, bad := range []string{"-leading", "trailing-", "Has Spaces", "UPPERCASE", "underscore_name"} {
-		bad := bad
 		_, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{MarketplaceName: &bad})
 		require.Error(t, err, "expected rejection for %q", bad)
 

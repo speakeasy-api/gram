@@ -9,8 +9,6 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
-	"net/netip"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -633,35 +631,26 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 	return findings
 }
 
-// ipv6ShortFormFP matches IPv6 strings of the form "<hex>::" — a single
-// hex group of up to four chars followed immediately by "::" and nothing
-// else (e.g. "b::", "dead::", "1::"). Production risk_results analysis
-// showed Presidio greedily flagging these as IP_ADDRESS whenever the
-// pattern appeared in code, hex dumps, or text, and none of them
-// represent an address anyone meaningfully uses.
-var ipv6ShortFormFP = regexp.MustCompile(`(?i)^[0-9a-f]{1,4}::$`)
-
 // isPresidioFalsePositive filters Presidio matches the policy author
-// would treat as noise. It currently drops:
-//   - the IPv6/IPv4 unspecified address in any spelling (`::`, `::0`,
-//     `0:0:0:0:0:0:0:0`, `0.0.0.0`), via net/netip;
-//   - loopback addresses (`127.0.0.0/8`, `::1`), via net/netip;
-//   - IPv6 short-form strings of shape "<hex>::" (e.g. "b::", "dead::"),
-//     which dominate Presidio's IP_ADDRESS noise on prod.
+// would treat as noise. For IP_ADDRESS it delegates to the unified
+// catalog in falsepositives_ip.go, which covers:
+//   - IANA-reserved space (RFC1918, loopback, link-local, multicast,
+//     CGNAT, documentation, 6to4 deprecated, class E, benchmarking,
+//     this-network, limited broadcast);
+//   - well-known public DNS resolvers (Cloudflare, Google, Quad9,
+//     OpenDNS, AdGuard, etc.);
+//   - common placeholder IPs (1.2.3.4 et al.);
+//   - shape heuristics (X.0.0.0 /8 network address, sparse IPv6 like
+//     1::, b::, dead::).
+//
+// Cloud / CDN attribution by AS organisation (the fp_infra_asn bucket
+// in the offline classifier) requires runtime ASN lookup and is
+// deliberately out of scope here.
 func isPresidioFalsePositive(entityType, match string) bool {
 	if entityType != "IP_ADDRESS" {
 		return false
 	}
-	trimmed := strings.TrimSpace(match)
-	if addr, err := netip.ParseAddr(trimmed); err == nil {
-		if addr.IsUnspecified() || addr.IsLoopback() {
-			return true
-		}
-	}
-	if ipv6ShortFormFP.MatchString(trimmed) {
-		return true
-	}
-	return false
+	return nonPIIIPReason(strings.TrimSpace(match)) != ""
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the
