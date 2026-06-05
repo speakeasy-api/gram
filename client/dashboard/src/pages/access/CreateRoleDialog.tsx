@@ -93,6 +93,24 @@ function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
   return groups;
 }
 
+/**
+ * Detect the storage form of an unrestricted grant: a single selector with
+ * only resource_kind + resource_id keys where resource_id is "*". The server
+ * synthesizes this when a grant is created with nil selectors, so we collapse
+ * it back to the unrestricted rule shape on read.
+ */
+function isUnrestrictedSelectorList(selectors: Selector[]): boolean {
+  if (selectors.length !== 1) return false;
+  const s = selectors[0]!;
+  if (s.resourceId !== "*") return false;
+  return (
+    s.disposition == null &&
+    s.tool == null &&
+    s.projectId == null &&
+    s.serverUrl == null
+  );
+}
+
 /** Convert API Role grants to rules-based RoleGrant map. */
 function grantsFromRole(role: Role): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = {};
@@ -104,7 +122,11 @@ function grantsFromRole(role: Role): Record<string, RoleGrant> {
 
     const effect: PolicyEffect = (g.effect as PolicyEffect) ?? "allow";
 
-    if (!g.selectors || g.selectors.length === 0) {
+    if (
+      !g.selectors ||
+      g.selectors.length === 0 ||
+      isUnrestrictedSelectorList(g.selectors as Selector[])
+    ) {
       // Unrestricted rule
       result[g.scope].rules.push({
         id: crypto.randomUUID(),
