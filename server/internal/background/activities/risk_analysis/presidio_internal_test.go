@@ -53,7 +53,7 @@ func TestIsPresidioFalsePositive_CorpusAllFiltered(t *testing.T) {
 
 	f, err := os.Open("testdata/fp-ip.txt")
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 1<<22)

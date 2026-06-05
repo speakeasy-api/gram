@@ -34,7 +34,7 @@ func TestFPSplit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open input %q: %v", *fpSplitInput, err)
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	outPath := filepath.Join("testdata", "fp-ip.txt")
 	var fp []string
@@ -65,9 +65,9 @@ func TestFPSplit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create %q: %v", outPath, err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 	w := bufio.NewWriter(out)
-	defer w.Flush()
+	defer func() { _ = w.Flush() }()
 	for _, ip := range fp {
 		if _, err := fmt.Fprintln(w, ip); err != nil {
 			t.Fatalf("write: %v", err)
