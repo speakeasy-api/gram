@@ -25,14 +25,14 @@ export function generateSlug(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export type ReleasePhase =
+type ReleasePhase =
   | "selectRemotes"
   | "configure"
   | "deploying"
   | "complete"
   | "error";
 
-export interface ServerConfig {
+interface ServerConfig {
   server: PulseMCPServer;
   name: string;
   /** For multi-remote servers, track which remotes are selected */
@@ -40,7 +40,7 @@ export interface ServerConfig {
 }
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
-export interface MultiRemoteServerConfig {
+interface MultiRemoteServerConfig {
   server: PulseMCPServer;
   name: string;
   remotes: ExternalMCPRemote[];

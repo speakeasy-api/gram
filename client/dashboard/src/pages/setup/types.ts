@@ -15,7 +15,7 @@ export type PlatformSetupStatus =
   | "complete"
   | "blocked";
 
-export interface PlatformSetupStep {
+interface PlatformSetupStep {
   title: string;
   description?: string;
   code?: string;

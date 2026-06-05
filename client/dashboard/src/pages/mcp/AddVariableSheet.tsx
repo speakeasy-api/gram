@@ -22,7 +22,7 @@ interface Environment {
   name: string;
 }
 
-export interface VariableEntry {
+interface VariableEntry {
   key: string;
   value: string;
   state: EnvVarState;

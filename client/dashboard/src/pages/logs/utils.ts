@@ -21,14 +21,6 @@ export function formatNanoTimestamp(nanos: string): string {
 }
 
 /**
- * Format Unix nanoseconds to human-readable relative time
- */
-export function formatRelativeTime(nanos: number): string {
-  const ms = nanos / 1_000_000;
-  return dateTimeFormatters.humanize(new Date(ms));
-}
-
-/**
  * Get status indicator for a tool call
  */
 export function getStatusInfo(toolCall: ToolCallSummary): {
@@ -68,7 +60,7 @@ export function getSeverityColorClass(severity?: string): string {
  * Parse the tool/source name from a gram URN
  * Format: tools:{kind}:{source}:{name}
  */
-export function parseGramUrn(urn: string): {
+function parseGramUrn(urn: string): {
   kind: string;
   source: string;
   name: string;
@@ -125,17 +117,4 @@ export function getToolIcon(trace: ToolCallSummary): LucideIcon {
  */
 export function formatLogBody(log: TelemetryLogRecord): string {
   return log.body || "(no message)";
-}
-
-/**
- * Get attributes as a formatted string for preview
- */
-export function formatAttributesPreview(attributes: unknown): string {
-  if (!attributes || typeof attributes !== "object") return "";
-  const entries = Object.entries(attributes as Record<string, unknown>);
-  if (entries.length === 0) return "";
-  return entries
-    .slice(0, 3)
-    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
-    .join(", ");
 }

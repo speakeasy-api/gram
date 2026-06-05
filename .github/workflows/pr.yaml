@@ -1136,6 +1136,10 @@ jobs:
         run: pnpm lint
         working-directory: client/dashboard
 
+      - name: Knip (dead code / unused deps)
+        run: pnpm knip
+        working-directory: client/dashboard
+
       - name: Check for dirty files
         run: mise run git:porcelain
 

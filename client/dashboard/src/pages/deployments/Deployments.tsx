@@ -122,7 +122,7 @@ function DeploymentActionsDropdown({
   );
 }
 
-export function DeploymentsTable({
+function DeploymentsTable({
   showHeader = true,
 }: { showHeader?: boolean } = {}) {
   const routes = useRoutes();
@@ -263,7 +263,7 @@ export function DeploymentsTable({
   );
 }
 
-export function DeploymentLink({ id }: { id: string }) {
+function DeploymentLink({ id }: { id: string }) {
   const routes = useRoutes();
   return (
     <routes.deployments.deployment.Link params={[id]}>

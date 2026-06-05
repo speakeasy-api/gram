@@ -9,10 +9,7 @@ import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
 import { Deployment, DeploymentLogEvent } from "@gram/client/models/components";
-import {
-  useDeploymentLogs,
-  useLatestDeployment,
-} from "@gram/client/react-query";
+import { useDeploymentLogs } from "@gram/client/react-query";
 import { Alert, Stack } from "@speakeasy-api/moonshine";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
@@ -297,9 +294,7 @@ function DeploymentDetailsCollapsible({
  * deployment state.
  */
 const useCreateDeployment = (): (() => Promise<Deployment>) => {
-  const _latestDeployment = useLatestDeployment();
   const stepper = useStepper();
-  const _step = useStep();
   const client = useSdkClient();
 
   const _do = React.useCallback(async () => {

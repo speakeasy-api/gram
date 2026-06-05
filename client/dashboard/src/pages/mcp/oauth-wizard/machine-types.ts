@@ -5,7 +5,7 @@ export type DiscoveredOAuth = {
   metadata: Record<string, unknown>;
 };
 
-export type ExternalFormKey = "slug" | "metadataJson";
+type ExternalFormKey = "slug" | "metadataJson";
 
 export type ProxyFormKey =
   | "slug"

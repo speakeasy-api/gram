@@ -84,7 +84,7 @@ function CustomToolsInner() {
   );
 }
 
-export function CustomToolCard({ template }: { template: PromptTemplate }) {
+function CustomToolCard({ template }: { template: PromptTemplate }) {
   const routes = useRoutes();
   const queryClient = useQueryClient();
 

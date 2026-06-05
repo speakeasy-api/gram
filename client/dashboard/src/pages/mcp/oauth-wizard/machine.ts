@@ -545,10 +545,7 @@ export const oauthWizardMachine = setup({
     },
   },
 });
-
-export type OAuthWizardMachine = typeof oauthWizardMachine;
 export type WizardSnapshot = SnapshotFrom<typeof oauthWizardMachine>;
-export type WizardSend = (event: WizardEvent) => void;
 
 export const WizardContext = createActorContext(oauthWizardMachine);
 
