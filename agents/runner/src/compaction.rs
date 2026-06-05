@@ -188,7 +188,26 @@ impl Compactor for PersistingCompactor {
         reason: CompactionReason,
         cancellation: Option<TurnCancellation>,
     ) -> Result<Vec<Item>, CompactionError> {
-        let compacted = self.inner.compact(transcript, reason, cancellation).await?;
+        let raw = self.inner.compact(transcript, reason, cancellation).await?;
+        // AgentCompactor emits its summary as `ItemKind::Context`, which
+        // agentkit-adapter-completions serialises as a `system` chat message.
+        // We persist Context as `role="user"` so it survives loadChatHistory's
+        // system-row drop on cold bootstrap — but if we left the in-memory
+        // kind as Context, the *next* warm turn would send `system` upstream,
+        // capture's matcher would diverge against our `user` row, and write a
+        // newer generation containing the summary as `system` that the cold
+        // bootstrap after THAT would silently drop. Rewriting Context to User
+        // here keeps warm-outbound, captured row, persisted row, and cold-
+        // reload all consistent at `user`.
+        let compacted: Vec<Item> = raw
+            .into_iter()
+            .map(|mut item| {
+                if item.kind == ItemKind::Context {
+                    item.kind = ItemKind::User;
+                }
+                item
+            })
+            .collect();
         let messages = denormalize_transcript(&compacted);
         if messages.is_empty() {
             return Ok(compacted);
@@ -278,21 +297,21 @@ pub fn build_compactor(
 }
 
 /// Converts an agentkit transcript back into the wire shape the server
-/// persists. Mirrors `runtime::normalize_history` in reverse with one
-/// twist: `ItemKind::Context` items (including the summary
-/// [`AgentCompactor`] produces) collapse to `role=user` because
-/// `ServiceCore.loadChatHistory` drops `system` rows on the next
-/// bootstrap. Mapping Context to `user` keeps the compaction summary
-/// alive across the cold cron bootstrap that this whole persistence
-/// path exists to support.
+/// persists. Mirrors `runtime::normalize_history` in reverse. Callers
+/// hitting this for compaction persistence should already have rewritten
+/// any `ItemKind::Context` items to `User` (see
+/// [`PersistingCompactor::compact`]) so warm-outbound and persisted-row
+/// shapes stay consistent; Context arriving here unrewritten still
+/// collapses to `role=user` for the same survival-across-bootstrap
+/// reason, but that's a backstop rather than the supported entry
+/// shape.
 ///
 /// Specifically:
 ///
 /// * `System`, `Developer` items → `role=system` (loadChatHistory drops
 ///   these on bootstrap; the server-composed system prompt replaces
 ///   them anyway).
-/// * `Context` items → `role=user` so the summary persists and replays.
-/// * `User` and `Notification` items → `role=user`.
+/// * `Context`, `User`, `Notification` items → `role=user`.
 /// * `Assistant` items → single row with concatenated text and any
 ///   tool_calls from `Part::ToolCall` parts.
 /// * `Tool` items → one row per `Part::ToolResult` with its `call_id`.
