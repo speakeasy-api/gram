@@ -1,3 +1,12 @@
+// Tool-filtering scope state. scopeVariants is the JSON map (keyed by tag, with
+// the empty-string key holding the unfiltered defaults) emitted server-side when
+// filtering is enabled; it stays null on servers without a variations group, in
+// which case all scope behavior is inert and the page works exactly as before.
+let scopeVariants = null;
+let defaultScopeUrl = "";
+let activeScopeTag = "";
+let toolSearchQuery = "";
+
 function togglePopover(e) {
   const popoverRoot = e.currentTarget.parentElement;
   const menu = popoverRoot.querySelector(".popover-menu");
@@ -28,6 +37,10 @@ function closeModal() {
 function openModal(childContent) {
   const template = document.querySelector("#modal-template");
   const modalElement = template.content.cloneNode(true);
+
+  // The cloned snippets carry the unfiltered default URL; re-apply the active
+  // scope so the modal reflects the currently selected chip.
+  applyScopeToTree(childContent, activeScopeTag);
 
   modalElement.querySelector(".content-slot").appendChild(childContent);
   modalElement.querySelectorAll(".code-container").forEach((el) => {
@@ -70,18 +83,36 @@ function toggleToolDetail(row) {
   }
 }
 
-function filterTools(query) {
+function toolMatchesScope(row, tag) {
+  if (!tag) return true;
+  const tags = (row.getAttribute("data-tool-tags") || "")
+    .split(",")
+    .filter(Boolean);
+  return tags.includes(tag);
+}
+
+function toolMatchesSearch(row, query) {
+  if (!query) return true;
+  const name = row.getAttribute("data-tool-name") || "";
+  const desc = row.querySelector(".tool-desc");
+  const descText = desc ? desc.textContent : "";
+  return (
+    name.toLowerCase().includes(query) || descText.toLowerCase().includes(query)
+  );
+}
+
+// updateToolVisibility shows a tool only when it matches BOTH the active scope
+// and the search query, so the two filters compose instead of clobbering each
+// other's filtered-out class.
+function updateToolVisibility() {
   const table = document.querySelector(".tools-table");
   if (!table) return;
   const rows = table.querySelectorAll(".tool-row");
-  const q = query.toLowerCase();
+  const q = toolSearchQuery.toLowerCase();
   let visibleCount = 0;
   for (const row of rows) {
-    const name = row.getAttribute("data-tool-name") || "";
-    const desc = row.querySelector(".tool-desc");
-    const descText = desc ? desc.textContent : "";
     const match =
-      name.toLowerCase().includes(q) || descText.toLowerCase().includes(q);
+      toolMatchesScope(row, activeScopeTag) && toolMatchesSearch(row, q);
     row.classList.toggle("filtered-out", !match);
     const detail = row.nextElementSibling;
     if (detail && detail.classList.contains("tool-detail")) {
@@ -96,6 +127,116 @@ function filterTools(query) {
   const noResults = table.querySelector(".tools-no-results");
   if (noResults)
     noResults.style.display = visibleCount === 0 ? "block" : "none";
+}
+
+// parseScopeVariants reads the server-emitted scope/connection map from the
+// data-variants attribute. Returns null when the page has no scope filtering,
+// leaving all scope behavior inert.
+function parseScopeVariants() {
+  const el = document.getElementById("scope-variants");
+  if (!el) return null;
+  try {
+    return JSON.parse(el.dataset.variants);
+  } catch (err) {
+    console.error("Failed to parse scope variants:", err);
+    return null;
+  }
+}
+
+// applyScopeToTree swaps the connection strings for the given tag within root.
+// root is the document for the always-visible elements, or a freshly cloned
+// modal fragment (whose snippets start at the unfiltered default). Every value
+// comes from the server-built variant map, so the client never encodes a URL.
+function applyScopeToTree(root, tag) {
+  if (!scopeVariants) return;
+  const variant = scopeVariants[tag] || scopeVariants[""];
+  if (!variant) return;
+
+  root.querySelectorAll("[data-scope-url]").forEach((el) => {
+    el.textContent = variant.url;
+  });
+  root.querySelectorAll("[data-scope-config]").forEach((el) => {
+    el.textContent = variant.config;
+  });
+  root.querySelectorAll("[data-scope-cursor]").forEach((el) => {
+    el.setAttribute("href", variant.cursor);
+  });
+  root.querySelectorAll("[data-scope-vscode]").forEach((el) => {
+    el.setAttribute("href", variant.vscode);
+  });
+  // Command snippets embed the MCP URL inside a larger string; replace the
+  // unfiltered default URL with the scoped URL (both server-built). On a fresh
+  // modal clone the text starts at the default, so this single pass is correct.
+  root.querySelectorAll("[data-scope-url-text]").forEach((el) => {
+    if (defaultScopeUrl && variant.url !== defaultScopeUrl) {
+      el.textContent = el.textContent.split(defaultScopeUrl).join(variant.url);
+    }
+  });
+}
+
+// updateToolCount sets the "Available Tools (N)" header to the number of tools
+// in the active scope (ignoring the search box, which has its own empty state).
+function updateToolCount() {
+  const countEl = document.querySelector(".available-tools .tool-count");
+  if (!countEl) return;
+  const rows = document.querySelectorAll(".tools-table .tool-row");
+  let count = 0;
+  for (const row of rows) {
+    if (toolMatchesScope(row, activeScopeTag)) count++;
+  }
+  countEl.textContent = "(" + count + ")";
+}
+
+function applyScope(tag) {
+  if (!scopeVariants) return;
+  if (!(tag in scopeVariants)) tag = "";
+  activeScopeTag = tag;
+
+  applyScopeToTree(document, tag);
+
+  document.querySelectorAll(".scope-chip").forEach((chip) => {
+    chip.classList.toggle(
+      "active",
+      (chip.getAttribute("data-scope-tag") || "") === tag,
+    );
+  });
+
+  updateToolCount();
+  updateToolVisibility();
+}
+
+// scopeTagFromLocation reads the selected scope from the ?tags= query parameter.
+// The install page is single-select, so a shared multi-tag URL collapses to its
+// first tag.
+function scopeTagFromLocation() {
+  const raw = new URLSearchParams(window.location.search).get("tags");
+  if (!raw) return "";
+  return raw.split(",")[0].trim();
+}
+
+function initializeScopes() {
+  scopeVariants = parseScopeVariants();
+  if (!scopeVariants) return;
+  defaultScopeUrl = scopeVariants[""] ? scopeVariants[""].url : "";
+
+  document.querySelectorAll(".scope-chip").forEach((chip) => {
+    chip.addEventListener("click", (e) => {
+      e.preventDefault();
+      const tag = chip.getAttribute("data-scope-tag") || "";
+      applyScope(tag);
+      const nextURL = tag
+        ? "?tags=" + encodeURIComponent(tag)
+        : window.location.pathname;
+      window.history.pushState({ scopeTag: tag }, "", nextURL);
+    });
+  });
+
+  window.addEventListener("popstate", () => {
+    applyScope(scopeTagFromLocation());
+  });
+
+  // Restore the scope from the URL so shared ?tags= links open pre-selected.
+  applyScope(scopeTagFromLocation());
 }
 
 function copyContainerSnippet(e) {
@@ -178,8 +319,13 @@ function initializeHandlers() {
 
   const toolsSearch = document.querySelector(".tools-search");
   if (toolsSearch) {
-    toolsSearch.addEventListener("input", (e) => filterTools(e.target.value));
+    toolsSearch.addEventListener("input", (e) => {
+      toolSearchQuery = e.target.value;
+      updateToolVisibility();
+    });
   }
+
+  initializeScopes();
 
   registerCenterOffsetUpdaters(document.querySelector(".gram-brand-badge"));
 

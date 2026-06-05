@@ -12,8 +12,10 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -105,6 +108,29 @@ type toolInfo struct {
 	DestructiveHint bool
 	IdempotentHint  bool
 	OpenWorldHint   bool
+	// Tags are the tool's effective filter tags (see toolfilter.EffectiveToolTags).
+	// Rendered onto each tool row so the install-page JS can filter the list by
+	// the selected scope without re-deriving tags client-side.
+	Tags []string
+}
+
+// scopeInfo is one selectable filter scope (a single tag) shown as a chip on the
+// install page, along with the number of tools that carry that tag.
+type scopeInfo struct {
+	Tag       string
+	ToolCount int
+}
+
+// scopeConnection holds the per-scope connection strings the install-page JS
+// swaps in when a scope chip is selected. Every value is built server-side from
+// the existing Go URL builders so the client performs no URL/encoding logic and
+// cannot drift from the runtime ?tags= behavior. The map emitted to the page is
+// keyed by tag, with the empty-string key holding the unfiltered defaults.
+type scopeConnection struct {
+	URL    string       `json:"url"`
+	Config string       `json:"config"`
+	Cursor template.URL `json:"cursor"`
+	VSCode template.URL `json:"vscode"`
 }
 
 func applyAnnotations(info *toolInfo, a *types.ToolAnnotations) {
@@ -150,6 +176,15 @@ type hostedPageData struct {
 	DocsText          string
 	Instructions      string
 	IsPublic          bool
+	// FilteringEnabled gates the scope chip bar and related UI.
+	FilteringEnabled bool
+	// Scopes are the selectable filter tags rendered as chips.
+	Scopes []scopeInfo
+	// ScopeVariantsJSON is a JSON object keyed by tag (empty-string key = the
+	// unfiltered default) mapping to that scope's connection strings. It is
+	// emitted into a data-* attribute and read by the install-page JS;
+	// html/template auto-escapes it in attribute context.
+	ScopeVariantsJSON string
 }
 
 type Service struct {
@@ -854,6 +889,20 @@ func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	return u.String(), nil
 }
 
+// appendTagsQuery returns mcpURL with a ?tags=<tag> query parameter added. The
+// install-page MCP URLs are clean (no existing query), so this encodes the
+// single selected tag the same way the runtime ?tags= filter expects.
+func appendTagsQuery(mcpURL, tag string) string {
+	u, err := url.Parse(mcpURL)
+	if err != nil {
+		return mcpURL + "?tags=" + url.QueryEscape(tag)
+	}
+	q := u.Query()
+	q.Set("tags", tag)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 // installContext is the resolved subject of an install-page request. When
 // resolution comes through mcp_endpoints, mcpServer is set. For toolset-backed
 // installs — whether routed via the legacy toolsets.mcp_slug path or via an
@@ -1080,7 +1129,23 @@ func (s *Service) loadInstallPageMetadata(ctx context.Context, ic *installContex
 func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseWriter, ic *installContext, mcpSlug string, metadataRecord *repo.McpMetadatum) error {
 	toolset := ic.toolset
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache, nil)
+	// Resolve the effective tool-variations group with the same precedence chain
+	// as the runtime (mcp_servers value wins, then the toolset's own column).
+	// When a group is resolved we describe the toolset against it so the tools —
+	// and the tags we derive below — carry that group's variation overrides,
+	// matching exactly what the ?tags= runtime filter would return. A nil result
+	// means no explicit group (filtering disabled); the page renders as before.
+	var mcpServerGroupID *uuid.UUID
+	if ic.mcpServer != nil && ic.mcpServer.ToolVariationsGroupID.Valid {
+		mcpServerGroupID = &ic.mcpServer.ToolVariationsGroupID.UUID
+	}
+	var toolsetGroupID *uuid.UUID
+	if toolset.ToolVariationsGroupID.Valid {
+		toolsetGroupID = &toolset.ToolVariationsGroupID.UUID
+	}
+	resolvedGroupID := toolfilter.ResolveGroupID(mcpServerGroupID, toolsetGroupID)
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache, resolvedGroupID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "describe toolset").Log(ctx, s.logger)
 	}
@@ -1141,6 +1206,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 				DestructiveHint: false,
 				IdempotentHint:  false,
 				OpenWorldHint:   false,
+				Tags:            toolfilter.EffectiveToolTags(toolDesc),
 			}
 			applyAnnotations(&info, toolDesc.ExternalMcpToolDefinition.Annotations)
 			tools = append(tools, info)
@@ -1160,9 +1226,31 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 			DestructiveHint: false,
 			IdempotentHint:  false,
 			OpenWorldHint:   false,
+			Tags:            toolfilter.EffectiveToolTags(toolDesc),
 		}
 		applyAnnotations(&info, baseTool.Annotations)
 		tools = append(tools, info)
+	}
+
+	// Build the selectable scopes from the tools' effective tags (same source as
+	// the per-row Tags above, so chips and client-side filtering agree). Filtering
+	// is only surfaced when an explicit group is resolved AND it yields at least
+	// one tag; an empty group falls back to the unfiltered view (no chips).
+	filteringEnabled := false
+	scopes := []scopeInfo{}
+	if resolvedGroupID != nil {
+		tagCounts := map[string]int{}
+		for _, t := range tools {
+			for _, tag := range t.Tags {
+				tagCounts[tag]++
+			}
+		}
+		if len(tagCounts) > 0 {
+			for _, tag := range slices.Sorted(maps.Keys(tagCounts)) {
+				scopes = append(scopes, scopeInfo{Tag: tag, ToolCount: tagCounts[tag]})
+			}
+			filteringEnabled = true
+		}
 	}
 
 	mcpURL, err := s.resolveToolsetMCPURL(ctx, *toolset, mcpSlug)
@@ -1179,18 +1267,20 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 	}
 
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
-		MCPName:        toolset.Name,
-		MCPSlug:        publicSlug,
-		MCPDescription: toolset.Description.String,
-		MCPURL:         mcpURL,
-		SecurityInputs: securityInputs,
-		Tools:          tools,
-		LogoAssetURL:   logoAssetURL,
-		DocsURL:        docsURL,
-		DocsText:       docsText,
-		Instructions:   instructions,
-		IsPublic:       ic.isPublic(),
-		OrgName:        ic.organization.Name,
+		MCPName:          toolset.Name,
+		MCPSlug:          publicSlug,
+		MCPDescription:   toolset.Description.String,
+		MCPURL:           mcpURL,
+		SecurityInputs:   securityInputs,
+		Tools:            tools,
+		LogoAssetURL:     logoAssetURL,
+		DocsURL:          docsURL,
+		DocsText:         docsText,
+		Instructions:     instructions,
+		IsPublic:         ic.isPublic(),
+		OrgName:          ic.organization.Name,
+		FilteringEnabled: filteringEnabled,
+		Scopes:           scopes,
 	})
 }
 
@@ -1247,6 +1337,9 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		Instructions:   instructions,
 		IsPublic:       ic.isPublic(),
 		OrgName:        ic.organization.Name,
+		// Remote-MCP-backed installs have no tool list, so no filter scopes.
+		FilteringEnabled: false,
+		Scopes:           nil,
 	})
 }
 
@@ -1265,6 +1358,11 @@ type hostedPageRenderInputs struct {
 	Instructions   string
 	IsPublic       bool
 	OrgName        string
+	// FilteringEnabled is true when the install context resolves an explicit
+	// tool-variations group with at least one tag; it gates all scope UI.
+	FilteringEnabled bool
+	// Scopes are the selectable filter tags (sorted), each with its tool count.
+	Scopes []scopeInfo
 }
 
 func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, in hostedPageRenderInputs) error {
@@ -1282,36 +1380,76 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 		return oops.E(oops.CodeUnexpected, err, "parse config snippet template").Log(ctx, s.logger)
 	}
 
-	var configSnippet bytes.Buffer
-	if err := configSnippetTmpl.Execute(&configSnippet, configSnippetData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "execute config snippet template").Log(ctx, s.logger)
+	// buildConn assembles the connection strings for a single MCP URL, reusing
+	// the same Go builders for every scope so the client never encodes a URL or
+	// deep link itself (no drift from the runtime ?tags= behavior).
+	buildConn := func(mcpURL string) (scopeConnection, error) {
+		snippetData := configSnippetData
+		snippetData.MCPURL = mcpURL
+
+		var configSnippet bytes.Buffer
+		if err := configSnippetTmpl.Execute(&configSnippet, snippetData); err != nil {
+			return scopeConnection{}, fmt.Errorf("execute config snippet template: %w", err)
+		}
+
+		cursorURL, err := buildCursorInstallURL(in.MCPName, mcpURL, in.SecurityInputs)
+		if err != nil {
+			return scopeConnection{}, fmt.Errorf("build cursor install URL: %w", err)
+		}
+		safeCursorURL, err := safeTemplateURL(cursorURL, "cursor")
+		if err != nil {
+			return scopeConnection{}, fmt.Errorf("sanitize cursor install URL: %w", err)
+		}
+
+		vsCodeURL, err := buildVSCodeInstallURL(in.MCPName, mcpURL, in.SecurityInputs)
+		if err != nil {
+			return scopeConnection{}, fmt.Errorf("build vscode install URL: %w", err)
+		}
+		safeVsCodeURL, err := safeTemplateURL(vsCodeURL, "vscode")
+		if err != nil {
+			return scopeConnection{}, fmt.Errorf("sanitize vscode install URL: %w", err)
+		}
+
+		return scopeConnection{
+			URL:    mcpURL,
+			Config: configSnippet.String(),
+			Cursor: safeCursorURL,
+			VSCode: safeVsCodeURL,
+		}, nil
 	}
 
-	cursorURL, err := buildCursorInstallURL(in.MCPName, in.MCPURL, in.SecurityInputs)
+	defaultConn, err := buildConn(in.MCPURL)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build cursor install URL").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "build default connection").Log(ctx, s.logger)
 	}
 
-	vsCodeURL, err := buildVSCodeInstallURL(in.MCPName, in.MCPURL, in.SecurityInputs)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build vscode install URL").Log(ctx, s.logger)
-	}
-
-	safeVsCodeURL, err := safeTemplateURL(vsCodeURL, "vscode")
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "sanitize vscode install URL").Log(ctx, s.logger)
-	}
-
-	safeCursorURL, err := safeTemplateURL(cursorURL, "cursor")
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "sanitize cursor install URL").Log(ctx, s.logger)
+	// When filtering is enabled, build one connection variant per scope (plus the
+	// unfiltered default under the empty-string key) and emit them as JSON for the
+	// install-page JS to swap in when a scope chip is selected.
+	var scopeVariantsJSON string
+	if in.FilteringEnabled {
+		variants := map[string]scopeConnection{"": defaultConn}
+		for _, scope := range in.Scopes {
+			conn, err := buildConn(appendTagsQuery(in.MCPURL, scope.Tag))
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "build scope connection").Log(ctx, s.logger)
+			}
+			variants[scope.Tag] = conn
+		}
+		encoded, err := json.Marshal(variants)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "marshal scope variants").Log(ctx, s.logger)
+		}
+		// Emitted into a data-* attribute (not a <script>), so html/template's
+		// attribute auto-escaping handles it — no template.JS / nosec needed.
+		scopeVariantsJSON = string(encoded)
 	}
 
 	data := hostedPageData{
 		jsonSnippetData:   configSnippetData,
-		MCPConfig:         configSnippet.String(),
-		CursorInstallLink: safeCursorURL,
-		VSCodeInstallLink: safeVsCodeURL,
+		MCPConfig:         defaultConn.Config,
+		CursorInstallLink: defaultConn.Cursor,
+		VSCodeInstallLink: defaultConn.VSCode,
 		OrganizationName:  in.OrgName,
 		SiteURL:           s.siteURL.String(),
 		ScriptURL:         "/mcp/install-page-" + s.installPageScriptHash + ".js",
@@ -1320,6 +1458,9 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 		DocsText:          in.DocsText,
 		Instructions:      in.Instructions,
 		IsPublic:          in.IsPublic,
+		FilteringEnabled:  in.FilteringEnabled,
+		Scopes:            in.Scopes,
+		ScopeVariantsJSON: scopeVariantsJSON,
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Funcs(templatefuncs.FuncMap()).Parse(hostedPageTmplData)
