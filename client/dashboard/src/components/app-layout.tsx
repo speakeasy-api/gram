@@ -136,7 +136,7 @@ const GlobalInsightsWrapper = ({ children }: { children: React.ReactNode }) => {
   return (
     <InsightsProvider
       mcpConfig={mcpConfig}
-      title="Ask AI"
+      title="How can I help you understand your AI usage?"
       subtitle="Your assistant for exploring the platform — logs, traces, MCP servers, and more."
       suggestions={[
         {

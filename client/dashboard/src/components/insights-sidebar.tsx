@@ -1,16 +1,24 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes.tsx";
+import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
 import type {
   ElementsConfig,
   ElementsTransportFactory,
 } from "@gram-ai/elements";
-import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import { Chat, ChatHistory, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type { UIMessage } from "ai";
 import {
   ChevronRight,
+  HistoryIcon,
   Loader2,
   Sparkles,
   SquarePen,
@@ -286,7 +294,9 @@ export function InsightsProvider({
   // calls in a long-lived runtime throw `tapLookupResources: Resource not
   // found for lookup: __LOCALID_…` during render.
   const [sessionKey, setSessionKey] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const { theme } = useMoonshineConfig();
+  const routes = useRoutes();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
   const mcpConfig = override?.mcpConfig ?? defaultMcpConfig;
@@ -405,6 +415,7 @@ export function InsightsProvider({
         },
       },
       welcome: {
+        logo: speakeasyIcon,
         title,
         subtitle,
         suggestions,
@@ -530,28 +541,19 @@ export function InsightsProvider({
         >
           {/* Header */}
           <div className="border-border bg-muted/30 flex items-center justify-between border-b px-4 py-3">
-            <div className="flex items-center gap-2">
+            <routes.assistants.Link className="group flex items-center gap-2">
               <Sparkles className="text-primary size-5" />
-              <span className="font-semibold">Project Assistant</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleStartFresh}
-                disabled={!assistantReady}
-                className="hover:bg-muted rounded p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Start a new conversation"
-                title="Start a new conversation"
-              >
-                <SquarePen className="size-[18px]" />
-              </button>
-              <button
-                onClick={() => setIsExpanded(false)}
-                className="hover:bg-muted rounded p-1.5 transition-colors"
-                aria-label="Close Project Assistant"
-              >
-                <ChevronRight className="size-5" />
-              </button>
-            </div>
+              <span className="font-semibold group-hover:underline">
+                Project Assistant
+              </span>
+            </routes.assistants.Link>
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="hover:bg-muted rounded p-1.5 transition-colors"
+              aria-label="Close Project Assistant"
+            >
+              <ChevronRight className="size-5" />
+            </button>
           </div>
 
           {/* Notice when the Project Assistant failed to connect */}
@@ -582,7 +584,44 @@ export function InsightsProvider({
                   pending={pendingPrompt}
                   onConsume={consumePendingPrompt}
                 />
-                <Chat />
+                <div className="flex h-full min-h-0 flex-col">
+                  {/* Thread nav: history picker + new conversation. Lives inside
+                      the Elements provider so <ChatHistory> can read the chat
+                      runtime; the header above (title, close) stays outside so it
+                      doesn't remount when "New" bumps the session key. */}
+                  <div className="border-border flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+                    <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          className="hover:bg-muted text-muted-foreground flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors"
+                          aria-label="Conversation history"
+                        >
+                          <HistoryIcon className="size-3.5" />
+                          History
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="max-h-96 w-72 overflow-y-auto p-0"
+                      >
+                        <ChatHistory className="max-h-96 overflow-y-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    <button
+                      onClick={handleStartFresh}
+                      disabled={!assistantReady}
+                      className="hover:bg-muted text-muted-foreground flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Start a new conversation"
+                      title="Start a new conversation"
+                    >
+                      <SquarePen className="size-3.5" />
+                      New
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <Chat />
+                  </div>
+                </div>
               </GramElementsProvider>
             ) : (
               !assistantError && (

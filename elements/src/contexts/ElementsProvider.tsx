@@ -227,7 +227,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // State to expose the current chat ID via context
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
-  const { data: mcpTools, mcpHeaders } = useMCPTools({
+  const {
+    data: mcpTools,
+    mcpHeaders,
+    isLoading: mcpQueryLoading,
+  } = useMCPTools({
     auth,
     mcp: config.mcp,
     mcps: config.mcps,
@@ -235,6 +239,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
   });
+  // Treat auth-loading as "tools not yet resolved" too — the MCP query is
+  // disabled (and so not "loading") until auth settles, so without this a
+  // tool-list consumer would briefly see an empty, settled state before tools
+  // arrive.
+  const mcpToolsLoading = auth.isLoading || mcpQueryLoading;
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
@@ -582,8 +591,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       setIsOpen,
       plugins,
       mcpTools,
+      mcpToolsLoading,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools],
+    [config, model, isExpanded, isOpen, plugins, mcpTools, mcpToolsLoading],
   );
 
   const frontendTools = config.tools?.frontendTools ?? {};
