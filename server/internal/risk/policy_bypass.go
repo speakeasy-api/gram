@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -98,16 +100,24 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request policy id")
 	}
 
-	if _, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass request").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if _, err := projectsrepo.New(dbtx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
 		ID:             projectID,
 		OrganizationID: claims.OrganizationID,
 	}); err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "project not found").Log(ctx, s.logger)
 	}
-	if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+	q := repo.New(dbtx)
+	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        policyID,
 		ProjectID: projectID,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
 	}
 
@@ -115,7 +125,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request target")
 	}
-	row, err := s.repo.UpsertRiskPolicyBypassRequest(ctx, repo.UpsertRiskPolicyBypassRequestParams{
+	row, err := q.UpsertRiskPolicyBypassRequest(ctx, repo.UpsertRiskPolicyBypassRequestParams{
 		ID:               requestID,
 		OrganizationID:   claims.OrganizationID,
 		ProjectID:        projectID,
@@ -131,6 +141,14 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy bypass request").Log(ctx, s.logger)
+	}
+
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestCreate, authCtx, policy.ID, policy.ProjectID, policy.Name, nil, &row); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request create").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass request").Log(ctx, s.logger)
 	}
 
 	return riskPolicyBypassRequestView(row)
@@ -164,7 +182,6 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
-
 	principal := urn.NewPrincipal(urn.PrincipalTypeUser, current.RequesterUserID)
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
@@ -193,6 +210,10 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 		return nil, oops.E(oops.CodeUnexpected, err, "approve risk policy bypass request").Log(ctx, s.logger)
 	}
 
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestApprove, authCtx, current.RiskPolicyID, current.ProjectID, "", &current, &row); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request approval").Log(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass approval").Log(ctx, s.logger)
 	}
@@ -213,7 +234,22 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid bypass request id")
 	}
-	row, err := s.repo.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass denial").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	q := repo.New(dbtx)
+	current, err := q.GetRiskPolicyBypassRequest(ctx, repo.GetRiskPolicyBypassRequestParams{
+		ID:        requestID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
+	}
+	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
 		Status:               riskPolicyBypassRequestStatusDenied,
 		DecidedBy:            conv.ToPGText(authCtx.UserID),
 		GrantedPrincipalUrns: []string{},
@@ -222,6 +258,14 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
+	}
+
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestDeny, authCtx, current.RiskPolicyID, current.ProjectID, "", &current, &row); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request denial").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass denial").Log(ctx, s.logger)
 	}
 
 	return riskPolicyBypassRequestView(row)
@@ -255,7 +299,6 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
-
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").Log(ctx, s.logger)
@@ -283,11 +326,141 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass request").Log(ctx, s.logger)
 	}
 
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestRevoke, authCtx, current.RiskPolicyID, current.ProjectID, "", &current, &row); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request revocation").Log(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass revocation").Log(ctx, s.logger)
 	}
 
 	return riskPolicyBypassRequestView(row)
+}
+
+func (s *Service) logRiskPolicyBypassRequestAudit(
+	ctx context.Context,
+	dbtx auditrepo.DBTX,
+	action audit.Action,
+	authCtx *contextvalues.AuthContext,
+	policyID uuid.UUID,
+	projectID uuid.UUID,
+	policyName string,
+	beforeRow *repo.RiskPolicyBypassRequest,
+	afterRow *repo.RiskPolicyBypassRequest,
+) error {
+	var before *audit.RiskPolicyBypassRequestSnapshot
+	var err error
+	if beforeRow != nil {
+		before, err = riskPolicyBypassRequestSnapshot(*beforeRow)
+		if err != nil {
+			return err
+		}
+	}
+
+	var after *audit.RiskPolicyBypassRequestSnapshot
+	if afterRow != nil {
+		after, err = riskPolicyBypassRequestSnapshot(*afterRow)
+		if err != nil {
+			return err
+		}
+	}
+
+	metadata, err := riskPolicyBypassRequestAuditMetadata(beforeRow, afterRow)
+	if err != nil {
+		return err
+	}
+
+	event := audit.LogRiskPolicyBypassRequestEvent{
+		OrganizationID:                    authCtx.ActiveOrganizationID,
+		ProjectID:                         projectID,
+		Actor:                             urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:                  authCtx.Email,
+		ActorSlug:                         nil,
+		RiskPolicyID:                      policyID,
+		RiskPolicyName:                    policyName,
+		PolicyBypassRequestSnapshotBefore: before,
+		PolicyBypassRequestSnapshotAfter:  after,
+		Metadata:                          metadata,
+	}
+
+	switch action {
+	case audit.ActionRiskPolicyBypassRequestCreate:
+		if err := s.audit.LogRiskPolicyBypassRequestCreate(ctx, dbtx, event); err != nil {
+			return fmt.Errorf("log risk policy bypass request create: %w", err)
+		}
+	case audit.ActionRiskPolicyBypassRequestApprove:
+		if err := s.audit.LogRiskPolicyBypassRequestApprove(ctx, dbtx, event); err != nil {
+			return fmt.Errorf("log risk policy bypass request approve: %w", err)
+		}
+	case audit.ActionRiskPolicyBypassRequestDeny:
+		if err := s.audit.LogRiskPolicyBypassRequestDeny(ctx, dbtx, event); err != nil {
+			return fmt.Errorf("log risk policy bypass request deny: %w", err)
+		}
+	case audit.ActionRiskPolicyBypassRequestRevoke:
+		if err := s.audit.LogRiskPolicyBypassRequestRevoke(ctx, dbtx, event); err != nil {
+			return fmt.Errorf("log risk policy bypass request revoke: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported risk policy bypass request audit action %q", action)
+	}
+
+	return nil
+}
+
+func riskPolicyBypassRequestSnapshot(row repo.RiskPolicyBypassRequest) (*audit.RiskPolicyBypassRequestSnapshot, error) {
+	view, err := riskPolicyBypassRequestView(row)
+	if err != nil {
+		return nil, err
+	}
+
+	return &audit.RiskPolicyBypassRequestSnapshot{
+		ID:                   view.ID,
+		PolicyID:             view.PolicyID,
+		TargetKind:           view.TargetKind,
+		TargetLabel:          view.TargetLabel,
+		TargetKey:            view.TargetKey,
+		TargetDimensions:     maps.Clone(view.TargetDimensions),
+		RequesterUserID:      view.RequesterUserID,
+		RequesterEmail:       view.RequesterEmail,
+		Note:                 view.Note,
+		Status:               view.Status,
+		DecidedBy:            view.DecidedBy,
+		GrantedPrincipalURNs: slices.Clone(view.GrantedPrincipalUrns),
+		DecidedAt:            view.DecidedAt,
+		CreatedAt:            view.CreatedAt,
+		UpdatedAt:            view.UpdatedAt,
+	}, nil
+}
+
+func riskPolicyBypassRequestAuditMetadata(beforeRow *repo.RiskPolicyBypassRequest, afterRow *repo.RiskPolicyBypassRequest) (*audit.RiskPolicyBypassRequestMetadata, error) {
+	source := afterRow
+	if source == nil {
+		source = beforeRow
+	}
+	if source == nil {
+		return nil, nil
+	}
+
+	dimensions, err := riskPolicyBypassDimensions(source.TargetDimensions)
+	if err != nil {
+		return nil, err
+	}
+
+	previousStatus := ""
+	if beforeRow != nil {
+		previousStatus = beforeRow.Status
+	}
+
+	return &audit.RiskPolicyBypassRequestMetadata{
+		RequestID:            source.ID.String(),
+		TargetKind:           conv.FromPGTextOrEmpty[string](source.TargetKind),
+		TargetKey:            conv.FromPGTextOrEmpty[string](source.TargetKey),
+		TargetDimensions:     dimensions,
+		RequesterUserID:      source.RequesterUserID,
+		GrantedPrincipalURNs: slices.Clone(source.GrantedPrincipalUrns),
+		PreviousStatus:       previousStatus,
+		CurrentStatus:        source.Status,
+	}, nil
 }
 
 func validateRiskPolicyBypassRequestStatus(status *string) error {

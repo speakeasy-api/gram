@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -32,6 +34,13 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	fullURL := "https://mcp.example.com/server"
 	token := riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL)
 
+	beforeCreateAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+	beforeApproveAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestApprove)
+	require.NoError(t, err)
+	beforeRevokeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
+	require.NoError(t, err)
+
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: token,
 	})
@@ -46,6 +55,18 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	assert.Equal(t, fullURL, request.TargetDimensions[authz.SelectorKeyServerURL])
 	assert.Equal(t, authCtx.UserID, request.RequesterUserID)
 
+	afterCreateAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCreateAuditCount+1, afterCreateAuditCount)
+	createRecord, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+	createMetadata, err := audittest.DecodeAuditData(createRecord.Metadata)
+	require.NoError(t, err)
+	assert.Equal(t, request.ID, createMetadata["request_id"])
+	assert.Equal(t, "requested", createMetadata["current_status"])
+	assert.Empty(t, createRecord.BeforeSnapshot)
+	require.NotEmpty(t, createRecord.AfterSnapshot)
+
 	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
 		ID: request.ID,
 	})
@@ -54,6 +75,18 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	require.Len(t, approved.GrantedPrincipalUrns, 1)
 	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 
+	afterApproveAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestApprove)
+	require.NoError(t, err)
+	require.Equal(t, beforeApproveAuditCount+1, afterApproveAuditCount)
+	approveRecord, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestApprove)
+	require.NoError(t, err)
+	approveMetadata, err := audittest.DecodeAuditData(approveRecord.Metadata)
+	require.NoError(t, err)
+	assert.Equal(t, "requested", approveMetadata["previous_status"])
+	assert.Equal(t, "approved", approveMetadata["current_status"])
+	require.NotEmpty(t, approveRecord.BeforeSnapshot)
+	require.NotEmpty(t, approveRecord.AfterSnapshot)
+
 	revoked, err := ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{
 		ID: request.ID,
 	})
@@ -61,6 +94,10 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	assert.Equal(t, "revoked", revoked.Status)
 	assert.Empty(t, revoked.GrantedPrincipalUrns)
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
+
+	afterRevokeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
+	require.NoError(t, err)
+	require.Equal(t, beforeRevokeAuditCount+1, afterRevokeAuditCount)
 }
 
 func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t *testing.T) {
@@ -84,12 +121,25 @@ func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t 
 	})
 	require.NoError(t, err)
 
+	beforeDenyAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestDeny)
+	require.NoError(t, err)
+
 	denied, err := ti.service.DenyRiskPolicyBypassRequest(ctx, &gen.DenyRiskPolicyBypassRequestPayload{
 		ID: request.ID,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "denied", denied.Status)
 	require.NotNil(t, denied.DecidedBy)
+
+	afterDenyAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestDeny)
+	require.NoError(t, err)
+	require.Equal(t, beforeDenyAuditCount+1, afterDenyAuditCount)
+	denyRecord, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestDeny)
+	require.NoError(t, err)
+	denyMetadata, err := audittest.DecodeAuditData(denyRecord.Metadata)
+	require.NoError(t, err)
+	assert.Equal(t, "requested", denyMetadata["previous_status"])
+	assert.Equal(t, "denied", denyMetadata["current_status"])
 
 	refreshed, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: token,
