@@ -44,10 +44,11 @@ func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
 
 // TestIsPresidioFalsePositive_CorpusAllFiltered is the canonical
 // positive-coverage gate: every IP in testdata/fp-ip.txt is an address
-// surfaced by a production risk_events scan that the catalog must drop.
-// Each line is run through isPresidioFalsePositive; any miss is a
-// regression. Regenerate the corpus from a fresh dump with the fpsplit
-// tool (see fp_split_test.go).
+// the catalog must drop. Each line is run through
+// isPresidioFalsePositive; any miss is a regression. The corpus is
+// hand-curated — extend it by adding IPs (one per line, sorted) that
+// surface as false positives during catalog tuning. Real residential
+// IPs (PII) are never added to the corpus or otherwise committed.
 func TestIsPresidioFalsePositive_CorpusAllFiltered(t *testing.T) {
 	t.Parallel()
 
