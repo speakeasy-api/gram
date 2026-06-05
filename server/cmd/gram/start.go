@@ -82,6 +82,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platforminsights "github.com/speakeasy-api/gram/server/internal/platformtools/insights"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
@@ -770,13 +771,33 @@ func newStartCommand() *cli.Command {
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
+			// Forward-declared so the managed-assistant observability tools (built
+			// just below) can hold lazy providers over them. These services are
+			// constructed later in startup, and chat in particular depends
+			// transitively on the platform toolset we're about to build — the
+			// providers are only invoked at tool-call time, long after startup has
+			// assigned them.
+			var (
+				deploymentsSvc   *deployments.Service
+				chatService      *chat.Service
+				organizationsSvc *organizations.Service
+				riskService      *risk.Service
+			)
+
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemSvc)
+			managedMgmtTools := platformtoolsruntime.ManagedAssistantManagementTools(platformtoolsruntime.ManagedAssistantServiceProviders{
+				Deployments:   func() platforminsights.DeploymentsService { return deploymentsSvc },
+				Chat:          func() platforminsights.ChatService { return chatService },
+				Organizations: func() platforminsights.OrganizationsService { return organizationsSvc },
+				Risk:          func() platforminsights.RiskService { return riskService },
+			})
+			managedObservabilityTools := append(append([]platformtools.ExternalTool{}, managedLogsTools...), managedMgmtTools...)
 			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 				AssistantMemoryTools:     memoryTools,
 				AssistantTriggerTools:    triggerTools,
-				ManagedAssistantLogTools: managedLogsTools,
+				ManagedAssistantLogTools: managedObservabilityTools,
 			})
 			// Runner-callable platform tools the runtime must be able to execute
 			// (trigger tools are wired separately via WithTriggerTools).
@@ -861,7 +882,7 @@ func newStartCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo)
+			chatService = chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
@@ -1015,7 +1036,8 @@ func newStartCommand() *cli.Command {
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
 			))
-			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient))
+			organizationsSvc = organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
+			organizations.Attach(mux, organizationsSvc)
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
@@ -1040,7 +1062,8 @@ func newStartCommand() *cli.Command {
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
 			assets.Attach(mux, assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, auditLogger))
-			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger))
+			deploymentsSvc = deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
+			deployments.Attach(mux, deploymentsSvc)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
@@ -1073,7 +1096,7 @@ func newStartCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, accessStore, auditLogger, c.String("pi-classifier-url") != "", hookPIIScanner, hookPIScanner)
+			riskService = risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, accessStore, auditLogger, c.String("pi-classifier-url") != "", hookPIIScanner, hookPIScanner)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 

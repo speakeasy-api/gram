@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platforminsights "github.com/speakeasy-api/gram/server/internal/platformtools/insights"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
@@ -139,6 +140,38 @@ func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []pl
 		{Executor: platformlogs.NewGetUserMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewGetObservabilityOverviewTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewListAttributeKeysTool(telemetrySvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantServiceProviders supplies the management services that back
+// the managed assistant's non-telemetry observability tools. They are providers
+// (func() Service) rather than values because the managed-assistant toolset is
+// built early at startup — before some of these services exist — to avoid a
+// toolset → mcpService → chatService → toolset construction cycle. Each provider
+// is invoked lazily at tool-call time, by which point startup has populated it.
+type ManagedAssistantServiceProviders struct {
+	Deployments   func() platforminsights.DeploymentsService
+	Chat          func() platforminsights.ChatService
+	Organizations func() platforminsights.OrganizationsService
+	Risk          func() platforminsights.RiskService
+}
+
+// ManagedAssistantManagementTools returns the managed assistant's observability
+// tools that are backed by management services other than telemetry —
+// deployments, chats, organization users, and risk — completing the catalog the
+// old client-side AI Insights copilot exposed. Each wrapped method enforces its
+// own authz against the calling user's grants (dashboard turns are sender-
+// scoped), so e.g. the risk tools resolve only for org admins.
+func ManagedAssistantManagementTools(p ManagedAssistantServiceProviders) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platforminsights.NewGetDeploymentLogsTool(p.Deployments), RequiredFeature: ""},
+		{Executor: platforminsights.NewListChatsTool(p.Chat), RequiredFeature: ""},
+		{Executor: platforminsights.NewLoadChatTool(p.Chat), RequiredFeature: ""},
+		{Executor: platforminsights.NewListOrganizationUsersTool(p.Organizations), RequiredFeature: ""},
+		{Executor: platforminsights.NewListRiskPoliciesTool(p.Risk), RequiredFeature: ""},
+		{Executor: platforminsights.NewListRiskResultsForAgentTool(p.Risk), RequiredFeature: ""},
+		{Executor: platforminsights.NewListRiskResultsByChatTool(p.Risk), RequiredFeature: ""},
+		{Executor: platforminsights.NewGetRiskPolicyStatusTool(p.Risk), RequiredFeature: ""},
 	}
 }
 

@@ -1,0 +1,109 @@
+package insights
+
+import (
+	"context"
+	"fmt"
+	"io"
+
+	"github.com/speakeasy-api/gram/server/gen/chat"
+	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+)
+
+type ListChats struct {
+	provider func() ChatService
+}
+
+type listChatsInput struct {
+	Search         *string `json:"search,omitempty" jsonschema:"Search query (matches chat ID, user ID, and title)."`
+	ExternalUserID *string `json:"external_user_id,omitempty" jsonschema:"Filter by external user ID."`
+	AssistantID    *string `json:"assistant_id,omitempty" jsonschema:"Filter to chats produced by this assistant."`
+	HasRisk        *string `json:"has_risk,omitempty" jsonschema:"Filter by whether the chat has risk findings: 'true', 'false', or omit for no filter."`
+	From           *string `json:"from,omitempty" jsonschema:"Only chats created after this ISO 8601 timestamp."`
+	To             *string `json:"to,omitempty" jsonschema:"Only chats created before this ISO 8601 timestamp."`
+	Limit          int     `json:"limit,omitempty" jsonschema:"Number of results per page."`
+	Offset         int     `json:"offset,omitempty" jsonschema:"Pagination offset."`
+	SortBy         string  `json:"sort_by,omitempty" jsonschema:"Field to sort by."`
+	SortOrder      string  `json:"sort_order,omitempty" jsonschema:"Sort order."`
+}
+
+func NewListChatsTool(provider func() ChatService) *ListChats {
+	return &ListChats{provider: provider}
+}
+
+func (s *ListChats) Descriptor() core.ToolDescriptor {
+	return core.ToolDescriptor{
+		SourceSlug:  "insights",
+		HandlerName: "list_chats",
+		Name:        "platform_list_chats",
+		Description: "List agent/assistant chat conversations in the current project, with optional search and filters.",
+		InputSchema: core.BuildInputSchema[listChatsInput](
+			core.WithPropertyEnum("has_risk", "", "true", "false"),
+			core.WithPropertyEnum("sort_by", "created_at", "num_messages"),
+			core.WithPropertyEnum("sort_order", "asc", "desc"),
+			core.WithPropertyFormat("from", "date-time"),
+			core.WithPropertyFormat("to", "date-time"),
+			core.WithPropertyNumberRange("limit", 1, 100),
+		),
+		Variables:   nil,
+		Annotations: readOnlyToolAnnotations(),
+		Managed:     true,
+		OwnerKind:   nil,
+		OwnerID:     nil,
+	}
+}
+
+func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+	svc := s.provider()
+	if svc == nil {
+		return fmt.Errorf("chat service not configured")
+	}
+
+	// Defaults mirror the telemetry/chat Goa transport defaults that direct
+	// service calls bypass.
+	input := listChatsInput{
+		Search:         nil,
+		ExternalUserID: nil,
+		AssistantID:    nil,
+		HasRisk:        nil,
+		From:           nil,
+		To:             nil,
+		Limit:          50,
+		Offset:         0,
+		SortBy:         "created_at",
+		SortOrder:      "desc",
+	}
+	if err := decodeToolInput(payload, &input); err != nil {
+		return err
+	}
+	if input.Limit == 0 {
+		input.Limit = 50
+	}
+	if input.SortBy == "" {
+		input.SortBy = "created_at"
+	}
+	if input.SortOrder == "" {
+		input.SortOrder = "desc"
+	}
+
+	result, err := svc.ListChats(ctx, &chat.ListChatsPayload{
+		SessionToken:      nil,
+		ProjectSlugInput:  nil,
+		ChatSessionsToken: nil,
+		Search:            input.Search,
+		ExternalUserID:    input.ExternalUserID,
+		AssistantID:       input.AssistantID,
+		HasRisk:           input.HasRisk,
+		From:              input.From,
+		To:                input.To,
+		Limit:             input.Limit,
+		Offset:            input.Offset,
+		SortBy:            input.SortBy,
+		SortOrder:         input.SortOrder,
+	})
+	if err != nil {
+		return fmt.Errorf("list chats: %w", err)
+	}
+
+	return encodeToolResult(wr, result)
+}

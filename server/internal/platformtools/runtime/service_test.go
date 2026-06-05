@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	platforminsights "github.com/speakeasy-api/gram/server/internal/platformtools/insights"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -41,6 +42,35 @@ func TestManagedAssistantLogsToolsExposesObservabilityCatalog(t *testing.T) {
 		"platform_get_user_metrics_summary",
 		"platform_get_observability_overview",
 		"platform_list_attribute_keys",
+	}, got)
+}
+
+// The management-service-backed half of the catalog (deployments, chats, org
+// users, risk). Same regression guard for the cross-service tools.
+func TestManagedAssistantManagementToolsExposesCatalog(t *testing.T) {
+	t.Parallel()
+
+	tools := ManagedAssistantManagementTools(ManagedAssistantServiceProviders{
+		Deployments:   func() platforminsights.DeploymentsService { return nil },
+		Chat:          func() platforminsights.ChatService { return nil },
+		Organizations: func() platforminsights.OrganizationsService { return nil },
+		Risk:          func() platforminsights.RiskService { return nil },
+	})
+
+	got := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		got = append(got, tool.Executor.Descriptor().Name)
+	}
+
+	require.ElementsMatch(t, []string{
+		"platform_get_deployment_logs",
+		"platform_list_chats",
+		"platform_load_chat",
+		"platform_list_organization_users",
+		"platform_list_risk_policies",
+		"platform_list_risk_results_for_agent",
+		"platform_list_risk_results_by_chat",
+		"platform_get_risk_policy_status",
 	}, got)
 }
 
