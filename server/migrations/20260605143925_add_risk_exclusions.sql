@@ -9,7 +9,7 @@ CREATE INDEX CONCURRENTLY "risk_results_project_found_idx" ON "risk_results" ("p
 -- Create index "risk_results_excluded_exclusion_idx" to table: "risk_results"
 CREATE INDEX CONCURRENTLY "risk_results_excluded_exclusion_idx" ON "risk_results" ("excluded_exclusion_id") WHERE (excluded_exclusion_id IS NOT NULL);
 -- Create index "risk_results_policy_match_idx" to table: "risk_results"
-CREATE INDEX CONCURRENTLY "risk_results_policy_match_idx" ON "risk_results" ("project_id", "risk_policy_id", "rule_id");
+CREATE INDEX CONCURRENTLY "risk_results_policy_match_idx" ON "risk_results" ("project_id", "risk_policy_id", "rule_id", "match");
 -- Create "risk_exclusions" table
 CREATE TABLE "risk_exclusions" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
