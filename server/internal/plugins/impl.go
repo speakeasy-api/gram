@@ -565,7 +565,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 
 	row, err := s.repo.WithTx(tx).AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    pluginID,
-		ToolsetID:   toolsetID,
+		ToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: payload.DisplayName,
 		Policy:      payload.Policy,
 		SortOrder:   payload.SortOrder,
@@ -591,7 +591,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		ServerDisplayName: row.DisplayName,
 		ServerPolicy:      row.Policy,
 		ServerSortOrder:   row.SortOrder,
-		ToolsetURN:        urn.NewToolset(row.ToolsetID),
+		ToolsetURN:        urn.NewToolset(row.ToolsetID.UUID),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server add").Log(ctx, s.logger)
 	}
@@ -1678,7 +1678,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 			// toolset without an mcp_metadata row simply has no user-provided
 			// env vars — UpsertMetadata is explicit, not auto-created on publish.
 			if r.ToolsetIsPublic {
-				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: r.ToolsetID, Valid: true})
+				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
 				switch {
 				case errors.Is(metaErr, pgx.ErrNoRows):
 					// No metadata configured → no env configs to surface.
@@ -1701,7 +1701,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 						headerName := conv.FromPGText[string](ec.HeaderDisplayName)
 						if headerName == nil {
 							s.logger.WarnContext(ctx, "skipping user env config with no header name",
-								attr.SlogToolsetID(r.ToolsetID.String()),
+								attr.SlogToolsetID(r.ToolsetID.UUID.String()),
 								attr.SlogEnvVarName(ec.VariableName),
 							)
 							continue
@@ -1812,7 +1812,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 func pluginServerToGen(s repo.PluginServer) *gen.PluginServer {
 	return &gen.PluginServer{
 		ID:          s.ID.String(),
-		ToolsetID:   s.ToolsetID.String(),
+		ToolsetID:   s.ToolsetID.UUID.String(),
 		DisplayName: s.DisplayName,
 		Policy:      s.Policy,
 		SortOrder:   s.SortOrder,
