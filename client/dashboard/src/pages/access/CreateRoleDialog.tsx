@@ -362,11 +362,14 @@ export function CreateRoleDialog({
 
       let rules = grant.rules.filter((_, i) => i !== ruleIndex);
 
-      // Removing the last allow chip falls back to unrestricted instead of
+      // Removing a narrower allow chip falls back to unrestricted instead of
       // unchecking the scope. Any remaining denies were exceptions to the
-      // prior narrower allow, so they get dropped along with it.
+      // prior narrower allow, so they get dropped along with it. If the
+      // removed rule was already unrestricted, the X click means "uncheck
+      // this scope" — fall through to the empty-rules clear path.
       if (
         removed.effect === "allow" &&
+        removed.selectors !== null &&
         !rules.some((r) => r.effect === "allow")
       ) {
         rules = [{ id: crypto.randomUUID(), effect: "allow", selectors: null }];
