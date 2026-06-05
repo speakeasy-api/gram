@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * listRiskPolicyBypassRequests risk
  *
  * @remarks
- * List current risk policy bypass request workflow records for administrators.
+ * List current risk policy bypass request workflow records.
  */
 export function riskPolicyBypassRequestsList(
   client: GramCore,

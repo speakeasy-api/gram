@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * denyRiskPolicyBypassRequest risk
  *
  * @remarks
- * Deny a risk policy bypass request. Denial updates workflow state only and does not change grants.
+ * Deny a risk policy bypass request, updating workflow state.
  */
 export function riskPolicyBypassRequestsDeny(
   client: GramCore,

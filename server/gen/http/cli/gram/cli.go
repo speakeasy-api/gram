@@ -10464,10 +10464,10 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp: Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
 	fmt.Fprintln(os.Stderr, `    revoke-shadow-mcp-approval: Remove a previously-approved shadow-MCP server for a policy.`)
 	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
-	fmt.Fprintln(os.Stderr, `    list-risk-policy-bypass-requests: List current risk policy bypass request workflow records for administrators.`)
-	fmt.Fprintln(os.Stderr, `    approve-risk-policy-bypass-request: Approve a risk policy bypass request and grant the requester risk_policy:bypass for the requested policy target.`)
-	fmt.Fprintln(os.Stderr, `    deny-risk-policy-bypass-request: Deny a risk policy bypass request. Denial updates workflow state only and does not change grants.`)
-	fmt.Fprintln(os.Stderr, `    revoke-risk-policy-bypass-request: Revoke a previously approved risk policy bypass request and remove the corresponding risk_policy:bypass grant.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-policy-bypass-requests: List current risk policy bypass request workflow records.`)
+	fmt.Fprintln(os.Stderr, `    approve-risk-policy-bypass-request: Approve a risk policy bypass request for the requested policy target.`)
+	fmt.Fprintln(os.Stderr, `    deny-risk-policy-bypass-request: Deny a risk policy bypass request, updating workflow state.`)
+	fmt.Fprintln(os.Stderr, `    revoke-risk-policy-bypass-request: Revoke a previously approved risk policy bypass request.`)
 	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `+"`"+`limit=0`+"`"+` to backfill every unanalyzed message.`)
 	fmt.Fprintln(os.Stderr, `    create-custom-detection-rule: Create a custom regex-backed detection rule for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-custom-detection-rules: List custom detection rules for the current project.`)
@@ -10964,7 +10964,7 @@ func riskListRiskPolicyBypassRequestsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List current risk policy bypass request workflow records for administrators.`)
+	fmt.Fprintln(os.Stderr, `List current risk policy bypass request workflow records.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
@@ -10989,7 +10989,7 @@ func riskApproveRiskPolicyBypassRequestUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Approve a risk policy bypass request and grant the requester risk_policy:bypass for the requested policy target.`)
+	fmt.Fprintln(os.Stderr, `Approve a risk policy bypass request for the requested policy target.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11013,7 +11013,7 @@ func riskDenyRiskPolicyBypassRequestUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Deny a risk policy bypass request. Denial updates workflow state only and does not change grants.`)
+	fmt.Fprintln(os.Stderr, `Deny a risk policy bypass request, updating workflow state.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -11037,7 +11037,7 @@ func riskRevokeRiskPolicyBypassRequestUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke a previously approved risk policy bypass request and remove the corresponding risk_policy:bypass grant.`)
+	fmt.Fprintln(os.Stderr, `Revoke a previously approved risk policy bypass request.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

@@ -70,16 +70,13 @@ type Service interface {
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
 	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
-	// List current risk policy bypass request workflow records for administrators.
+	// List current risk policy bypass request workflow records.
 	ListRiskPolicyBypassRequests(context.Context, *ListRiskPolicyBypassRequestsPayload) (res *ListRiskPolicyBypassRequestsResult, err error)
-	// Approve a risk policy bypass request and grant the requester
-	// risk_policy:bypass for the requested policy target.
+	// Approve a risk policy bypass request for the requested policy target.
 	ApproveRiskPolicyBypassRequest(context.Context, *ApproveRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
-	// Deny a risk policy bypass request. Denial updates workflow state only and
-	// does not change grants.
+	// Deny a risk policy bypass request, updating workflow state.
 	DenyRiskPolicyBypassRequest(context.Context, *DenyRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
-	// Revoke a previously approved risk policy bypass request and remove the
-	// corresponding risk_policy:bypass grant.
+	// Revoke a previously approved risk policy bypass request.
 	RevokeRiskPolicyBypassRequest(context.Context, *RevokeRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
 	// Manually trigger risk analysis for a policy, starting or signaling the drain
 	// workflow. Defaults to the most recent 100 unanalyzed messages; pass

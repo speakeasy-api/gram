@@ -52,7 +52,7 @@ export type RiskDenyPolicyBypassRequestMutationError =
  * denyRiskPolicyBypassRequest risk
  *
  * @remarks
- * Deny a risk policy bypass request. Denial updates workflow state only and does not change grants.
+ * Deny a risk policy bypass request, updating workflow state.
  */
 export function useRiskDenyPolicyBypassRequestMutation(
   options?: MutationHookOptions<

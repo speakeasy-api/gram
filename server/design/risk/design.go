@@ -618,7 +618,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("listRiskPolicyBypassRequests", func() {
-		Description("List current risk policy bypass request workflow records for administrators.")
+		Description("List current risk policy bypass request workflow records.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -651,7 +651,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("approveRiskPolicyBypassRequest", func() {
-		Description("Approve a risk policy bypass request and grant the requester risk_policy:bypass for the requested policy target.")
+		Description("Approve a risk policy bypass request for the requested policy target.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -680,7 +680,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("denyRiskPolicyBypassRequest", func() {
-		Description("Deny a risk policy bypass request. Denial updates workflow state only and does not change grants.")
+		Description("Deny a risk policy bypass request, updating workflow state.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -709,7 +709,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("revokeRiskPolicyBypassRequest", func() {
-		Description("Revoke a previously approved risk policy bypass request and remove the corresponding risk_policy:bypass grant.")
+		Description("Revoke a previously approved risk policy bypass request.")
 
 		Payload(func() {
 			security.ByKeyPayload()

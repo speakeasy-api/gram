@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * approveRiskPolicyBypassRequest risk
  *
  * @remarks
- * Approve a risk policy bypass request and grant the requester risk_policy:bypass for the requested policy target.
+ * Approve a risk policy bypass request for the requested policy target.
  */
 export function riskPolicyBypassRequestsApprove(
   client: GramCore,

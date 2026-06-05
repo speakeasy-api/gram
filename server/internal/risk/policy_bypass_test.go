@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func TestRiskPolicyBypassRequest_URLTokenLifecycle(t *testing.T) {
+func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -63,7 +63,7 @@ func TestRiskPolicyBypassRequest_URLTokenLifecycle(t *testing.T) {
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 }
 
-func TestRiskPolicyBypassRequest_ReRequestAfterDenyResetsState(t *testing.T) {
+func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 

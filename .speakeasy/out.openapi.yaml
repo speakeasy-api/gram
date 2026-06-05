@@ -20865,7 +20865,7 @@ paths:
         name: RiskListShadowMCPApprovals
   /rpc/risk.approvePolicyBypassRequest:
     post:
-      description: Approve a risk policy bypass request and grant the requester risk_policy:bypass for the requested policy target.
+      description: Approve a risk policy bypass request for the requested policy target.
       operationId: approveRiskPolicyBypassRequest
       parameters:
         - allowEmptyValue: true
@@ -21897,7 +21897,7 @@ paths:
         type: mutation
   /rpc/risk.denyPolicyBypassRequest:
     post:
-      description: Deny a risk policy bypass request. Denial updates workflow state only and does not change grants.
+      description: Deny a risk policy bypass request, updating workflow state.
       operationId: denyRiskPolicyBypassRequest
       parameters:
         - allowEmptyValue: true
@@ -22004,7 +22004,7 @@ paths:
         type: mutation
   /rpc/risk.listPolicyBypassRequests:
     get:
-      description: List current risk policy bypass request workflow records for administrators.
+      description: List current risk policy bypass request workflow records.
       operationId: listRiskPolicyBypassRequests
       parameters:
         - allowEmptyValue: true
@@ -23687,7 +23687,7 @@ paths:
         name: RiskListResultsForAgent
   /rpc/risk.revokePolicyBypassRequest:
     post:
-      description: Revoke a previously approved risk policy bypass request and remove the corresponding risk_policy:bypass grant.
+      description: Revoke a previously approved risk policy bypass request.
       operationId: revokeRiskPolicyBypassRequest
       parameters:
         - allowEmptyValue: true

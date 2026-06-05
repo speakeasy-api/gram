@@ -17,7 +17,7 @@ export class PolicyBypassRequests extends ClientSDK {
    * approveRiskPolicyBypassRequest risk
    *
    * @remarks
-   * Approve a risk policy bypass request and grant the requester risk_policy:bypass for the requested policy target.
+   * Approve a risk policy bypass request for the requested policy target.
    */
   async approve(
     request: operations.ApproveRiskPolicyBypassRequestRequest,
@@ -55,7 +55,7 @@ export class PolicyBypassRequests extends ClientSDK {
    * denyRiskPolicyBypassRequest risk
    *
    * @remarks
-   * Deny a risk policy bypass request. Denial updates workflow state only and does not change grants.
+   * Deny a risk policy bypass request, updating workflow state.
    */
   async deny(
     request: operations.DenyRiskPolicyBypassRequestRequest,
@@ -74,7 +74,7 @@ export class PolicyBypassRequests extends ClientSDK {
    * listRiskPolicyBypassRequests risk
    *
    * @remarks
-   * List current risk policy bypass request workflow records for administrators.
+   * List current risk policy bypass request workflow records.
    */
   async list(
     request?: operations.ListRiskPolicyBypassRequestsRequest | undefined,
@@ -93,7 +93,7 @@ export class PolicyBypassRequests extends ClientSDK {
    * revokeRiskPolicyBypassRequest risk
    *
    * @remarks
-   * Revoke a previously approved risk policy bypass request and remove the corresponding risk_policy:bypass grant.
+   * Revoke a previously approved risk policy bypass request.
    */
   async revoke(
     request: operations.RevokeRiskPolicyBypassRequestRequest,

@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -56,7 +54,7 @@ func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen
 
 	requests := make([]*gen.RiskPolicyBypassRequest, 0, len(rows))
 	for _, row := range rows {
-		req, err := riskPolicyBypassRequestToType(row)
+		req, err := riskPolicyBypassRequestView(row)
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +133,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy bypass request").Log(ctx, s.logger)
 	}
 
-	return riskPolicyBypassRequestToType(row)
+	return riskPolicyBypassRequestView(row)
 }
 
 func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *gen.ApproveRiskPolicyBypassRequestPayload) (*gen.RiskPolicyBypassRequest, error) {
@@ -199,7 +197,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass approval").Log(ctx, s.logger)
 	}
 
-	return riskPolicyBypassRequestToType(row)
+	return riskPolicyBypassRequestView(row)
 }
 
 func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.DenyRiskPolicyBypassRequestPayload) (*gen.RiskPolicyBypassRequest, error) {
@@ -226,7 +224,7 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
 
-	return riskPolicyBypassRequestToType(row)
+	return riskPolicyBypassRequestView(row)
 }
 
 func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *gen.RevokeRiskPolicyBypassRequestPayload) (*gen.RiskPolicyBypassRequest, error) {
@@ -289,7 +287,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass revocation").Log(ctx, s.logger)
 	}
 
-	return riskPolicyBypassRequestToType(row)
+	return riskPolicyBypassRequestView(row)
 }
 
 func validateRiskPolicyBypassRequestStatus(status *string) error {
@@ -312,40 +310,42 @@ type riskPolicyBypassRequestTarget struct {
 }
 
 func riskPolicyBypassTargetFromClaims(claims *policyBypassRequestClaims) (riskPolicyBypassRequestTarget, error) {
+	var kind string
+	var key string
+	dimensions := []byte("{}")
+
 	switch {
 	case optionalStringValue(claims.ObservedFullURL) != "":
-		fullURL := optionalStringValue(claims.ObservedFullURL)
-		return marshalRiskPolicyBypassTarget(authz.SelectorKeyServerURL, riskPolicyBypassTargetLabel(claims, fullURL), fullURL, map[string]string{
-			authz.SelectorKeyServerURL: fullURL,
+		kind = authz.SelectorKeyServerURL
+		key = optionalStringValue(claims.ObservedFullURL)
+
+		rawDimensions, err := json.Marshal(map[string]string{
+			authz.SelectorKeyServerURL: key,
 		})
+		if err != nil {
+			return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
+		}
+		dimensions = rawDimensions
 	case optionalStringValue(claims.ObservedURLHost) != "":
-		host := optionalStringValue(claims.ObservedURLHost)
-		return marshalRiskPolicyBypassTarget("url_host", riskPolicyBypassTargetLabel(claims, host), host, map[string]string{})
+		kind = "url_host"
+		key = optionalStringValue(claims.ObservedURLHost)
 	case optionalStringValue(claims.ObservedServerIdentity) != "":
-		identity := optionalStringValue(claims.ObservedServerIdentity)
-		return marshalRiskPolicyBypassTarget("server_identity", riskPolicyBypassTargetLabel(claims, identity), identity, map[string]string{})
+		kind = "server_identity"
+		key = optionalStringValue(claims.ObservedServerIdentity)
 	default:
 		return riskPolicyBypassRequestTarget{}, fmt.Errorf("target evidence is required")
 	}
-}
 
-func riskPolicyBypassTargetLabel(claims *policyBypassRequestClaims, fallback string) string {
-	if label := optionalStringValue(claims.ObservedName); label != "" {
-		return label
+	label := optionalStringValue(claims.ObservedName)
+	if label == "" {
+		label = key
 	}
-	return fallback
-}
 
-func marshalRiskPolicyBypassTarget(kind, label, key string, dimensions map[string]string) (riskPolicyBypassRequestTarget, error) {
-	rawDimensions, err := json.Marshal(dimensions)
-	if err != nil {
-		return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
-	}
 	return riskPolicyBypassRequestTarget{
 		kind:       kind,
 		label:      label,
 		key:        key,
-		dimensions: rawDimensions,
+		dimensions: dimensions,
 	}, nil
 }
 
@@ -354,6 +354,7 @@ func riskPolicyBypassGrantSelector(row repo.RiskPolicyBypassRequest) (authz.Sele
 	if err != nil {
 		return nil, err
 	}
+
 	targetKind := conv.FromPGTextOrEmpty[string](row.TargetKind)
 	if targetKind != "" && targetKind != authz.SelectorKeyServerURL && dimensions[authz.SelectorKeyServerURL] == "" {
 		return nil, fmt.Errorf("unsupported risk policy bypass target kind %q", targetKind)
@@ -367,10 +368,16 @@ func riskPolicyBypassGrantSelector(row repo.RiskPolicyBypassRequest) (authz.Sele
 	return selector, nil
 }
 
-func riskPolicyBypassRequestToType(row repo.RiskPolicyBypassRequest) (*gen.RiskPolicyBypassRequest, error) {
+func riskPolicyBypassRequestView(row repo.RiskPolicyBypassRequest) (*gen.RiskPolicyBypassRequest, error) {
 	dimensions, err := riskPolicyBypassDimensions(row.TargetDimensions)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "decode risk policy bypass target dimensions")
+	}
+
+	decidedAt := conv.FromPGTimestamptz(row.DecidedAt)
+	var decidedAtPtr *string
+	if decidedAt != "" {
+		decidedAtPtr = &decidedAt
 	}
 
 	return &gen.RiskPolicyBypassRequest{
@@ -386,9 +393,9 @@ func riskPolicyBypassRequestToType(row repo.RiskPolicyBypassRequest) (*gen.RiskP
 		Status:               row.Status,
 		DecidedBy:            conv.FromPGText[string](row.DecidedBy),
 		GrantedPrincipalUrns: slices.Clone(row.GrantedPrincipalUrns),
-		DecidedAt:            pgTimeStringPtr(row.DecidedAt),
-		CreatedAt:            pgTimeString(row.CreatedAt),
-		UpdatedAt:            pgTimeString(row.UpdatedAt),
+		DecidedAt:            decidedAtPtr,
+		CreatedAt:            conv.FromPGTimestamptz(row.CreatedAt),
+		UpdatedAt:            conv.FromPGTimestamptz(row.UpdatedAt),
 	}, nil
 }
 
@@ -396,27 +403,15 @@ func riskPolicyBypassDimensions(raw []byte) (map[string]string, error) {
 	if len(raw) == 0 {
 		return map[string]string{}, nil
 	}
+
 	var dimensions map[string]string
 	if err := json.Unmarshal(raw, &dimensions); err != nil {
 		return nil, fmt.Errorf("unmarshal dimensions: %w", err)
 	}
+
 	if dimensions == nil {
 		return map[string]string{}, nil
 	}
+
 	return dimensions, nil
-}
-
-func pgTimeString(ts pgtype.Timestamptz) string {
-	if !ts.Valid {
-		return ""
-	}
-	return ts.Time.UTC().Format(time.RFC3339)
-}
-
-func pgTimeStringPtr(ts pgtype.Timestamptz) *string {
-	if !ts.Valid {
-		return nil
-	}
-	value := pgTimeString(ts)
-	return &value
 }

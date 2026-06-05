@@ -52,7 +52,7 @@ export type RiskRevokePolicyBypassRequestMutationError =
  * revokeRiskPolicyBypassRequest risk
  *
  * @remarks
- * Revoke a previously approved risk policy bypass request and remove the corresponding risk_policy:bypass grant.
+ * Revoke a previously approved risk policy bypass request.
  */
 export function useRiskRevokePolicyBypassRequestMutation(
   options?: MutationHookOptions<
