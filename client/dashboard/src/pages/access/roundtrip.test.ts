@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import type { Role } from "@gram/client/models/components/role.js";
-import { grantsFromRole, sdkGrantsFromForm } from "./roleGrantTransform";
+import type { RoleGrant } from "./types";
+import {
+  applyRemoveRule,
+  diffGrants,
+  grantsFromRole,
+  sdkGrantsFromForm,
+} from "./roleGrantTransform";
 
 function role(grants: Role["grants"]): Role {
   return {
@@ -62,5 +68,100 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
         effect: "deny",
       }),
     );
+  });
+});
+
+describe("diffGrants", () => {
+  it("treats two risk-policy selectors differing only in serverUrl as distinct", () => {
+    // serverUrl is the differentiating dimension for risk_policy scopes.
+    // selectorKey must include it or the diff collapses both grants to the
+    // same identity and the change is silently dropped.
+    const before = [
+      {
+        scope: "risk_policy:evaluate" as const,
+        effect: "allow" as const,
+        selectors: [
+          {
+            resourceKind: "risk_policy" as const,
+            resourceId: "*",
+            serverUrl: "https://a.example.com",
+          },
+        ],
+      },
+    ];
+    const after = [
+      {
+        scope: "risk_policy:evaluate" as const,
+        effect: "allow" as const,
+        selectors: [
+          {
+            resourceKind: "risk_policy" as const,
+            resourceId: "*",
+            serverUrl: "https://b.example.com",
+          },
+        ],
+      },
+    ];
+
+    const { addGrants, removeGrants } = diffGrants(before, after);
+
+    expect(removeGrants).toHaveLength(1);
+    expect(addGrants).toHaveLength(1);
+  });
+});
+
+describe("applyRemoveRule", () => {
+  it("unchecks the scope when an unrestricted allow is removed, dropping orphaned denies", () => {
+    const grant: RoleGrant = {
+      scope: "mcp:connect",
+      rules: [
+        { id: "a", effect: "allow", selectors: null },
+        {
+          id: "d",
+          effect: "deny",
+          selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+        },
+      ],
+    };
+
+    expect(applyRemoveRule(grant, 0)).toBeNull();
+  });
+
+  it("falls back to unrestricted when the only narrower allow is removed", () => {
+    const grant: RoleGrant = {
+      scope: "mcp:connect",
+      rules: [
+        {
+          id: "a",
+          effect: "allow",
+          selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+        },
+      ],
+    };
+
+    const next = applyRemoveRule(grant, 0);
+    expect(next).not.toBeNull();
+    expect(next!.rules).toHaveLength(1);
+    expect(next!.rules[0]!.effect).toBe("allow");
+    expect(next!.rules[0]!.selectors).toBeNull();
+  });
+
+  it("filters a deny without touching surviving allows", () => {
+    const grant: RoleGrant = {
+      scope: "mcp:connect",
+      rules: [
+        { id: "a", effect: "allow", selectors: null },
+        {
+          id: "d",
+          effect: "deny",
+          selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+        },
+      ],
+    };
+
+    const next = applyRemoveRule(grant, 1);
+    expect(next).not.toBeNull();
+    expect(next!.rules).toHaveLength(1);
+    expect(next!.rules[0]!.effect).toBe("allow");
   });
 });

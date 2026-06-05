@@ -156,6 +156,7 @@ function selectorKey(selector: Selector | undefined): string {
     projectId: selector.projectId ?? "",
     resourceId: selector.resourceId,
     resourceKind: selector.resourceKind,
+    serverUrl: selector.serverUrl ?? "",
     tool: selector.tool ?? "",
   });
 }
@@ -237,4 +238,37 @@ export function diffGrants(
     addGrants: grantsFromIdentities(addIdentities),
     removeGrants: grantsFromIdentities(removeIdentities),
   };
+}
+
+/**
+ * Pure helper for the chip X-click behavior on a single scope's grant.
+ * Returns the next grant value, or null when the scope should be removed
+ * entirely from the form state.
+ *
+ *   - removing a narrower allow that leaves no allows → fall back to
+ *     unrestricted ("All servers"); orphaned denies are dropped.
+ *   - removing an unrestricted allow → orphan-clear: scope unchecks, any
+ *     denies go with it.
+ *   - removing a deny → just filter it out; allows preserved.
+ *   - removing one of several allows → just filter it out.
+ */
+export function applyRemoveRule(
+  grant: RoleGrant,
+  ruleIndex: number,
+): RoleGrant | null {
+  const removed = grant.rules[ruleIndex];
+  if (!removed) return grant;
+
+  let rules = grant.rules.filter((_, i) => i !== ruleIndex);
+  const hasAllow = rules.some((r) => r.effect === "allow");
+
+  if (removed.effect === "allow" && removed.selectors !== null && !hasAllow) {
+    rules = [{ id: crypto.randomUUID(), effect: "allow", selectors: null }];
+  } else if (!hasAllow) {
+    // No allows left — any remaining denies are orphaned, clear them too.
+    rules = [];
+  }
+
+  if (rules.length === 0) return null;
+  return { ...grant, rules };
 }

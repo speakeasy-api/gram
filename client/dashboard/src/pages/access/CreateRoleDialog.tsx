@@ -64,9 +64,10 @@ import {
   computeRuleTooltip,
 } from "./roleDialogState";
 import {
+  applyRemoveRule,
+  diffGrants,
   grantsFromRole,
   sdkGrantsFromForm,
-  diffGrants,
 } from "./roleGrantTransform";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -357,30 +358,14 @@ export function CreateRoleDialog({
     setGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
-      const removed = grant.rules[ruleIndex];
-      if (!removed) return prev;
-
-      let rules = grant.rules.filter((_, i) => i !== ruleIndex);
-
-      // Removing a narrower allow chip falls back to unrestricted instead of
-      // unchecking the scope. Any remaining denies were exceptions to the
-      // prior narrower allow, so they get dropped along with it. If the
-      // removed rule was already unrestricted, the X click means "uncheck
-      // this scope" — fall through to the empty-rules clear path.
-      if (
-        removed.effect === "allow" &&
-        removed.selectors !== null &&
-        !rules.some((r) => r.effect === "allow")
-      ) {
-        rules = [{ id: crypto.randomUUID(), effect: "allow", selectors: null }];
-      }
-
-      if (rules.length === 0) {
-        const next = { ...prev };
+      const result = applyRemoveRule(grant, ruleIndex);
+      const next = { ...prev };
+      if (result === null) {
         delete next[scopeSlug];
-        return next;
+      } else {
+        next[scopeSlug] = result;
       }
-      return { ...prev, [scopeSlug]: { ...grant, rules } };
+      return next;
     });
   };
 
