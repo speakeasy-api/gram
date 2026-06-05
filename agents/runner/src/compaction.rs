@@ -409,12 +409,18 @@ fn concat_text(parts: &[Part]) -> String {
     buf
 }
 
+// Mirrors `agentkit_adapter_completions::request::tool_output_to_string` so
+// the persisted compaction row matches what the next outbound capture would
+// have stored. `Parts` and `Files` get the same JSON-serialised shape the
+// completions adapter sends upstream; collapsing them to text would drop
+// structured/media/file payloads that the assistant relies on after a cold
+// bootstrap.
 fn tool_output_text(output: &ToolOutput) -> String {
     match output {
         ToolOutput::Text(s) => s.clone(),
         ToolOutput::Structured(v) => v.to_string(),
-        ToolOutput::Parts(parts) => concat_text(parts),
-        ToolOutput::Files(_) => String::new(),
+        ToolOutput::Parts(parts) => serde_json::to_string(parts).unwrap_or_else(|_| "[]".into()),
+        ToolOutput::Files(files) => serde_json::to_string(files).unwrap_or_else(|_| "[]".into()),
     }
 }
 
