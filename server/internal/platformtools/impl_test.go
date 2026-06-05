@@ -20,6 +20,34 @@ func (f *fakeTelemetryService) SearchLogs(_ context.Context, payload *telemetry.
 	return &telemetry.SearchLogsResult{}, nil
 }
 
+func (f *fakeTelemetryService) SearchToolCalls(_ context.Context, _ *telemetry.SearchToolCallsPayload) (*telemetry.SearchToolCallsResult, error) {
+	return &telemetry.SearchToolCallsResult{}, nil
+}
+
+func (f *fakeTelemetryService) SearchChats(_ context.Context, _ *telemetry.SearchChatsPayload) (*telemetry.SearchChatsResult, error) {
+	return &telemetry.SearchChatsResult{}, nil
+}
+
+func (f *fakeTelemetryService) SearchUsers(_ context.Context, _ *telemetry.SearchUsersPayload) (*telemetry.SearchUsersResult, error) {
+	return &telemetry.SearchUsersResult{}, nil
+}
+
+func (f *fakeTelemetryService) GetProjectMetricsSummary(_ context.Context, _ *telemetry.GetProjectMetricsSummaryPayload) (*telemetry.GetMetricsSummaryResult, error) {
+	return &telemetry.GetMetricsSummaryResult{}, nil
+}
+
+func (f *fakeTelemetryService) GetUserMetricsSummary(_ context.Context, _ *telemetry.GetUserMetricsSummaryPayload) (*telemetry.GetUserMetricsSummaryResult, error) {
+	return &telemetry.GetUserMetricsSummaryResult{}, nil
+}
+
+func (f *fakeTelemetryService) GetObservabilityOverview(_ context.Context, _ *telemetry.GetObservabilityOverviewPayload) (*telemetry.GetObservabilityOverviewResult, error) {
+	return &telemetry.GetObservabilityOverviewResult{}, nil
+}
+
+func (f *fakeTelemetryService) ListAttributeKeys(_ context.Context, _ *telemetry.ListAttributeKeysPayload) (*telemetry.ListAttributeKeysResult, error) {
+	return &telemetry.ListAttributeKeysResult{}, nil
+}
+
 func TestExecuteSearchLogs_IgnoresInjectedAuthFields(t *testing.T) {
 	t.Parallel()
 
