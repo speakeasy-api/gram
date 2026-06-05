@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: e2c962adbc3f838d52243e0b564fbfe0
+  docChecksum: 538eb021c5c4f43c9bf822396f0aa93f
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -4211,7 +4211,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:6df921dac916d53c18d46c40a3fc35b73e18f0fa
+    last_write_checksum: sha1:d47c2cef6264063f92588e9e3ac02cbccac9ee8e
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -5148,7 +5148,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:25dc70977cec23e9c2652c1b6b523c56ec361729
+    last_write_checksum: sha1:a7500bde36e7183444e5609cf23e1d9b2b5cdc93
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5794,7 +5794,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:612195db3974c2f114188d91b2ce41557381db75
+    last_write_checksum: sha1:dad9abc9915eb1bc3519d519773a6f1ee6005e40
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -9707,5 +9707,58 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  approveRiskPolicyBypassRequest:
+    speakeasy-default-approve-risk-policy-bypass-request:
+      requestBody:
+        application/json: {"id": "bc30a025-2871-4321-bd95-3e1f47fd5a8f"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-07-16T16:57:41.798Z", "granted_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "id": "e82a658c-d5c5-4f9c-a5e6-6bb813fcf60f", "policy_id": "8f3eec24-dd88-4005-ba8b-eefc97ac1b79", "requester_user_id": "<id>", "status": "approved", "target_dimensions": {}, "updated_at": "2024-06-30T00:00:53.273Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createRiskPolicyBypassRequest:
+    speakeasy-default-create-risk-policy-bypass-request:
+      requestBody:
+        application/json: {"request_token": "<value>"}
+      responses:
+        "201":
+          application/json: {"created_at": "2024-06-13T10:48:05.276Z", "granted_principal_urns": ["<value 1>"], "id": "572db9cf-acf4-495b-81e3-16801f13d519", "policy_id": "290f5dd2-1c72-47b0-868b-4d0907cb7585", "requester_user_id": "<id>", "status": "approved", "target_dimensions": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2025-11-09T11:38:02.890Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  denyRiskPolicyBypassRequest:
+    speakeasy-default-deny-risk-policy-bypass-request:
+      requestBody:
+        application/json: {"id": "1c7dc61e-2925-4783-a38b-ccfd210b4189"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-09-09T23:58:11.569Z", "granted_principal_urns": ["<value 1>", "<value 2>"], "id": "46e0ff73-8826-4338-b4c7-c705b62ac6b0", "policy_id": "817dd37d-f5bd-43b6-a25f-3586ead00ed4", "requester_user_id": "<id>", "status": "revoked", "target_dimensions": {"key": "<value>"}, "updated_at": "2024-04-27T16:32:27.882Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listRiskPolicyBypassRequests:
+    speakeasy-default-list-risk-policy-bypass-requests:
+      responses:
+        "200":
+          application/json: {"requests": [{"created_at": "2026-09-22T02:23:34.845Z", "granted_principal_urns": ["<value 1>", "<value 2>"], "id": "d4aa7aa5-95a6-46d7-83f1-aadebf24b2e3", "policy_id": "3e831b30-453f-448f-9359-7285ae643f4a", "requester_user_id": "<id>", "status": "revoked", "target_dimensions": {"key": "<value>"}, "updated_at": "2026-03-11T08:02:59.719Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  revokeRiskPolicyBypassRequest:
+    speakeasy-default-revoke-risk-policy-bypass-request:
+      requestBody:
+        application/json: {"id": "b52109d2-9378-4d8d-a182-48d0fa3f612e"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-09-14T15:53:30.910Z", "granted_principal_urns": [], "id": "f6ea93a5-f2cd-44c4-9491-8bdc363dcb0a", "policy_id": "08c695ff-d8cf-4ce2-8086-6fa0168a781b", "requester_user_id": "<id>", "status": "requested", "target_dimensions": {}, "updated_at": "2025-04-15T15:05:38.063Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
