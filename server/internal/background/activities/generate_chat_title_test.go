@@ -8,30 +8,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStripMessageContextRemovesAdapterFraming(t *testing.T) {
+func TestStripLeadingEnvelopesRemovesAssistantRuntimeFraming(t *testing.T) {
 	t.Parallel()
 
 	input := "<message-context>\nEventID: abc-123\nUserID: user-9\n</message-context>\n\nHow do I reduce my token usage?"
-	require.Equal(t, "How do I reduce my token usage?", stripMessageContext(input))
+	require.Equal(t, "How do I reduce my token usage?", stripLeadingEnvelopes(input))
 }
 
-func TestStripMessageContextLeavesPlainTextUntouched(t *testing.T) {
+// Other harnesses prepend their own envelopes (e.g. Claude Code background
+// tasks return <notification>…</notification>); the strip is generic so the
+// title model isn't polluted by envelopes we don't control.
+func TestStripLeadingEnvelopesRemovesForeignEnvelope(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "just a normal message", stripMessageContext("just a normal message"))
+	input := "<notification>background task completed</notification>\nThe migration finished without errors."
+	require.Equal(t, "The migration finished without errors.", stripLeadingEnvelopes(input))
 }
 
-// The regex is anchored to the start of the message: only the leading framing
-// the backend prepends is removed. A user who happens to type the literal tags
-// mid-message keeps that text — stripping it would distort the title.
-func TestStripMessageContextOnlyStripsLeadingBlock(t *testing.T) {
+func TestStripLeadingEnvelopesRemovesMultipleLeadingBlocks(t *testing.T) {
+	t.Parallel()
+
+	input := "<message-context>\nEventID: e1\n</message-context>\n<notification>done</notification>\n\nWhat changed?"
+	require.Equal(t, "What changed?", stripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesLeavesPlainTextUntouched(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "just a normal message", stripLeadingEnvelopes("just a normal message"))
+}
+
+// The regex is anchored to the start of the message: only leading framing is
+// removed. A user who happens to type tags mid-message keeps that text —
+// stripping it would distort the title.
+func TestStripLeadingEnvelopesOnlyStripsLeadingBlock(t *testing.T) {
 	t.Parallel()
 
 	input := "why does my agent emit <message-context>foo</message-context> in its output?"
-	require.Equal(t, input, stripMessageContext(input))
+	require.Equal(t, input, stripLeadingEnvelopes(input))
 }
 
-func TestBuildTitleContextStripsMessageContextFraming(t *testing.T) {
+func TestBuildTitleContextStripsLeadingEnvelopeFraming(t *testing.T) {
 	t.Parallel()
 
 	messages := []repo.ChatMessage{
@@ -54,11 +71,11 @@ func TestBuildTitleContextStripsMessageContextFraming(t *testing.T) {
 	require.Contains(t, got, "travel-planner agent")
 }
 
-func TestBuildTitleContextSkipsPureFramingMessages(t *testing.T) {
+func TestBuildTitleContextSkipsPureEnvelopeMessages(t *testing.T) {
 	t.Parallel()
 
-	// A turn that is *only* framing (e.g. an MCP auth event with no human text)
-	// must not contribute an empty "user: " line to the title context.
+	// A turn that is *only* an envelope (e.g. an MCP auth event with no human
+	// text) must not contribute an empty "user: " line to the title context.
 	messages := []repo.ChatMessage{
 		{
 			Role:    "user",

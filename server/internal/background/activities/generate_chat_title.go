@@ -107,20 +107,27 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	return nil
 }
 
-// messageContextBlockRE matches the <message-context>…</message-context>
-// framing that the backend's source adapters prepend to a turn's input
-// (EventID / UserID lines, MCP auth events) when constructing the message for
-// the runtime. The runner needs that block for replay, but it is noise for
-// title generation — left in, the title model fixates on the structured
-// boilerplate and every thread ends up with the same generic title. Anchored
-// to the start so only the leading framing is removed; a user who happens to
-// type "<message-context>" mid-message keeps their text intact.
-var messageContextBlockRE = regexp.MustCompile(`(?s)^\s*<message-context>.*?</message-context>\s*`)
+// leadingEnvelopeRE matches one or more leading XML-ish "envelope" blocks that
+// agent harnesses prepend to a turn to steer the assistant toward the right
+// channel — e.g. <message-context>…</message-context> from our assistant
+// runtime (which source/surface the turn came from, MCP auth events) or
+// <notification>…</notification> from Claude Code background tasks. The harness
+// needs the block, but it is noise for title generation — left in, the title
+// model fixates on the structured boilerplate and every thread ends up with the
+// same generic title.
+//
+// Anchored to the start, so only leading framing is removed and a user who
+// types a tag mid-message keeps their text. Tag names are lowercase/kebab; the
+// non-greedy body stops at the first close tag. RE2 has no backreferences, so
+// the open and close tags aren't required to match — fine for well-formed
+// envelopes, and intentionally generic so envelopes we don't control are still
+// stripped.
+var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:\s*<[a-z][a-z0-9_-]*>.*?</[a-z][a-z0-9_-]*>\s*)+`)
 
-// stripMessageContext removes the leading source-adapter framing so the title
-// model sees only the human-authored turn text.
-func stripMessageContext(s string) string {
-	return strings.TrimSpace(messageContextBlockRE.ReplaceAllString(s, ""))
+// stripLeadingEnvelopes removes any leading harness framing so the title model
+// sees only the human-authored turn text.
+func stripLeadingEnvelopes(s string) string {
+	return strings.TrimSpace(leadingEnvelopeRE.ReplaceAllString(s, ""))
 }
 
 // buildTitleContext concatenates the last few user/assistant messages into a
@@ -130,7 +137,7 @@ func buildTitleContext(messages []repo.ChatMessage) string {
 	count := 0
 	for i := len(messages) - 1; i >= 0; i-- { // Start from the last message and work backwards to make sure we capture the most recent messages
 		msg := messages[i]
-		content := stripMessageContext(msg.Content)
+		content := stripLeadingEnvelopes(msg.Content)
 		if (msg.Role != "user" && msg.Role != "assistant") || content == "" {
 			continue
 		}
