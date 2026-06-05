@@ -1,6 +1,7 @@
 package risk_analysis
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -40,59 +42,40 @@ func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
 	assert.Equal(t, "dead::beef", findings[0].Match)
 }
 
-func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
+// TestIsPresidioFalsePositive_CorpusAllFiltered is the canonical
+// positive-coverage gate: every IP in testdata/fp-ip.txt is an address
+// surfaced by a production risk_events scan that the catalog must drop.
+// Each line is run through isPresidioFalsePositive; any miss is a
+// regression. Regenerate the corpus from a fresh dump with the fpsplit
+// tool (see fp_split_test.go).
+func TestIsPresidioFalsePositive_CorpusAllFiltered(t *testing.T) {
 	t.Parallel()
 
-	// Unspecified addresses are filtered, IPv6 and IPv4 (0.0.0.0/8).
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0::0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0:0:0:0:0:0:0:0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0.0.0.0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed")
+	f, err := os.Open("testdata/fp-ip.txt")
+	require.NoError(t, err)
+	defer f.Close()
 
-	// Loopback addresses are filtered, IPv6 and IPv4 (whole 127.0.0.0/8).
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "127.0.0.1"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "127.1.2.3"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::1"))
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 1<<22)
+	var checked int
+	for sc.Scan() {
+		ip := strings.TrimSpace(sc.Text())
+		if ip == "" || strings.HasPrefix(ip, "#") {
+			continue
+		}
+		assert.True(t, isPresidioFalsePositive("IP_ADDRESS", ip),
+			"corpus IP %q must be filtered", ip)
+		checked++
+	}
+	require.NoError(t, sc.Err())
+	assert.Greater(t, checked, 0, "fp-ip.txt corpus must not be empty")
+}
 
-	// IPv6 short-form "<hex>::" patterns dominate Presidio's IP_ADDRESS
-	// noise on prod (hex constants and text fragments greedily matched).
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "b::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "dead::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "DEAF::"), "case-insensitive")
-
-	// Other IANA-reserved space.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "10.0.0.5"), "RFC1918 private")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "192.168.1.1"), "RFC1918 private")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "172.16.5.5"), "RFC1918 private")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "100.64.1.1"), "CGNAT RFC6598")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "169.254.1.1"), "link-local")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "224.0.0.1"), "multicast")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "192.0.2.1"), "RFC5737 documentation")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "198.51.100.1"), "RFC5737 documentation")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "203.0.113.7"), "RFC5737 documentation")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2001:db8::1"), "RFC5737 documentation IPv6")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "192.88.99.1"), "6to4 deprecated")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "240.1.2.3"), "class E reserved")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "198.18.0.0"), "RFC2544 benchmarking")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "255.255.255.255"), "limited broadcast")
-
-	// Well-known public DNS resolvers are not personal data.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "8.8.8.8"), "Google public DNS")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1.1.1.1"), "Cloudflare 1.1.1.1")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "9.9.9.9"), "Quad9")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "208.67.222.222"), "OpenDNS")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700::1111"), "Cloudflare IPv6")
-
-	// Common placeholder IPs.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1.2.3.4"), "placeholder")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2.2.2.2"), "placeholder")
-
-	// Heuristic: /8 network address.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "148.0.0.0"), "network address of /8")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "147.0.0.0"), "network address of /8")
+// TestIsPresidioFalsePositive_NegativesAndEntityScope locks the two
+// invariants the corpus cannot express: real consumer-ISP IPs still
+// surface as PII, and the filter only fires for IP_ADDRESS findings.
+func TestIsPresidioFalsePositive_NegativesAndEntityScope(t *testing.T) {
+	t.Parallel()
 
 	// Real addresses still flow through. Consumer ISP IPs identify an end
 	// user and are deliberately not in the infra ASN regex, so they are
@@ -101,12 +84,8 @@ func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "82.15.226.61"), "residential Virgin Media")
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
 
-	// Cloud / CDN / managed-hosting ASNs are filtered as infra. The DB-IP
-	// mmdb embedded by falsepositives_ip_asn.go resolves these.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2607:f8b0:4002:c0e::200e"), "Google IPv6 anycast — AS15169")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "8.29.231.184"), "Cloudflare AS13335")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "140.82.112.0"), "GitHub AS36459")
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "185.199.108.0"), "Fastly / GitHub pages")
+	// Whitespace-trimming applies to the IP_ADDRESS path.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed unspecified")
 
 	// Other entity types are never filtered by this rule.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
