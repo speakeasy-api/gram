@@ -18,9 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
+	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
+	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
+	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -122,13 +126,11 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 	}
 }
 
-// ManagedAssistantLogsTools returns the observability tools granted only to a
-// project's managed assistant so it can answer "what's happening in my project?"
-// questions in the sidebar — the same telemetry catalog the old AI Insights
-// copilot exposed (logs, tool calls, chats, users, metrics, attribute keys).
-// Scoped to the managed assistant rather than the universal `assistants`
-// toolset because non-managed assistants have no dashboard surface for the
-// results.
+// ManagedAssistantLogsTools returns the telemetry-backed observability tools
+// granted only to a project's managed assistant so it can answer "what's
+// happening in my project?" questions in the sidebar. Scoped to the managed
+// assistant rather than the universal `assistants` toolset because non-managed
+// assistants have no dashboard surface for the results.
 func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: ""},
@@ -139,6 +141,46 @@ func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []pl
 		{Executor: platformlogs.NewGetUserMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewGetObservabilityOverviewTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewListAttributeKeysTool(telemetrySvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantChatsTools returns the chat-history tools granted only to a
+// project's managed assistant so the sidebar can drill into a single chat
+// without round-tripping through the dashboard.
+func ManagedAssistantChatsTools(chatSvc platformchats.ChatService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformchats.NewListChatsTool(chatSvc), RequiredFeature: ""},
+		{Executor: platformchats.NewLoadChatTool(chatSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantUsersTools returns the user-directory tools granted only to a
+// project's managed assistant so it can resolve names against the
+// organization's Gram membership when answering ownership questions.
+func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformusers.NewListOrganizationUsersTool(orgSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantRiskTools returns the risk/policy tools granted only to a
+// project's managed assistant so the sidebar can summarize findings without
+// exposing raw secret content (listRiskResultsForAgent redacts matches).
+func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantDeploymentsTools returns the deployment-introspection tools
+// granted only to a project's managed assistant so it can explain why a recent
+// deployment is unhealthy.
+func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.DeploymentsService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformdeployments.NewGetDeploymentLogsTool(deploymentsSvc), RequiredFeature: ""},
 	}
 }
 

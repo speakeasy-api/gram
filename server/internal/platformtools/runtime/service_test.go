@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -42,6 +43,54 @@ func TestManagedAssistantLogsToolsExposesObservabilityCatalog(t *testing.T) {
 		"platform_get_observability_overview",
 		"platform_list_attribute_keys",
 	}, got)
+}
+
+func TestManagedAssistantChatsToolsExposesCatalog(t *testing.T) {
+	t.Parallel()
+
+	got := toolNames(ManagedAssistantChatsTools(nil))
+	require.ElementsMatch(t, []string{
+		"platform_list_chats",
+		"platform_load_chat",
+	}, got)
+}
+
+func TestManagedAssistantUsersToolsExposesCatalog(t *testing.T) {
+	t.Parallel()
+
+	got := toolNames(ManagedAssistantUsersTools(nil))
+	require.ElementsMatch(t, []string{
+		"platform_list_organization_users",
+	}, got)
+}
+
+func TestManagedAssistantRiskToolsExposesCatalog(t *testing.T) {
+	t.Parallel()
+
+	got := toolNames(ManagedAssistantRiskTools(nil))
+	require.ElementsMatch(t, []string{
+		"platform_list_risk_policies",
+		"platform_list_risk_results_for_agent",
+		"platform_list_risk_results_by_chat",
+		"platform_get_risk_policy_status",
+	}, got)
+}
+
+func TestManagedAssistantDeploymentsToolsExposesCatalog(t *testing.T) {
+	t.Parallel()
+
+	got := toolNames(ManagedAssistantDeploymentsTools(nil))
+	require.ElementsMatch(t, []string{
+		"platform_get_deployment_logs",
+	}, got)
+}
+
+func toolNames(tools []platformtools.ExternalTool) []string {
+	out := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		out = append(out, tool.Executor.Descriptor().Name)
+	}
+	return out
 }
 
 type stubDirectExecutor struct {
