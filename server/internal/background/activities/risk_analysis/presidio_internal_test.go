@@ -72,6 +72,36 @@ func TestIsPresidioFalsePositive_CorpusAllFiltered(t *testing.T) {
 	assert.Positive(t, checked, "fp-ip.txt corpus must not be empty")
 }
 
+// TestIsPresidioFalsePositive_EmailCorpusAllFiltered is the email
+// twin of TestIsPresidioFalsePositive_CorpusAllFiltered. Every line in
+// testdata/fp-email.txt is a candidate the catalog must drop. The
+// corpus is hand-curated from production EMAIL_ADDRESS findings —
+// extend it by adding emails (one per line, sorted) that surface as
+// false positives during catalog tuning. Real candidate-PII emails
+// are never added to the corpus or otherwise committed.
+func TestIsPresidioFalsePositive_EmailCorpusAllFiltered(t *testing.T) {
+	t.Parallel()
+
+	f, err := os.Open("testdata/fp-email.txt")
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 1<<22)
+	var checked int
+	for sc.Scan() {
+		email := strings.TrimSpace(sc.Text())
+		if email == "" || strings.HasPrefix(email, "#") {
+			continue
+		}
+		assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", email),
+			"corpus email %q must be filtered", email)
+		checked++
+	}
+	require.NoError(t, sc.Err())
+	assert.Positive(t, checked, "fp-email.txt corpus must not be empty")
+}
+
 // TestIsPresidioFalsePositive_NegativesAndEntityScope locks the two
 // invariants the corpus cannot express: real consumer-ISP IPs still
 // surface as PII, and the filter only fires for IP_ADDRESS findings.
