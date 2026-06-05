@@ -68,7 +68,7 @@ func TestIsPresidioFalsePositive_CorpusAllFiltered(t *testing.T) {
 		checked++
 	}
 	require.NoError(t, sc.Err())
-	assert.Greater(t, checked, 0, "fp-ip.txt corpus must not be empty")
+	assert.Positive(t, checked, "fp-ip.txt corpus must not be empty")
 }
 
 // TestIsPresidioFalsePositive_NegativesAndEntityScope locks the two
