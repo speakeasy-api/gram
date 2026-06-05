@@ -199,7 +199,6 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     current.RiskPolicyID.String(),
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{principal},
 		Selector:   selector,
 	}); err != nil {
@@ -324,7 +323,6 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     current.RiskPolicyID.String(),
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, current.RequesterUserID)},
 		Selector:   selector,
 	}); err != nil {
