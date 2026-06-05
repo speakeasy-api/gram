@@ -16,7 +16,6 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
-import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
   invalidateAllMembers,
@@ -52,14 +51,11 @@ import {
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type {
   ActivePanel,
-  AnnotationHint,
-  PolicyEffect,
   RoleGrant,
   Scope,
   ScopeRule,
+  Selector,
 } from "./types";
-import type { Selector } from "./types";
-import { DISPOSITION_TO_ANNOTATION } from "./types";
 import {
   isSaveDisabled,
   effectiveGrantCount,
@@ -67,74 +63,17 @@ import {
   computeRuleLabel,
   computeRuleTooltip,
 } from "./roleDialogState";
+import {
+  applyRemoveRule,
+  diffGrants,
+  grantsFromRole,
+  sdkGrantsFromForm,
+} from "./roleGrantTransform";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Human-readable label for a rule chip. */
-/** Split a flat selector array into groups by hierarchy level. */
-function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
-  const projects: Selector[] = [];
-  const servers: Selector[] = [];
-  const tools: Selector[] = [];
-  const annotations: Selector[] = [];
-
-  for (const s of selectors) {
-    if (s.disposition) annotations.push(s);
-    else if (s.tool) tools.push(s);
-    else if (s.projectId) projects.push(s);
-    else servers.push(s);
-  }
-
-  const groups: Selector[][] = [];
-  if (projects.length) groups.push(projects);
-  if (servers.length) groups.push(servers);
-  if (tools.length) groups.push(tools);
-  if (annotations.length) groups.push(annotations);
-  return groups;
-}
-
-/** Convert API Role grants to rules-based RoleGrant map. */
-function grantsFromRole(role: Role): Record<string, RoleGrant> {
-  const result: Record<string, RoleGrant> = {};
-
-  for (const g of role.grants) {
-    if (!result[g.scope]) {
-      result[g.scope] = { scope: g.scope, rules: [] };
-    }
-
-    const effect: PolicyEffect = (g.effect as PolicyEffect) ?? "allow";
-
-    if (!g.selectors || g.selectors.length === 0) {
-      // Unrestricted rule
-      result[g.scope].rules.push({
-        id: crypto.randomUUID(),
-        effect,
-        selectors: null,
-      });
-    } else {
-      // Split selectors by hierarchy level into separate rules
-      const groups = groupSelectorsByLevel(g.selectors as Selector[]);
-      for (const sels of groups) {
-        const rule: ScopeRule = {
-          id: crypto.randomUUID(),
-          effect,
-          selectors: sels,
-        };
-        // Detect annotation-based rules and restore UI hints
-        if (sels.some((s) => s.disposition)) {
-          rule.customTab = "auto-groups";
-          rule.annotations = sels
-            .filter((s) => s.disposition)
-            .map((s) => DISPOSITION_TO_ANNOTATION[s.disposition!])
-            .filter((a): a is AnnotationHint => !!a);
-        }
-        result[g.scope].rules.push(rule);
-      }
-    }
-  }
-
-  return result;
-}
+//
+// Grant ↔ form transforms live in ./roleGrantTransform — kept in a plain TS
+// module so they can be unit-tested without pulling in React/react-query.
 
 /** Determine the broadest allow level from a scope's rules. */
 function getAllowLevel(
@@ -162,140 +101,6 @@ function getDenyPanels(allowLevel: string | null): ActivePanel[] {
     default:
       return []; // tool/annotation — already most specific, no deny possible
   }
-}
-
-function sdkGrantsFromForm(grants: Record<string, RoleGrant>): SdkRoleGrant[] {
-  const sdkGrants: SdkRoleGrant[] = [];
-
-  for (const grant of Object.values(grants)) {
-    const allowSelectors: Selector[] = [];
-    const denySelectors: Selector[] = [];
-    let hasUnrestrictedAllow = false;
-
-    for (const rule of grant.rules) {
-      if (rule.effect === "allow") {
-        if (rule.selectors === null) hasUnrestrictedAllow = true;
-        else if (rule.selectors.length > 0) {
-          allowSelectors.push(...rule.selectors);
-        }
-      } else if (rule.selectors && rule.selectors.length > 0) {
-        denySelectors.push(...rule.selectors);
-      }
-    }
-
-    if (!hasUnrestrictedAllow && allowSelectors.length === 0) continue;
-
-    sdkGrants.push({
-      scope: grant.scope,
-      selectors: hasUnrestrictedAllow ? undefined : allowSelectors,
-    });
-
-    if (denySelectors.length > 0) {
-      sdkGrants.push({
-        scope: grant.scope,
-        effect: "deny",
-        selectors: denySelectors,
-      });
-    }
-  }
-
-  return sdkGrants;
-}
-
-type GrantIdentity = {
-  scope: SdkRoleGrant["scope"];
-  effect: "allow" | "deny";
-  selector?: Selector;
-};
-
-function selectorKey(selector: Selector | undefined): string {
-  if (!selector) return "*";
-  return JSON.stringify({
-    disposition: selector.disposition ?? "",
-    projectId: selector.projectId ?? "",
-    resourceId: selector.resourceId,
-    resourceKind: selector.resourceKind,
-    tool: selector.tool ?? "",
-  });
-}
-
-function grantIdentityKey(identity: GrantIdentity): string {
-  return `${identity.scope}\x00${identity.effect}\x00${selectorKey(identity.selector)}`;
-}
-
-function grantIdentities(grants: SdkRoleGrant[]): GrantIdentity[] {
-  return grants.flatMap((grant) => {
-    const effect = (grant.effect ?? "allow") as "allow" | "deny";
-    if (!grant.selectors || grant.selectors.length === 0) {
-      return [{ scope: grant.scope, effect }];
-    }
-    return grant.selectors.map((selector) => ({
-      scope: grant.scope,
-      effect,
-      selector: selector as Selector,
-    }));
-  });
-}
-
-function grantsFromIdentities(identities: GrantIdentity[]): SdkRoleGrant[] {
-  const unrestricted: SdkRoleGrant[] = [];
-  const grouped = new Map<string, SdkRoleGrant>();
-
-  for (const identity of identities) {
-    if (!identity.selector) {
-      unrestricted.push({
-        scope: identity.scope,
-        effect: identity.effect === "deny" ? "deny" : undefined,
-        selectors: undefined,
-      });
-      continue;
-    }
-
-    const key = `${identity.scope}\x00${identity.effect}`;
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.selectors = [...(existing.selectors ?? []), identity.selector];
-      continue;
-    }
-
-    grouped.set(key, {
-      scope: identity.scope,
-      effect: identity.effect === "deny" ? "deny" : undefined,
-      selectors: [identity.selector],
-    });
-  }
-
-  return [...unrestricted, ...grouped.values()];
-}
-
-function diffGrants(
-  before: SdkRoleGrant[],
-  after: SdkRoleGrant[],
-): { addGrants: SdkRoleGrant[]; removeGrants: SdkRoleGrant[] } {
-  const beforeByKey = new Map(
-    grantIdentities(before).map((identity) => [
-      grantIdentityKey(identity),
-      identity,
-    ]),
-  );
-  const afterByKey = new Map(
-    grantIdentities(after).map((identity) => [
-      grantIdentityKey(identity),
-      identity,
-    ]),
-  );
-
-  const addIdentities = [...afterByKey]
-    .filter(([key]) => !beforeByKey.has(key))
-    .map(([, identity]) => identity);
-  const removeIdentities = [...beforeByKey]
-    .filter(([key]) => !afterByKey.has(key))
-    .map(([, identity]) => identity);
-
-  return {
-    addGrants: grantsFromIdentities(addIdentities),
-    removeGrants: grantsFromIdentities(removeIdentities),
-  };
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -553,17 +358,14 @@ export function CreateRoleDialog({
     setGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
-      let rules = grant.rules.filter((_, i) => i !== ruleIndex);
-      // No allows left → denies are orphaned, clear everything
-      if (!rules.some((r) => r.effect === "allow")) {
-        rules = [];
-      }
-      if (rules.length === 0) {
-        const next = { ...prev };
+      const result = applyRemoveRule(grant, ruleIndex);
+      const next = { ...prev };
+      if (result === null) {
         delete next[scopeSlug];
-        return next;
+      } else {
+        next[scopeSlug] = result;
       }
-      return { ...prev, [scopeSlug]: { ...grant, rules } };
+      return next;
     });
   };
 
