@@ -12,11 +12,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// recordCompactedGenerationMaxBodyBytes caps the request body to a generous
-// ceiling for a compacted transcript. A summary plus a handful of preserved
-// turns should fit comfortably; an oversized body almost certainly signals
-// the runner is misusing the endpoint to dump a full transcript.
-const recordCompactedGenerationMaxBodyBytes = 1 * 1024 * 1024
+// recordCompactedGenerationMaxBodyBytes caps the request body high enough
+// that the four preserved recent turns (each tool result clipped at 150KB
+// in the runner — see agents/runner/src/clip.rs::MAX_TOOL_BYTES) plus the
+// AgentCompactor summary fit comfortably even on heavy threads. Past this
+// ceiling we'd silently drop legitimate compactions, defeating the cron
+// persistence path; anything above is far beyond a realistic transcript
+// and points at the runner misusing the endpoint.
+const recordCompactedGenerationMaxBodyBytes = 8 * 1024 * 1024
 
 type recordCompactedGenerationRequest struct {
 	ThreadID string           `json:"thread_id"`
