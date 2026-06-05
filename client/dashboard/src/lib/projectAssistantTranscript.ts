@@ -28,6 +28,11 @@ function userText(content: GramChatMessage["content"]): string {
     .join("");
 }
 
+/** True when the message carries a non-text part (image, audio, …). */
+function hasMediaPart(content: GramChatMessage["content"]): boolean {
+  return Array.isArray(content) && content.some((part) => part.type !== "text");
+}
+
 /**
  * Strips the backend's leading `<message-context>` framing from a persisted
  * message and drops user turns that are *only* framing (e.g. an injected
@@ -42,8 +47,15 @@ export function stripMessageContextFraming(
     return message;
   }
 
+  // Drop a turn only when it is *nothing but* framing. A turn that also carries
+  // media (image/audio) keeps its parts — the framing text is stripped below —
+  // so a user's image isn't lost just because its text part was an event block.
   const text = userText(message.content);
-  if (text.includes("<message-context>") && stripFraming(text).trim() === "") {
+  if (
+    !hasMediaPart(message.content) &&
+    text.includes("<message-context>") &&
+    stripFraming(text).trim() === ""
+  ) {
     return null;
   }
 

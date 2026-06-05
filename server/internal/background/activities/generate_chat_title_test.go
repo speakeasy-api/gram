@@ -38,6 +38,16 @@ func TestStripLeadingEnvelopesLeavesPlainTextUntouched(t *testing.T) {
 	require.Equal(t, "just a normal message", stripLeadingEnvelopes("just a normal message"))
 }
 
+// Only known harness envelopes are stripped. A message that legitimately opens
+// with user markup (a <details> block, a pasted snippet, etc.) must survive — a
+// fully-generic <tag>…</tag> match would eat it and distort the title.
+func TestStripLeadingEnvelopesLeavesUnknownLeadingTag(t *testing.T) {
+	t.Parallel()
+
+	input := "<details>my setup</details>\n\nwhy does the build fail?"
+	require.Equal(t, input, stripLeadingEnvelopes(input))
+}
+
 // The regex is anchored to the start of the message: only leading framing is
 // removed. A user who happens to type tags mid-message keeps that text —
 // stripping it would distort the title.

@@ -48,6 +48,24 @@ describe("stripMessageContextFraming", () => {
     expect(stripMessageContextFraming(userMessage(text))?.content).toBe(text);
   });
 
+  it("keeps a media turn whose text part is only framing", () => {
+    const result = stripMessageContextFraming(
+      userMessage([
+        {
+          type: "text",
+          text: "<message-context>\nEventID: e1\n</message-context>\n",
+        },
+        { type: "image_url", image_url: { url: "https://example.test/a.png" } },
+      ]),
+    );
+    // The whole turn must survive (the image is not lost); the framing text is stripped to empty.
+    expect(result).not.toBeNull();
+    expect(result?.content).toEqual([
+      { type: "text", text: "" },
+      { type: "image_url", image_url: { url: "https://example.test/a.png" } },
+    ]);
+  });
+
   it("passes assistant messages through untouched", () => {
     const assistant: GramChatMessage = {
       id: "a1",
