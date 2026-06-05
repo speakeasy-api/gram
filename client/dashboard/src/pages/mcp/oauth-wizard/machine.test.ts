@@ -11,7 +11,9 @@ import {
 } from "./guards";
 import { oauthWizardMachine } from "./machine";
 import {
+  authServerOrigin,
   parseScopes,
+  pickAuthMethodFromList,
   type Context,
   type DiscoveredOAuth,
   type Input,
@@ -785,6 +787,117 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
     expect(snap.matches({ proxy: "registering" })).toBe(true);
     expect(snap.context.autoRegistering).toBe(true);
     expect(snap.context.proxy.scopes).toBe("");
+  });
+
+  it("auto-select picks the preferred token endpoint auth method from discovery (basic > post > none)", () => {
+    const actor = makeActor({
+      ...baseInput,
+      discovered: {
+        ...DISCOVERED_2_1,
+        metadata: {
+          ...VALID_PROXY_METADATA,
+          token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
+        },
+      },
+    });
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    expect(actor.getSnapshot().context.proxy.tokenAuthMethod).toBe(
+      "client_secret_post",
+    );
+  });
+
+  it("auto-select falls back to client_secret_basic when discovery advertises no methods", () => {
+    const actor = makeActor(inputWithDiscovered);
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    expect(actor.getSnapshot().context.proxy.tokenAuthMethod).toBe(
+      "client_secret_basic",
+    );
+  });
+
+  it("forwards the auto-selected token endpoint auth method into the DCR call", async () => {
+    let captured: RegisterClientInput | null = null;
+    const services = {
+      ...happyServices(),
+      registerClient: fromPromise<RegisterClientOutput, RegisterClientInput>(
+        async ({ input }) => {
+          captured = input;
+          return {
+            clientId: "auto-cid",
+            clientSecret: "auto-secret",
+            tokenAuthMethod: null,
+          };
+        },
+      ),
+    };
+    const actor = makeActor(
+      {
+        ...baseInput,
+        discovered: {
+          ...DISCOVERED_2_1,
+          metadata: {
+            ...VALID_PROXY_METADATA,
+            token_endpoint_auth_methods_supported: ["client_secret_post"],
+          },
+        },
+      },
+      services,
+    );
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ result: "success" }), {
+      timeout: 1000,
+    });
+
+    expect(captured).not.toBeNull();
+    expect(captured!.tokenAuthMethod).toBe("client_secret_post");
+    // Issuer origin is derived from the discovered endpoints so the service
+    // can run live RFC 8414 discovery to recover the real supported methods.
+    expect(captured!.issuer).toBe("https://example.com");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Auth-method helpers
+// ---------------------------------------------------------------------------
+
+describe("pickAuthMethodFromList", () => {
+  it("prefers client_secret_basic > client_secret_post > none", () => {
+    expect(
+      pickAuthMethodFromList([
+        "none",
+        "client_secret_post",
+        "client_secret_basic",
+      ]),
+    ).toBe("client_secret_basic");
+    expect(pickAuthMethodFromList(["none", "client_secret_post"])).toBe(
+      "client_secret_post",
+    );
+    expect(pickAuthMethodFromList(["none"])).toBe("none");
+  });
+
+  it("falls back to client_secret_basic when empty or unrecognized", () => {
+    expect(pickAuthMethodFromList([])).toBe("client_secret_basic");
+    expect(pickAuthMethodFromList(["private_key_jwt", "tls_client_auth"])).toBe(
+      "client_secret_basic",
+    );
+  });
+});
+
+describe("authServerOrigin", () => {
+  it("returns the origin of the first parseable URL", () => {
+    expect(authServerOrigin("https://www.make.com/oauth/v2/authorize")).toBe(
+      "https://www.make.com",
+    );
+    expect(authServerOrigin("", "not a url", "https://x.test/token")).toBe(
+      "https://x.test",
+    );
+  });
+
+  it("returns empty string when no candidate parses", () => {
+    expect(authServerOrigin("", "  ", "relative/path")).toBe("");
   });
 });
 
