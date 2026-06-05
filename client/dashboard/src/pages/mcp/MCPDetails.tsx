@@ -84,7 +84,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Grid,
   Icon,
   Stack,
 } from "@speakeasy-api/moonshine";
@@ -110,7 +109,7 @@ import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { useToolsets } from "../toolsets/useToolsets";
 import { getSystemProvidedVariables } from "./environmentVariableUtils";
-import { useMcpConfigs, useMcpSlugValidation } from "./mcp-details-utils";
+import { useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
@@ -660,7 +659,7 @@ const STATUS_OPTIONS: {
   },
 ];
 
-export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
+function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
@@ -2009,11 +2008,6 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   );
 }
 
-// Keep the old MCPDetails for backward compatibility (can be removed later)
-export function MCPDetails({ toolset }: { toolset: Toolset }) {
-  return <MCPSettingsTab toolset={toolset} />;
-}
-
 export function PageSection({
   heading,
   description,
@@ -2051,82 +2045,6 @@ export function PageSection({
       </Type>
       {children}
     </Stack>
-  );
-}
-
-export function MCPJson({
-  toolset,
-  fullWidth = false,
-  className,
-}: {
-  toolset: Toolset;
-  fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
-  className?: string;
-}) {
-  const telemetry = useTelemetry();
-
-  const {
-    public: mcpJsonPublic,
-    internal: mcpJsonInternal,
-    requiresGramKey,
-    hasOAuth,
-  } = useMcpConfigs(toolset);
-
-  const onCopy = () => {
-    telemetry.capture("mcp_event", {
-      action: "mcp_json_copied",
-      slug: toolset.slug,
-    });
-  };
-
-  const showManagedAuth = !hasOAuth;
-
-  return (
-    <Grid
-      gap={4}
-      className={cn("my-4!", className)}
-      columns={
-        !fullWidth && showManagedAuth
-          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
-          : 1
-      }
-    >
-      {[
-        <Grid.Item key="passthrough">
-          <Type className="font-medium">Pass-through Authentication</Type>
-          <Type muted small className="mb-2! max-w-3xl">
-            Pass API credentials directly to the MCP server.
-            <br />
-            <span
-              className={
-                requiresGramKey
-                  ? "text-warning-foreground font-medium"
-                  : "italic"
-              }
-            >
-              {requiresGramKey
-                ? "Requires a platform API key."
-                : "No platform API key required."}
-            </span>
-          </Type>
-          <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-        </Grid.Item>,
-        ...(showManagedAuth
-          ? [
-              <Grid.Item key="managed">
-                <Type className="font-medium">Managed Authentication</Type>
-                <Type muted small className="mb-2! max-w-3xl">
-                  Manage API authentication with platform environments.
-                  <br />
-                  Users need a single platform API Key rather than bringing
-                  their own keys.
-                </Type>
-                <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
-              </Grid.Item>,
-            ]
-          : []),
-      ]}
-    </Grid>
   );
 }
 

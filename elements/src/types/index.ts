@@ -843,6 +843,12 @@ export interface ContextCompactionConfig {
 
 export interface WelcomeConfig {
   /**
+   * Optional logo image URL shown above the title on the empty-thread welcome
+   * screen.
+   */
+  logo?: string;
+
+  /**
    * The welcome message to display when the thread is empty.
    */
   title?: string;
@@ -1116,4 +1122,6 @@ export type ElementsContextType = {
   setIsOpen: (isOpen: boolean) => void;
   plugins: Plugin[];
   mcpTools: Record<string, unknown> | undefined;
+  /** True while the MCP tool list is actively being fetched. */
+  mcpToolsLoading: boolean;
 };

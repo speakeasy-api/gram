@@ -28,10 +28,6 @@ export function buildLoginRedirectURL(redirectTo: string | null): string {
   return href;
 }
 
-export function titleCase(str: string) {
-  return str.replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 export function capitalize(str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }

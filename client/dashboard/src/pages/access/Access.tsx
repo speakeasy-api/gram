@@ -62,7 +62,7 @@ export default function Access() {
   );
 }
 
-export function AccessInner() {
+function AccessInner() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: rolesData } = useRoles();

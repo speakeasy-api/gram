@@ -22,7 +22,7 @@ export const useCatalogIconMap = () => {
   }, [catalogData]);
 };
 
-export const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
+const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
   const { data: catalogData } = useInfiniteListMCPCatalog();
 
   return useMemo(() => {
@@ -41,13 +41,6 @@ export const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
     }
     return result;
   }, [catalogData]);
-};
-
-export const useCatalogServerAuthType = (
-  registrySpecifier: string,
-): PulseMcpAuthType | null => {
-  const authMap = useCatalogAuthMap();
-  return authMap.get(registrySpecifier) ?? null;
 };
 
 export type ExternalMcpOAuthConfigStatus =

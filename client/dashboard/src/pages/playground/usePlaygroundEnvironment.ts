@@ -24,7 +24,7 @@ function toServerSlug(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export interface SaveResult {
+interface SaveResult {
   /** True if a new environment was created by this save. */
   created: boolean;
   /** True if the save was skipped (nothing meaningful to persist). */

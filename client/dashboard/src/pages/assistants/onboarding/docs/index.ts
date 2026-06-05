@@ -8,7 +8,7 @@ export type IntegrationDoc = {
   body: string;
 };
 
-export const INTEGRATION_DOCS: Record<string, IntegrationDoc> = {
+const INTEGRATION_DOCS: Record<string, IntegrationDoc> = {
   slack: SLACK_DOCS,
   cron: CRON_DOCS,
 };

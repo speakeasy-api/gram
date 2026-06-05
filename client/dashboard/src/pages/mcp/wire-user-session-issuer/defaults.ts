@@ -10,7 +10,7 @@ import type { OAuthProxyProvider } from "@gram/client/models/components";
 // (1 week / 2 weeks / 1 month). Keep in lockstep with
 // REFRESH_TOKEN_DURATION_OPTIONS in WireUserSessionIssuerModal so the
 // selector opens on a real option rather than a custom value.
-export const DEFAULT_SESSION_DURATION_HOURS = 24 * 14;
+const DEFAULT_SESSION_DURATION_HOURS = 24 * 14;
 
 export type MigrationDefaults = {
   proxyProvider: OAuthProxyProvider;

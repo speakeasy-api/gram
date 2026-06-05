@@ -495,7 +495,7 @@ export default function OrgAdminSettings() {
   );
 }
 
-export function OrgAdminSettingsInner() {
+function OrgAdminSettingsInner() {
   const organization = useOrganization();
   const client = useSdkClient();
 

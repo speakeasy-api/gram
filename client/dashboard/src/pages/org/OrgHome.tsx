@@ -91,7 +91,7 @@ export default function OrgHome() {
   );
 }
 
-export function OrgHomeInner() {
+function OrgHomeInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const client = useSdkClient();

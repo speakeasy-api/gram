@@ -19,7 +19,7 @@ import {
 import { SlackAppResult } from "@gram/client/models/components/slackappresult.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
-import React, { useState } from "react";
+import { useState } from "react";
 
 export function StatusBadge({
   status,
