@@ -343,6 +343,7 @@ async fn spawn_thread(
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
     let compactor = build_compactor(
+        &bootstrap.compaction,
         &bootstrap.chat_id,
         bootstrap.context_window.unwrap_or(0),
         compactor_adapter,

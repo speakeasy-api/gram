@@ -2073,6 +2073,11 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
 	completionsEndpoint.RawQuery = completionsQuery.Encode()
 
+	compaction := compactionPolicyFor(thread.SourceKind)
+	if err := compaction.Validate(); err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "build compaction policy").Log(ctx, s.logger, logAttrs...)
+	}
+
 	return threadBootstrap{
 		Model:          assistant.Model,
 		Instructions:   instructions,
@@ -2081,6 +2086,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		MCPServers:     mcpServers,
 		History:        history,
 		ContextWindow:  s.resolveAssistantContextWindow(ctx, assistant.Model),
+		Compaction:     compaction,
 		SourceRefJSON:  thread.SourceRefJSON,
 	}, nil
 }
