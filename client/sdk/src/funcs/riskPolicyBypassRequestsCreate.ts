@@ -11,6 +11,7 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * deleteCustomDetectionRule risk
+ * createRiskPolicyBypassRequest risk
  *
  * @remarks
- * Delete a custom detection rule.
+ * Create or refresh a risk policy bypass request from a signed request URL token.
  */
-export function riskCustomRulesDelete(
+export function riskPolicyBypassRequestsCreate(
   client: GramCore,
-  request: operations.DeleteCustomDetectionRuleRequest,
-  security?: operations.DeleteCustomDetectionRuleSecurity | undefined,
+  request: operations.CreateRiskPolicyBypassRequestRequest,
+  security?: operations.CreateRiskPolicyBypassRequestSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    void,
+    components.RiskPolicyBypassRequest,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +62,13 @@ export function riskCustomRulesDelete(
 
 async function $do(
   client: GramCore,
-  request: operations.DeleteCustomDetectionRuleRequest,
-  security?: operations.DeleteCustomDetectionRuleSecurity | undefined,
+  request: operations.CreateRiskPolicyBypassRequestRequest,
+  security?: operations.CreateRiskPolicyBypassRequestSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      void,
+      components.RiskPolicyBypassRequest,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        operations.DeleteCustomDetectionRuleRequest$outboundSchema,
+        operations.CreateRiskPolicyBypassRequestRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -94,25 +95,15 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.ApproveRiskPolicyBypassRequestRequestBody,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.CreateShadowMCPApprovalRequestForm, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/risk.customRules.delete")();
+  const path = pathToFunc("/rpc/risk.createPolicyBypassRequest")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -122,26 +113,9 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.option1?.apikeyHeaderGramKey,
-      },
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
-    ],
-    [
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
-      },
-      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option2?.sessionHeaderGramSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );
@@ -149,7 +123,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteCustomDetectionRule",
+    operationID: "createRiskPolicyBypassRequest",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -204,7 +178,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    void,
+    components.RiskPolicyBypassRequest,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -215,7 +189,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(200, z.void()),
+    M.json(201, components.RiskPolicyBypassRequest$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

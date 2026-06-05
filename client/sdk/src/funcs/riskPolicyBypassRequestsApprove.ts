@@ -11,6 +11,7 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * deleteCustomDetectionRule risk
+ * approveRiskPolicyBypassRequest risk
  *
  * @remarks
- * Delete a custom detection rule.
+ * Approve a risk policy bypass request and grant the requester risk_policy:bypass for the requested policy target.
  */
-export function riskCustomRulesDelete(
+export function riskPolicyBypassRequestsApprove(
   client: GramCore,
-  request: operations.DeleteCustomDetectionRuleRequest,
-  security?: operations.DeleteCustomDetectionRuleSecurity | undefined,
+  request: operations.ApproveRiskPolicyBypassRequestRequest,
+  security?: operations.ApproveRiskPolicyBypassRequestSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    void,
+    components.RiskPolicyBypassRequest,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +62,13 @@ export function riskCustomRulesDelete(
 
 async function $do(
   client: GramCore,
-  request: operations.DeleteCustomDetectionRuleRequest,
-  security?: operations.DeleteCustomDetectionRuleSecurity | undefined,
+  request: operations.ApproveRiskPolicyBypassRequestRequest,
+  security?: operations.ApproveRiskPolicyBypassRequestSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      void,
+      components.RiskPolicyBypassRequest,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        operations.DeleteCustomDetectionRuleRequest$outboundSchema,
+        operations.ApproveRiskPolicyBypassRequestRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -100,7 +101,7 @@ async function $do(
     { explode: true },
   );
 
-  const path = pathToFunc("/rpc/risk.customRules.delete")();
+  const path = pathToFunc("/rpc/risk.approvePolicyBypassRequest")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -149,7 +150,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteCustomDetectionRule",
+    operationID: "approveRiskPolicyBypassRequest",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -204,7 +205,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    void,
+    components.RiskPolicyBypassRequest,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -215,7 +216,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(200, z.void()),
+    M.json(200, components.RiskPolicyBypassRequest$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
