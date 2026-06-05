@@ -15,6 +15,7 @@ export * from "./agentmarketplace.js";
 export * from "./agentplugin.js";
 export * from "./aiintegrationconfig.js";
 export * from "./allowedorigin.js";
+export * from "./approveriskpolicybypassrequestrequestbody.js";
 export * from "./approveshadowmcpapprovalrequestform.js";
 export * from "./approveshadowmcprequestbody.js";
 export * from "./asset.js";
