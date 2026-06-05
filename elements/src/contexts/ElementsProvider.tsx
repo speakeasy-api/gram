@@ -230,7 +230,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const {
     data: mcpTools,
     mcpHeaders,
-    isLoading: mcpToolsLoading,
+    isLoading: mcpQueryLoading,
   } = useMCPTools({
     auth,
     mcp: config.mcp,
@@ -239,6 +239,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
   });
+  // Treat auth-loading as "tools not yet resolved" too — the MCP query is
+  // disabled (and so not "loading") until auth settles, so without this a
+  // tool-list consumer would briefly see an empty, settled state before tools
+  // arrive.
+  const mcpToolsLoading = auth.isLoading || mcpQueryLoading;
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
