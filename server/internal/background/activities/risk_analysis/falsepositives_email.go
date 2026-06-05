@@ -8,9 +8,12 @@ import (
 // email-shaped string should be treated as a non-PII false positive, or
 // "" if the string looks like it could be a real email address.
 //
-// Four layers, in order:
+// Five layers, in order:
 //
-//  1. Reserved / placeholder domain — the primary reason this filter
+//  1. Exact-match against `knownFPEmails` — one-off addresses that
+//     don't fit any of the structural categories below (e.g. SSH
+//     pseudo-users like `git@github.com`).
+//  2. Reserved / placeholder domain — the primary reason this filter
 //     exists. Two sub-cases:
 //     a. RFC 6761 special-use TLDs (`.example`, `.invalid`,
 //     `.localhost`, `.test`). Anything under one of these is
@@ -19,19 +22,19 @@ import (
 //     (`example.com`, `acme.com`, `acmecorp.com`, `asdf.com`, etc.).
 //     These are not PII the policy author cares about regardless of
 //     the local-part.
-//  2. Any `/` in the candidate. Per RFC 5322 §3.2.3 atext does include
+//  3. Any `/` in the candidate. Per RFC 5322 §3.2.3 atext does include
 //     `/`, so `/` is technically permitted in the local-part of an
 //     addr-spec. In practice every `/`-containing match in our corpus
 //     is a URL fragment (`medium.com/@user`, GCP IAM API paths, CDN
 //     asset URLs, npm / Go / Deno module paths) rather than an email
 //     with a slash in the local-part. We accept the theoretical miss
 //     for the URL-noise drop.
-//  3. Two narrow domain checks that survive the slash filter:
+//  4. Two narrow domain checks that survive the slash filter:
 //     a `.gserviceaccount.com` suffix (GCP machine identity) and a
 //     trailing digit on the right-hand side of the final `@` (TLDs are
 //     letters; a digit there is a package version suffix like
 //     `pkg@v1.2.3`).
-//  4. Local-parts that can never identify a real person: template
+//  5. Local-parts that can never identify a real person: template
 //     tokens (`first.last`, `firstname.lastname`) and the universally
 //     automated `noreply` / `no-reply` aliases. Canonical placeholder
 //     person names like `john.doe` or `joe.bloggs` are NOT in this set
@@ -50,6 +53,10 @@ func nonPIIEmailReason(s string) string {
 		return ""
 	}
 	lower := strings.ToLower(trimmed)
+
+	if knownFPEmails[lower] {
+		return "known false-positive address"
+	}
 
 	if r := placeholderDomainReason(lower); r != "" {
 		return r
@@ -152,6 +159,15 @@ var placeholderTLDs = map[string]bool{
 	"local": true,
 	"dev":   true,
 	"io":    true,
+}
+
+// knownFPEmails is the set of complete email-shaped strings that are
+// always false positives but don't fit any of the structural layers.
+// Matched as an exact lowercase comparison against the whole input.
+var knownFPEmails = map[string]bool{
+	// Canonical SSH pseudo-user for github.com; never identifies a real
+	// mailbox or person.
+	"git@github.com": true,
 }
 
 // placeholderLocalParts is the set of local-parts that can never

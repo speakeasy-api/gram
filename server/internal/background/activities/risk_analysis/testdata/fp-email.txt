@@ -111,6 +111,7 @@ frames@example.com
 frank@example.com
 friend_customer@example.com
 git.example.com/internal/skills@v1.0.0
+git@github.com
 github-actions@moonpay-airflow.iam.gserviceaccount.com
 github.com/GoogleCloudPlatform/cloudsql-proxy/cmd/cloud_sql_proxy@v1.37.6
 github.com/dop251/goja/debugger=github.com/speakeasy-api/goja/debugger@v0.0.0-20260223084236-ed0328a0a462
