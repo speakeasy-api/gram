@@ -115,6 +115,40 @@ function parseDate(date: Date | string): Date {
   return typeof date === "string" ? new Date(date) : date;
 }
 
+// The assistant runtime wraps each turn's input in a `<message-context>…</message-context>`
+// block (event metadata, MCP-auth events, etc.) that the model reads but the
+// user shouldn't see. It's persisted verbatim in the transcript, so strip the
+// leading block when rendering — and skip turns that are *only* a context block
+// (e.g. an injected `assistant_mcp_auth_required` event), which would otherwise
+// render as a raw bubble exposing internals like AuthURLs.
+const MESSAGE_CONTEXT_RE = /^<message-context>[\s\S]*?<\/message-context>\s*/;
+
+function stripMessageContext(text: string): string {
+  return text.replace(MESSAGE_CONTEXT_RE, "");
+}
+
+function userMessageText(msg: GramChatMessage): string {
+  if (typeof msg.content === "string") return msg.content;
+  if (!Array.isArray(msg.content)) return "";
+  return msg.content
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+}
+
+/**
+ * True when a user message is nothing but an injected `<message-context>` event
+ * (no real user text after stripping the block) — these should not be rendered.
+ */
+function isPureMessageContextEvent(msg: GramChatMessage): boolean {
+  if (msg.role !== "user") return false;
+  const text = userMessageText(msg);
+  return (
+    text.includes("<message-context>") &&
+    stripMessageContext(text).trim() === ""
+  );
+}
+
 /**
  * Builds content parts for a user message.
  */
@@ -127,7 +161,7 @@ function buildUserContentParts(msg: GramChatMessage): ThreadUserMessagePart[] {
     return [
       {
         type: "text",
-        text: msg.content ?? "",
+        text: stripMessageContext(msg.content ?? ""),
       },
     ];
   }
@@ -139,7 +173,7 @@ function buildUserContentParts(msg: GramChatMessage): ThreadUserMessagePart[] {
       case "text":
         parts.push({
           type: "text",
-          text: item.text,
+          text: stripMessageContext(item.text),
         });
         break;
       case "image_url": {
@@ -334,7 +368,8 @@ export function convertGramMessagesToExported(
     if (
       msg.role === "system" ||
       msg.role === "developer" ||
-      msg.role === "tool"
+      msg.role === "tool" ||
+      isPureMessageContextEvent(msg)
     ) {
       continue;
     }
@@ -384,6 +419,9 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
   const seenToolCallIds = new Set<string>();
 
   for (const msg of messages) {
+    if (isPureMessageContextEvent(msg)) {
+      continue;
+    }
     switch (msg.role) {
       case "developer":
       case "tool":

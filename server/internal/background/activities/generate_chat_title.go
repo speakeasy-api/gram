@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -106,6 +107,19 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	return nil
 }
 
+// messageContextBlockRE matches the <message-context>…</message-context>
+// framing that assistant source adapters prepend to a turn's input (EventID /
+// UserID lines, MCP auth events). The runner needs that block for replay, but
+// it is noise for title generation — left in, the title model fixates on the
+// structured boilerplate and every thread ends up with the same generic title.
+var messageContextBlockRE = regexp.MustCompile(`(?s)<message-context>.*?</message-context>\s*`)
+
+// stripMessageContext removes any leading source-adapter framing so the title
+// model sees only the human-authored turn text.
+func stripMessageContext(s string) string {
+	return strings.TrimSpace(messageContextBlockRE.ReplaceAllString(s, ""))
+}
+
 // buildTitleContext concatenates the last few user/assistant messages into a
 // single string suitable for LLM title generation.
 func buildTitleContext(messages []repo.ChatMessage) string {
@@ -113,10 +127,11 @@ func buildTitleContext(messages []repo.ChatMessage) string {
 	count := 0
 	for i := len(messages) - 1; i >= 0; i-- { // Start from the last message and work backwards to make sure we capture the most recent messages
 		msg := messages[i]
-		if (msg.Role != "user" && msg.Role != "assistant") || strings.TrimSpace(msg.Content) == "" {
+		content := stripMessageContext(msg.Content)
+		if (msg.Role != "user" && msg.Role != "assistant") || content == "" {
 			continue
 		}
-		fmt.Fprintf(&b, "%s: %s\n", msg.Role, strings.TrimSpace(msg.Content))
+		fmt.Fprintf(&b, "%s: %s\n", msg.Role, content)
 		count++
 		if count >= 6 {
 			break
