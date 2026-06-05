@@ -39,7 +39,7 @@ export default function OrgApiKeys() {
   );
 }
 
-export function OrgApiKeysInner() {
+function OrgApiKeysInner() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);

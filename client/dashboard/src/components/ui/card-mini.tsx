@@ -79,7 +79,7 @@ function MiniCardDescription({
   );
 }
 
-export function MiniCards({
+function MiniCards({
   className,
   children,
   isLoading,

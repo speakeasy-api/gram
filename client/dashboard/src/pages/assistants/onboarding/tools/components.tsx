@@ -1109,10 +1109,7 @@ export function ProposeSlackSetupComponent({
   );
 }
 
-export function NoticeOnUnmount({
-  toolCallId,
-  status,
-}: ToolCallMessagePartProps) {
+function NoticeOnUnmount({ toolCallId, status }: ToolCallMessagePartProps) {
   const draft = useAssistantDraft();
   const isPending = isExecuting(status);
   useEffect(() => {

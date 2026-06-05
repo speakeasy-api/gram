@@ -11,7 +11,7 @@ export function RedirectToInsightsTools() {
   return <RedirectPreservingLocation to={routes.insights.tools.href()} />;
 }
 
-export function RedirectToInsightsCosts() {
+function RedirectToInsightsCosts() {
   const routes = useRoutes();
   return <RedirectPreservingLocation to={routes.insights.costs.href()} />;
 }

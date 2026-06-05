@@ -660,7 +660,7 @@ const STATUS_OPTIONS: {
   },
 ];
 
-export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
+function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
@@ -2010,7 +2010,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
 }
 
 // Keep the old MCPDetails for backward compatibility (can be removed later)
-export function MCPDetails({ toolset }: { toolset: Toolset }) {
+function MCPDetails({ toolset }: { toolset: Toolset }) {
   return <MCPSettingsTab toolset={toolset} />;
 }
 
@@ -2054,7 +2054,7 @@ export function PageSection({
   );
 }
 
-export function MCPJson({
+function MCPJson({
   toolset,
   fullWidth = false,
   className,

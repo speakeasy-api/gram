@@ -14,7 +14,7 @@ import {
 // Define minimal types for badge components
 type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
 
-export const ToolsetPromptsBadge = ({
+const ToolsetPromptsBadge = ({
   toolset,
   variant = "neutral",
 }: {
@@ -49,7 +49,7 @@ export const ToolsetPromptsBadge = ({
   ) : null;
 };
 
-export const ResourcesBadge = ({
+const ResourcesBadge = ({
   resourceUris,
   variant = "neutral",
   className,

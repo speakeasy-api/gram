@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { forwardRef, type InputHTMLAttributes } from "react";
 
-export interface SliderProps extends Omit<
+interface SliderProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "onChange"
 > {

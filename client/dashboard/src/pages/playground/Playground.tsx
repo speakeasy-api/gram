@@ -205,7 +205,7 @@ function PlaygroundInner() {
   );
 }
 
-export function ToolsetPanel({
+function ToolsetPanel({
   configRef,
   setSelectedToolset,
   setSelectedEnvironment,

@@ -65,8 +65,8 @@ type OnboardingStep =
   | "toolset"
   | "mcp";
 
-export const START_PATH_PARAM = "start-path";
-export const START_STEP_PARAM = "start-step";
+const START_PATH_PARAM = "start-path";
+const START_STEP_PARAM = "start-step";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
@@ -161,7 +161,7 @@ const Step = ({
   );
 };
 
-export const ChoiceCard = ({
+const ChoiceCard = ({
   onClick,
   icon: Icon,
   title,

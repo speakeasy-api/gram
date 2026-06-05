@@ -1,4 +1,4 @@
-export const SECTION_NAMES = ["Personality", "Behavior", "Tasks"] as const;
+const SECTION_NAMES = ["Personality", "Behavior", "Tasks"] as const;
 export type SectionName = (typeof SECTION_NAMES)[number];
 
 const HEADING_RE = /^# (Personality|Behavior|Tasks)[ \t]*\r?$/gm;
@@ -26,7 +26,7 @@ function findSections(text: string): SectionRange[] {
   }));
 }
 
-export function getSection(text: string, name: SectionName): string | null {
+function getSection(text: string, name: SectionName): string | null {
   const ranges = findSections(text);
   const r = ranges.find((x) => x.name === name);
   if (!r) return null;
@@ -54,7 +54,7 @@ export function setSection(
   return `${head}\n\n${block}`;
 }
 
-export function removeSection(text: string, name: SectionName): string {
+function removeSection(text: string, name: SectionName): string {
   const ranges = findSections(text);
   const r = ranges.find((x) => x.name === name);
   if (!r) return text;

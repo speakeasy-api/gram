@@ -38,7 +38,7 @@ export const INSIGHTS_AI_RAINBOW_CLASS = "insights-ai-rainbow";
  * Requires <InsightsRainbowStyles /> in the tree. Works best on elements
  * with a 1px border and a border-radius.
  */
-export const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
+const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
 
 function InsightsRainbowStyles() {
   return (
@@ -598,13 +598,6 @@ export function InsightsProvider({
     </InsightsContext.Provider>
   );
 }
-
-/**
- * @deprecated Use <InsightsProvider> at the app shell level + <InsightsConfig>
- * on individual pages that need custom prompts. This alias is kept temporarily
- * to avoid breaking out-of-tree consumers; remove after migration.
- */
-export const InsightsSidebar = InsightsProvider;
 
 /**
  * Lives inside GramElementsProvider so it can access useThreadRuntime().

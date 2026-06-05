@@ -265,5 +265,3 @@ export function useFilterState() {
     clearFilters,
   };
 }
-
-export { defaultFilterState, defaultFilterValues, VALID_SORT_OPTIONS };

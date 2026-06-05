@@ -101,7 +101,7 @@ export default function Team() {
   );
 }
 
-export function TeamInner() {
+function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
   const { isRbacEnabled } = useRBAC();

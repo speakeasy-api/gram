@@ -36,7 +36,7 @@ const CATEGORIES: CategoryConfig[] = [
  * Horizontal category tabs for quick server filtering.
  * Each tab represents a predefined filter category.
  */
-export function CategoryTabs({ value, onChange, counts }: CategoryTabsProps) {
+function CategoryTabs({ value, onChange, counts }: CategoryTabsProps) {
   return (
     <div className="flex flex-wrap gap-2">
       {CATEGORIES.map((category) => {
@@ -80,5 +80,3 @@ export function CategoryTabs({ value, onChange, counts }: CategoryTabsProps) {
     </div>
   );
 }
-
-export { CATEGORIES };

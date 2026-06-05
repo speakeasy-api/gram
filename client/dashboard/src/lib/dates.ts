@@ -105,7 +105,7 @@ export const dateTimeFormatters = {
   }),
 };
 
-export const formatDuration = (ms: number) => {
+const formatDuration = (ms: number) => {
   if (ms < 1000) {
     return `${ms.toFixed(0)}ms`;
   }

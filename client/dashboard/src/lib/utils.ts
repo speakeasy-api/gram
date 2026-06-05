@@ -28,7 +28,7 @@ export function buildLoginRedirectURL(redirectTo: string | null): string {
   return href;
 }
 
-export function titleCase(str: string) {
+function titleCase(str: string) {
   return str.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 

@@ -14,8 +14,8 @@ import {
 } from "@gram/client/models/components";
 import { useMemo } from "react";
 
-export type ToolWithDisplayName = Tool & { displayName: string };
-export type HttpToolWithDisplayName = Tool & { type: "http" } & {
+type ToolWithDisplayName = Tool & { displayName: string };
+type HttpToolWithDisplayName = Tool & { type: "http" } & {
   displayName: string;
 };
 
@@ -58,7 +58,7 @@ const PLATFORM_SOURCE_LABELS: Record<string, string> = {
   logs: "MCP Logs",
 };
 
-export const asTool = (tool: GeneratedTool): Tool | undefined => {
+const asTool = (tool: GeneratedTool): Tool | undefined => {
   if (tool.httpToolDefinition) {
     return { type: "http", ...tool.httpToolDefinition };
   } else if (tool.promptTemplate) {
@@ -99,7 +99,7 @@ export const asResource = (resource: GeneratedResource): Resource => {
   }
 };
 
-export const useGroupedToolDefinitions = (
+const useGroupedToolDefinitions = (
   toolset: GeneratedToolset | undefined,
 ): ToolGroup[] => {
   const tools = toolset?.tools ?? [];
@@ -178,15 +178,15 @@ const templateName = (template: PromptTemplateEntry) => template.name;
 export const isPrompt = (template: PromptTemplateEntry) =>
   template.kind === PromptTemplateKind.Prompt;
 
-export const isHigherOrderTool = (template: PromptTemplateEntry) =>
+const isHigherOrderTool = (template: PromptTemplateEntry) =>
   template.kind === PromptTemplateKind.HigherOrderTool;
 
 export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
   promptTemplates.filter(isPrompt).map(templateName);
 
 export const isHttpTool = (tool: Tool) => tool.type === "http";
-export const isPromptTool = (tool: Tool) => tool.type === "prompt";
-export const isFunctionTool = (tool: Tool) => tool.type === "function";
+const isPromptTool = (tool: Tool) => tool.type === "prompt";
+const isFunctionTool = (tool: Tool) => tool.type === "function";
 export const toolSupportsAnnotations = (
   tool: Tool,
 ): tool is ToolWithAnnotations =>
@@ -268,7 +268,7 @@ export const filterFunctionTools = (
   return tools?.filter(isFunctionTool) ?? [];
 };
 
-export const toolNames = (toolset: { tools: Tool[] }) => {
+const toolNames = (toolset: { tools: Tool[] }) => {
   const { tools } = toolset;
   return tools.map((tool) => tool.name);
 };

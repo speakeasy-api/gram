@@ -54,7 +54,7 @@ export const MCPPage = () => {
   );
 };
 
-export function MCPOverview() {
+function MCPOverview() {
   const toolsets = useToolsets();
   const routes = useRoutes();
   const navigate = useNavigate();

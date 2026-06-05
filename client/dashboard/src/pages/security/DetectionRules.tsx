@@ -349,7 +349,7 @@ function RuleRow({
   );
 }
 
-export function SeverityBadge({ severity }: { severity: SeverityLevel }) {
+function SeverityBadge({ severity }: { severity: SeverityLevel }) {
   const meta = SEVERITY_META[severity];
   return (
     <span

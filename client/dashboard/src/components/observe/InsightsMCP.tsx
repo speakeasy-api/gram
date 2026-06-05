@@ -240,7 +240,7 @@ const FILTER_PLURAL_LABELS: Record<FilterDimension, string> = {
   agent: "Agents",
 };
 
-export type InsightsContentProps = {
+type InsightsContentProps = {
   data: GetObservabilityOverviewResult;
   summary: GetObservabilityOverviewResult["summary"];
   comparison: GetObservabilityOverviewResult["comparison"];
@@ -443,7 +443,7 @@ export function InsightsMCPContent() {
   );
 }
 
-export function InsightsOverviewShell({
+function InsightsOverviewShell({
   children,
   noDataKind,
   showMcpFilter,
@@ -1589,7 +1589,7 @@ function ToolCallsChart({
   );
 }
 
-export function SessionDurationChart({
+function SessionDurationChart({
   data,
   timeRangeMs,
   title,

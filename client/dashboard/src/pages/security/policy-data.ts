@@ -31,17 +31,17 @@ export type DetectionRule = {
   hidden?: boolean;
 };
 
-export type McpServerScope = {
+type McpServerScope = {
   slug: string;
   allTools: boolean;
   selectedTools: string[];
 };
 
-export type McpScope =
+type McpScope =
   | { mode: "all" }
   | { mode: "selected"; servers: McpServerScope[] };
 
-export type DlpPolicy = {
+type DlpPolicy = {
   id: string;
   name: string;
   enabled: boolean;
@@ -1424,7 +1424,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
 };
 
 // Mock policies for initial display
-export const MOCK_POLICIES: DlpPolicy[] = [
+const MOCK_POLICIES: DlpPolicy[] = [
   {
     id: "pol-1",
     name: "Production Secret Scanner",
@@ -1481,7 +1481,7 @@ export const MOCK_POLICIES: DlpPolicy[] = [
   },
 ];
 
-export function createEmptyPolicy(): DlpPolicy {
+function createEmptyPolicy(): DlpPolicy {
   return {
     id: `pol-${Date.now()}`,
     name: "",

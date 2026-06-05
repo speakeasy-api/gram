@@ -249,12 +249,10 @@ export function expandEvents(slugs: readonly string[]): string[] {
   return Array.from(types);
 }
 
-export function getCapabilityGroup(
-  slug: string,
-): SlackCapabilityGroup | undefined {
+function getCapabilityGroup(slug: string): SlackCapabilityGroup | undefined {
   return SLACK_CAPABILITY_GROUPS.find((g) => g.slug === slug);
 }
 
-export function getEventGroup(slug: string): SlackEventGroup | undefined {
+function getEventGroup(slug: string): SlackEventGroup | undefined {
   return SLACK_EVENT_GROUPS.find((g) => g.slug === slug);
 }

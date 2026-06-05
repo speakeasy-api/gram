@@ -14,7 +14,7 @@ export type AttachmentsContext = {
   fileInputRef: RefObject<HTMLInputElement | null>;
 };
 
-export type TextInputContext = {
+type TextInputContext = {
   value: string;
   setInput: (v: string) => void;
   clear: () => void;
@@ -38,7 +38,7 @@ export const LocalAttachmentsContext = createContext<AttachmentsContext | null>(
   null,
 );
 
-export const usePromptInputController = () => {
+const usePromptInputController = () => {
   const ctx = useContext(PromptInputController);
   if (!ctx) {
     throw new Error(
@@ -52,7 +52,7 @@ export const usePromptInputController = () => {
 export const useOptionalPromptInputController = () =>
   useContext(PromptInputController);
 
-export const useProviderAttachments = () => {
+const useProviderAttachments = () => {
   const ctx = useContext(ProviderAttachmentsContext);
   if (!ctx) {
     throw new Error(
@@ -62,7 +62,7 @@ export const useProviderAttachments = () => {
   return ctx;
 };
 
-export const useOptionalProviderAttachments = () =>
+const useOptionalProviderAttachments = () =>
   useContext(ProviderAttachmentsContext);
 
 export const usePromptInputAttachments = () => {

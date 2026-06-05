@@ -321,7 +321,7 @@ export function filterAndSortServers(
 /**
  * Count servers matching each category for display badges.
  */
-export function countByCategory(
+function countByCategory(
   servers: PulseMCPServer[],
 ): Record<"all" | "popular", number> {
   const serversWithMeta = servers.map((server) => parseServerMetadata(server));

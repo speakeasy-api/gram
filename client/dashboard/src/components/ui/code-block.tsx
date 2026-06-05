@@ -173,7 +173,7 @@ interface CollapsibleCodeSectionProps {
   defaultExpanded?: boolean;
 }
 
-export function CollapsibleCodeSection({
+function CollapsibleCodeSection({
   title,
   content,
   defaultExpanded = false,

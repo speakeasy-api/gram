@@ -216,7 +216,7 @@ function CreateIntegrationDialog({
   );
 }
 
-export function IntegrationCard({
+function IntegrationCard({
   integration,
   newVersionCallback,
 }: {

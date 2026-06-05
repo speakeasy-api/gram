@@ -84,7 +84,7 @@ export function useExternalMcpOAuthStatus(
   });
 }
 
-export function getAuthStatus(
+function getAuthStatus(
   toolset: Pick<
     Toolset,
     | "securityVariables"

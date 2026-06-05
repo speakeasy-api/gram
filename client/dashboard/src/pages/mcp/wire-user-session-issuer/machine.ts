@@ -553,7 +553,7 @@ export const wireUserSessionIssuerMachine = setup({
   },
 });
 
-export type WireUserSessionIssuerMachine = typeof wireUserSessionIssuerMachine;
+type WireUserSessionIssuerMachine = typeof wireUserSessionIssuerMachine;
 export type WireUserSessionIssuerSnapshot = SnapshotFrom<
   typeof wireUserSessionIssuerMachine
 >;

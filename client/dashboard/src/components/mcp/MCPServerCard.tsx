@@ -66,7 +66,7 @@ export function MCPServerCard({
   );
 }
 
-export function MCPServerCardSkeleton() {
+function MCPServerCardSkeleton() {
   return (
     <DotCard>
       <div className="mb-2 flex items-start justify-between gap-2">

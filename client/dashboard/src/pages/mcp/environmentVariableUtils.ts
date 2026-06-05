@@ -17,7 +17,7 @@ export interface EnvironmentVariable {
 }
 
 // Get all environments that have a value for a specific variable
-export const getAllEnvironments = (envVar: EnvironmentVariable): string[] => {
+const getAllEnvironments = (envVar: EnvironmentVariable): string[] => {
   const allEnvs = new Set<string>();
   envVar.valueGroups.forEach((group) => {
     group.environments.forEach((env) => allEnvs.add(env));
@@ -93,7 +93,7 @@ export const getEditingValue = (
 };
 
 // Check if a variable has unsaved changes or has no environment entry (unmapped)
-export const hasUnsavedChanges = (
+const hasUnsavedChanges = (
   envVar: EnvironmentVariable,
   environmentEntries: Array<{
     variableName: string;

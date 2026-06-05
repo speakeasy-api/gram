@@ -80,7 +80,7 @@ export function Badge({
 }
 
 // Combines two badges into one. Requires two children, the first is the left part and the second is the right part
-export function TwoPartBadge({
+function TwoPartBadge({
   children,
 }: BadgeProps & {
   children: [React.ReactNode, React.ReactNode];

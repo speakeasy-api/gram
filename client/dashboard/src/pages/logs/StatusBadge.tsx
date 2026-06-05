@@ -96,7 +96,7 @@ interface SpanTypeBadgeProps {
   urn: string;
 }
 
-export function SpanTypeBadge({ urn }: SpanTypeBadgeProps) {
+function SpanTypeBadge({ urn }: SpanTypeBadgeProps) {
   const { kind } = parseGramUrn(urn);
 
   switch (kind) {

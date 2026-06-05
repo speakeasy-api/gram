@@ -58,12 +58,12 @@ export const MessageContent = ({
   </div>
 );
 
-export type MessageAvatarProps = ComponentProps<typeof Avatar> & {
+type MessageAvatarProps = ComponentProps<typeof Avatar> & {
   src: string;
   name?: string;
 };
 
-export const MessageAvatar = ({
+const MessageAvatar = ({
   src,
   name,
   className,

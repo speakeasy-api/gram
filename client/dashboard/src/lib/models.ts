@@ -45,4 +45,4 @@ export const AVAILABLE_MODELS: AvailableModel[] = [
   { value: "mistralai/mistral-medium-3.1", label: "Mistral Medium 3.1" },
 ];
 
-export const DEFAULT_MODEL = "anthropic/claude-sonnet-4.6";
+const DEFAULT_MODEL = "anthropic/claude-sonnet-4.6";

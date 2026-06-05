@@ -155,7 +155,7 @@ export const AgentifyProvider = ({
   );
 };
 
-export const AgentifyButton = ({
+const AgentifyButton = ({
   toolsetSlug,
   environmentSlug,
   onAgentify,

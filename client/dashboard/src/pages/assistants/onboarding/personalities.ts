@@ -747,7 +747,7 @@ export function getPersonality(slug: string): Personality | undefined {
   return PERSONALITIES.find((p) => p.slug === slug);
 }
 
-export function listPersonalitySummaries(): Pick<
+function listPersonalitySummaries(): Pick<
   Personality,
   "slug" | "title" | "summary"
 >[] {

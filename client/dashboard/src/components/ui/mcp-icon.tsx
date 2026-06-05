@@ -24,12 +24,10 @@ export const McpIcon = forwardRef<SVGSVGElement, LucideProps>(
   ),
 );
 
-export const ExternalMcpIcon = forwardRef<SVGSVGElement, LucideProps>(
-  (props, ref) => (
-    <SimpleTooltip tooltip="External MCP server imported from the Catalog">
-      <McpIcon ref={ref} {...props} />
-    </SimpleTooltip>
-  ),
-);
+const ExternalMcpIcon = forwardRef<SVGSVGElement, LucideProps>((props, ref) => (
+  <SimpleTooltip tooltip="External MCP server imported from the Catalog">
+    <McpIcon ref={ref} {...props} />
+  </SimpleTooltip>
+));
 
 ExternalMcpIcon.displayName = "ExternalMcpIcon";

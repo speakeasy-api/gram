@@ -91,7 +91,7 @@ export function Stepper({
   );
 }
 
-export function Step({
+function Step({
   stepNumber,
   heading,
   description,

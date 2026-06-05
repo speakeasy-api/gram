@@ -155,7 +155,7 @@ export function useMcpSlugValidation(
   return slugError;
 }
 
-export const randSlug = () => {
+const randSlug = () => {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let rand = "";
   for (let i = 0; i < 5; i++) {

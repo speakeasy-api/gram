@@ -172,7 +172,7 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
 /** All builtin rule ids, used for custom rule id collision checks. Includes
  *  hidden/deprecated rule ids (which BUILTIN_RULES_BY_CATEGORY omits) so a
  *  custom rule can never reuse an id that legacy findings still resolve. */
-export const BUILTIN_RULE_IDS = new Set<string>([
+const BUILTIN_RULE_IDS = new Set<string>([
   ...Object.values(BUILTIN_RULES_BY_CATEGORY).flatMap((rules) =>
     rules.map((r) => r.id),
   ),

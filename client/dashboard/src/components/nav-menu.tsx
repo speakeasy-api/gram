@@ -11,7 +11,7 @@ import { Type } from "./ui/type";
 
 export const NAV_LOADING_DURATION_MS = 600;
 
-export function NavMenu({
+function NavMenu({
   items,
   className,
   children,

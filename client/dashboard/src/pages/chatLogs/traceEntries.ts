@@ -115,7 +115,7 @@ export function getEntryTypeCounts(
   return counts;
 }
 
-export function isMessageVisible(
+function isMessageVisible(
   message: ChatMessage,
   enabledEntryTypes: FilterableTraceEntryType[],
 ) {
@@ -124,14 +124,14 @@ export function isMessageVisible(
   return entryType === "system" || enabledEntryTypes.includes(entryType);
 }
 
-export function messageHasRiskResults(
+function messageHasRiskResults(
   message: ChatMessage,
   riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>,
 ) {
   return (riskResultsByMessage.get(message.id)?.length ?? 0) > 0;
 }
 
-export function isMessageVisibleWithRisk({
+function isMessageVisibleWithRisk({
   message,
   enabledEntryTypes,
   riskOnly,
@@ -177,7 +177,7 @@ export function getRiskEntryCount(
   ).length;
 }
 
-export function getVisibleMessageCount(
+function getVisibleMessageCount(
   messages: ChatMessage[],
   enabledEntryTypes: FilterableTraceEntryType[],
 ) {

@@ -6,7 +6,7 @@ import {
 } from "@gram/client/models/components";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 
-export const validPresets: DateRangePreset[] = [
+const validPresets: DateRangePreset[] = [
   "15m",
   "1h",
   "4h",

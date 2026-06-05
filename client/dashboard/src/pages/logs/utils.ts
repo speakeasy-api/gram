@@ -23,7 +23,7 @@ export function formatNanoTimestamp(nanos: string): string {
 /**
  * Format Unix nanoseconds to human-readable relative time
  */
-export function formatRelativeTime(nanos: number): string {
+function formatRelativeTime(nanos: number): string {
   const ms = nanos / 1_000_000;
   return dateTimeFormatters.humanize(new Date(ms));
 }
@@ -130,7 +130,7 @@ export function formatLogBody(log: TelemetryLogRecord): string {
 /**
  * Get attributes as a formatted string for preview
  */
-export function formatAttributesPreview(attributes: unknown): string {
+function formatAttributesPreview(attributes: unknown): string {
   if (!attributes || typeof attributes !== "object") return "";
   const entries = Object.entries(attributes as Record<string, unknown>);
   if (entries.length === 0) return "";

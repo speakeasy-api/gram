@@ -620,7 +620,7 @@ type DialogProps = ContentProps & {
   onOpenChange: (open: boolean) => void;
 };
 
-export function InstallInstructionsDialog({
+function InstallInstructionsDialog({
   open,
   onOpenChange,
   ...content

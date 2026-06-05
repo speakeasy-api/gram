@@ -184,7 +184,7 @@ const useAssetNumtools = (
     : 0;
 };
 
-export function UploadOpenAPIContent({
+function UploadOpenAPIContent({
   onStepsComplete,
   className,
 }: {

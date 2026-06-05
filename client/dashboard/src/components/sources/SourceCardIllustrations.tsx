@@ -52,7 +52,7 @@ const PATTERN_IMAGES = [
  * MCP card illustration using pattern images
  * Deterministically selects a pattern based on the toolset slug
  */
-export function MCPPatternIllustration({
+function MCPPatternIllustration({
   className,
   toolsetSlug,
 }: IllustrationProps & { toolsetSlug: string }) {

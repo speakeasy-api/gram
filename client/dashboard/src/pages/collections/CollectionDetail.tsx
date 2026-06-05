@@ -44,7 +44,7 @@ import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
 
-export function CollectionDetailRoot() {
+function CollectionDetailRoot() {
   return <Outlet />;
 }
 

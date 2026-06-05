@@ -78,7 +78,7 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
 }
 
 /** Whether the form fields are valid enough to submit */
-export function isFormValid(input: SaveButtonInput): boolean {
+function isFormValid(input: SaveButtonInput): boolean {
   if (input.isSystemRole) return true; // system roles only change members
   return (
     input.name.trim().length > 0 &&
@@ -88,7 +88,7 @@ export function isFormValid(input: SaveButtonInput): boolean {
 }
 
 /** Whether non-member fields (name, description, grants) changed */
-export function hasNonMemberChanges(input: SaveButtonInput): boolean {
+function hasNonMemberChanges(input: SaveButtonInput): boolean {
   return (
     input.name !== input.initial.name ||
     input.description !== input.initial.description ||

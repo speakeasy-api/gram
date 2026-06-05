@@ -40,7 +40,7 @@ export default function SDK() {
   );
 }
 
-export const SdkContent = ({
+const SdkContent = ({
   projectSlug,
   toolset = "my-toolset",
   environment = "default",
