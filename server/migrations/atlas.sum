@@ -1,4 +1,4 @@
-h1:3lQqdjRs53GmyJoP+a+kTsJaO6kmF/HVppQNLq+CuBw=
+h1:ARgVW+ppUTnO2dfZyEsOdfPZcHSMeupdtg/0Zrxpc6I=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -206,4 +206,5 @@ h1:3lQqdjRs53GmyJoP+a+kTsJaO6kmF/HVppQNLq+CuBw=
 20260602202253_mcp_collection_attachment_mcp_server_id.sql h1:Oy4CAg/xcVVrq+mMho5fmvWckLQdhCecrpRadQ1JiL0=
 20260603130426_risk-policies-add-message-types.sql h1:U9s5GPUuoojFLFjPnQyxftN10IUxFw+iTHuDgJ5voB4=
 20260603143315_age-2631-assistant-dashboard-messages.sql h1:cY9snSVnbLTFV+vKZ4pw5mH11TkZ2cBfb4IscJlQtkY=
-20260604094217_add_risk_exclusions.sql h1:vh5CPToZssFBVoGIPNpja674+BhclWU62tRj9GPrUOI=
+20260604141922_add-risk-policy-bypass-requests-table.sql h1:Ol7aa0m2r1gSObRbAJaqr6wdCs37y8qtvLlZYs6Q7pg=
+20260605121600_add_risk_exclusions.sql h1:30gcwDwZ4A3IsWgJNij/lr09WDYq/69y3pipLLv4ZgY=

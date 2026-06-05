@@ -60,6 +60,10 @@ export type Selector = {
    */
   resourceKind: ResourceKind;
   /**
+   * Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.
+   */
+  serverUrl?: string | undefined;
+  /**
    * Specific tool name filter (MCP scopes only).
    */
   tool?: string | undefined;
@@ -86,6 +90,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
     project_id: z.optional(z.string()),
     resource_id: z.string(),
     resource_kind: ResourceKind$inboundSchema,
+    server_url: z.optional(z.string()),
     tool: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -93,6 +98,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
       "project_id": "projectId",
       "resource_id": "resourceId",
       "resource_kind": "resourceKind",
+      "server_url": "serverUrl",
     });
   }),
 );
@@ -102,6 +108,7 @@ export type Selector$Outbound = {
   project_id?: string | undefined;
   resource_id: string;
   resource_kind: string;
+  server_url?: string | undefined;
   tool?: string | undefined;
 };
 
@@ -115,6 +122,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
     projectId: z.optional(z.string()),
     resourceId: z.string(),
     resourceKind: ResourceKind$outboundSchema,
+    serverUrl: z.optional(z.string()),
     tool: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -122,6 +130,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
       projectId: "project_id",
       resourceId: "resource_id",
       resourceKind: "resource_kind",
+      serverUrl: "server_url",
     });
   }),
 );

@@ -1,6 +1,7 @@
 package risk_analysis
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -17,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/semaphore"
+	"gopkg.in/yaml.v3"
 )
 
 // TestConvertPresidioFindings_FiltersIPv6Unspecified verifies that the
@@ -26,48 +30,97 @@ import (
 func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
 	t.Parallel()
 
-	text := ":: and ::0 and 2001:db8::1"
+	text := ":: and ::0 and dead::beef"
 	results := []presidioResult{
 		{EntityType: "IP_ADDRESS", Start: 0, End: 2, Score: 0.9},   // "::"
 		{EntityType: "IP_ADDRESS", Start: 7, End: 10, Score: 0.9},  // "::0"
-		{EntityType: "IP_ADDRESS", Start: 15, End: 26, Score: 0.9}, // "2001:db8::1"
+		{EntityType: "IP_ADDRESS", Start: 15, End: 25, Score: 0.9}, // "dead::beef"
 	}
 
 	findings := convertPresidioFindings(text, results)
 	require.Len(t, findings, 1, "only the real IPv6 address should survive the filter")
-	assert.Equal(t, "2001:db8::1", findings[0].Match)
+	assert.Equal(t, "dead::beef", findings[0].Match)
 }
 
-func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
+// TestIsPresidioFalsePositive_CorpusAllFiltered is the canonical
+// positive-coverage gate: every IP in testdata/fp-ip.txt is an address
+// the catalog must drop. Each line is run through
+// isPresidioFalsePositive; any miss is a regression. The corpus is
+// hand-curated — extend it by adding IPs (one per line, sorted) that
+// surface as false positives during catalog tuning. Real residential
+// IPs (PII) are never added to the corpus or otherwise committed.
+func TestIsPresidioFalsePositive_CorpusAllFiltered(t *testing.T) {
 	t.Parallel()
 
-	// Unspecified addresses are filtered, IPv6 and IPv4.
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0::0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0:0:0:0:0:0:0:0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0.0.0.0"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed")
+	f, err := os.Open("testdata/fp-ip.txt")
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
 
-	// Loopback addresses are filtered, IPv6 and IPv4 (whole 127.0.0.0/8).
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "127.0.0.1"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "127.1.2.3"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::1"))
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 1<<22)
+	var checked int
+	for sc.Scan() {
+		ip := strings.TrimSpace(sc.Text())
+		if ip == "" || strings.HasPrefix(ip, "#") {
+			continue
+		}
+		assert.True(t, isPresidioFalsePositive("IP_ADDRESS", ip),
+			"corpus IP %q must be filtered", ip)
+		checked++
+	}
+	require.NoError(t, sc.Err())
+	assert.Positive(t, checked, "fp-ip.txt corpus must not be empty")
+}
 
-	// IPv6 short-form "<hex>::" patterns dominate Presidio's IP_ADDRESS
-	// noise on prod (hex constants and text fragments greedily matched).
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "b::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "dead::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1::"))
-	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "DEAF::"), "case-insensitive")
+// TestIsPresidioFalsePositive_NegativesAndEntityScope locks the two
+// invariants the corpus cannot express: real consumer-ISP IPs still
+// surface as PII, and the filter only fires for IP_ADDRESS findings.
+func TestIsPresidioFalsePositive_NegativesAndEntityScope(t *testing.T) {
+	t.Parallel()
 
-	// Real addresses are not filtered.
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "8.8.8.8"))
-	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "2001:db8::1"))
+	// Real addresses still flow through. Consumer ISP IPs identify an end
+	// user and are deliberately not in the infra ASN regex, so they are
+	// still treated as PII.
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "71.126.87.167"), "residential Verizon")
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "82.15.226.61"), "residential Virgin Media")
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
+
+	// Whitespace-trimming applies to the IP_ADDRESS path.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed unspecified")
 
 	// Other entity types are never filtered by this rule.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "8.8.8.8"))
+}
+
+// TestIsPresidioFalsePositive_EquivalentIPFormsMatch verifies that
+// catalogued exact IPs are caught regardless of how Presidio happens to
+// spell them. The exact lookup canonicalises via netip before matching,
+// so expanded zero-groups and uppercase hex resolve to the same entry as
+// the curated key.
+func TestIsPresidioFalsePositive_EquivalentIPFormsMatch(t *testing.T) {
+	t.Parallel()
+
+	// Cloudflare 2606:4700:4700::1111 spelled with explicit zero groups.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700:0:0:0:0:1111"), "compressed-zero variant")
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2606:4700:4700:0000:0000:0000:0000:1111"), "fully-expanded variant")
+	// Google 2001:4860:4860::8888 with explicit zero groups.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2001:4860:4860:0:0:0:0:8888"), "Google DNS expanded")
+	// AdGuard 2a10:50c0::bad1:ff in uppercase hex.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2A10:50C0::BAD1:FF"), "uppercase hex variant")
+}
+
+// TestNonPIIIPExactKeysAreCanonical locks the invariant that every key in
+// nonPIIIPExact is already in netip canonical form. The exact lookup keys
+// off addr.String(), so a non-canonical key would silently never match.
+func TestNonPIIIPExactKeysAreCanonical(t *testing.T) {
+	t.Parallel()
+
+	for key := range nonPIIIPExact {
+		addr, err := netip.ParseAddr(key)
+		require.NoErrorf(t, err, "key %q must parse as an IP", key)
+		assert.Equalf(t, key, addr.String(), "key %q must be in canonical netip form", key)
+	}
 }
 
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
@@ -431,6 +484,28 @@ func TestTruncateAtRuneBoundaryHandlesMultibyte(t *testing.T) {
 	assert.Empty(t, truncateAtRuneBoundary(in, 0))
 }
 
+// TestFilterEntitiesDropsBlacklistedTypes asserts that PERSON and
+// US_DRIVER_LICENSE are stripped from any caller-supplied entity list
+// before reaching Presidio. PERSON is dropped because NER trips on
+// capitalized words inside tool calls; US_DRIVER_LICENSE because the
+// upstream regex is unusably broad (microsoft/presidio#1063).
+func TestFilterEntitiesDropsBlacklistedTypes(t *testing.T) {
+	t.Parallel()
+
+	// nil passes through untouched so Presidio's default entity set still applies.
+	assert.Nil(t, filterEntities(nil))
+
+	// Blacklisted entries are removed; the rest survive in order.
+	got := filterEntities([]string{"EMAIL_ADDRESS", "PERSON", "US_DRIVER_LICENSE", "CREDIT_CARD"})
+	assert.Equal(t, []string{"EMAIL_ADDRESS", "CREDIT_CARD"}, got)
+
+	// All-blacklisted input returns an empty (non-nil) slice so AnalyzeBatch
+	// can short-circuit instead of falling back to the unbounded default scan.
+	got = filterEntities([]string{"PERSON", "US_DRIVER_LICENSE"})
+	assert.NotNil(t, got)
+	assert.Empty(t, got)
+}
+
 func TestIsCancelErrClassifiesContextErrors(t *testing.T) {
 	t.Parallel()
 
@@ -440,6 +515,123 @@ func TestIsCancelErrClassifiesContextErrors(t *testing.T) {
 	assert.True(t, isCancelErr(fmt.Errorf("wrapped: %w", context.DeadlineExceeded)))
 	assert.False(t, isCancelErr(nil))
 	assert.False(t, isCancelErr(errors.New("presidio returned status 500")))
+}
+
+// TestReformatJSONAsYAML_LeavesNonJSONUntouched documents the safety
+// fallback: anything we cannot decode as a JSON value flows through to
+// Presidio verbatim so plain prose and pre-formatted snippets are still
+// scanned.
+func TestReformatJSONAsYAML_LeavesNonJSONUntouched(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"",
+		"hello world",
+		"not { json",
+		"  leading whitespace and trailing garbage }",
+	}
+	for _, in := range cases {
+		assert.Equal(t, in, reformatJSONAsYAML(in))
+	}
+}
+
+// TestReformatJSONAsYAML_EscapedNewlinesBecomeLiteralBlock is the
+// regression test for POC-58: JSON-encoded multiline strings produce
+// `\n` and similar escapes that Presidio's pattern-based recognizers
+// (US_DRIVER_LICENSE in particular) misread as license numbers. The
+// YAML literal-block form replaces those escapes with real newlines.
+func TestReformatJSONAsYAML_EscapedNewlinesBecomeLiteralBlock(t *testing.T) {
+	t.Parallel()
+
+	in := `{"message":"first line\nsecond line\nthird line"}`
+	out := reformatJSONAsYAML(in)
+
+	assert.Contains(t, out, "|", "multiline strings should be emitted as a YAML literal block scalar")
+	assert.NotContains(t, out, `\n`, "JSON newline escapes must not survive into the Presidio payload")
+	for _, line := range []string{"first line", "second line", "third line"} {
+		assert.Contains(t, out, line)
+	}
+	assert.GreaterOrEqual(t, strings.Count(out, "\n"), 3, "literal block should preserve real newlines between lines")
+}
+
+// TestReformatJSONAsYAML_PreservesStructureAndValues confirms that
+// non-string JSON values (numbers, booleans, null, nested arrays and
+// objects) round-trip through the converter into a YAML document that
+// decodes back to the same data.
+func TestReformatJSONAsYAML_PreservesStructureAndValues(t *testing.T) {
+	t.Parallel()
+
+	in := `{"a":1,"b":1.5,"c":true,"d":null,"e":["x","y"],"f":{"nested":"value"}}`
+	out := reformatJSONAsYAML(in)
+
+	var roundTrip map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(out), &roundTrip))
+	assert.Equal(t, 1, roundTrip["a"])
+	assert.InEpsilon(t, 1.5, roundTrip["b"], 1e-9)
+	assert.Equal(t, true, roundTrip["c"])
+	assert.Nil(t, roundTrip["d"])
+	assert.Equal(t, []any{"x", "y"}, roundTrip["e"])
+	assert.Equal(t, map[string]any{"nested": "value"}, roundTrip["f"])
+}
+
+// TestReformatJSONAsYAML_PreservesTrailingBytes guards against
+// json.Decoder.Decode silently discarding bytes after the first JSON value:
+// for mixed prefix-JSON-then-prose inputs we must still hand the trailing
+// portion to Presidio so PII outside the JSON envelope is not dropped.
+func TestReformatJSONAsYAML_PreservesTrailingBytes(t *testing.T) {
+	t.Parallel()
+
+	in := `{"a":1} contact sarah@example.com for details`
+	out := reformatJSONAsYAML(in)
+
+	assert.Contains(t, out, "a: 1", "JSON prefix should still be reformatted as YAML")
+	assert.Contains(t, out, "sarah@example.com", "trailing bytes must survive into the Presidio payload")
+}
+
+// TestReformatJSONAsYAML_SortsMapKeys makes the output deterministic so
+// repeated scans of the same payload produce stable Presidio offsets.
+func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
+	t.Parallel()
+
+	in := `{"zebra":"z","apple":"a","mango":"m"}`
+	out := reformatJSONAsYAML(in)
+
+	appleIdx := strings.Index(out, "apple:")
+	mangoIdx := strings.Index(out, "mango:")
+	zebraIdx := strings.Index(out, "zebra:")
+	require.GreaterOrEqual(t, appleIdx, 0)
+	require.GreaterOrEqual(t, mangoIdx, 0)
+	require.GreaterOrEqual(t, zebraIdx, 0)
+	assert.Less(t, appleIdx, mangoIdx)
+	assert.Less(t, mangoIdx, zebraIdx)
+}
+
+// TestAnalyzeOncePayloadIsYAMLForJSONInput is the end-to-end assertion
+// that the client converts JSON bodies before handing them to Presidio.
+// We send a JSON object with a multiline string and confirm the wire
+// payload no longer contains the raw `\n` escape sequence.
+func TestAnalyzeOncePayloadIsYAMLForJSONInput(t *testing.T) {
+	t.Parallel()
+
+	var got presidioRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&got))
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestPresidioClient(t, srv.URL)
+	in := `{"body":"line one\nline two"}`
+	_, err := client.AnalyzeBatch(t.Context(), []string{in}, nil, nil)
+	require.NoError(t, err)
+
+	require.Len(t, got.Text, 1)
+	wire := got.Text[0]
+	assert.NotContains(t, wire, `\n`, "JSON newline escapes must not reach Presidio")
+	assert.Contains(t, wire, "body: |", "object key should be followed by a literal-block scalar marker")
+	assert.Contains(t, wire, "line one")
+	assert.Contains(t, wire, "line two")
 }
 
 // --- helpers ---

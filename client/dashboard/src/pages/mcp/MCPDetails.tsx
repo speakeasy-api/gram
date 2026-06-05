@@ -56,6 +56,10 @@ import {
 import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
+import {
+  EXCLUDED_TAG_KEY,
+  MCPToolFilterScopesPanel,
+} from "@/pages/mcp/MCPToolFilterScopesPanel";
 import { useRoutes } from "@/routes";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
@@ -65,9 +69,11 @@ import {
   buildCollectionsListServersQuery,
   useAddOAuthProxyServerMutation,
   useExportMcpMetadataMutation,
+  invalidateListToolsetToolFilters,
   useGetMcpMetadata,
   useLatestDeployment,
   useListEnvironments,
+  useListToolsetToolFilters,
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
@@ -1077,9 +1083,43 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   const routes = useRoutes();
   const { data: fullToolset, refetch } = useToolset(toolset.slug);
 
+  // Read-only tool filtering ("scopes") view. The resolved variation group, when
+  // present, mirrors what the runtime ?tags= filter exposes.
+  const { data: toolFilters } = useListToolsetToolFilters(
+    { slug: toolset.slug },
+    undefined,
+    { throwOnError: false },
+  );
+  const filteringEnabled = toolFilters?.filteringEnabled ?? false;
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+
   const [addToolsDialogOpen, setAddToolsDialogOpen] = useState(false);
 
   const tools = fullToolset?.tools ?? [];
+
+  // Validate the selected tag against the current filters (derived during render
+  // so a refetch that drops the selected scope cleanly falls back to "all tools"
+  // without a stale chip or a reset effect).
+  const effectiveActiveTag = useMemo(() => {
+    if (!toolFilters || activeTag === null) return null;
+    if (activeTag === EXCLUDED_TAG_KEY) {
+      return toolFilters.excluded.length > 0 ? EXCLUDED_TAG_KEY : null;
+    }
+    return toolFilters.scopes.some((s) => s.tag === activeTag)
+      ? activeTag
+      : null;
+  }, [activeTag, toolFilters]);
+
+  // When a scope chip is active, restrict the list below to that scope's tools
+  // (or the excluded set), matched by URN so variation renames don't break it.
+  const activeFilterUrns = useMemo(() => {
+    if (!effectiveActiveTag || !toolFilters) return null;
+    if (effectiveActiveTag === EXCLUDED_TAG_KEY) {
+      return new Set(toolFilters.excluded.map((tool) => tool.toolUrn));
+    }
+    const scope = toolFilters.scopes.find((s) => s.tag === effectiveActiveTag);
+    return scope ? new Set(scope.tools.map((tool) => tool.toolUrn)) : null;
+  }, [effectiveActiveTag, toolFilters]);
 
   // Check if this is an external MCP proxy server
   const isExternalMcpProxy = fullToolset?.kind === "external-mcp-proxy";
@@ -1154,7 +1194,13 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
   const { updateTool, isUpdating } = useToolUpdate({
     telemetryEvent: "toolset_event",
-    onSuccess: refetch,
+    // Refresh the toolset and the tool filtering scopes. Editing a tool's tags
+    // can add or remove filter scopes, so the read-only filtering panel above
+    // must be invalidated too — otherwise new tags only appear after a reload.
+    onSuccess: () => {
+      refetch();
+      invalidateListToolsetToolFilters(queryClient, [{ slug: toolset.slug }]);
+    },
   });
 
   // For external MCP proxy servers, show the server info instead of tools list
@@ -1177,6 +1223,11 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   let toolsToDisplay = tools.filter((tool) => groupedToolNames.has(tool.name));
   if (toolsToDisplay.length === 0) {
     toolsToDisplay = tools;
+  }
+  if (activeFilterUrns) {
+    toolsToDisplay = toolsToDisplay.filter((tool) =>
+      activeFilterUrns.has(tool.toolUrn),
+    );
   }
 
   return (
@@ -1207,6 +1258,15 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
             )}
           </Stack>
         </Stack>
+      )}
+
+      {/* Read-only tool filtering scopes panel (only when filtering enabled) */}
+      {!isExternalMcpProxy && filteringEnabled && toolFilters && (
+        <MCPToolFilterScopesPanel
+          filters={toolFilters}
+          activeTag={effectiveActiveTag}
+          onSelectTag={setActiveTag}
+        />
       )}
 
       {/* Group filter */}

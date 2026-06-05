@@ -12,16 +12,13 @@ import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import type { RiskResult } from "@gram/client/models/components";
 import {
-  invalidateAllRiskListResults,
-  invalidateAllRiskListShadowMCPApprovals,
-  useRiskApproveShadowMCPMutation,
   useRiskListPolicies,
   useRiskOverview,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { RefreshCw, ShieldOff } from "lucide-react";
+import { RefreshCw, Share2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -46,7 +43,6 @@ const RISK_EVENTS_GRID =
 
 export default function RiskEvents() {
   const client = useSdkClient();
-  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
   const policyFilter = searchParams.get("policy_id") ?? "";
@@ -205,37 +201,6 @@ export default function RiskEvents() {
   const totalCount = resultsQuery.data?.pages[0]?.totalCount ?? results.length;
   const isInitialLoading = policiesLoading || resultsQuery.isLoading;
 
-  const approveMutation = useRiskApproveShadowMCPMutation();
-  const handleExclude = useCallback(
-    (policyId: string, match: string, serverName?: string) => {
-      approveMutation.mutate(
-        {
-          request: {
-            approveShadowMCPRequestBody: {
-              policyId,
-              match,
-              serverName,
-            },
-          },
-        },
-        {
-          onSuccess: () => {
-            toast.success("Excluded from policy");
-            queryClient.invalidateQueries({
-              queryKey: ["risk", "results", "list"],
-            });
-            invalidateAllRiskListResults(queryClient);
-            invalidateAllRiskListShadowMCPApprovals(queryClient);
-          },
-          onError: (err) => {
-            toast.error(`Failed to exclude: ${err.message ?? "unknown error"}`);
-          },
-        },
-      );
-    },
-    [approveMutation, queryClient],
-  );
-
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const container = e.currentTarget;
@@ -364,10 +329,8 @@ export default function RiskEvents() {
           isLoading={isInitialLoading}
           results={results}
           policyNameById={policyNameById}
-          isExcluding={approveMutation.isPending}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
-          onExclude={handleExclude}
         />
       </LogWorkbench>
     </RevealAllProvider>
@@ -467,19 +430,15 @@ function RiskEventsRows({
   isLoading,
   results,
   policyNameById,
-  isExcluding,
   scrollRef,
   onSelectChat,
-  onExclude,
 }: {
   error: Error | null;
   isLoading: boolean;
   results: RiskResult[];
   policyNameById: Map<string, string>;
-  isExcluding: boolean;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
-  onExclude: (policyId: string, match: string, serverName?: string) => void;
 }) {
   const rowVirtualizer = useVirtualizer({
     count: results.length,
@@ -549,9 +508,7 @@ function RiskEventsRows({
             <RiskEventsRow
               result={result}
               policyName={policyNameById.get(result.policyId)}
-              isExcluding={isExcluding}
               onSelectChat={onSelectChat}
-              onExclude={onExclude}
             />
           </div>
         );
@@ -563,17 +520,29 @@ function RiskEventsRows({
 function RiskEventsRow({
   result,
   policyName,
-  isExcluding,
   onSelectChat,
-  onExclude,
 }: {
   result: RiskResult;
   policyName: string | undefined;
-  isExcluding: boolean;
   onSelectChat: (chatId: string | null) => void;
-  onExclude: (policyId: string, match: string, serverName?: string) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
+
+  const handleShare = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!result.chatId) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set("chat_id", result.chatId);
+      try {
+        await navigator.clipboard.writeText(url.toString());
+        toast.success("Link copied to clipboard");
+      } catch {
+        toast.error("Failed to copy link");
+      }
+    },
+    [result.chatId],
+  );
 
   return (
     <div
@@ -621,22 +590,17 @@ function RiskEventsRow({
         {policyName ?? "-"}
       </div>
       <div className="flex min-w-0 justify-center">
-        {isShadowMCP && result.match ? (
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={isExcluding}
-            onClick={(e) => {
-              e.stopPropagation();
-              onExclude(result.policyId, result.match!);
-            }}
-            title="Exclude this MCP server from the policy"
+        {result.chatId ? (
+          <button
+            type="button"
+            onClick={handleShare}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center transition-colors"
+            aria-label="Copy link to this event"
+            title="Copy link to this event"
           >
-            <Button.LeftIcon>
-              <ShieldOff className="h-3 w-3" />
-            </Button.LeftIcon>
-            <Button.Text>Exclude</Button.Text>
-          </Button>
+            <Share2 className="h-3 w-3" />
+          </button>
         ) : null}
       </div>
     </div>

@@ -27,13 +27,15 @@ type Service interface {
 	UpdateAssistant(context.Context, *UpdateAssistantPayload) (res *types.Assistant, err error)
 	// Delete an assistant.
 	DeleteAssistant(context.Context, *DeleteAssistantPayload) (err error)
-	// Send a message from the dashboard to an assistant as the calling user. The
-	// reply is delivered asynchronously; poll the returned chat to read it.
+	// Send a message from the dashboard to an assistant as the calling user.
+	// Continue an existing conversation by passing its chat_id (from listChats),
+	// or omit chat_id to start a new conversation — the server mints and returns a
+	// fresh chat id. The reply is delivered asynchronously; poll the chat service
+	// (loadChat) to read it.
 	SendMessage(context.Context, *SendMessagePayload) (res *SendMessageResult, err error)
-	// List a dashboard conversation log for a chat (the user's messages and the
-	// assistant's delivered replies). Only the user who owns the conversation may
-	// read it. Poll with after_seq to fetch only newer messages.
-	ListMessages(context.Context, *ListMessagesPayload) (res *ListMessagesResult, err error)
+	// Get the project's built-in Project Assistant, provisioning it on first
+	// access. Idempotent — safe to call on every sidebar open.
+	EnsureManagedAssistant(context.Context, *EnsureManagedAssistantPayload) (res *types.Assistant, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -56,7 +58,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "listMessages"}
+var MethodNames = [7]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "ensureManagedAssistant"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -79,25 +81,18 @@ type CreateAssistantPayload struct {
 	Status *string
 }
 
-type DashboardMessage struct {
-	// Message id.
-	ID string
-	// Message author.
-	Role string
-	// Message content (Markdown).
-	Content string
-	// Monotonic cursor; pass the latest value as after_seq to poll for newer
-	// messages.
-	Seq int64
-	// RFC3339 creation timestamp.
-	CreatedAt string
-}
-
 // DeleteAssistantPayload is the payload type of the assistants service
 // deleteAssistant method.
 type DeleteAssistantPayload struct {
 	// The assistant ID.
 	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// EnsureManagedAssistantPayload is the payload type of the assistants service
+// ensureManagedAssistant method.
+type EnsureManagedAssistantPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -125,24 +120,6 @@ type ListAssistantsResult struct {
 	Assistants []*types.Assistant
 }
 
-// ListMessagesPayload is the payload type of the assistants service
-// listMessages method.
-type ListMessagesPayload struct {
-	// The chat id returned by sendMessage.
-	ChatID string
-	// Return only messages with seq greater than this; omit or 0 for the full log.
-	AfterSeq         *int64
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
-// ListMessagesResult is the result type of the assistants service listMessages
-// method.
-type ListMessagesResult struct {
-	// Conversation log in send order.
-	Messages []*DashboardMessage
-}
-
 // SendMessagePayload is the payload type of the assistants service sendMessage
 // method.
 type SendMessagePayload struct {
@@ -150,9 +127,9 @@ type SendMessagePayload struct {
 	AssistantID string
 	// The user's message text.
 	Message string
-	// Conversation key the message is threaded under. Send the user id for one
-	// continuing thread per user, or a fresh value to start a new conversation.
-	CorrelationID string
+	// The conversation to continue (from listChats or a prior sendMessage). Omit
+	// to start a new conversation; the server mints and returns a fresh chat id.
+	ChatID *string
 	// Stable key the client mints once per message so retries dedupe instead of
 	// enqueuing twice. A new key is generated server-side when omitted.
 	IdempotencyKey   *string
@@ -165,8 +142,9 @@ type SendMessagePayload struct {
 type SendMessageResult struct {
 	// The chat to poll for the assistant's reply.
 	ChatID string
-	// The assistant thread the message was enqueued on.
-	ThreadID string
+	// The assistant thread the message was enqueued on, when the ingest produced
+	// one.
+	ThreadID *string
 	// Whether the message was accepted and enqueued for processing.
 	Accepted bool
 }

@@ -146,7 +146,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)), &s.toolsetCache)
+	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)), &s.toolsetCache, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +304,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	var toolsetUUID uuid.UUID
 	if chatID != "" && toolsetSlug != "" {
 		var toolsetErr error
-		toolset, toolsetErr = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug), &s.toolsetCache)
+		toolset, toolsetErr = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug), &s.toolsetCache, nil)
 		if toolsetErr != nil {
 			logger.ErrorContext(ctx, "failed to load toolset", attr.SlogError(err))
 		} else if toolset != nil {

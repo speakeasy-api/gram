@@ -94,5 +94,9 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		userID:           m.UserID,
 		externalUserID:   m.ExternalUserID,
 		apiKeyID:         m.APIKeyID,
+		// Internal clients (agent workflows) always use the project-default
+		// variation group and never filter by tag.
+		toolVariationsGroupID: nil,
+		tags:                  nil,
 	}
 }

@@ -239,6 +239,11 @@ export function TokenEndpointAuthMethodField({
           >
             client_secret_post
           </SelectItem>
+          <SelectItem
+            value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
+          >
+            none
+          </SelectItem>
         </SelectContent>
       </Select>
     </Stack>

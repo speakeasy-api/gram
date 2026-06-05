@@ -156,12 +156,43 @@ func TestDiscoverProtectedResourceMetadata_PathStyleAndOriginBoth404(t *testing.
 	require.NotContains(t, probeErr.ProbeURL, "/mcp/foo")
 }
 
-func TestDiscoverProtectedResourceMetadata_PathStyle5xxDoesNotFallBack(t *testing.T) {
+func TestDiscoverProtectedResourceMetadata_PathStyle5xxFallsBackToOrigin(t *testing.T) {
 	t.Parallel()
 
-	// A 5xx at the path-style probe must NOT fall back to origin-style — the
-	// upstream told us something went wrong and masking that with a separate
-	// probe would lose the signal.
+	// A 5xx at the speculative path-style probe falls back to the canonical
+	// origin-style URL. Non-compliant SPA catch-alls answer the path-style
+	// guess with a 500 (e.g. "Only HTML requests are supported here") rather
+	// than a 404, so the path-style status must not block the origin-style
+	// probe that actually serves the document.
+	var probedPaths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probedPaths = append(probedPaths, r.URL.Path)
+		if r.URL.Path != "/.well-known/oauth-protected-resource" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"resource":              "http://" + r.Host,
+			"authorization_servers": []string{"https://auth.example.com"},
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(t.Context(), newProbeTestPolicy(t), server.URL+"/mcp/foo")
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://auth.example.com"}, doc.AuthorizationServers)
+	require.Equal(t, []string{
+		"/.well-known/oauth-protected-resource/mcp/foo",
+		"/.well-known/oauth-protected-resource",
+	}, probedPaths, "path-style 5xx falls through to origin-style")
+}
+
+func TestDiscoverProtectedResourceMetadata_PathStyle5xxAndOrigin5xxSurfacesOrigin(t *testing.T) {
+	t.Parallel()
+
+	// When both candidates fail, the surfaced error reflects the final,
+	// canonical origin-style attempt — not the speculative path-style guess.
 	var probedPaths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		probedPaths = append(probedPaths, r.URL.Path)
@@ -175,8 +206,9 @@ func TestDiscoverProtectedResourceMetadata_PathStyle5xxDoesNotFallBack(t *testin
 	require.ErrorAs(t, err, &probeErr)
 	require.Equal(t, "http_error", probeErr.Code())
 	require.Equal(t, http.StatusInternalServerError, probeErr.Status)
-	require.Len(t, probedPaths, 1, "5xx must not trigger a second probe")
-	require.Equal(t, "/.well-known/oauth-protected-resource/mcp/foo", probedPaths[0])
+	require.Len(t, probedPaths, 2, "path-style 5xx falls through, both probed")
+	require.Contains(t, probeErr.ProbeURL, "/.well-known/oauth-protected-resource")
+	require.NotContains(t, probeErr.ProbeURL, "/mcp/foo")
 }
 
 func TestDiscoverProtectedResourceMetadata_NoPathSkipsPathStyle(t *testing.T) {

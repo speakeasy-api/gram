@@ -30,8 +30,8 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
 		if body.TokenEndpointAuthMethod != nil {
-			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 			}
 		}
 		for _, e := range body.Scope {
@@ -106,8 +106,8 @@ func BuildCloneClientFromOAuthProxyProviderPayload(remoteSessionClientsCloneClie
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
 		if body.TokenEndpointAuthMethod != nil {
-			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 			}
 		}
 		for _, e := range body.Scope {
@@ -181,8 +181,8 @@ func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessi
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 		}
 		if body.TokenEndpointAuthMethod != nil {
-			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 			}
 		}
 		for _, e := range body.Scope {

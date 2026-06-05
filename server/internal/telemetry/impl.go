@@ -28,13 +28,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 	"golang.org/x/sync/errgroup"
 )
-
-const logsDisabledMsg = "logs are not enabled for this organization"
 
 type Service struct {
 	auth                  *auth.Auth
@@ -132,7 +131,7 @@ func (s *Service) CheckLogsEnabled(ctx context.Context, organizationID string) e
 		return oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
 	}
 	if !enabled {
-		return oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 	return nil
 }
@@ -611,7 +610,7 @@ func (s *Service) GetProjectMetricsSummary(ctx context.Context, payload *telem_g
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -704,7 +703,7 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	// Validate that exactly one of user_id or external_user_id is provided
@@ -758,7 +757,7 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
 	}
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	userID := conv.PtrValOr(payload.UserID, "")
@@ -1030,7 +1029,7 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 		return nil, oops.E(oops.CodeUnexpected, err, "checking if logs enabled")
 	}
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	if limit < 1 || limit > 1000 {
@@ -1230,7 +1229,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -1377,7 +1376,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -1860,7 +1859,7 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -1913,7 +1912,7 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -1965,7 +1964,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)

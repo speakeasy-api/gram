@@ -1,8 +1,8 @@
-[**@gram-ai/elements v1.33.2**](README.md)
+[**@gram-ai/elements v1.34.0**](README.md)
 
 ***
 
-# @gram-ai/elements v1.33.2
+# @gram-ai/elements v1.34.0
 
 ## Interfaces
 
@@ -16,7 +16,11 @@
 - [Cassette](interfaces/Cassette.md)
 - [ReplayOptions](interfaces/ReplayOptions.md)
 - [ErrorContext](interfaces/ErrorContext.md)
+- [GramChatMessage](interfaces/GramChatMessage.md)
+- [GramChat](interfaces/GramChat.md)
+- [GramChatOverview](interfaces/GramChatOverview.md)
 - [MCPServerEntry](interfaces/MCPServerEntry.md)
+- [ElementsTransportContext](interfaces/ElementsTransportContext.md)
 - [ElementsConfig](interfaces/ElementsConfig.md)
 - [ErrorTrackingConfigOption](interfaces/ErrorTrackingConfigOption.md)
 - [ModelConfig](interfaces/ModelConfig.md)
@@ -43,6 +47,7 @@
 - [GetSessionFn](type-aliases/GetSessionFn.md)
 - [VARIANTS](type-aliases/VARIANTS.md)
 - [Variant](type-aliases/Variant.md)
+- [ElementsTransportFactory](type-aliases/ElementsTransportFactory.md)
 - [DangerousApiKeyAuthConfig](type-aliases/DangerousApiKeyAuthConfig.md)
 - [UnifiedSessionAuthConfig](type-aliases/UnifiedSessionAuthConfig.md)
 - [Model](type-aliases/Model.md)
@@ -77,8 +82,11 @@
 - [useRecordCassette](functions/useRecordCassette.md)
 - [useThreadId](functions/useThreadId.md)
 - [trackError](functions/trackError.md)
+- [convertGramMessagesToExported](functions/convertGramMessagesToExported.md)
+- [convertGramMessagesToUIMessages](functions/convertGramMessagesToUIMessages.md)
 - [describeStreamError](functions/describeStreamError.md)
 - [defineFrontendTool](functions/defineFrontendTool.md)
+- [sleep](functions/sleep.md)
 
 ## References
 

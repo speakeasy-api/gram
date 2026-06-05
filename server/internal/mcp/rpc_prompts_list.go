@@ -70,7 +70,7 @@ func parsePromptArgumentsFromJSONSchema(schemaStr string, logger *slog.Logger, c
 func handlePromptsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents], platformExtras []platformtools.ExternalTool) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, platformExtras...)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, nil, platformExtras...)
 	if err != nil {
 		return nil, err
 	}

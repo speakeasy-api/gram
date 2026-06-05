@@ -605,6 +605,9 @@ type Selector struct {
 	// Project filter (MCP scopes only). When set with resource_id='*', grants
 	// access to all servers in the project.
 	ProjectID *string
+	// Server URL filter (risk policy scopes only). Include the URI scheme, for
+	// example https://api.example.com.
+	ServerURL *string
 }
 
 // ShadowMCPAccessRule is the result type of the access service

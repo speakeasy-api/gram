@@ -1262,6 +1262,32 @@ type RiskPolicy struct {
 	Deleted              bool
 }
 
+// Risk-policy bypass request workflow. A block records a request here; an admin approves by granting risk_policy:bypass.
+type RiskPolicyBypassRequest struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	RiskPolicyID   uuid.UUID
+	// Generic target namespace for the bypass request, such as server_url. Empty means the whole policy.
+	TargetKind  pgtype.Text
+	TargetLabel pgtype.Text
+	// Stable canonical key for deduplicating bypass requests within the target namespace.
+	TargetKey pgtype.Text
+	// Selector dimensions for the target, such as {"server_url":"mcp.example.com"}.
+	TargetDimensions     []byte
+	RequesterUserID      string
+	RequesterEmail       pgtype.Text
+	Note                 pgtype.Text
+	Status               string
+	DecidedBy            pgtype.Text
+	GrantedPrincipalUrns []string
+	DecidedAt            pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
 type RiskResult struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID

@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	assistants "github.com/speakeasy-api/gram/server/gen/assistants"
@@ -1328,46 +1327,27 @@ func EncodeSendMessageError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
-// EncodeListMessagesResponse returns an encoder for responses returned by the
-// assistants listMessages endpoint.
-func EncodeListMessagesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeEnsureManagedAssistantResponse returns an encoder for responses
+// returned by the assistants ensureManagedAssistant endpoint.
+func EncodeEnsureManagedAssistantResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*assistants.ListMessagesResult)
+		res, _ := v.(*types.Assistant)
 		enc := encoder(ctx, w)
-		body := NewListMessagesResponseBody(res)
+		body := NewEnsureManagedAssistantResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListMessagesRequest returns a decoder for requests sent to the
-// assistants listMessages endpoint.
-func DecodeListMessagesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*assistants.ListMessagesPayload, error) {
-	return func(r *http.Request) (*assistants.ListMessagesPayload, error) {
-		var payload *assistants.ListMessagesPayload
+// DecodeEnsureManagedAssistantRequest returns a decoder for requests sent to
+// the assistants ensureManagedAssistant endpoint.
+func DecodeEnsureManagedAssistantRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*assistants.EnsureManagedAssistantPayload, error) {
+	return func(r *http.Request) (*assistants.EnsureManagedAssistantPayload, error) {
+		var payload *assistants.EnsureManagedAssistantPayload
 		var (
-			chatID           string
-			afterSeq         *int64
 			sessionToken     *string
 			projectSlugInput *string
-			err              error
 		)
-		qp := r.URL.Query()
-		chatID = qp.Get("chat_id")
-		if chatID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("chat_id", "query string"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("chat_id", chatID, goa.FormatUUID))
-		{
-			afterSeqRaw := qp.Get("after_seq")
-			if afterSeqRaw != "" {
-				v, err2 := strconv.ParseInt(afterSeqRaw, 10, 64)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("after_seq", afterSeqRaw, "integer"))
-				}
-				afterSeq = &v
-			}
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1376,10 +1356,7 @@ func DecodeListMessagesRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewListMessagesPayload(chatID, afterSeq, sessionToken, projectSlugInput)
+		payload = NewEnsureManagedAssistantPayload(sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1399,9 +1376,9 @@ func DecodeListMessagesRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	}
 }
 
-// EncodeListMessagesError returns an encoder for errors returned by the
-// listMessages assistants endpoint.
-func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeEnsureManagedAssistantError returns an encoder for errors returned by
+// the ensureManagedAssistant assistants endpoint.
+func EncodeEnsureManagedAssistantError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -1418,7 +1395,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesUnauthorizedResponseBody(res)
+				body = NewEnsureManagedAssistantUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -1432,7 +1409,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesForbiddenResponseBody(res)
+				body = NewEnsureManagedAssistantForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -1446,7 +1423,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesBadRequestResponseBody(res)
+				body = NewEnsureManagedAssistantBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -1460,7 +1437,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesNotFoundResponseBody(res)
+				body = NewEnsureManagedAssistantNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -1474,7 +1451,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesConflictResponseBody(res)
+				body = NewEnsureManagedAssistantConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -1488,7 +1465,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesUnsupportedMediaResponseBody(res)
+				body = NewEnsureManagedAssistantUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -1502,7 +1479,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesInvalidResponseBody(res)
+				body = NewEnsureManagedAssistantInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -1516,7 +1493,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesInvariantViolationResponseBody(res)
+				body = NewEnsureManagedAssistantInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1530,7 +1507,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesUnexpectedResponseBody(res)
+				body = NewEnsureManagedAssistantUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1544,7 +1521,7 @@ func EncodeListMessagesError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListMessagesGatewayErrorResponseBody(res)
+				body = NewEnsureManagedAssistantGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -1605,21 +1582,6 @@ func unmarshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef(v *Assist
 	res := &types.AssistantToolsetRef{
 		ToolsetSlug:     *v.ToolsetSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
-	}
-
-	return res
-}
-
-// marshalAssistantsDashboardMessageToDashboardMessageResponseBody builds a
-// value of type *DashboardMessageResponseBody from a value of type
-// *assistants.DashboardMessage.
-func marshalAssistantsDashboardMessageToDashboardMessageResponseBody(v *assistants.DashboardMessage) *DashboardMessageResponseBody {
-	res := &DashboardMessageResponseBody{
-		ID:        v.ID,
-		Role:      v.Role,
-		Content:   v.Content,
-		Seq:       v.Seq,
-		CreatedAt: v.CreatedAt,
 	}
 
 	return res

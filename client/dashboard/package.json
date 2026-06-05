@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.67.0",
+  "version": "0.68.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -56,7 +56,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.0",
     "@react-three/postprocessing": "^3.0.4",
-    "@speakeasy-api/moonshine": "1.37.0",
+    "@speakeasy-api/moonshine": "1.40.0",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-table": "^8.21.3",

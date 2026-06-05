@@ -132,25 +132,27 @@ func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpi
 
 const callerOwnsDashboardChat = `-- name: CallerOwnsDashboardChat :one
 SELECT 1 AS ok
-FROM assistant_dashboard_messages
-WHERE chat_id = $1
+FROM chats
+WHERE id = $1
   AND project_id = $2
   AND user_id = $3
+  AND deleted IS FALSE
 LIMIT 1
 `
 
 type CallerOwnsDashboardChatParams struct {
 	ChatID    uuid.UUID
 	ProjectID uuid.UUID
-	UserID    string
+	UserID    pgtype.Text
 }
 
-// Read gate for a dashboard conversation: returns a row only when the caller has
-// at least one message in the chat. The conversation key (correlation id) is
-// client-chosen and not user-namespaced, so a chat_id can hold rows for more
-// than one user; scoping by user_id keeps each caller to their own conversation.
-// No row means the caller has nothing here (chat doesn't exist for them), which
-// the handler surfaces as not-found so existence isn't disclosed.
+// Read gate for a dashboard conversation: returns a row only when the caller
+// owns the chat. The conversation key (chat id) is client-chosen and not
+// user-namespaced, so without scoping by user_id one caller could read or
+// continue another's chat. Ownership is stamped on the chats row at
+// UpsertAssistantChat time; no row means the caller has nothing here (chat
+// doesn't exist for them), which the handler surfaces as not-found so existence
+// isn't disclosed.
 func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDashboardChatParams) (int32, error) {
 	row := q.db.QueryRow(ctx, callerOwnsDashboardChat, arg.ChatID, arg.ProjectID, arg.UserID)
 	var ok int32
@@ -831,34 +833,6 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
-const getDashboardThreadTarget = `-- name: GetDashboardThreadTarget :one
-SELECT chat_id, COALESCE(source_ref_json->>'user_id', '')::TEXT AS user_id
-FROM assistant_threads
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
-`
-
-type GetDashboardThreadTargetParams struct {
-	ThreadID  uuid.UUID
-	ProjectID uuid.UUID
-}
-
-type GetDashboardThreadTargetRow struct {
-	ChatID uuid.UUID
-	UserID string
-}
-
-// Resolves where a dashboard egress reply goes: the thread's chat id (the log
-// key) and the conversation's owner user id (stamped on every log row). The
-// egress tool knows only its thread id, from the assistant principal.
-func (q *Queries) GetDashboardThreadTarget(ctx context.Context, arg GetDashboardThreadTargetParams) (GetDashboardThreadTargetRow, error) {
-	row := q.db.QueryRow(ctx, getDashboardThreadTarget, arg.ThreadID, arg.ProjectID)
-	var i GetDashboardThreadTargetRow
-	err := row.Scan(&i.ChatID, &i.UserID)
-	return i, err
-}
-
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
@@ -1054,42 +1028,6 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const insertDashboardMessage = `-- name: InsertDashboardMessage :one
-INSERT INTO assistant_dashboard_messages (project_id, chat_id, user_id, role, content)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, seq, created_at
-`
-
-type InsertDashboardMessageParams struct {
-	ProjectID uuid.UUID
-	ChatID    uuid.UUID
-	UserID    string
-	Role      string
-	Content   string
-}
-
-type InsertDashboardMessageRow struct {
-	ID        uuid.UUID
-	Seq       int64
-	CreatedAt pgtype.Timestamptz
-}
-
-// Appends a message to a dashboard assistant chat's conversation log. role is
-// 'user' (recorded at ingest) or 'assistant' (written by the egress tool).
-// user_id is the conversation owner, stamped on every row so reads scope to it.
-func (q *Queries) InsertDashboardMessage(ctx context.Context, arg InsertDashboardMessageParams) (InsertDashboardMessageRow, error) {
-	row := q.db.QueryRow(ctx, insertDashboardMessage,
-		arg.ProjectID,
-		arg.ChatID,
-		arg.UserID,
-		arg.Role,
-		arg.Content,
-	)
-	var i InsertDashboardMessageRow
-	err := row.Scan(&i.ID, &i.Seq, &i.CreatedAt)
-	return i, err
 }
 
 const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
@@ -1353,69 +1291,6 @@ func (q *Queries) ListColdPendingThreadsForAdmit(ctx context.Context, arg ListCo
 	for rows.Next() {
 		var i ListColdPendingThreadsForAdmitRow
 		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listDashboardMessages = `-- name: ListDashboardMessages :many
-SELECT id, chat_id, role, content, seq, created_at
-FROM assistant_dashboard_messages
-WHERE chat_id = $1
-  AND project_id = $2
-  AND user_id = $3
-  AND seq > $4
-ORDER BY seq
-`
-
-type ListDashboardMessagesParams struct {
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-	UserID    string
-	AfterSeq  int64
-}
-
-type ListDashboardMessagesRow struct {
-	ID        uuid.UUID
-	ChatID    uuid.UUID
-	Role      string
-	Content   string
-	Seq       int64
-	CreatedAt pgtype.Timestamptz
-}
-
-// Reads a dashboard chat's conversation log in send order, optionally only
-// messages newer than a cursor (after_seq) for incremental polling. Scoped to
-// the caller's own rows: chat_id is a hash of the client-chosen correlation id
-// and is not user-namespaced, so a single chat_id can hold more than one user's
-// messages — filtering by user_id keeps a reader to their own conversation.
-func (q *Queries) ListDashboardMessages(ctx context.Context, arg ListDashboardMessagesParams) ([]ListDashboardMessagesRow, error) {
-	rows, err := q.db.Query(ctx, listDashboardMessages,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.UserID,
-		arg.AfterSeq,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListDashboardMessagesRow
-	for rows.Next() {
-		var i ListDashboardMessagesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ChatID,
-			&i.Role,
-			&i.Content,
-			&i.Seq,
-			&i.CreatedAt,
-		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2675,22 +2550,33 @@ func (q *Queries) UpdateAssistantRuntimeMetadata(ctx context.Context, arg Update
 
 const upsertAssistantChat = `-- name: UpsertAssistantChat :exec
 INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES ($1, $2, $3, NULL, NULL, $4, NOW(), NOW())
-ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+VALUES ($1, $2, $3, $4::TEXT, NULL, $5, NOW(), NOW())
+ON CONFLICT (id) DO UPDATE SET
+  user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  updated_at = NOW()
 `
 
 type UpsertAssistantChatParams struct {
 	ChatID         uuid.UUID
 	ProjectID      uuid.UUID
 	OrganizationID string
+	UserID         pgtype.Text
 	Title          pgtype.Text
 }
 
+// user_id is the conversation owner — stamped on first insert so reads can
+// scope to the user who started the chat. The dashboard source passes the
+// Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+// the existing user_id is preserved when already set so a later NULL-user-id
+// retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
+// backfilled on first owned send so dashboard ownership checks accept the
+// legitimate owner.
 func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantChatParams) error {
 	_, err := q.db.Exec(ctx, upsertAssistantChat,
 		arg.ChatID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.UserID,
 		arg.Title,
 	)
 	return err

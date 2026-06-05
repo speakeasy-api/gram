@@ -168,6 +168,33 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Toolset"}`)
 	})
 
+	Method("listToolFilters", func() {
+		Description("List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.ListToolFiltersResult)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.listToolFilters")
+			Param("slug")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listToolsetToolFilters")
+		Meta("openapi:extension:x-speakeasy-name-override", "listToolFilters")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsetToolFilters"}`)
+	})
+
 	Method("checkMCPSlugAvailability", func() {
 		Description("Check if a MCP slug is available")
 

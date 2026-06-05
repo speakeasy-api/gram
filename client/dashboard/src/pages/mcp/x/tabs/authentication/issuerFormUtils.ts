@@ -32,9 +32,24 @@ export function narrowTokenEndpointAuthMethod(
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
     value ===
-      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost ||
+    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None
   ) {
     return value;
+  }
+  return undefined;
+}
+
+// Picks the preferred auth method from the issuer's advertised list.
+// Preference order: client_secret_basic > client_secret_post > none.
+// Returns undefined when none of the preferred methods are advertised.
+export function pickPreferredAuthMethod(
+  supported: string[],
+): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
+  const { ClientSecretBasic, ClientSecretPost, None } =
+    CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+  for (const preferred of [ClientSecretBasic, ClientSecretPost, None]) {
+    if (supported.includes(preferred)) return preferred;
   }
   return undefined;
 }

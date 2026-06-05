@@ -4498,6 +4498,97 @@ paths:
       tags:
         - assistants
       x-speakeasy-name-override: delete
+  /rpc/assistants.ensureManagedAssistant:
+    post:
+      description: Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.
+      operationId: ensureManagedAssistant
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assistant'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: ensureManagedAssistant assistants
+      tags:
+        - assistants
+      x-speakeasy-name-override: ensureManaged
+      x-speakeasy-react-hook:
+        name: EnsureManagedAssistant
+        type: mutation
   /rpc/assistants.get:
     get:
       description: Get an assistant by ID.
@@ -4683,116 +4774,9 @@ paths:
       tags:
         - assistants
       x-speakeasy-name-override: list
-  /rpc/assistants.listMessages:
-    get:
-      description: List a dashboard conversation log for a chat (the user's messages and the assistant's delivered replies). Only the user who owns the conversation may read it. Poll with after_seq to fetch only newer messages.
-      operationId: listAssistantMessages
-      parameters:
-        - allowEmptyValue: true
-          description: The chat id returned by sendMessage.
-          in: query
-          name: chat_id
-          required: true
-          schema:
-            description: The chat id returned by sendMessage.
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Return only messages with seq greater than this; omit or 0 for the full log.
-          in: query
-          name: after_seq
-          schema:
-            description: Return only messages with seq greater than this; omit or 0 for the full log.
-            format: int64
-            type: integer
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListMessagesResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: listMessages assistants
-      tags:
-        - assistants
-      x-speakeasy-name-override: listMessages
-      x-speakeasy-react-hook:
-        name: ListAssistantMessages
   /rpc/assistants.sendMessage:
     post:
-      description: Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.
+      description: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.
       operationId: sendAssistantMessage
       parameters:
         - allowEmptyValue: true
@@ -12955,6 +12939,120 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: McpServers
+  /rpc/mcpServers.listToolFilters:
+    get:
+      description: List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
+      operationId: listMcpServerToolFilters
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server. Mutually exclusive with slug.
+          in: query
+          name: id
+          schema:
+            description: The ID of the MCP server. Mutually exclusive with slug.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The slug of the MCP server. Mutually exclusive with id.
+          in: query
+          name: slug
+          schema:
+            description: The slug of the MCP server. Mutually exclusive with id.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListToolFiltersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listToolFilters mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: listToolFilters
+      x-speakeasy-react-hook:
+        name: ListMcpServerToolFilters
   /rpc/mcpServers.update:
     post:
       description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.'
@@ -13967,6 +14065,88 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: Organization
+  /rpc/organizations.getOnboardingStatus:
+    get:
+      description: Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+      operationId: getOnboardingStatus
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingStatusResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getOnboardingStatus organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: getOnboardingStatus
+      x-speakeasy-react-hook:
+        name: OnboardingStatus
   /rpc/organizations.listInvites:
     get:
       description: List pending WorkOS invitations for the active organization.
@@ -14303,6 +14483,94 @@ paths:
       x-speakeasy-name-override: revokeInvite
       x-speakeasy-react-hook:
         name: RevokeInvite
+  /rpc/organizations.sendEnterpriseAdminOnboardingEmail:
+    post:
+      description: Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the super-admin Onboarding tab.
+      operationId: sendEnterpriseAdminOnboardingEmail
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendEnterpriseAdminOnboardingEmailRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEnterpriseAdminOnboardingEmailResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: sendEnterpriseAdminOnboardingEmail organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: sendEnterpriseAdminOnboardingEmail
+      x-speakeasy-react-hook:
+        name: SendEnterpriseAdminOnboardingEmail
   /rpc/organizations.sendInvite:
     post:
       description: Send a WorkOS invitation for the active organization.
@@ -14479,6 +14747,95 @@ paths:
       x-speakeasy-name-override: updateInviteRole
       x-speakeasy-react-hook:
         name: UpdateInviteRole
+  /rpc/organizations.verifyOnboardingHooksSetup:
+    get:
+      description: Return recent hook events for the active organization so the onboarding wizard can confirm that Claude Code, Cursor, or Codex instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+      operationId: verifyOnboardingHooksSetup
+      parameters:
+        - allowEmptyValue: true
+          description: Only return events with time_unix_nano greater than this value. Pass the previous response's latest_unix_nano to poll for new events. Stringified to preserve int64 precision.
+          in: query
+          name: since_unix_nano
+          schema:
+            description: Only return events with time_unix_nano greater than this value. Pass the previous response's latest_unix_nano to poll for new events. Stringified to preserve int64 precision.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyOnboardingHooksSetupResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: verifyOnboardingHooksSetup organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: verifyOnboardingHooksSetup
+      x-speakeasy-react-hook:
+        name: VerifyOnboardingHooksSetup
   /rpc/otelForwarding.deleteConfig:
     post:
       description: Delete the org-wide OTEL forwarding config.
@@ -27350,6 +27707,115 @@ paths:
       x-speakeasy-name-override: listForOrg
       x-speakeasy-react-hook:
         name: ListToolsetsForOrg
+  /rpc/toolsets.listToolFilters:
+    get:
+      description: List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
+      operationId: listToolsetToolFilters
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListToolFiltersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listToolFilters toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: listToolFilters
+      x-speakeasy-react-hook:
+        name: ListToolsetToolFilters
   /rpc/toolsets.removeOAuthServer:
     post:
       description: Remove OAuth server association from a toolset
@@ -32739,6 +33205,7 @@ components:
           enum:
             - client_secret_basic
             - client_secret_post
+            - none
         user_session_issuer_id:
           type: string
           description: The user_session_issuer the new client is paired with.
@@ -33311,6 +33778,7 @@ components:
           enum:
             - client_secret_basic
             - client_secret_post
+            - none
         user_session_issuer_id:
           type: string
           description: The user_session_issuer this client is paired with.
@@ -34058,36 +34526,6 @@ components:
         - project_name
         - project_slug
         - mcp_server_id
-    DashboardMessage:
-      type: object
-      properties:
-        content:
-          type: string
-          description: Message content (Markdown).
-        created_at:
-          type: string
-          description: RFC3339 creation timestamp.
-          format: date-time
-        id:
-          type: string
-          description: Message id.
-          format: uuid
-        role:
-          type: string
-          description: Message author.
-          enum:
-            - user
-            - assistant
-        seq:
-          type: integer
-          description: Monotonic cursor; pass the latest value as after_seq to poll for newer messages.
-          format: int64
-      required:
-        - id
-        - role
-        - content
-        - seq
-        - created_at
     DeleteAIIntegrationConfigRequest:
       type: object
       properties:
@@ -35228,6 +35666,21 @@ components:
             - audit_logs
             - domain_verification
             - log_streams
+        intent_options:
+          $ref: '#/components/schemas/WorkOSIntentOptions'
+        it_contact_emails:
+          type: array
+          items:
+            type: string
+          description: IT contact email addresses displayed in the Admin Portal for end-user support.
+        return_url:
+          type: string
+          description: URL to redirect the user to after the Admin Portal session ends.
+          format: uri
+        success_url:
+          type: string
+          description: URL to redirect the user to on successful completion of the Admin Portal flow.
+          format: uri
       required:
         - intent
     GenerateWorkOSAdminPortalLinkResult:
@@ -36781,16 +37234,6 @@ components:
           description: The members in your organization.
       required:
         - members
-    ListMessagesResult:
-      type: object
-      properties:
-        messages:
-          type: array
-          items:
-            $ref: '#/components/schemas/DashboardMessage'
-          description: Conversation log in send order.
-      required:
-        - messages
     ListPackagesResult:
       type: object
       properties:
@@ -37008,6 +37451,7 @@ components:
             - environment:read
             - environment:write
             - risk_policy:evaluate
+            - risk_policy:bypass
         selectors:
           type: array
           items:
@@ -37028,6 +37472,7 @@ components:
               - environment:read
               - environment:write
               - risk_policy:evaluate
+              - risk_policy:bypass
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -37115,6 +37560,34 @@ components:
           description: List of Slack apps
       required:
         - items
+    ListToolFiltersResult:
+      type: object
+      properties:
+        excluded:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolFilterTool'
+          description: 'Tools whose effective tag set is empty: reachable only without a ?tags= filter.'
+        filtering_enabled:
+          type: boolean
+          description: Whether tool filtering is enabled, i.e. the resolution chain (mcp_servers then toolsets) yields a non-null tool variations group. When false, scopes and excluded are empty. A project-default (source-level) variations group is not treated as filtering here.
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolFilterScope'
+          description: The available filter scopes (tags), each with its member tools. Union of effective tags across the server's tools.
+        tool_variations_group_id:
+          type: string
+          description: The ID of the resolved tool variations group, if filtering is enabled.
+          format: uuid
+        tool_variations_group_name:
+          type: string
+          description: The name of the resolved tool variations group, if filtering is enabled.
+      description: 'The tool filtering configuration in effect for an MCP server: the resolved tool variations group, the available filter scopes (tags), and the tools excluded from all filters. Read-only. Filtering is reported as enabled only when an explicit tool variations group is configured on the MCP server or its toolset; the per-group effective-tag derivation matches the runtime ?tags= filter for that group.'
+      required:
+        - filtering_enabled
+        - scopes
+        - excluded
     ListToolVariationGroupsResult:
       type: object
       properties:
@@ -38159,6 +38632,49 @@ components:
         - total_tool_calls
         - failed_tool_calls
         - avg_latency_ms
+    OnboardingHookEvent:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: Gram chat/session ID that owns this event, when present.
+        event_name:
+          type: string
+          description: Hook event name (e.g. PreToolUse, SessionStart).
+        project_slug:
+          type: string
+          description: Slug of the Gram project that received the event.
+        source:
+          type: string
+          description: 'Hook source: claude_code, cursor, or codex.'
+        status:
+          type: string
+          description: 'Outcome status: allowed, blocked, failure, or pending.'
+        time_unix_nano:
+          type: string
+          description: Event timestamp in nanoseconds since unix epoch. Stringified to preserve int64 precision.
+        tool_name:
+          type: string
+          description: Tool invoked by the hook, if any.
+        user_email:
+          type: string
+          description: Email of the user whose session produced the event, when present in hook attributes.
+      required:
+        - time_unix_nano
+        - source
+        - project_slug
+    OnboardingStatusResult:
+      type: object
+      properties:
+        dsync_configured:
+          type: boolean
+          description: Whether the organization has at least one linked directory sync in WorkOS.
+        sso_configured:
+          type: boolean
+          description: Whether the organization has at least one active SSO connection in WorkOS.
+      required:
+        - sso_configured
+        - dsync_configured
     OpenAPIv3DeploymentAsset:
       type: object
       properties:
@@ -39424,6 +39940,7 @@ components:
           enum:
             - client_secret_basic
             - client_secret_post
+            - none
         updated_at:
           type: string
           format: date-time
@@ -40403,6 +40920,7 @@ components:
             - environment:read
             - environment:write
             - risk_policy:evaluate
+            - risk_policy:bypass
         selectors:
           type: array
           items:
@@ -40487,6 +41005,7 @@ components:
             - environment:read
             - environment:write
             - risk_policy:evaluate
+            - risk_policy:bypass
       required:
         - slug
         - description
@@ -40909,6 +41428,10 @@ components:
             - environment
             - risk_policy
             - '*'
+        server_url:
+          type: string
+          description: Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.
+          format: uri
         tool:
           type: string
           description: Specific tool name filter (MCP scopes only).
@@ -40916,6 +41439,31 @@ components:
       required:
         - resource_kind
         - resource_id
+    SendEnterpriseAdminOnboardingEmailRequestBody:
+      type: object
+      properties:
+        recipients:
+          type: array
+          items:
+            type: string
+            format: email
+          description: Recipient email addresses.
+          minItems: 1
+      required:
+        - recipients
+    SendEnterpriseAdminOnboardingEmailResult:
+      type: object
+      properties:
+        sent_count:
+          type: integer
+          description: Number of recipients the email was dispatched to.
+          format: int64
+        setup_link:
+          type: string
+          description: The setup link embedded in the dispatched email.
+      required:
+        - sent_count
+        - setup_link
     SendInviteRequestBody:
       type: object
       properties:
@@ -40934,11 +41482,10 @@ components:
           type: string
           description: The assistant to send the message to.
           format: uuid
-        correlation_id:
+        chat_id:
           type: string
-          description: Conversation key the message is threaded under. Send the user id for one continuing thread per user, or a fresh value to start a new conversation.
-          minLength: 1
-          maxLength: 255
+          description: The conversation to continue (from listChats or a prior sendMessage). Omit to start a new conversation; the server mints and returns a fresh chat id.
+          format: uuid
         idempotency_key:
           type: string
           description: Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.
@@ -40951,7 +41498,6 @@ components:
       required:
         - assistant_id
         - message
-        - correlation_id
     SendMessageResult:
       type: object
       properties:
@@ -40964,11 +41510,10 @@ components:
           format: uuid
         thread_id:
           type: string
-          description: The assistant thread the message was enqueued on.
+          description: The assistant thread the message was enqueued on, when the ingest produced one.
           format: uuid
       required:
         - chat_id
-        - thread_id
         - accepted
     ServeChatAttachmentForm:
       type: object
@@ -42131,6 +42676,39 @@ components:
         - id
         - name
         - tool_urn
+    ToolFilterScope:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: The filter tag
+        tool_count:
+          type: integer
+          description: The number of tools under this scope
+          format: int64
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolFilterTool'
+          description: The tools under this scope
+      description: A filter tag ("scope") and the tools reachable when filtering by it via the runtime ?tags= parameter.
+      required:
+        - tag
+        - tool_count
+        - tools
+    ToolFilterTool:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The display name of the tool, with any variation rename from the resolved group applied (matching the runtime wire)
+        tool_urn:
+          type: string
+          description: The URN of the tool
+      description: A tool referenced by a tool filter scope, identified by URN and display name.
+      required:
+        - tool_urn
+        - name
     ToolMetric:
       type: object
       properties:
@@ -43230,6 +43808,7 @@ components:
           enum:
             - client_secret_basic
             - client_secret_post
+            - none
         user_session_issuer_id:
           type: string
           description: Re-pair with a different user_session_issuer.
@@ -44249,6 +44828,25 @@ components:
         - organization
         - projects
         - scopes
+    VerifyOnboardingHooksSetupResult:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingHookEvent'
+          description: Recent hook events, newest first. Truncated to a server-defined limit.
+        latest_unix_nano:
+          type: string
+          description: Highest time_unix_nano in this batch. Pass back as since_unix_nano on the next poll.
+        total_count:
+          type: integer
+          description: Total events received with time_unix_nano greater than since_unix_nano. May exceed len(events) when truncated.
+          format: int64
+      required:
+        - events
+        - latest_unix_nano
+        - total_count
     VerifyURLForm:
       type: object
       properties:
@@ -44280,6 +44878,28 @@ components:
       required:
         - verified
         - message
+    WorkOSDomainVerificationIntentOptions:
+      type: object
+      properties:
+        domain_name:
+          type: string
+          description: Domain name to verify.
+    WorkOSIntentOptions:
+      type: object
+      properties:
+        domain_verification:
+          $ref: '#/components/schemas/WorkOSDomainVerificationIntentOptions'
+        sso:
+          $ref: '#/components/schemas/WorkOSSSOIntentOptions'
+    WorkOSSSOIntentOptions:
+      type: object
+      properties:
+        bookmark_slug:
+          type: string
+          description: SSO bookmark slug to launch a specific app after authentication.
+        provider_type:
+          type: string
+          description: SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML, GoogleSAML).
   securitySchemes:
     admin_auth_header_Authorization:
       type: apiKey

@@ -10,7 +10,6 @@ package client
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -1429,13 +1428,14 @@ func DecodeSendMessageResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
-// BuildListMessagesRequest instantiates a HTTP request object with method and
-// path set to call the "assistants" service "listMessages" endpoint
-func (c *Client) BuildListMessagesRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMessagesAssistantsPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
+// BuildEnsureManagedAssistantRequest instantiates a HTTP request object with
+// method and path set to call the "assistants" service
+// "ensureManagedAssistant" endpoint
+func (c *Client) BuildEnsureManagedAssistantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EnsureManagedAssistantAssistantsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("assistants", "listMessages", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("assistants", "ensureManagedAssistant", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -1444,13 +1444,13 @@ func (c *Client) BuildListMessagesRequest(ctx context.Context, v any) (*http.Req
 	return req, nil
 }
 
-// EncodeListMessagesRequest returns an encoder for requests sent to the
-// assistants listMessages server.
-func EncodeListMessagesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeEnsureManagedAssistantRequest returns an encoder for requests sent to
+// the assistants ensureManagedAssistant server.
+func EncodeEnsureManagedAssistantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*assistants.ListMessagesPayload)
+		p, ok := v.(*assistants.EnsureManagedAssistantPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("assistants", "listMessages", "*assistants.ListMessagesPayload", v)
+			return goahttp.ErrInvalidType("assistants", "ensureManagedAssistant", "*assistants.EnsureManagedAssistantPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -1460,20 +1460,14 @@ func EncodeListMessagesRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		values := req.URL.Query()
-		values.Add("chat_id", p.ChatID)
-		if p.AfterSeq != nil {
-			values.Add("after_seq", fmt.Sprintf("%v", *p.AfterSeq))
-		}
-		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeListMessagesResponse returns a decoder for responses returned by the
-// assistants listMessages endpoint. restoreBody controls whether the response
-// body should be restored after having been read.
-// DecodeListMessagesResponse may return the following errors:
+// DecodeEnsureManagedAssistantResponse returns a decoder for responses
+// returned by the assistants ensureManagedAssistant endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeEnsureManagedAssistantResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1485,7 +1479,7 @@ func EncodeListMessagesRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeListMessagesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeEnsureManagedAssistantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -1502,169 +1496,169 @@ func DecodeListMessagesResponse(decoder func(*http.Response) goahttp.Decoder, re
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body ListMessagesResponseBody
+				body EnsureManagedAssistantResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesResponseBody(&body)
+			err = ValidateEnsureManagedAssistantResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			res := NewListMessagesResultOK(&body)
+			res := NewEnsureManagedAssistantAssistantOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body ListMessagesUnauthorizedResponseBody
+				body EnsureManagedAssistantUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesUnauthorizedResponseBody(&body)
+			err = ValidateEnsureManagedAssistantUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			return nil, NewListMessagesUnauthorized(&body)
+			return nil, NewEnsureManagedAssistantUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body ListMessagesForbiddenResponseBody
+				body EnsureManagedAssistantForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesForbiddenResponseBody(&body)
+			err = ValidateEnsureManagedAssistantForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			return nil, NewListMessagesForbidden(&body)
+			return nil, NewEnsureManagedAssistantForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body ListMessagesBadRequestResponseBody
+				body EnsureManagedAssistantBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesBadRequestResponseBody(&body)
+			err = ValidateEnsureManagedAssistantBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			return nil, NewListMessagesBadRequest(&body)
+			return nil, NewEnsureManagedAssistantBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body ListMessagesNotFoundResponseBody
+				body EnsureManagedAssistantNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesNotFoundResponseBody(&body)
+			err = ValidateEnsureManagedAssistantNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			return nil, NewListMessagesNotFound(&body)
+			return nil, NewEnsureManagedAssistantNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body ListMessagesConflictResponseBody
+				body EnsureManagedAssistantConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesConflictResponseBody(&body)
+			err = ValidateEnsureManagedAssistantConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			return nil, NewListMessagesConflict(&body)
+			return nil, NewEnsureManagedAssistantConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body ListMessagesUnsupportedMediaResponseBody
+				body EnsureManagedAssistantUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesUnsupportedMediaResponseBody(&body)
+			err = ValidateEnsureManagedAssistantUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			return nil, NewListMessagesUnsupportedMedia(&body)
+			return nil, NewEnsureManagedAssistantUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body ListMessagesInvalidResponseBody
+				body EnsureManagedAssistantInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesInvalidResponseBody(&body)
+			err = ValidateEnsureManagedAssistantInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			return nil, NewListMessagesInvalid(&body)
+			return nil, NewEnsureManagedAssistantInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body ListMessagesInvariantViolationResponseBody
+					body EnsureManagedAssistantInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+					return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 				}
-				err = ValidateListMessagesInvariantViolationResponseBody(&body)
+				err = ValidateEnsureManagedAssistantInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+					return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 				}
-				return nil, NewListMessagesInvariantViolation(&body)
+				return nil, NewEnsureManagedAssistantInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body ListMessagesUnexpectedResponseBody
+					body EnsureManagedAssistantUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+					return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 				}
-				err = ValidateListMessagesUnexpectedResponseBody(&body)
+				err = ValidateEnsureManagedAssistantUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+					return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 				}
-				return nil, NewListMessagesUnexpected(&body)
+				return nil, NewEnsureManagedAssistantUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("assistants", "listMessages", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("assistants", "ensureManagedAssistant", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body ListMessagesGatewayErrorResponseBody
+				body EnsureManagedAssistantGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("assistants", "listMessages", err)
+				return nil, goahttp.ErrDecodingError("assistants", "ensureManagedAssistant", err)
 			}
-			err = ValidateListMessagesGatewayErrorResponseBody(&body)
+			err = ValidateEnsureManagedAssistantGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("assistants", "listMessages", err)
+				return nil, goahttp.ErrValidationError("assistants", "ensureManagedAssistant", err)
 			}
-			return nil, NewListMessagesGatewayError(&body)
+			return nil, NewEnsureManagedAssistantGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("assistants", "listMessages", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("assistants", "ensureManagedAssistant", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1727,21 +1721,6 @@ func marshalAssistantToolsetRefRequestBodyToTypesAssistantToolsetRef(v *Assistan
 	res := &types.AssistantToolsetRef{
 		ToolsetSlug:     v.ToolsetSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
-	}
-
-	return res
-}
-
-// unmarshalDashboardMessageResponseBodyToAssistantsDashboardMessage builds a
-// value of type *assistants.DashboardMessage from a value of type
-// *DashboardMessageResponseBody.
-func unmarshalDashboardMessageResponseBodyToAssistantsDashboardMessage(v *DashboardMessageResponseBody) *assistants.DashboardMessage {
-	res := &assistants.DashboardMessage{
-		ID:        *v.ID,
-		Role:      *v.Role,
-		Content:   *v.Content,
-		Seq:       *v.Seq,
-		CreatedAt: *v.CreatedAt,
 	}
 
 	return res

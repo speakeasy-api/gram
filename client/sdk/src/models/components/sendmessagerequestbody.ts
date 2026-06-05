@@ -11,9 +11,9 @@ export type SendMessageRequestBody = {
    */
   assistantId: string;
   /**
-   * Conversation key the message is threaded under. Send the user id for one continuing thread per user, or a fresh value to start a new conversation.
+   * The conversation to continue (from listChats or a prior sendMessage). Omit to start a new conversation; the server mints and returns a fresh chat id.
    */
-  correlationId: string;
+  chatId?: string | undefined;
   /**
    * Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.
    */
@@ -27,7 +27,7 @@ export type SendMessageRequestBody = {
 /** @internal */
 export type SendMessageRequestBody$Outbound = {
   assistant_id: string;
-  correlation_id: string;
+  chat_id?: string | undefined;
   idempotency_key?: string | undefined;
   message: string;
 };
@@ -39,14 +39,14 @@ export const SendMessageRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     assistantId: z.string(),
-    correlationId: z.string(),
+    chatId: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
     message: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       assistantId: "assistant_id",
-      correlationId: "correlation_id",
+      chatId: "chat_id",
       idempotencyKey: "idempotency_key",
     });
   }),

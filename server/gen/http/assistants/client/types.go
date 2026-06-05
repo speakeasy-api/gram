@@ -60,9 +60,9 @@ type SendMessageRequestBody struct {
 	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
 	// The user's message text.
 	Message string `form:"message" json:"message" xml:"message"`
-	// Conversation key the message is threaded under. Send the user id for one
-	// continuing thread per user, or a fresh value to start a new conversation.
-	CorrelationID string `form:"correlation_id" json:"correlation_id" xml:"correlation_id"`
+	// The conversation to continue (from listChats or a prior sendMessage). Omit
+	// to start a new conversation; the server mints and returns a fresh chat id.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 	// Stable key the client mints once per message so retries dedupe instead of
 	// enqueuing twice. A new key is generated server-side when omitted.
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
@@ -161,17 +161,38 @@ type UpdateAssistantResponseBody struct {
 type SendMessageResponseBody struct {
 	// The chat to poll for the assistant's reply.
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
-	// The assistant thread the message was enqueued on.
+	// The assistant thread the message was enqueued on, when the ingest produced
+	// one.
 	ThreadID *string `form:"thread_id,omitempty" json:"thread_id,omitempty" xml:"thread_id,omitempty"`
 	// Whether the message was accepted and enqueued for processing.
 	Accepted *bool `form:"accepted,omitempty" json:"accepted,omitempty" xml:"accepted,omitempty"`
 }
 
-// ListMessagesResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body.
-type ListMessagesResponseBody struct {
-	// Conversation log in send order.
-	Messages []*DashboardMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+// EnsureManagedAssistantResponseBody is the type of the "assistants" service
+// "ensureManagedAssistant" endpoint HTTP response body.
+type EnsureManagedAssistantResponseBody struct {
+	// The assistant ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID owning the assistant.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The assistant name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The model identifier used by the assistant.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The system instructions for the assistant.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Toolsets available to the assistant.
+	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// Warm runtime TTL in seconds.
+	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
+	// Maximum active warm runtimes for the assistant.
+	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// The assistant status.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Creation timestamp.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Last update timestamp.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListAssistantsUnauthorizedResponseBody is the type of the "assistants"
@@ -1280,9 +1301,10 @@ type SendMessageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesUnauthorizedResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body for the "unauthorized" error.
-type ListMessagesUnauthorizedResponseBody struct {
+// EnsureManagedAssistantUnauthorizedResponseBody is the type of the
+// "assistants" service "ensureManagedAssistant" endpoint HTTP response body
+// for the "unauthorized" error.
+type EnsureManagedAssistantUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1298,9 +1320,10 @@ type ListMessagesUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesForbiddenResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body for the "forbidden" error.
-type ListMessagesForbiddenResponseBody struct {
+// EnsureManagedAssistantForbiddenResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "forbidden" error.
+type EnsureManagedAssistantForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1316,9 +1339,10 @@ type ListMessagesForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesBadRequestResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body for the "bad_request" error.
-type ListMessagesBadRequestResponseBody struct {
+// EnsureManagedAssistantBadRequestResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "bad_request" error.
+type EnsureManagedAssistantBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1334,9 +1358,10 @@ type ListMessagesBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesNotFoundResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body for the "not_found" error.
-type ListMessagesNotFoundResponseBody struct {
+// EnsureManagedAssistantNotFoundResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "not_found" error.
+type EnsureManagedAssistantNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1352,9 +1377,10 @@ type ListMessagesNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesConflictResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body for the "conflict" error.
-type ListMessagesConflictResponseBody struct {
+// EnsureManagedAssistantConflictResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "conflict" error.
+type EnsureManagedAssistantConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1370,10 +1396,10 @@ type ListMessagesConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesUnsupportedMediaResponseBody is the type of the "assistants"
-// service "listMessages" endpoint HTTP response body for the
-// "unsupported_media" error.
-type ListMessagesUnsupportedMediaResponseBody struct {
+// EnsureManagedAssistantUnsupportedMediaResponseBody is the type of the
+// "assistants" service "ensureManagedAssistant" endpoint HTTP response body
+// for the "unsupported_media" error.
+type EnsureManagedAssistantUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1389,9 +1415,10 @@ type ListMessagesUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesInvalidResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body for the "invalid" error.
-type ListMessagesInvalidResponseBody struct {
+// EnsureManagedAssistantInvalidResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "invalid" error.
+type EnsureManagedAssistantInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1407,10 +1434,10 @@ type ListMessagesInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesInvariantViolationResponseBody is the type of the "assistants"
-// service "listMessages" endpoint HTTP response body for the
-// "invariant_violation" error.
-type ListMessagesInvariantViolationResponseBody struct {
+// EnsureManagedAssistantInvariantViolationResponseBody is the type of the
+// "assistants" service "ensureManagedAssistant" endpoint HTTP response body
+// for the "invariant_violation" error.
+type EnsureManagedAssistantInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1426,9 +1453,10 @@ type ListMessagesInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesUnexpectedResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body for the "unexpected" error.
-type ListMessagesUnexpectedResponseBody struct {
+// EnsureManagedAssistantUnexpectedResponseBody is the type of the "assistants"
+// service "ensureManagedAssistant" endpoint HTTP response body for the
+// "unexpected" error.
+type EnsureManagedAssistantUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1444,9 +1472,10 @@ type ListMessagesUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMessagesGatewayErrorResponseBody is the type of the "assistants" service
-// "listMessages" endpoint HTTP response body for the "gateway_error" error.
-type ListMessagesGatewayErrorResponseBody struct {
+// EnsureManagedAssistantGatewayErrorResponseBody is the type of the
+// "assistants" service "ensureManagedAssistant" endpoint HTTP response body
+// for the "gateway_error" error.
+type EnsureManagedAssistantGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1506,21 +1535,6 @@ type AssistantToolsetRefRequestBody struct {
 	EnvironmentSlug *string `form:"environment_slug,omitempty" json:"environment_slug,omitempty" xml:"environment_slug,omitempty"`
 }
 
-// DashboardMessageResponseBody is used to define fields on response body types.
-type DashboardMessageResponseBody struct {
-	// Message id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message author.
-	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
-	// Message content (Markdown).
-	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
-	// Monotonic cursor; pass the latest value as after_seq to poll for newer
-	// messages.
-	Seq *int64 `form:"seq,omitempty" json:"seq,omitempty" xml:"seq,omitempty"`
-	// RFC3339 creation timestamp.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-}
-
 // NewCreateAssistantRequestBody builds the HTTP request body from the payload
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *CreateAssistantRequestBody {
@@ -1578,7 +1592,7 @@ func NewSendMessageRequestBody(p *assistants.SendMessagePayload) *SendMessageReq
 	body := &SendMessageRequestBody{
 		AssistantID:    p.AssistantID,
 		Message:        p.Message,
-		CorrelationID:  p.CorrelationID,
+		ChatID:         p.ChatID,
 		IdempotencyKey: p.IdempotencyKey,
 	}
 	return body
@@ -2436,7 +2450,7 @@ func NewDeleteAssistantGatewayError(body *DeleteAssistantGatewayErrorResponseBod
 func NewSendMessageResultOK(body *SendMessageResponseBody) *assistants.SendMessageResult {
 	v := &assistants.SendMessageResult{
 		ChatID:   *body.ChatID,
-		ThreadID: *body.ThreadID,
+		ThreadID: body.ThreadID,
 		Accepted: *body.Accepted,
 	}
 
@@ -2593,25 +2607,36 @@ func NewSendMessageGatewayError(body *SendMessageGatewayErrorResponseBody) *goa.
 	return v
 }
 
-// NewListMessagesResultOK builds a "assistants" service "listMessages"
-// endpoint result from a HTTP "OK" response.
-func NewListMessagesResultOK(body *ListMessagesResponseBody) *assistants.ListMessagesResult {
-	v := &assistants.ListMessagesResult{}
-	v.Messages = make([]*assistants.DashboardMessage, len(body.Messages))
-	for i, val := range body.Messages {
+// NewEnsureManagedAssistantAssistantOK builds a "assistants" service
+// "ensureManagedAssistant" endpoint result from a HTTP "OK" response.
+func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBody) *types.Assistant {
+	v := &types.Assistant{
+		ID:             *body.ID,
+		ProjectID:      *body.ProjectID,
+		Name:           *body.Name,
+		Model:          *body.Model,
+		Instructions:   *body.Instructions,
+		WarmTTLSeconds: *body.WarmTTLSeconds,
+		MaxConcurrency: *body.MaxConcurrency,
+		Status:         *body.Status,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
+	for i, val := range body.Toolsets {
 		if val == nil {
-			v.Messages[i] = nil
+			v.Toolsets[i] = nil
 			continue
 		}
-		v.Messages[i] = unmarshalDashboardMessageResponseBodyToAssistantsDashboardMessage(val)
+		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
 	}
 
 	return v
 }
 
-// NewListMessagesUnauthorized builds a assistants service listMessages
-// endpoint unauthorized error.
-func NewListMessagesUnauthorized(body *ListMessagesUnauthorizedResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantUnauthorized builds a assistants service
+// ensureManagedAssistant endpoint unauthorized error.
+func NewEnsureManagedAssistantUnauthorized(body *EnsureManagedAssistantUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2624,9 +2649,9 @@ func NewListMessagesUnauthorized(body *ListMessagesUnauthorizedResponseBody) *go
 	return v
 }
 
-// NewListMessagesForbidden builds a assistants service listMessages endpoint
-// forbidden error.
-func NewListMessagesForbidden(body *ListMessagesForbiddenResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantForbidden builds a assistants service
+// ensureManagedAssistant endpoint forbidden error.
+func NewEnsureManagedAssistantForbidden(body *EnsureManagedAssistantForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2639,9 +2664,9 @@ func NewListMessagesForbidden(body *ListMessagesForbiddenResponseBody) *goa.Serv
 	return v
 }
 
-// NewListMessagesBadRequest builds a assistants service listMessages endpoint
-// bad_request error.
-func NewListMessagesBadRequest(body *ListMessagesBadRequestResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantBadRequest builds a assistants service
+// ensureManagedAssistant endpoint bad_request error.
+func NewEnsureManagedAssistantBadRequest(body *EnsureManagedAssistantBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2654,9 +2679,9 @@ func NewListMessagesBadRequest(body *ListMessagesBadRequestResponseBody) *goa.Se
 	return v
 }
 
-// NewListMessagesNotFound builds a assistants service listMessages endpoint
-// not_found error.
-func NewListMessagesNotFound(body *ListMessagesNotFoundResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantNotFound builds a assistants service
+// ensureManagedAssistant endpoint not_found error.
+func NewEnsureManagedAssistantNotFound(body *EnsureManagedAssistantNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2669,9 +2694,9 @@ func NewListMessagesNotFound(body *ListMessagesNotFoundResponseBody) *goa.Servic
 	return v
 }
 
-// NewListMessagesConflict builds a assistants service listMessages endpoint
-// conflict error.
-func NewListMessagesConflict(body *ListMessagesConflictResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantConflict builds a assistants service
+// ensureManagedAssistant endpoint conflict error.
+func NewEnsureManagedAssistantConflict(body *EnsureManagedAssistantConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2684,9 +2709,9 @@ func NewListMessagesConflict(body *ListMessagesConflictResponseBody) *goa.Servic
 	return v
 }
 
-// NewListMessagesUnsupportedMedia builds a assistants service listMessages
-// endpoint unsupported_media error.
-func NewListMessagesUnsupportedMedia(body *ListMessagesUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantUnsupportedMedia builds a assistants service
+// ensureManagedAssistant endpoint unsupported_media error.
+func NewEnsureManagedAssistantUnsupportedMedia(body *EnsureManagedAssistantUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2699,9 +2724,9 @@ func NewListMessagesUnsupportedMedia(body *ListMessagesUnsupportedMediaResponseB
 	return v
 }
 
-// NewListMessagesInvalid builds a assistants service listMessages endpoint
-// invalid error.
-func NewListMessagesInvalid(body *ListMessagesInvalidResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantInvalid builds a assistants service
+// ensureManagedAssistant endpoint invalid error.
+func NewEnsureManagedAssistantInvalid(body *EnsureManagedAssistantInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2714,9 +2739,9 @@ func NewListMessagesInvalid(body *ListMessagesInvalidResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewListMessagesInvariantViolation builds a assistants service listMessages
-// endpoint invariant_violation error.
-func NewListMessagesInvariantViolation(body *ListMessagesInvariantViolationResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantInvariantViolation builds a assistants service
+// ensureManagedAssistant endpoint invariant_violation error.
+func NewEnsureManagedAssistantInvariantViolation(body *EnsureManagedAssistantInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2729,9 +2754,9 @@ func NewListMessagesInvariantViolation(body *ListMessagesInvariantViolationRespo
 	return v
 }
 
-// NewListMessagesUnexpected builds a assistants service listMessages endpoint
-// unexpected error.
-func NewListMessagesUnexpected(body *ListMessagesUnexpectedResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantUnexpected builds a assistants service
+// ensureManagedAssistant endpoint unexpected error.
+func NewEnsureManagedAssistantUnexpected(body *EnsureManagedAssistantUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2744,9 +2769,9 @@ func NewListMessagesUnexpected(body *ListMessagesUnexpectedResponseBody) *goa.Se
 	return v
 }
 
-// NewListMessagesGatewayError builds a assistants service listMessages
-// endpoint gateway_error error.
-func NewListMessagesGatewayError(body *ListMessagesGatewayErrorResponseBody) *goa.ServiceError {
+// NewEnsureManagedAssistantGatewayError builds a assistants service
+// ensureManagedAssistant endpoint gateway_error error.
+func NewEnsureManagedAssistantGatewayError(body *EnsureManagedAssistantGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2970,9 +2995,6 @@ func ValidateSendMessageResponseBody(body *SendMessageResponseBody) (err error) 
 	if body.ChatID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("chat_id", "body"))
 	}
-	if body.ThreadID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("thread_id", "body"))
-	}
 	if body.Accepted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("accepted", "body"))
 	}
@@ -2985,18 +3007,65 @@ func ValidateSendMessageResponseBody(body *SendMessageResponseBody) (err error) 
 	return
 }
 
-// ValidateListMessagesResponseBody runs the validations defined on
-// ListMessagesResponseBody
-func ValidateListMessagesResponseBody(body *ListMessagesResponseBody) (err error) {
-	if body.Messages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+// ValidateEnsureManagedAssistantResponseBody runs the validations defined on
+// EnsureManagedAssistantResponseBody
+func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	for _, e := range body.Messages {
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Model == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
+	}
+	if body.Instructions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
+	}
+	if body.Toolsets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
+	}
+	if body.WarmTTLSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
+	}
+	if body.MaxConcurrency == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	for _, e := range body.Toolsets {
 		if e != nil {
-			if err2 := ValidateDashboardMessageResponseBody(e); err2 != nil {
+			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "active" || *body.Status == "paused") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -4441,9 +4510,9 @@ func ValidateSendMessageGatewayErrorResponseBody(body *SendMessageGatewayErrorRe
 	return
 }
 
-// ValidateListMessagesUnauthorizedResponseBody runs the validations defined on
-// listMessages_unauthorized_response_body
-func ValidateListMessagesUnauthorizedResponseBody(body *ListMessagesUnauthorizedResponseBody) (err error) {
+// ValidateEnsureManagedAssistantUnauthorizedResponseBody runs the validations
+// defined on ensureManagedAssistant_unauthorized_response_body
+func ValidateEnsureManagedAssistantUnauthorizedResponseBody(body *EnsureManagedAssistantUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4465,9 +4534,9 @@ func ValidateListMessagesUnauthorizedResponseBody(body *ListMessagesUnauthorized
 	return
 }
 
-// ValidateListMessagesForbiddenResponseBody runs the validations defined on
-// listMessages_forbidden_response_body
-func ValidateListMessagesForbiddenResponseBody(body *ListMessagesForbiddenResponseBody) (err error) {
+// ValidateEnsureManagedAssistantForbiddenResponseBody runs the validations
+// defined on ensureManagedAssistant_forbidden_response_body
+func ValidateEnsureManagedAssistantForbiddenResponseBody(body *EnsureManagedAssistantForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4489,9 +4558,9 @@ func ValidateListMessagesForbiddenResponseBody(body *ListMessagesForbiddenRespon
 	return
 }
 
-// ValidateListMessagesBadRequestResponseBody runs the validations defined on
-// listMessages_bad_request_response_body
-func ValidateListMessagesBadRequestResponseBody(body *ListMessagesBadRequestResponseBody) (err error) {
+// ValidateEnsureManagedAssistantBadRequestResponseBody runs the validations
+// defined on ensureManagedAssistant_bad_request_response_body
+func ValidateEnsureManagedAssistantBadRequestResponseBody(body *EnsureManagedAssistantBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4513,9 +4582,9 @@ func ValidateListMessagesBadRequestResponseBody(body *ListMessagesBadRequestResp
 	return
 }
 
-// ValidateListMessagesNotFoundResponseBody runs the validations defined on
-// listMessages_not_found_response_body
-func ValidateListMessagesNotFoundResponseBody(body *ListMessagesNotFoundResponseBody) (err error) {
+// ValidateEnsureManagedAssistantNotFoundResponseBody runs the validations
+// defined on ensureManagedAssistant_not_found_response_body
+func ValidateEnsureManagedAssistantNotFoundResponseBody(body *EnsureManagedAssistantNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4537,9 +4606,9 @@ func ValidateListMessagesNotFoundResponseBody(body *ListMessagesNotFoundResponse
 	return
 }
 
-// ValidateListMessagesConflictResponseBody runs the validations defined on
-// listMessages_conflict_response_body
-func ValidateListMessagesConflictResponseBody(body *ListMessagesConflictResponseBody) (err error) {
+// ValidateEnsureManagedAssistantConflictResponseBody runs the validations
+// defined on ensureManagedAssistant_conflict_response_body
+func ValidateEnsureManagedAssistantConflictResponseBody(body *EnsureManagedAssistantConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4561,9 +4630,9 @@ func ValidateListMessagesConflictResponseBody(body *ListMessagesConflictResponse
 	return
 }
 
-// ValidateListMessagesUnsupportedMediaResponseBody runs the validations
-// defined on listMessages_unsupported_media_response_body
-func ValidateListMessagesUnsupportedMediaResponseBody(body *ListMessagesUnsupportedMediaResponseBody) (err error) {
+// ValidateEnsureManagedAssistantUnsupportedMediaResponseBody runs the
+// validations defined on ensureManagedAssistant_unsupported_media_response_body
+func ValidateEnsureManagedAssistantUnsupportedMediaResponseBody(body *EnsureManagedAssistantUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4585,9 +4654,9 @@ func ValidateListMessagesUnsupportedMediaResponseBody(body *ListMessagesUnsuppor
 	return
 }
 
-// ValidateListMessagesInvalidResponseBody runs the validations defined on
-// listMessages_invalid_response_body
-func ValidateListMessagesInvalidResponseBody(body *ListMessagesInvalidResponseBody) (err error) {
+// ValidateEnsureManagedAssistantInvalidResponseBody runs the validations
+// defined on ensureManagedAssistant_invalid_response_body
+func ValidateEnsureManagedAssistantInvalidResponseBody(body *EnsureManagedAssistantInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4609,9 +4678,10 @@ func ValidateListMessagesInvalidResponseBody(body *ListMessagesInvalidResponseBo
 	return
 }
 
-// ValidateListMessagesInvariantViolationResponseBody runs the validations
-// defined on listMessages_invariant_violation_response_body
-func ValidateListMessagesInvariantViolationResponseBody(body *ListMessagesInvariantViolationResponseBody) (err error) {
+// ValidateEnsureManagedAssistantInvariantViolationResponseBody runs the
+// validations defined on
+// ensureManagedAssistant_invariant_violation_response_body
+func ValidateEnsureManagedAssistantInvariantViolationResponseBody(body *EnsureManagedAssistantInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4633,9 +4703,9 @@ func ValidateListMessagesInvariantViolationResponseBody(body *ListMessagesInvari
 	return
 }
 
-// ValidateListMessagesUnexpectedResponseBody runs the validations defined on
-// listMessages_unexpected_response_body
-func ValidateListMessagesUnexpectedResponseBody(body *ListMessagesUnexpectedResponseBody) (err error) {
+// ValidateEnsureManagedAssistantUnexpectedResponseBody runs the validations
+// defined on ensureManagedAssistant_unexpected_response_body
+func ValidateEnsureManagedAssistantUnexpectedResponseBody(body *EnsureManagedAssistantUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4657,9 +4727,9 @@ func ValidateListMessagesUnexpectedResponseBody(body *ListMessagesUnexpectedResp
 	return
 }
 
-// ValidateListMessagesGatewayErrorResponseBody runs the validations defined on
-// listMessages_gateway_error_response_body
-func ValidateListMessagesGatewayErrorResponseBody(body *ListMessagesGatewayErrorResponseBody) (err error) {
+// ValidateEnsureManagedAssistantGatewayErrorResponseBody runs the validations
+// defined on ensureManagedAssistant_gateway_error_response_body
+func ValidateEnsureManagedAssistantGatewayErrorResponseBody(body *EnsureManagedAssistantGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4749,38 +4819,6 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 func ValidateAssistantToolsetRefResponseBody(body *AssistantToolsetRefResponseBody) (err error) {
 	if body.ToolsetSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
-	}
-	return
-}
-
-// ValidateDashboardMessageResponseBody runs the validations defined on
-// DashboardMessageResponseBody
-func ValidateDashboardMessageResponseBody(body *DashboardMessageResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Role == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
-	}
-	if body.Content == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
-	}
-	if body.Seq == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("seq", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.Role != nil {
-		if !(*body.Role == "user" || *body.Role == "assistant") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", *body.Role, []any{"user", "assistant"}))
-		}
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }

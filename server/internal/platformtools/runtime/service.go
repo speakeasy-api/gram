@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	platformdashboard "github.com/speakeasy-api/gram/server/internal/platformtools/dashboard"
+	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -122,11 +122,14 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 	}
 }
 
-// DashboardExternalTools returns the dashboard egress tool, which delivers an
-// assistant's reply to the dashboard conversation log.
-func DashboardExternalTools(db *pgxpool.Pool) []platformtools.ExternalTool {
+// ManagedAssistantLogsTools returns the log-search tool granted only to a
+// project's managed assistant so it can answer "what errors are firing?"
+// questions in the sidebar. Scoped to the managed assistant rather than the
+// universal `assistants` toolset because non-managed assistants have no
+// dashboard surface for the results.
+func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformdashboard.NewSendMessageTool(db), RequiredFeature: ""},
+		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: ""},
 	}
 }
 

@@ -1,5 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
+import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -28,16 +29,6 @@ import { toast } from "sonner";
 // Radix Select disallows an empty-string value, so the "Disabled" option needs
 // a sentinel that maps back to null (filtering off) when persisted.
 const DISABLED_VALUE = "__disabled__";
-
-// The backend auto-provisions a single project-wide group under this exact
-// name (see variations.InitGlobalToolVariationsGroup). It's an internal
-// implementation detail, so we surface a friendlier label for it in the UI
-// without renaming the underlying record.
-const GLOBAL_GROUP_BACKEND_NAME = "Global tool variations";
-const GLOBAL_GROUP_DISPLAY_NAME = "All source tool tags";
-
-const groupDisplayName = (name: string) =>
-  name === GLOBAL_GROUP_BACKEND_NAME ? GLOBAL_GROUP_DISPLAY_NAME : name;
 
 // The variations group is assigned to either a toolset (via
 // toolsets.setToolVariationsGroup) or an mcp_server (via mcpServers.update).
@@ -189,7 +180,7 @@ export function MCPToolFilteringSection({
               <SelectItem value={DISABLED_VALUE}>Disabled</SelectItem>
               {groups.map((group) => (
                 <SelectItem key={group.id} value={group.id}>
-                  {groupDisplayName(group.name)}
+                  {toolVariationsGroupDisplayName(group.name)}
                 </SelectItem>
               ))}
             </SelectContent>

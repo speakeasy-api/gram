@@ -207,6 +207,68 @@ func (q *Queries) InitGlobalToolVariationsGroup(ctx context.Context, arg InitGlo
 	return id, err
 }
 
+const listByGroupIDAndToolURNs = `-- name: ListByGroupIDAndToolURNs :many
+SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_urn, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.title, tool_variations.read_only_hint, tool_variations.destructive_hint, tool_variations.idempotent_hint, tool_variations.open_world_hint, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
+FROM tool_variations
+INNER JOIN tool_variations_groups
+  ON tool_variations.group_id = tool_variations_groups.id
+WHERE
+  tool_variations.group_id = $1
+  AND tool_variations_groups.project_id = $2
+  AND tool_variations.src_tool_urn = ANY($3::text[])
+  AND tool_variations.deleted IS FALSE
+`
+
+type ListByGroupIDAndToolURNsParams struct {
+	GroupID   uuid.UUID
+	ProjectID uuid.UUID
+	ToolUrns  []string
+}
+
+// Resolves variation overrides from an explicit variation group, scoped to the
+// owning project. Unlike FindGlobalVariationsByToolURNs (which resolves the
+// project-default group), the caller supplies the group id directly.
+func (q *Queries) ListByGroupIDAndToolURNs(ctx context.Context, arg ListByGroupIDAndToolURNsParams) ([]ToolVariation, error) {
+	rows, err := q.db.Query(ctx, listByGroupIDAndToolURNs, arg.GroupID, arg.ProjectID, arg.ToolUrns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ToolVariation
+	for rows.Next() {
+		var i ToolVariation
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.SrcToolUrn,
+			&i.SrcToolName,
+			&i.Confirm,
+			&i.ConfirmPrompt,
+			&i.Name,
+			&i.Summary,
+			&i.Description,
+			&i.Tags,
+			&i.Summarizer,
+			&i.Title,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGlobalToolVariations = `-- name: ListGlobalToolVariations :many
 SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_urn, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.title, tool_variations.read_only_hint, tool_variations.destructive_hint, tool_variations.idempotent_hint, tool_variations.open_world_hint, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
 FROM tool_variations
