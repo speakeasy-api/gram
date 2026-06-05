@@ -11,7 +11,7 @@ import type {
 import { DISPOSITION_TO_ANNOTATION } from "./types";
 
 /** Split a flat selector array into groups by hierarchy level. */
-export function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
+function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
   const projects: Selector[] = [];
   const servers: Selector[] = [];
   const tools: Selector[] = [];
@@ -38,7 +38,7 @@ export function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
  * synthesizes this when a grant is created with nil selectors, so we collapse
  * it back to the unrestricted rule shape on read.
  */
-export function isUnrestrictedSelectorList(selectors: Selector[]): boolean {
+function isUnrestrictedSelectorList(selectors: Selector[]): boolean {
   if (selectors.length !== 1) return false;
   const s = selectors[0]!;
   if (s.resourceId !== "*") return false;
@@ -143,13 +143,13 @@ export function sdkGrantsFromForm(
   return sdkGrants;
 }
 
-export type GrantIdentity = {
+type GrantIdentity = {
   scope: SdkRoleGrant["scope"];
   effect: "allow" | "deny";
   selector?: Selector;
 };
 
-export function selectorKey(selector: Selector | undefined): string {
+function selectorKey(selector: Selector | undefined): string {
   if (!selector) return "*";
   return JSON.stringify({
     disposition: selector.disposition ?? "",
@@ -160,11 +160,11 @@ export function selectorKey(selector: Selector | undefined): string {
   });
 }
 
-export function grantIdentityKey(identity: GrantIdentity): string {
+function grantIdentityKey(identity: GrantIdentity): string {
   return `${identity.scope}\x00${identity.effect}\x00${selectorKey(identity.selector)}`;
 }
 
-export function grantIdentities(grants: SdkRoleGrant[]): GrantIdentity[] {
+function grantIdentities(grants: SdkRoleGrant[]): GrantIdentity[] {
   return grants.flatMap((grant) => {
     const effect = (grant.effect ?? "allow") as "allow" | "deny";
     if (!grant.selectors || grant.selectors.length === 0) {
@@ -178,9 +178,7 @@ export function grantIdentities(grants: SdkRoleGrant[]): GrantIdentity[] {
   });
 }
 
-export function grantsFromIdentities(
-  identities: GrantIdentity[],
-): SdkRoleGrant[] {
+function grantsFromIdentities(identities: GrantIdentity[]): SdkRoleGrant[] {
   const unrestricted: SdkRoleGrant[] = [];
   const grouped = new Map<string, SdkRoleGrant>();
 
