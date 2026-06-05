@@ -182,7 +182,7 @@ export function ConfirmTrafficStep({
       title="Confirm traffic"
       description="We're listening for events from your agent platforms. Trigger any action in Claude Code, Cursor, or Codex on a managed machine to confirm the instrumentation works."
       onContinue={onComplete}
-      continueLabel="Complete setup"
+      continueLabel="Continue"
       showBack
       onBack={onBack}
     >
