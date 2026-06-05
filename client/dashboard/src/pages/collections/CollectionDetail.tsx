@@ -23,7 +23,7 @@ import {
 import { Button, Input } from "@speakeasy-api/moonshine";
 import { Textarea } from "@/components/moon/textarea";
 import { useMemo, useState } from "react";
-import { useParams, Outlet } from "react-router";
+import { useParams } from "react-router";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useQueries } from "@tanstack/react-query";
 import { Search } from "lucide-react";
@@ -43,10 +43,6 @@ import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
-
-function CollectionDetailRoot() {
-  return <Outlet />;
-}
 
 export default function CollectionDetail() {
   return (

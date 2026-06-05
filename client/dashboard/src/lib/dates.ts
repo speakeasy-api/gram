@@ -104,10 +104,3 @@ export const dateTimeFormatters = {
     hour12: false,
   }),
 };
-
-const formatDuration = (ms: number) => {
-  if (ms < 1000) {
-    return `${ms.toFixed(0)}ms`;
-  }
-  return `${(ms / 1000).toFixed(1)}s`;
-};

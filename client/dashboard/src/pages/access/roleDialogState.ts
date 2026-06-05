@@ -87,15 +87,6 @@ function isFormValid(input: SaveButtonInput): boolean {
   );
 }
 
-/** Whether non-member fields (name, description, grants) changed */
-function hasNonMemberChanges(input: SaveButtonInput): boolean {
-  return (
-    input.name !== input.initial.name ||
-    input.description !== input.initial.description ||
-    grantKeysString(input.grants) !== input.initial.grantKeys
-  );
-}
-
 /** Returns true when the Save/Create button should be disabled */
 export function isSaveDisabled(input: SaveButtonInput): boolean {
   if (input.isMutating) return true;

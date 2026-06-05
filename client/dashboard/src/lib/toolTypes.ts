@@ -99,13 +99,6 @@ export const asResource = (resource: GeneratedResource): Resource => {
   }
 };
 
-const useGroupedToolDefinitions = (
-  toolset: GeneratedToolset | undefined,
-): ToolGroup[] => {
-  const tools = toolset?.tools ?? [];
-  return useGroupedTools(asTools(tools));
-};
-
 export const useGroupedHttpTools = (
   tools: HTTPToolDefinition[],
 ): HttpToolGroup[] => {
@@ -173,16 +166,8 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   return toolGroups;
 };
 
-const templateName = (template: PromptTemplateEntry) => template.name;
-
 export const isPrompt = (template: PromptTemplateEntry) =>
   template.kind === PromptTemplateKind.Prompt;
-
-const isHigherOrderTool = (template: PromptTemplateEntry) =>
-  template.kind === PromptTemplateKind.HigherOrderTool;
-
-export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
-  promptTemplates.filter(isPrompt).map(templateName);
 
 export const isHttpTool = (tool: Tool) => tool.type === "http";
 const isPromptTool = (tool: Tool) => tool.type === "prompt";
@@ -266,9 +251,4 @@ export const filterFunctionTools = (
   tools: Tool[] | undefined,
 ): FunctionToolDefinition[] => {
   return tools?.filter(isFunctionTool) ?? [];
-};
-
-const toolNames = (toolset: { tools: Tool[] }) => {
-  const { tools } = toolset;
-  return tools.map((tool) => tool.name);
 };

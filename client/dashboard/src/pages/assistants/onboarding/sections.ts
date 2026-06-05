@@ -26,15 +26,6 @@ function findSections(text: string): SectionRange[] {
   }));
 }
 
-function getSection(text: string, name: SectionName): string | null {
-  const ranges = findSections(text);
-  const r = ranges.find((x) => x.name === name);
-  if (!r) return null;
-  let s = r.contentStart;
-  if (text[s] === "\n") s += 1;
-  return text.slice(s, r.end).replace(/\s+$/, "");
-}
-
 export function setSection(
   text: string,
   name: SectionName,
@@ -52,13 +43,4 @@ export function setSection(
   const head = text.replace(/\s+$/, "");
   if (head.length === 0) return block;
   return `${head}\n\n${block}`;
-}
-
-function removeSection(text: string, name: SectionName): string {
-  const ranges = findSections(text);
-  const r = ranges.find((x) => x.name === name);
-  if (!r) return text;
-  const before = text.slice(0, r.start).replace(/\s+$/, "");
-  const after = text.slice(r.end).replace(/^\s+/, "");
-  return [before, after].filter((x) => x.length > 0).join("\n\n");
 }

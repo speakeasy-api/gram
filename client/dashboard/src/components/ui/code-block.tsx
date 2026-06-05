@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { CheckIcon, CopyIcon, ChevronDownIcon } from "lucide-react";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { codeToHtml } from "shiki";
 
@@ -171,48 +171,4 @@ interface CollapsibleCodeSectionProps {
   title: string;
   content: string | Record<string, unknown> | unknown;
   defaultExpanded?: boolean;
-}
-
-function CollapsibleCodeSection({
-  title,
-  content,
-  defaultExpanded = false,
-}: CollapsibleCodeSectionProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-
-  const formattedContent = useMemo(() => {
-    if (typeof content === "string") {
-      try {
-        return JSON.stringify(JSON.parse(content), null, 2);
-      } catch {
-        return content;
-      }
-    }
-    return JSON.stringify(content, null, 2);
-  }, [content]);
-
-  return (
-    <div className="border-border border-t">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between px-4 py-2.5 text-left transition-colors"
-      >
-        <span className="text-muted-foreground text-sm">{title}</span>
-        <div className="flex items-center gap-1">
-          <CopyButton content={formattedContent} />
-          <ChevronDownIcon
-            className={cn(
-              "text-muted-foreground size-4 transition-transform duration-200",
-              isExpanded && "rotate-180",
-            )}
-          />
-        </div>
-      </button>
-      {isExpanded && (
-        <div className="border-border border-t">
-          <CodeBlock content={content} />
-        </div>
-      )}
-    </div>
-  );
 }

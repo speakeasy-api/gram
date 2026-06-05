@@ -7,31 +7,19 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import { FullWidthUpload } from "@/components/upload";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
 import UploadAssetStepper from "@/components/upload-asset/stepper";
 import { useStepper } from "@/components/upload-asset/stepper/use-stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
-import { useListTools } from "@/hooks/toolTypes";
-import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { Deployment } from "@gram/client/models/components";
 import { useDeploymentLogs } from "@gram/client/react-query/index.js";
 import { Heading } from "@/components/ui/heading";
-import { Alert, Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
-import {
-  ArrowRightIcon,
-  CheckIcon,
-  FileTextIcon,
-  RefreshCcwIcon,
-} from "lucide-react";
-import { useUploadOpenAPISteps } from "./upload-openapi-utils";
+import { Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { ArrowRightIcon, FileTextIcon, RefreshCcwIcon } from "lucide-react";
 
 export default function UploadOpenAPI() {
   return (
@@ -157,172 +145,6 @@ function FooterActions() {
         </>
       );
   }
-}
-
-const useAssetNumtools = (
-  assetId: string | undefined,
-  sourceName: string | undefined,
-  deployment: Deployment | undefined,
-) => {
-  const { data: tools } = useListTools({
-    deploymentId: deployment?.id,
-  });
-
-  const sourceSlug = sourceName ? slugify(sourceName) : undefined;
-  const documentId =
-    deployment?.openapiv3Assets.find((doc) => doc.slug === sourceSlug)?.id ??
-    deployment?.openapiv3Assets.find((doc) => doc.assetId === assetId)?.id;
-
-  return documentId
-    ? tools?.tools.filter(
-        (tool) =>
-          tool.type === "http" &&
-          tool.openapiv3DocumentId !== undefined &&
-          tool.deploymentId === deployment?.id &&
-          tool.openapiv3DocumentId === documentId,
-      ).length
-    : 0;
-};
-
-function UploadOpenAPIContent({
-  onStepsComplete,
-  className,
-}: {
-  onStepsComplete?: (deployment: Deployment) => void;
-  className?: string;
-}) {
-  const {
-    handleSpecUpload,
-    undoSpecUpload,
-    apiName,
-    setApiName,
-    createDeployment,
-    createdDeployment,
-    creatingDeployment,
-    apiNameError,
-    file,
-    asset,
-    isUploading,
-  } = useUploadOpenAPISteps();
-  const routes = useRoutes();
-
-  const numtools = useAssetNumtools(
-    asset?.asset.id,
-    apiName,
-    createdDeployment,
-  );
-
-  const steps: StepProps[] = [
-    {
-      heading: "Upload OpenAPI Specification",
-      description: "Upload your OpenAPI specification to get started.",
-      display: (
-        <FullWidthUpload
-          onUpload={handleSpecUpload}
-          allowedExtensions={["yaml", "yml", "json"]}
-          isLoading={isUploading}
-        />
-      ),
-      displayComplete: (
-        <Stack direction={"horizontal"} gap={2} align={"center"}>
-          <Type>✓ Uploaded {file?.name}</Type>
-          <Button variant={"secondary"} onClick={undoSpecUpload}>
-            Change
-          </Button>
-        </Stack>
-      ),
-      isComplete: !!asset,
-    },
-    {
-      heading: "Name Your API",
-      description: "The tools generated will be scoped under this name.",
-      display: (
-        <Stack gap={2}>
-          <Stack
-            direction={"horizontal"}
-            gap={2}
-            className="relative z-10 max-w-sm"
-          >
-            <Input value={apiName} onChange={setApiName} placeholder="My API" />
-            <Button
-              onClick={() => createDeployment()}
-              disabled={!!apiNameError}
-            >
-              CONTINUE
-            </Button>
-          </Stack>
-          {!!apiNameError && (
-            <span className="text-destructive">{apiNameError}</span>
-          )}
-        </Stack>
-      ),
-      displayComplete: <Type>✓ Source named "{apiName}"</Type>,
-      isComplete: creatingDeployment || !!createdDeployment,
-    },
-    {
-      heading: "Generate Tools",
-      description: "The platform will generate tools for your API.",
-      display: (
-        <>
-          <Type>
-            The platform is generating tools for your API. This may take a few
-            seconds.
-          </Type>
-          <Spinner />
-        </>
-      ),
-      get displayComplete() {
-        if (!createdDeployment) return null;
-
-        if (createdDeployment.status === "failed")
-          return (
-            <Alert variant="error" dismissible={false} className="text-sm">
-              The deployment failed. Check the{" "}
-              <routes.deployments.deployment.Link
-                params={[createdDeployment.id]}
-                className="text-link"
-              >
-                deployment logs
-              </routes.deployments.deployment.Link>{" "}
-              for more information.
-            </Alert>
-          );
-
-        return (
-          <div>
-            {createdDeployment ? (
-              <Accordion type="single" collapsible className="max-w-2xl">
-                <AccordionItem value="logs">
-                  <AccordionTrigger className="text-base">
-                    <div className="flex items-center gap-2">
-                      <CheckIcon className="size-4" /> Created {numtools} tools
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <DeploymentLogs
-                      deploymentId={createdDeployment?.id}
-                      onlyErrors
-                    />
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            ) : null}
-          </div>
-        );
-      },
-      isComplete: !!createdDeployment,
-      failed: createdDeployment?.status === "failed",
-    },
-  ];
-
-  return (
-    <Page.Body className={className}>
-      <Stepper
-        steps={steps}
-        onComplete={() => onStepsComplete?.(createdDeployment!)}
-      />
-    </Page.Body>
-  );
 }
 
 export function DeploymentLogs(props: {

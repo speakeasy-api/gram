@@ -16,15 +16,6 @@ export interface EnvironmentVariable {
   updatedAt?: Date;
 }
 
-// Get all environments that have a value for a specific variable
-const getAllEnvironments = (envVar: EnvironmentVariable): string[] => {
-  const allEnvs = new Set<string>();
-  envVar.valueGroups.forEach((group) => {
-    group.environments.forEach((env) => allEnvs.add(env));
-  });
-  return Array.from(allEnvs);
-};
-
 // Check if an environment has a value for a specific variable
 export const environmentHasValue = (
   envVar: EnvironmentVariable,
@@ -90,67 +81,6 @@ export const getEditingValue = (
   }
   // Show the value for the currently selected environment
   return getValueForEnvironment(envVar, selectedEnvironmentView);
-};
-
-// Check if a variable has unsaved changes or has no environment entry (unmapped)
-const hasUnsavedChanges = (
-  envVar: EnvironmentVariable,
-  environmentEntries: Array<{
-    variableName: string;
-    providedBy: string;
-    headerDisplayName?: string;
-  }>,
-  editingState: Map<string, { value: string; headerDisplayName?: string }>,
-  selectedEnvironmentView: string,
-): boolean => {
-  // Find existing environment entry
-  const entry = environmentEntries.find((e) => e.variableName === envVar.key);
-
-  // If no entry exists, this is an unmapped required variable that needs to be saved
-  if (!entry && envVar.isRequired) {
-    return true;
-  }
-
-  // Determine the original state based on environment entry
-  const originalState: EnvVarState =
-    entry?.providedBy === "user"
-      ? "user-provided"
-      : entry?.providedBy === "none"
-        ? "omitted"
-        : "system";
-
-  // Check if state has changed
-  if (envVar.state !== originalState) {
-    return true;
-  }
-
-  // If state is system, check if value changed
-  if (envVar.state === "system" && editingState.has(envVar.id)) {
-    const editing = editingState.get(envVar.id)!;
-    const currentValue = getValueForEnvironment(
-      envVar,
-      selectedEnvironmentView,
-    );
-
-    // Check if value changed (only if a value is provided)
-    if (editing.value && editing.value !== currentValue) {
-      return true;
-    }
-  }
-
-  // Check if header display name changed
-  if (editingState.has(envVar.id)) {
-    const editing = editingState.get(envVar.id)!;
-    const originalHeaderName = entry?.headerDisplayName || "";
-    if (
-      editing.headerDisplayName !== undefined &&
-      editing.headerDisplayName !== originalHeaderName
-    ) {
-      return true;
-    }
-  }
-
-  return false;
 };
 
 // Check if an environment has all required variables configured

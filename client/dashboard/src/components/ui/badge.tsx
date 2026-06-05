@@ -78,21 +78,3 @@ export function Badge({
 
   return base;
 }
-
-// Combines two badges into one. Requires two children, the first is the left part and the second is the right part
-function TwoPartBadge({
-  children,
-}: BadgeProps & {
-  children: [React.ReactNode, React.ReactNode];
-}) {
-  return (
-    <div className="flex items-center">
-      <span className="mr-0! [&_[data-slot=badge]]:rounded-r-none">
-        {children[0]}
-      </span>
-      <span className="ml-0! [&_[data-slot=badge]]:rounded-l-none">
-        {children[1]}
-      </span>
-    </div>
-  );
-}

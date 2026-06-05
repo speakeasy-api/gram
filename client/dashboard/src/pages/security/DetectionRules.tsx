@@ -42,7 +42,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   BUILTIN_RULES_BY_CATEGORY,
   SEVERITY_LEVELS,
-  SEVERITY_META,
   useDetectionRulesStore,
   validateCustomRuleId,
   validateRegex,
@@ -346,20 +345,6 @@ function RuleRow({
       </div>
       <ChevronRight className="text-muted-foreground size-4 shrink-0" />
     </button>
-  );
-}
-
-function SeverityBadge({ severity }: { severity: SeverityLevel }) {
-  const meta = SEVERITY_META[severity];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium",
-        meta.badgeClass,
-      )}
-    >
-      {meta.label}
-    </span>
   );
 }
 

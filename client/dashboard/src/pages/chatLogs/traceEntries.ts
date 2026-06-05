@@ -176,12 +176,3 @@ export function getRiskEntryCount(
     messageHasRiskResults(message, riskResultsByMessage),
   ).length;
 }
-
-function getVisibleMessageCount(
-  messages: ChatMessage[],
-  enabledEntryTypes: FilterableTraceEntryType[],
-) {
-  return messages.filter((message) =>
-    isMessageVisible(message, enabledEntryTypes),
-  ).length;
-}

@@ -43,13 +43,6 @@ const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
   }, [catalogData]);
 };
 
-const useCatalogServerAuthType = (
-  registrySpecifier: string,
-): PulseMcpAuthType | null => {
-  const authMap = useCatalogAuthMap();
-  return authMap.get(registrySpecifier) ?? null;
-};
-
 export type ExternalMcpOAuthConfigStatus =
   | "required-unconfigured"
   | "configured"

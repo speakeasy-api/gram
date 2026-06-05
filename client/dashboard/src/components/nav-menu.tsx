@@ -1,4 +1,4 @@
-import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
+import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
@@ -10,40 +10,6 @@ import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Type } from "./ui/type";
 
 export const NAV_LOADING_DURATION_MS = 600;
-
-function NavMenu({
-  items,
-  className,
-  children,
-}: {
-  items: AppRoute[];
-  className?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <SidebarMenu className={className}>
-      {items.map((item) => (
-        <SidebarMenuItem key={item.title}>
-          <NavMenuButton item={item} />
-        </SidebarMenuItem>
-      ))}
-      {children}
-    </SidebarMenu>
-  );
-}
-
-function NavMenuButton({ item }: { item: AppRoute }) {
-  return (
-    <NavButton
-      title={item.title}
-      href={item.href()}
-      active={item.active}
-      Icon={item.Icon}
-      target={item.external ? "_blank" : undefined}
-      stage={item.stage}
-    />
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Sliding highlight context

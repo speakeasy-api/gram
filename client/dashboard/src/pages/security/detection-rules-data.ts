@@ -21,41 +21,6 @@ export const SEVERITY_LEVELS = [
 
 export type SeverityLevel = (typeof SEVERITY_LEVELS)[number];
 
-export const SEVERITY_META: Record<
-  SeverityLevel,
-  { label: string; description: string; badgeClass: string }
-> = {
-  info: {
-    label: "Info",
-    description: "Informational signal, no action recommended",
-    badgeClass: "bg-muted text-muted-foreground border-border",
-  },
-  low: {
-    label: "Low",
-    description: "Minor risk, review periodically",
-    badgeClass:
-      "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30",
-  },
-  medium: {
-    label: "Medium",
-    description: "Notable risk, review when surfaced",
-    badgeClass:
-      "bg-yellow-500/10 text-yellow-800 dark:text-yellow-300 border-yellow-500/30",
-  },
-  high: {
-    label: "High",
-    description: "Serious risk, investigate promptly",
-    badgeClass:
-      "bg-orange-500/10 text-orange-800 dark:text-orange-300 border-orange-500/30",
-  },
-  critical: {
-    label: "Critical",
-    description: "Highest risk, immediate response required",
-    badgeClass:
-      "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30",
-  },
-};
-
 /** Default severity for builtin rules. Driven by category since the
  *  underlying detectors are uniform within a category. Individual rules
  *  can override via the Detection Rules page (stored locally for now). */

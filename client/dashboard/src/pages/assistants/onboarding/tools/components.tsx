@@ -1108,19 +1108,3 @@ export function ProposeSlackSetupComponent({
     </ToolCard>
   );
 }
-
-function NoticeOnUnmount({ toolCallId, status }: ToolCallMessagePartProps) {
-  const draft = useAssistantDraft();
-  const isPending = isExecuting(status);
-  useEffect(() => {
-    if (!isPending) return;
-    return () => {
-      draft.resolvePending(toolCallId, {
-        success: false,
-        cancelled: true,
-        reason: "Component unmounted before user submitted.",
-      });
-    };
-  }, [draft, toolCallId, isPending]);
-  return null;
-}

@@ -173,7 +173,7 @@ const SdkContent = ({
   );
 };
 
-export const SdkLanguageDropdown = ({
+const SdkLanguageDropdown = ({
   lang,
   setLang,
 }: {

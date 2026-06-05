@@ -746,14 +746,3 @@ export const GENERIC_PERSONALITIES = PERSONALITIES.filter(
 export function getPersonality(slug: string): Personality | undefined {
   return PERSONALITIES.find((p) => p.slug === slug);
 }
-
-function listPersonalitySummaries(): Pick<
-  Personality,
-  "slug" | "title" | "summary"
->[] {
-  return PERSONALITIES.map(({ slug, title, summary }) => ({
-    slug,
-    title,
-    summary,
-  }));
-}
