@@ -1,4 +1,4 @@
-h1:AHIqCGyCrEKwvUyDeVesxTdEd69kvzmD1hei16nD2C4=
+h1:NnIRbNfhDFe+LbgRk8BEdNDmlZBqKdkKItPTd4Yp1as=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -203,4 +203,4 @@ h1:AHIqCGyCrEKwvUyDeVesxTdEd69kvzmD1hei16nD2C4=
 20260602103955_age-2631-project-managed-assistants.sql h1:WTzRGPg815dtWcPpBbkJlWNyu2PRdArmtjbX0UDKySI=
 20260602133246_add-tool-variations-group-id-to-toolsets-and-mcp-servers.sql h1:evD/ljifFim1YzJ59/guBM+buZD8hMlxSKNmtLkMXg8=
 20260602183035_dashboard_trigger_unique_index.sql h1:tgKPbzPEDQjjPhjpjb/yMK3dDJDY4xjFlvtOMZwy5LY=
-20260605142311_add_user_attributes.sql h1:3TIWAcPvHRwuoqY70/uf8lon9cN2U7QWjH9d6G/fHOc=
+20260605143600_add_user_attributes.sql h1:HcX0ztS6XaL3736xW76Srr6mY6k+n6C991WoMir+4kI=

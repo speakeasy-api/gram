@@ -1623,17 +1623,15 @@ CREATE TABLE IF NOT EXISTS user_attributes (
   user_id TEXT NOT NULL,
   attributes JSONB NOT NULL,
   content_hash TEXT NOT NULL,
-  is_current BOOLEAN NOT NULL DEFAULT TRUE,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT user_attributes_pkey PRIMARY KEY (id),
   CONSTRAINT user_attributes_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS user_attributes_current
-ON user_attributes (user_id)
-WHERE is_current;
-
+-- The current attributes for a user are the most recent version. This index
+-- serves both the hot current-attributes lookup (ORDER BY created_at DESC
+-- LIMIT 1) and full history reads, so no stored is_current flag is needed.
 CREATE INDEX IF NOT EXISTS user_attributes_user_history
 ON user_attributes (user_id, created_at DESC);
 

@@ -4,12 +4,9 @@ CREATE TABLE "user_attributes" (
   "user_id" text NOT NULL,
   "attributes" jsonb NOT NULL,
   "content_hash" text NOT NULL,
-  "is_current" boolean NOT NULL DEFAULT true,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
   CONSTRAINT "user_attributes_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
 );
--- Create index "user_attributes_current" to table: "user_attributes"
-CREATE UNIQUE INDEX "user_attributes_current" ON "user_attributes" ("user_id") WHERE is_current;
 -- Create index "user_attributes_user_history" to table: "user_attributes"
 CREATE INDEX "user_attributes_user_history" ON "user_attributes" ("user_id", "created_at" DESC);
