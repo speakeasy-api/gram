@@ -151,6 +151,15 @@ func TestIsPresidioFalsePositive_Email(t *testing.T) {
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@invalid.com"), "invalid.com is a real registered domain; only the .invalid TLD is RFC 6761 reserved")
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "user@localhost.com"), "localhost.com is a real registered domain; only the .localhost TLD is RFC 6761 reserved")
 
+	// Image file extensions mis-shaped as TLDs — Presidio sometimes
+	// extracts a bare asset filename when the leading URL prefix is
+	// stripped before the slash layer fires.
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "1f615@2x.png"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "icon@2x.SVG"), "case-insensitive")
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "logo@retina.jpg"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "hero@2x.jpeg"))
+	assert.True(t, isPresidioFalsePositive("EMAIL_ADDRESS", "spinner@2x.gif"))
+
 	// RFC 6761 reserved special-use TLDs (.example, .invalid,
 	// .localhost, .test) are guaranteed not to resolve to a public
 	// mailbox, regardless of SLD or subdomain depth.

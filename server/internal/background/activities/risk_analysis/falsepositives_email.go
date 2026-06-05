@@ -13,12 +13,16 @@ import (
 //  1. Exact-match against `knownFPEmails` — one-off addresses that
 //     don't fit any of the structural categories below (e.g. SSH
 //     pseudo-users like `git@github.com`).
-//  2. Reserved / placeholder domain — the primary reason this filter
-//     exists. Two sub-cases:
+//  2. Reserved / placeholder / image-extension domain — the primary
+//     reason this filter exists. Three sub-cases:
 //     a. RFC 6761 special-use TLDs (`.example`, `.invalid`,
 //     `.localhost`, `.test`). Anything under one of these is
 //     guaranteed not to be a real address.
-//     b. Widely-used fixture SLDs paired with a real-world TLD
+//     b. Image file extensions mis-shaped as TLDs (`png`, `svg`,
+//     `jpg`, `jpeg`, `gif`) — Presidio sometimes extracts a bare
+//     `1f615@2x.png` fragment when the leading URL prefix gets
+//     stripped before the slash layer fires.
+//     c. Widely-used fixture SLDs paired with a real-world TLD
 //     (`example.com`, `acme.com`, `acmecorp.com`, `asdf.com`, etc.).
 //     These are not PII the policy author cares about regardless of
 //     the local-part.
@@ -83,13 +87,16 @@ func nonPIIEmailReason(s string) string {
 }
 
 // placeholderDomainReason reports whether the right-hand side of the
-// final `@` is a reserved or fixture domain. lower is the
-// already-lowercased input. Returns the matching category or "".
+// final `@` is a reserved, image-extension, or fixture domain. lower
+// is the already-lowercased input. Returns the matching category or "".
 //
-// Two sub-checks, in order:
+// Three sub-checks, in order:
 //   - The trailing label is an RFC 6761 special-use TLD (`.example`,
 //     `.invalid`, `.localhost`, `.test`). This applies regardless of
 //     subdomain depth: both `user@test` and `user@host.test` match.
+//   - The trailing label is an image file extension (`png`, `svg`,
+//     `jpg`, `jpeg`, `gif`) — Presidio mis-shapes asset URL filenames
+//     like `1f615@2x.png` as emails when the leading `/` is stripped.
 //   - The second-level label is in placeholderSLDs and the top-level
 //     label is in placeholderTLDs. Subdomain depth is irrelevant.
 //
@@ -106,6 +113,9 @@ func placeholderDomainReason(lower string) string {
 	tld := parts[len(parts)-1]
 	if reservedSpecialTLDs[tld] {
 		return "RFC 6761 reserved special-use TLD"
+	}
+	if imageFileExtensionTLDs[tld] {
+		return "image file extension (URL fragment)"
 	}
 	if len(parts) < 2 {
 		return ""
@@ -125,6 +135,19 @@ var reservedSpecialTLDs = map[string]bool{
 	"invalid":   true,
 	"localhost": true,
 	"test":      true,
+}
+
+// imageFileExtensionTLDs are file extensions Presidio occasionally
+// mis-shapes as TLDs when an `@2x.png`-style asset URL filename leaks
+// out of a longer string without the leading `/`. No real IANA TLD is
+// an image extension, so any candidate ending in one of these labels
+// is a URL fragment rather than an email.
+var imageFileExtensionTLDs = map[string]bool{
+	"png":  true,
+	"svg":  true,
+	"jpg":  true,
+	"jpeg": true,
+	"gif":  true,
 }
 
 // placeholderSLDs is the set of second-level domains conventionally
