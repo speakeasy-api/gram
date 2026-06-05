@@ -1,6 +1,7 @@
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  AtSign,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -10,6 +11,7 @@ import {
   PencilIcon,
   Settings2,
   Square,
+  Wrench,
 } from "lucide-react";
 
 import {
@@ -21,6 +23,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAssistantState,
+  useComposerRuntime,
 } from "@assistant-ui/react";
 
 import {
@@ -68,6 +71,7 @@ import { useToolMentions } from "@/hooks/useToolMentions";
 import { getApiUrl } from "@/lib/api";
 import { EASE_OUT_QUINT } from "@/lib/easing";
 import { MODELS } from "@/lib/models";
+import { toolSetToMentionableTools } from "@/lib/tool-mentions";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
@@ -262,7 +266,7 @@ const ThreadScrollToBottom: FC = () => {
 const ThreadWelcome: FC = () => {
   const { config } = useElements();
   const d = useDensity();
-  const { title, subtitle } = config.welcome ?? {};
+  const { logo, title, subtitle } = config.welcome ?? {};
   const isStandalone = config.variant === "standalone";
 
   return (
@@ -288,6 +292,19 @@ const ThreadWelcome: FC = () => {
             !isStandalone && d("py-md"),
           )}
         >
+          {logo && (
+            <m.img
+              src={logo}
+              alt=""
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}
+              className={cn(
+                "aui-thread-welcome-logo mb-2 size-12 object-contain",
+              )}
+            />
+          )}
           <m.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -794,6 +811,77 @@ const ComposerCassetteRecorder: FC = () => {
   );
 };
 
+// A discoverable counterpart to the type-`@` autocomplete: a composer button
+// that opens a picker of the available tools and inserts an @mention for the
+// chosen one. Inserts through the composer runtime so it stays in sync with the
+// autocomplete's own textarea handling. Hidden when tool mentions are disabled
+// or there are no tools.
+const ComposerToolMentionPicker: FC = () => {
+  const { config, mcpTools } = useElements();
+  const composer = useComposerRuntime();
+  const [open, setOpen] = useState(false);
+
+  const composerConfig = config.composer;
+  const toolMentionsEnabled =
+    composerConfig?.toolMentions === undefined ||
+    composerConfig.toolMentions === true ||
+    (typeof composerConfig.toolMentions === "object" &&
+      composerConfig.toolMentions.enabled !== false);
+
+  const tools = useMemo(() => toolSetToMentionableTools(mcpTools), [mcpTools]);
+
+  if (!toolMentionsEnabled || tools.length === 0) {
+    return null;
+  }
+
+  const insertMention = (toolName: string) => {
+    const current = composer.getState().text;
+    const base = current && !/\s$/.test(current) ? `${current} ` : current;
+    composer.setText(`${base}@${toolName} `);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          data-state={open ? "open" : "closed"}
+          className="aui-composer-tool-mention-picker flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+          aria-label="Mention a tool"
+        >
+          <AtSign className="size-5 stroke-[1.5px]" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" className="w-64 p-1 shadow-none">
+        <div className="max-h-56 overflow-y-auto">
+          {tools.map((tool) => (
+            <button
+              key={tool.id}
+              type="button"
+              onClick={() => insertMention(tool.name)}
+              className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
+            >
+              <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">
+                  {tool.name}
+                </span>
+                {tool.description && (
+                  <span className="line-clamp-2 text-xs text-muted-foreground">
+                    {tool.description}
+                  </span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 const ComposerAction: FC = () => {
   const { config } = useElements();
   const r = useRadius();
@@ -806,6 +894,8 @@ const ComposerAction: FC = () => {
         ) : (
           <div className="aui-composer-add-attachment-placeholder" />
         )}
+
+        <ComposerToolMentionPicker />
 
         {config.model?.showModelPicker && !config.languageModel && (
           <ComposerModelPicker />
