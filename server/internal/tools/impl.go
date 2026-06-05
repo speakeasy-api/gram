@@ -207,7 +207,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		result.Tools = append(result.Tools, tools...)
 	}
 
-	err := mv.ApplyVariations(ctx, s.logger, s.db, *authCtx.ProjectID, result.Tools)
+	err := mv.ApplyVariations(ctx, s.logger, s.db, *authCtx.ProjectID, nil, result.Tools)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to tools").Log(ctx, s.logger)
 	}

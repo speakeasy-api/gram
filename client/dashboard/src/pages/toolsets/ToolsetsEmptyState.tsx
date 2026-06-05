@@ -1,30 +1,6 @@
-import { EmptyState } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useState } from "react";
-
-export function ToolsetsEmptyState({
-  onCreateToolset,
-}: {
-  onCreateToolset: () => void;
-}) {
-  const cta = (
-    <Button size="sm" onClick={onCreateToolset}>
-      CREATE AN MCP SERVER
-    </Button>
-  );
-
-  return (
-    <EmptyState
-      heading="No MCP servers yet"
-      description="MCP servers are a way to organize your tools into groupings of appropriate size for an LLM to use effectively."
-      nonEmptyProjectCTA={cta}
-      graphic={<ToolsetsGraphic />}
-      graphicClassName="scale-90"
-    />
-  );
-}
 
 export function ToolsetsGraphic({ className }: { className?: string }) {
   const [isHovered, setIsHovered] = useState(false);

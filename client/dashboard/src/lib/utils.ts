@@ -28,12 +28,18 @@ export function buildLoginRedirectURL(redirectTo: string | null): string {
   return href;
 }
 
-export function titleCase(str: string) {
-  return str.replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 export function capitalize(str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/**
+ * Turn a URL slug into a Title Case display string, e.g.
+ * "custom-tools" -> "Custom Tools". Intended for the static (literal) segments
+ * of a route path — not for dynamic slug params like toolset or user
+ * identifiers, which should keep their original casing.
+ */
+export function titleCaseSlug(slug: string) {
+  return slug.split("-").filter(Boolean).map(capitalize).join(" ");
 }
 
 export function assert(condition: unknown, message: string): asserts condition {

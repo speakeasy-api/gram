@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -37,6 +38,7 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
 type Service struct {
@@ -107,6 +109,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.ToolsetID,
+		payload.ToolVariationsGroupID,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").Log(ctx, logger)
@@ -140,15 +143,16 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
-		ID:                  serverID,
-		ProjectID:           *authCtx.ProjectID,
-		Name:                conv.ToPGText(name),
-		Slug:                conv.ToPGText(slug),
-		EnvironmentID:       ids.EnvironmentID,
-		UserSessionIssuerID: ids.UserSessionIssuerID,
-		RemoteMcpServerID:   ids.RemoteMcpServerID,
-		ToolsetID:           ids.ToolsetID,
-		Visibility:          string(payload.Visibility),
+		ID:                    serverID,
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  conv.ToPGText(name),
+		Slug:                  conv.ToPGText(slug),
+		EnvironmentID:         ids.EnvironmentID,
+		UserSessionIssuerID:   ids.UserSessionIssuerID,
+		RemoteMcpServerID:     ids.RemoteMcpServerID,
+		ToolsetID:             ids.ToolsetID,
+		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		Visibility:            string(payload.Visibility),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -226,6 +230,99 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 	return mv.BuildMcpServerView(server), nil
 }
 
+func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFiltersPayload) (*types.ListToolFiltersResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
+	idProvided := payload.ID != nil && *payload.ID != ""
+	slugProvided := payload.Slug != nil && *payload.Slug != ""
+	if !idProvided && !slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id or slug is required").Log(ctx, s.logger)
+	}
+	if idProvided && slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").Log(ctx, s.logger)
+	}
+
+	r := repo.New(s.db)
+
+	var server repo.McpServer
+	var err error
+	if idProvided {
+		serverID, parseErr := uuid.Parse(*payload.ID)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid mcp server id").Log(ctx, s.logger)
+		}
+		server, err = r.GetMCPServerByID(ctx, repo.GetMCPServerByIDParams{
+			ID:        serverID,
+			ProjectID: *authCtx.ProjectID,
+		})
+	} else {
+		server, err = r.GetMCPServerBySlug(ctx, repo.GetMCPServerBySlugParams{
+			Slug:      conv.ToPGText(*payload.Slug),
+			ProjectID: *authCtx.ProjectID,
+		})
+	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").Log(ctx, s.logger)
+	}
+
+	// Only toolset-backed servers expose a tool list to filter. Remote-backed
+	// servers have no toolset tools here (their Tools tab is separate, future
+	// work), so report filtering disabled with no scopes.
+	if !server.ToolsetID.Valid {
+		return toolfilter.BuildView(nil, nil, nil), nil
+	}
+
+	toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
+		ID:        server.ToolsetID.UUID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "mcp server backing toolset not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server backing toolset").Log(ctx, s.logger)
+	}
+
+	// Resolution chain: the mcp_servers value takes precedence over the
+	// toolset's own column.
+	var mcpServerGroupID *uuid.UUID
+	if server.ToolVariationsGroupID.Valid {
+		mcpServerGroupID = &server.ToolVariationsGroupID.UUID
+	}
+	var toolsetGroupID *uuid.UUID
+	if toolset.ToolVariationsGroupID.Valid {
+		toolsetGroupID = &toolset.ToolVariationsGroupID.UUID
+	}
+	resolved := toolfilter.ResolveGroupID(mcpServerGroupID, toolsetGroupID)
+	if resolved == nil {
+		return toolfilter.BuildView(nil, nil, nil), nil
+	}
+
+	// DescribeToolset applies the resolved group's variation overrides to the
+	// tools, so the derived effective tags match the runtime ?tags= result.
+	described, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), nil, resolved)
+	if err != nil {
+		return nil, err
+	}
+
+	groupName, err := mv.ToolVariationsGroupName(ctx, s.logger, s.db, *resolved, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toolfilter.BuildView(described.Tools, resolved, groupName), nil
+}
+
 func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServersPayload) (*gen.ListMcpServersResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -284,6 +381,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.ToolsetID,
+		payload.ToolVariationsGroupID,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").Log(ctx, logger)
@@ -335,15 +433,16 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                name,
-		Slug:                conv.ToPGText(slug),
-		EnvironmentID:       ids.EnvironmentID,
-		UserSessionIssuerID: ids.UserSessionIssuerID,
-		RemoteMcpServerID:   ids.RemoteMcpServerID,
-		ToolsetID:           ids.ToolsetID,
-		Visibility:          string(payload.Visibility),
-		ID:                  serverID,
-		ProjectID:           *authCtx.ProjectID,
+		Name:                  name,
+		Slug:                  conv.ToPGText(slug),
+		EnvironmentID:         ids.EnvironmentID,
+		UserSessionIssuerID:   ids.UserSessionIssuerID,
+		RemoteMcpServerID:     ids.RemoteMcpServerID,
+		ToolsetID:             ids.ToolsetID,
+		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		Visibility:            string(payload.Visibility),
+		ID:                    serverID,
+		ProjectID:             *authCtx.ProjectID,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -465,10 +564,11 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 // create/update payloads so they can be passed around without a long
 // positional argument list.
 type serverIDs struct {
-	EnvironmentID       uuid.NullUUID
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
-	ToolsetID           uuid.NullUUID
+	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
 }
 
 // parseServerIDs parses the optional UUID payload fields into a
@@ -478,6 +578,7 @@ func parseServerIDs(
 	userSessionIssuerIDStr *string,
 	remoteMcpServerIDStr *string,
 	toolsetIDStr *string,
+	toolVariationsGroupIDStr *string,
 ) (serverIDs, error) {
 	var (
 		ids serverIDs
@@ -495,6 +596,9 @@ func parseServerIDs(
 	}
 	if ids.ToolsetID, err = conv.PtrToNullUUID(toolsetIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid toolset_id: %w", err)
+	}
+	if ids.ToolVariationsGroupID, err = conv.PtrToNullUUID(toolVariationsGroupIDStr); err != nil {
+		return serverIDs{}, fmt.Errorf("invalid tool_variations_group_id: %w", err)
 	}
 
 	return ids, nil
@@ -567,6 +671,18 @@ func verifyServerReferenceOwnership(
 				return fmt.Errorf("toolset_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check toolset ownership: %w", err)
+		}
+	}
+
+	if ids.ToolVariationsGroupID.Valid {
+		if _, err := variationsrepo.New(dbtx).GetToolVariationsGroupByID(ctx, variationsrepo.GetToolVariationsGroupByIDParams{
+			ID:        ids.ToolVariationsGroupID.UUID,
+			ProjectID: projectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("tool_variations_group_id does not reference a resource in this project")
+			}
+			return fmt.Errorf("check tool variations group ownership: %w", err)
 		}
 	}
 

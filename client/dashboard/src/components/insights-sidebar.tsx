@@ -1,10 +1,30 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
+import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes.tsx";
+import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
-import type { ElementsConfig } from "@gram-ai/elements";
-import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import type {
+  ElementsConfig,
+  ElementsTransportFactory,
+} from "@gram-ai/elements";
+import { Chat, ChatHistory, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { ChevronRight, Sparkles, Terminal, Wand2 } from "lucide-react";
+import type { UIMessage } from "ai";
+import {
+  ChevronRight,
+  HistoryIcon,
+  Loader2,
+  Sparkles,
+  SquarePen,
+  Terminal,
+  Wand2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
@@ -26,7 +46,7 @@ export const INSIGHTS_AI_RAINBOW_CLASS = "insights-ai-rainbow";
  * Requires <InsightsRainbowStyles /> in the tree. Works best on elements
  * with a 1px border and a border-radius.
  */
-export const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
+const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
 
 function InsightsRainbowStyles() {
   return (
@@ -216,13 +236,15 @@ export function InsightsTrigger({ className }: { className?: string }) {
  */
 export function InsightsConfig(options: InsightsConfigOptions) {
   const { setOverride } = useInsightsState();
-  // Stringify the options so the effect re-fires only when content changes,
-  // not on every parent render that creates a fresh object identity.
+  // JSON.stringify is the stable content key; optionsRef is read inside the
+  // effect to avoid a stale closure on re-renders that don't change content.
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   const key = JSON.stringify(options);
   useEffect(() => {
-    setOverride(options);
+    setOverride(optionsRef.current);
     return () => setOverride(null);
-  }, [key, setOverride, options]);
+  }, [key, setOverride]);
   return null;
 }
 
@@ -272,7 +294,9 @@ export function InsightsProvider({
   // calls in a long-lived runtime throw `tapLookupResources: Resource not
   // found for lookup: __LOCALID_…` during render.
   const [sessionKey, setSessionKey] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const { theme } = useMoonshineConfig();
+  const routes = useRoutes();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
   const mcpConfig = override?.mcpConfig ?? defaultMcpConfig;
@@ -283,46 +307,105 @@ export function InsightsProvider({
   const hideTrigger = override?.hideTrigger ?? false;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
 
+  // Server-side Project Assistant. Resolved lazily once the sidebar is first
+  // opened. While connecting (or after a failure) the factory is undefined and
+  // we gate the chat (below) instead of falling back to client-side generation.
+  // assistantId scopes the conversation list to this assistant's chats.
+  const {
+    transport: serverTransport,
+    assistantId: managedAssistantId,
+    ready: assistantReady,
+    error: assistantError,
+  } = useServerAssistantTransport(mcpConfig.projectSlug, isExpanded);
+
+  // Read inside the transport wrapper via ref so override churn doesn't
+  // re-create the transport identity on every parent re-render.
+  const contextInfoRef = useRef(contextInfo);
+  contextInfoRef.current = contextInfo;
+
+  // Wrap the server transport so the dashboard context (date range, chart
+  // identity for "Explore with AI" clicks) reaches the model. The server owns
+  // the Project Assistant's system prompt, so we can't inject the context
+  // there — instead we prepend it to the outgoing user message text in a
+  // tagged block. The wrapper only modifies what's sent over the wire; the
+  // user's message bubble in the UI is already in the assistant-ui store and
+  // is unaffected.
+  const wrappedTransport = useMemo<ElementsTransportFactory | undefined>(() => {
+    if (!serverTransport) return undefined;
+    return (ctx) => {
+      const inner = serverTransport(ctx);
+      return {
+        sendMessages: async (args) => {
+          const ctxText = contextInfoRef.current;
+          if (!ctxText) {
+            return inner.sendMessages(args);
+          }
+          // Find the latest user message and prepend the context to its text
+          // parts. Clone shallowly so the array passed to assistant-ui's
+          // optimistic store is left intact.
+          const messages = args.messages;
+          let lastUserIdx = -1;
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === "user") {
+              lastUserIdx = i;
+              break;
+            }
+          }
+          if (lastUserIdx === -1) {
+            return inner.sendMessages(args);
+          }
+          const original = messages[lastUserIdx];
+          const prefix = `<dashboard_context>\n${ctxText}\n</dashboard_context>\n\n`;
+          let prefixed = false;
+          const newParts = original.parts.map((p) => {
+            if (!prefixed && p.type === "text") {
+              prefixed = true;
+              return { ...p, text: `${prefix}${p.text}` };
+            }
+            return p;
+          });
+          // If the user message has no text part (pure image/audio/attachment),
+          // skip the prepend entirely — fabricating a text-only part would turn
+          // the send into a context-only prompt with no actual user question.
+          if (!prefixed) {
+            return inner.sendMessages(args);
+          }
+          const wrappedMessages: UIMessage[] = [
+            ...messages.slice(0, lastUserIdx),
+            { ...original, parts: newParts },
+            ...messages.slice(lastUserIdx + 1),
+          ];
+          return inner.sendMessages({ ...args, messages: wrappedMessages });
+        },
+        reconnectToStream: inner.reconnectToStream.bind(inner),
+      };
+    };
+  }, [serverTransport]);
+
   const sidebarWidth = `min(${SIDEBAR_MAX_WIDTH}px, ${SIDEBAR_MAX_PERCENT}vw)`;
-
-  // Build system prompt with optional context info.
-  const baseInstructions = `You are a helpful assistant for analyzing logs and security findings in Gram, an AI observability platform. Focus on log search, tool-call analysis, and risk/policy findings.
-
-The current date is ${new Date().toISOString().split("T")[0]}.
-
-Important: Treat all 4xx HTTP status codes (400, 401, 403, 404, etc.) as errors. From the user's perspective these indicate real problems — authentication failures, misconfigured requests, missing resources, etc.
-
-Custom attributes: SDK users can attach arbitrary key-value attributes to their logs. These appear with an @ prefix (e.g. @user, @tenant.id, @session). Standard system attributes have no prefix.
-
-When a user asks about logs for a specific user, tenant, customer, or entity:
-1. Always call listAttributeKeys first for the relevant time window to discover which @-prefixed attributes exist.
-2. Identify the most relevant attribute and filter on it (e.g. { path: "@user", operator: "eq", values: ["someone@example.com"] }).
-3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.
-
-MCP server vs. client breakdowns: \`gram.hook.source\` and \`gram.tool_call.source\` are complementary dimensions, not aliases. \`gram.hook.source\` identifies the agent/client that invoked Gram (e.g. "claude-code", "cursor") — use this for adoption / "who's using us" questions. \`gram.tool_call.source\` identifies the downstream MCP server that handled the call (e.g. "datadog-mcp", "linear") — use this for "top servers" / per-MCP usage questions. When asked about MCP server-level breakdowns, query BOTH dimensions: a server can appear in one and not the other depending on whether you're slicing by caller or callee.
-
-Risk and policy findings:
-- A risk policy scans chat messages for issues. Each \`source\` is a detector family: \`gitleaks\` (regex-based secret scanners — API keys, tokens), \`presidio\` (PII entities — emails, SSNs, credit cards), \`prompt_injection\` (heuristic + ML classifier for injection attempts), \`destructive_tool\` (tool calls matching destructive intent), \`shadow_mcp\` (calls to MCP servers not on an approved list).
-- Use \`listRiskResultsForAgent\` for finding-level data — it returns the same shape as the dashboard's findings list but with the raw \`match\` field replaced by \`match_redacted\`: an opaque token of the form \`<redacted len=N sha=XXXXXXXX>\` for secret-bearing sources, or the literal server identifier for \`shadow_mcp\`. The \`sha\` prefix is deterministic, so two findings of the same secret share a fingerprint — that's how you dedupe leak counts across chats without seeing the secret.
-- Use \`listRiskResultsByChat\` for chat-level rollups (findings_count, latest_detected), \`listRiskPolicies\` for the policy catalog, and \`getRiskPolicyStatus\` for analysis progress (pending vs analyzed counts, workflow state).
-- HARD RULE — never quote or repeat a \`match_redacted\` value, never attempt to reconstruct a redacted secret, and never echo any string that looks like an API key, token, password, or PII. Refer to findings by their \`rule_id\` (e.g. "aws-access-key-id"), \`source\` family, and \`chat_id\`. \`shadow_mcp\` matches (server URLs / stdio commands) are safe to name verbatim.`;
-
-  const systemPrompt = contextInfo
-    ? `${baseInstructions}
-
-Current dashboard context:
-${contextInfo}
-
-When the user asks about "current period", "selected period", "this timeframe", or similar, use the date range from the context above. Do not ask the user to specify a date range if it's already provided in the context.`
-    : baseInstructions;
 
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
       variant: "standalone",
-      systemPrompt,
-      model: {
-        defaultModel: "anthropic/claude-sonnet-4.6",
+      // Route the conversation through the persistent server-side Project
+      // Assistant. Its model and system prompt are owned server-side, so we
+      // don't set them here. `wrappedTransport` is the server transport with a
+      // thin wrapper that inlines the per-page dashboard context (date range,
+      // chart identity) into outgoing user messages — see `wrappedTransport`
+      // above.
+      transport: wrappedTransport,
+      // Edit relies on assistant-ui's local branch rewriting, which the
+      // server-side assistant transport can't honour — hide the affordance
+      // rather than ship a control that silently no-ops.
+      allowMessageEdit: false,
+      // History, the conversation list, and titles come from the chat service
+      // via Elements' thread-list adapter, scoped to this assistant's chats. The
+      // assistant mints chat ids server-side, so defer client-side id minting.
+      history: {
+        enabled: true,
+        threadListFilters: { assistant_id: managedAssistantId },
+        deferThreadIdMinting: true,
       },
       api: {
         ...mcpConfig.api,
@@ -331,21 +414,8 @@ When the user asks about "current period", "selected period", "this timeframe", 
           "X-Gram-Source": "dashboard-ai-insights",
         },
       },
-      tools: {
-        ...mcpConfig.tools,
-        // Cap individual MCP tool outputs to ~12.5K tokens. Observability
-        // queries (gram_search_logs, gram_get_deployment_logs) can return
-        // hundreds of KB; without this cap, one wide search fills the
-        // context window.
-        maxOutputBytes: 50_000,
-      },
-      contextCompaction: {
-        // Start compacting at 60% of the model ceiling — Insights runs long
-        // tool-heavy conversations and benefits from a tighter margin than
-        // the library default of 70%.
-        compactAtFraction: 0.6,
-      },
       welcome: {
+        logo: speakeasyIcon,
         title,
         subtitle,
         suggestions,
@@ -354,7 +424,15 @@ When the user asks about "current period", "selected period", "this timeframe", 
         colorScheme: theme === "dark" ? "dark" : "light",
       },
     }),
-    [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
+    [
+      mcpConfig,
+      title,
+      subtitle,
+      suggestions,
+      theme,
+      wrappedTransport,
+      managedAssistantId,
+    ],
   );
 
   // Page-level <InsightsConfig> calls this on every parent re-render and on
@@ -377,6 +455,13 @@ When the user asks about "current period", "selected period", "this timeframe", 
   }, []);
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
+
+  // Start a brand-new Project Assistant conversation: remount the chat provider
+  // (bumping sessionKey) so a fresh thread opens. With server-side id minting,
+  // the new thread gets its chat id from the server on the first send.
+  const handleStartFresh = useCallback(() => {
+    setSessionKey((k) => k + 1);
+  }, []);
 
   // Global keyboard shortcut: Option+Shift+W (Mac) / Alt+Shift+W (PC) toggles
   // the sidebar. Cmd+W is reserved by the browser (closes the tab before JS
@@ -456,52 +541,102 @@ When the user asks about "current period", "selected period", "this timeframe", 
         >
           {/* Header */}
           <div className="border-border bg-muted/30 flex items-center justify-between border-b px-4 py-3">
-            <div className="flex items-center gap-2">
+            <routes.assistants.Link className="group flex items-center gap-2">
               <Sparkles className="text-primary size-5" />
-              <span className="font-semibold">AI Insights</span>
-            </div>
+              <span className="font-semibold group-hover:underline">
+                Project Assistant
+              </span>
+            </routes.assistants.Link>
             <button
               onClick={() => setIsExpanded(false)}
               className="hover:bg-muted rounded p-1.5 transition-colors"
-              aria-label="Close AI Insights"
+              aria-label="Close Project Assistant"
             >
               <ChevronRight className="size-5" />
             </button>
           </div>
+
+          {/* Notice when the Project Assistant failed to connect */}
+          {assistantError && (
+            <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+              <Terminal className="mt-0.5 size-3.5 shrink-0" />
+              <span>{assistantError}</span>
+            </div>
+          )}
 
           {/* Notice when no toolsets are configured */}
           {noToolsetsConfigured && (
             <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
               <Terminal className="mt-0.5 size-3.5 shrink-0" />
               <span>
-                AI tools are unavailable. Create an MCP server to enable AI
-                Insights.
+                AI tools are unavailable. Create an MCP server to enable the
+                Project Assistant.
               </span>
             </div>
           )}
 
-          {/* Chat content */}
+          {/* Chat content — gated on the server assistant being ready so we
+              never fall back to client-side generation while connecting. */}
           <div className="flex-1 overflow-hidden">
-            <GramElementsProvider key={sessionKey} config={elementsConfig}>
-              <PendingPromptBridge
-                pending={pendingPrompt}
-                onConsume={consumePendingPrompt}
-              />
-              <Chat />
-            </GramElementsProvider>
+            {assistantReady ? (
+              <GramElementsProvider key={sessionKey} config={elementsConfig}>
+                <PendingPromptBridge
+                  pending={pendingPrompt}
+                  onConsume={consumePendingPrompt}
+                />
+                <div className="flex h-full min-h-0 flex-col">
+                  {/* Thread nav: history picker + new conversation. Lives inside
+                      the Elements provider so <ChatHistory> can read the chat
+                      runtime; the header above (title, close) stays outside so it
+                      doesn't remount when "New" bumps the session key. */}
+                  <div className="border-border flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+                    <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          className="hover:bg-muted text-muted-foreground flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors"
+                          aria-label="Conversation history"
+                        >
+                          <HistoryIcon className="size-3.5" />
+                          History
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="max-h-96 w-72 overflow-y-auto p-0"
+                      >
+                        <ChatHistory className="max-h-96 overflow-y-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    <button
+                      onClick={handleStartFresh}
+                      disabled={!assistantReady}
+                      className="hover:bg-muted text-muted-foreground flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Start a new conversation"
+                      title="Start a new conversation"
+                    >
+                      <SquarePen className="size-3.5" />
+                      New
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <Chat />
+                  </div>
+                </div>
+              </GramElementsProvider>
+            ) : (
+              !assistantError && (
+                <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
+                  <Loader2 className="size-4 animate-spin" />
+                  <span>Connecting to the Project Assistant…</span>
+                </div>
+              )
+            )}
           </div>
         </div>
       </div>
     </InsightsContext.Provider>
   );
 }
-
-/**
- * @deprecated Use <InsightsProvider> at the app shell level + <InsightsConfig>
- * on individual pages that need custom prompts. This alias is kept temporarily
- * to avoid breaking out-of-tree consumers; remove after migration.
- */
-export const InsightsSidebar = InsightsProvider;
 
 /**
  * Lives inside GramElementsProvider so it can access useThreadRuntime().

@@ -426,7 +426,7 @@ function HooksInnerContent({
   );
 }
 
-export function LogsToolsContent({
+function LogsToolsContent({
   error,
   isLoading,
   groupedTraces,

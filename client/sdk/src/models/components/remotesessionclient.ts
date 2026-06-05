@@ -15,6 +15,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const RemoteSessionClientTokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
+  None: "none",
 } as const;
 /**
  * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.

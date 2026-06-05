@@ -5,7 +5,7 @@ const OAuthProtectedResourceMetadataSchema = z.object({
   authorization_servers: z.array(z.string()).optional(),
 });
 
-export const getMcpOAuthRequiredQueryKey = (mcpUrl: string | undefined) => [
+const getMcpOAuthRequiredQueryKey = (mcpUrl: string | undefined) => [
   "mcpOAuthRequired",
   mcpUrl,
 ];

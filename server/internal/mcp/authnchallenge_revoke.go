@@ -30,7 +30,8 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
-	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
 	if err != nil {
 		return err
 	}
@@ -67,8 +68,9 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 
 	logger := endpoint.LogWith(s.logger)
 
-	clientID, clientSecret, _ := extractClientCredentials(r)
+	clientID, clientSecret, presentedAuthMethod, _ := extractClientCredentials(r)
 	if clientID == "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "missing_client_id")
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
@@ -77,6 +79,7 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "unknown_client_id")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
@@ -85,12 +88,15 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	// the token alone authenticates the revoke per RFC 7009 §2.1.
 	if clientRow.ClientSecretHash.Valid {
 		if err := bcrypt.CompareHashAndPassword([]byte(clientRow.ClientSecretHash.String), []byte(clientSecret)); err != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "client_secret_mismatch")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client secret mismatch")
 		}
 	}
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authenticated", clientID, presentedAuthMethod, "", "")
 
 	token := r.PostForm.Get("token")
 	if token == "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke request rejected", clientID, presentedAuthMethod, "", "missing_token")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "token is required")
 	}
 	hint := r.PostForm.Get("token_type_hint")

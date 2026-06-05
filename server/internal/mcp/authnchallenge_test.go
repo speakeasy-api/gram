@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -802,4 +803,115 @@ func TestHandleIDPCallback_ExchangeFailure_ReturnsUnauthorized(t *testing.T) {
 	err = ti.service.HandleIDPCallback(w, req)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to exchange IDP code")
+}
+
+// dcrPublicClientBody is a minimal RFC 7591 registration request for a
+// public (PKCE-only) client — enough to pass RegistrationRequest.Validate
+// so the test reaches the resolution path under test.
+const dcrPublicClientBody = `{"client_name":"age-2640 test","redirect_uris":["http://localhost:3000/callback"],"token_endpoint_auth_method":"none"}`
+
+// newRegisterRequest builds a POST /mcp/{slug}/register request carrying a
+// JSON DCR body and the chi mcpSlug route param. The handler call is left to
+// each test so resolution errors surface in the test function itself.
+func newRegisterRequest(t *testing.T, slug, body string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	return req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+}
+
+// TestHandleRegister_RemoteBackedIssuerGated_ResolvesViaEndpoints is the
+// direct AGE-2640 repro: a remote-backed, issuer-gated mcp_server has no
+// toolsets row, so the legacy toolset-only resolver 404'd at DCR. It must
+// now resolve via mcp_endpoints → mcp_servers and complete registration.
+//
+// HandleRegister is the representative OAuth flow handler here: register,
+// authorize, consent, token, and revoke all share the same
+// LoadResolvedMcpEndpointBySlug resolution path.
+func TestHandleRegister_RemoteBackedIssuerGated_ResolvesViaEndpoints(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "remote-register-" + uuid.NewString()
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", issuerID)
+
+	w := httptest.NewRecorder()
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, slug, dcrPublicClientBody))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp["client_id"])
+}
+
+// TestHandleRegister_RemoteBackedNotIssuerGated_ReturnsNotFound confirms a
+// remote-backed mcp_server that is NOT issuer-gated stays a 404 on the OAuth
+// flow surface: it is authoritative for the slug and never falls back to the
+// toolset lookup (parity with the well-known behaviour from AGE-2624).
+func TestHandleRegister_RemoteBackedNotIssuerGated_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "remote-noissuer-" + uuid.NewString()
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", uuid.Nil)
+
+	w := httptest.NewRecorder()
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, slug, dcrPublicClientBody))
+	require.Error(t, err)
+	require.Empty(t, w.Body.String())
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+// TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback is the regression
+// guard for issuer-gated toolset-backed servers that predate the toolsets →
+// mcp_servers migration: they have no mcp_endpoint row, so the addressing
+// lookup misses and resolution must fall back to toolsets.mcp_slug.
+func TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	w := httptest.NewRecorder()
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, toolset.McpSlug.String, dcrPublicClientBody))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp["client_id"])
+}
+
+// TestHandleRegister_UnknownSlug_ReturnsNotFound confirms a slug matching
+// neither an mcp_endpoint nor a toolset still 404s after the addressing miss
+// falls through the toolset fallback.
+func TestHandleRegister_UnknownSlug_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	slug := "definitely-missing-" + uuid.NewString()[:8]
+
+	w := httptest.NewRecorder()
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, slug, dcrPublicClientBody))
+	require.Error(t, err)
+	require.Empty(t, w.Body.String())
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }

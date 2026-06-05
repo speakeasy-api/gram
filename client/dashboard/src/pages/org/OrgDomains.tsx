@@ -162,7 +162,7 @@ function IPAllowlistEditor({
   );
 }
 
-export function OrgDomainsInner() {
+function OrgDomainsInner() {
   const organization = useOrganization();
   const productTier = useProductTier();
   const queryClient = useQueryClient();

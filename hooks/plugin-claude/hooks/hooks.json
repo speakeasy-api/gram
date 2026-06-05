@@ -5,7 +5,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_session_start.sh\"",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_mcp_inventory.sh\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/send_mcp_inventory.sh\"",
             "async": true
           }
         ]

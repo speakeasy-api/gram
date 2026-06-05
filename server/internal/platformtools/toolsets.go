@@ -6,6 +6,12 @@ import "net/url"
 // toolset granted to every assistant runtime.
 const AssistantsPlatformToolsetSlug = "assistants"
 
+// ManagedAssistantPlatformToolsetSlug is the reserved slug for the platform
+// toolset granted only to a project's managed assistant (the one powering the
+// dashboard sidebar). It carries tools that must not be reachable by any
+// other assistant.
+const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
+
 // Toolset is a virtual collection of platform tools exposed at runtime via a
 // dedicated MCP endpoint. Platform toolsets are not persisted; the slug is
 // hardcoded per consumer and wired in code at process startup.
@@ -18,8 +24,9 @@ type Toolset struct {
 // platform toolset registry. Add a field here when a new toolset needs an
 // external service or pre-built tool slice.
 type ToolsetDependencies struct {
-	AssistantMemoryTools  []ExternalTool
-	AssistantTriggerTools []ExternalTool
+	AssistantMemoryTools          []ExternalTool
+	AssistantTriggerTools         []ExternalTool
+	ManagedAssistantInsightsTools []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
@@ -30,6 +37,11 @@ var toolsetRegistry = []toolsetBuilder{
 		tools = append(tools, deps.AssistantMemoryTools...)
 		tools = append(tools, deps.AssistantTriggerTools...)
 		return NewAssistantsToolset(tools...)
+	},
+	func(deps ToolsetDependencies) Toolset {
+		tools := make([]ExternalTool, 0, len(deps.ManagedAssistantInsightsTools))
+		tools = append(tools, deps.ManagedAssistantInsightsTools...)
+		return NewManagedAssistantToolset(tools...)
 	},
 }
 
@@ -57,6 +69,13 @@ func BuildToolsets(deps ToolsetDependencies) map[string]Toolset {
 // goes through BuildToolsets.
 func NewAssistantsToolset(tools ...ExternalTool) Toolset {
 	return Toolset{Slug: AssistantsPlatformToolsetSlug, Tools: tools}
+}
+
+// NewManagedAssistantToolset returns the platform toolset granted only to a
+// project's managed assistant. Exposed for tests and direct callers;
+// production wiring goes through BuildToolsets.
+func NewManagedAssistantToolset(tools ...ExternalTool) Toolset {
+	return Toolset{Slug: ManagedAssistantPlatformToolsetSlug, Tools: tools}
 }
 
 // PlatformToolsetURL builds the URL where a runtime reaches the named

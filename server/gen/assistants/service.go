@@ -27,9 +27,15 @@ type Service interface {
 	UpdateAssistant(context.Context, *UpdateAssistantPayload) (res *types.Assistant, err error)
 	// Delete an assistant.
 	DeleteAssistant(context.Context, *DeleteAssistantPayload) (err error)
-	// Send a message from the dashboard to an assistant as the calling user. The
-	// reply is delivered asynchronously; poll the returned chat to read it.
+	// Send a message from the dashboard to an assistant as the calling user.
+	// Continue an existing conversation by passing its chat_id (from listChats),
+	// or omit chat_id to start a new conversation — the server mints and returns a
+	// fresh chat id. The reply is delivered asynchronously; poll the chat service
+	// (loadChat) to read it.
 	SendMessage(context.Context, *SendMessagePayload) (res *SendMessageResult, err error)
+	// Get the project's built-in Project Assistant, provisioning it on first
+	// access. Idempotent — safe to call on every sidebar open.
+	EnsureManagedAssistant(context.Context, *EnsureManagedAssistantPayload) (res *types.Assistant, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -52,7 +58,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage"}
+var MethodNames = [7]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "ensureManagedAssistant"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -80,6 +86,13 @@ type CreateAssistantPayload struct {
 type DeleteAssistantPayload struct {
 	// The assistant ID.
 	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// EnsureManagedAssistantPayload is the payload type of the assistants service
+// ensureManagedAssistant method.
+type EnsureManagedAssistantPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -114,9 +127,9 @@ type SendMessagePayload struct {
 	AssistantID string
 	// The user's message text.
 	Message string
-	// Conversation key the message is threaded under. Send the user id for one
-	// continuing thread per user, or a fresh value to start a new conversation.
-	CorrelationID string
+	// The conversation to continue (from listChats or a prior sendMessage). Omit
+	// to start a new conversation; the server mints and returns a fresh chat id.
+	ChatID *string
 	// Stable key the client mints once per message so retries dedupe instead of
 	// enqueuing twice. A new key is generated server-side when omitted.
 	IdempotencyKey   *string
@@ -129,8 +142,9 @@ type SendMessagePayload struct {
 type SendMessageResult struct {
 	// The chat to poll for the assistant's reply.
 	ChatID string
-	// The assistant thread the message was enqueued on.
-	ThreadID string
+	// The assistant thread the message was enqueued on, when the ingest produced
+	// one.
+	ThreadID *string
 	// Whether the message was accepted and enqueued for processing.
 	Accepted bool
 }

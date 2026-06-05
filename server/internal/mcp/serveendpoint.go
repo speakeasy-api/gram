@@ -156,7 +156,16 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, logger)
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamToken); err != nil {
+		// The mcp_servers row's variation group, when set, overrides the
+		// toolset's own column. Pass it through so ServeToolsetResolved resolves
+		// the effective group (mcp_server, then toolset, then project default).
+		var mcpServerVariationsGroupID *uuid.UUID
+		if mcpServer.ToolVariationsGroupID.Valid {
+			id := mcpServer.ToolVariationsGroupID.UUID
+			mcpServerVariationsGroupID = &id
+		}
+
+		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamToken, mcpServerVariationsGroupID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -185,23 +194,37 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 	return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
 }
 
-// LoadResolvedMcpEndpointBySlug resolves a slug all the way to a
-// *ResolvedMcpEndpoint via the mcp_endpoints → mcp_servers path,
-// verifying its issuer FK is still live. Used by the OAuth route adapters
-// in /x/mcp (and eventually /mcp) that need to dispatch to Serve*
-// post-resolution handlers. Returns CodeNotFound when either the
-// addressing resolves to no row or the resolved mcp_server is not
-// issuer-gated. mcpRouteBase ("mcp" or "x/mcp") propagates into the
-// resolved endpoint's URL building.
+// LoadResolvedMcpEndpointBySlug resolves a slug to a *ResolvedMcpEndpoint
+// for the issuer-gated OAuth handlers, shared by both the /mcp and /x/mcp
+// surfaces. It mirrors the well-known handlers' resolution model:
+//
+//   - Addressing hit, issuer-gated: build the endpoint from the
+//     (mcp_endpoint, mcp_server) pair.
+//   - Addressing hit, not issuer-gated: CodeNotFound. The mcp_server is
+//     authoritative for the slug and is not an OAuth endpoint, so we do
+//     NOT fall back — this keeps non-issuer-gated remote-backed servers
+//     returning not-found, matching the well-known surface.
+//   - Addressing miss (CodeNotFound): fall back to the legacy
+//     toolsets.mcp_slug lookup so issuer-gated toolset-backed servers
+//     without an mcp_endpoint row (predating the toolsets → mcp_servers
+//     migration) still resolve.
+//
+// mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
+// URL building on both the primary and fallback paths.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
 	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
-	if err != nil {
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+		if !mcpServer.UserSessionIssuerID.Valid {
+			return nil, oops.E(oops.CodeNotFound, nil, "not found")
+		}
+		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
+	default:
 		return nil, err
 	}
-	if !mcpServer.UserSessionIssuerID.Valid {
-		return nil, oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 }
 
 // BuildResolvedMcpEndpointForServer materialises a ResolvedMcpEndpoint
@@ -297,12 +320,29 @@ func (s *Service) serveRemoteBackend(
 			if !ok || authCtx == nil || project.OrganizationID != authCtx.ActiveOrganizationID {
 				return oops.C(oops.CodeUnauthorized)
 			}
+		}
 
-			var prepErr error
-			ctx, prepErr = s.authz.PrepareContext(ctx)
-			if prepErr != nil {
-				return oops.E(oops.CodeUnexpected, prepErr, "load access grants").Log(ctx, logger)
-			}
+		// Prepare RBAC grants for both the issuer-gated and non-issuer-gated
+		// paths. The proxy attaches the private-visibility mcp:connect
+		// interceptors (tools/list filter, tools/call authz) regardless of how
+		// the caller authenticated, and for RBAC-enforced callers those run
+		// FindMatched / Require, which fail with ErrMissingGrants unless grants
+		// are in context. Issuer-gated callers were authenticated by
+		// ApplyIssuerGate, which stamps the principal but does not load grants,
+		// so without this they hit that failure (AGE-2672). PrepareContext runs
+		// after the non-issuer-gated identity auth above has stamped the auth
+		// context, and is a no-op for callers RBAC never enforces.
+		var prepErr error
+		ctx, prepErr = s.authz.PrepareContext(ctx)
+		if prepErr != nil {
+			return oops.E(oops.CodeUnexpected, prepErr, "load access grants").Log(ctx, logger)
+		}
+
+		// Non-issuer-gated callers get an upfront mcp:connect fail-fast before
+		// the proxy. Issuer-gated callers rely on the per-tool response/request
+		// interceptors instead, which is acceptable since the JWT
+		// audience/issuer is already bound to the endpoint's project.
+		if !issuerGated {
 			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: mcpServer.ID.String(), Dimensions: nil}); err != nil {
 				return err
 			}

@@ -55,6 +55,10 @@ export type McpServer = {
    */
   slug?: string | undefined;
   /**
+   * The ID of the tool variations group enabling MCP tool filtering for this server, if any.
+   */
+  toolVariationsGroupId?: string | undefined;
+  /**
    * The ID of the toolset used as the backend
    */
   toolsetId?: string | undefined;
@@ -91,6 +95,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       slug: z.optional(z.string()),
+      tool_variations_group_id: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -105,6 +110,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "environment_id": "environmentId",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
+        "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
         "updated_at": "updatedAt",
         "user_session_issuer_id": "userSessionIssuerId",

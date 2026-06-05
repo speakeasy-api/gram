@@ -3,6 +3,7 @@ package authz
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -19,6 +20,7 @@ const (
 	SelectorKeyTool         = "tool"
 	SelectorKeyDisposition  = "disposition"
 	SelectorKeyProjectID    = "project_id"
+	SelectorKeyServerURL    = "server_url"
 )
 
 // Matches reports whether this (grant) selector satisfies the given check
@@ -108,6 +110,9 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	ResourceKindEnvironment: {
 		SelectorKeyProjectID: true,
 	},
+	ResourceKindRiskPolicy: {
+		SelectorKeyServerURL: true,
+	},
 }
 
 // ValidateSelector checks that a selector is well-formed for the given scope.
@@ -151,6 +156,12 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {
 			return fmt.Errorf("invalid disposition value %q", v)
+		}
+		if k == SelectorKeyServerURL {
+			parsed, err := url.Parse(v)
+			if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+				return fmt.Errorf("invalid server_url value %q: must include URI scheme and host", v)
+			}
 		}
 	}
 

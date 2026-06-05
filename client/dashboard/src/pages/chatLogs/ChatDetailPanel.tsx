@@ -986,7 +986,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
   );
 }
 
-export function ChatDetailPanel({
+function ChatDetailPanel({
   chatId,
   onClose,
   onDelete,

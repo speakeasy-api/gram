@@ -167,22 +167,31 @@ const (
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
+	McpRequestedTagsKey            = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey            = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey            = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey                 = attribute.Key("gram.mcp_server.id")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
+	ToolVariationsGroupIDKey       = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
 	OAuthClientNameKey             = attribute.Key("gram.oauth.client_name")
+	OAuthClientSecretGeneratedKey  = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
 	OAuthErrorKey                        = attribute.Key("gram.oauth.error")
 	OAuthErrorDescriptionKey             = attribute.Key("gram.oauth.error_description")
+	OAuthFailureReasonKey                = attribute.Key("gram.oauth.failure_reason")
 	OAuthGrantKey                        = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey                       = attribute.Key("gram.oauth.issuer")
+	OAuthPresentedAuthMethodKey          = attribute.Key("gram.oauth.presented_auth_method")
 	OAuthProviderKey                     = attribute.Key("gram.oauth.provider")
+	OAuthRedirectURICountKey             = attribute.Key("gram.oauth.redirect_uri.count")
 	OAuthRedirectURIFullKey              = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey         = attribute.Key("gram.oauth.registered_auth_method")
 	OAuthRegistrationEndpointKey         = attribute.Key("gram.oauth.registration_endpoint")
 	OAuthRequiredKey                     = attribute.Key("gram.oauth.required")
 	OAuthScopeKey                        = attribute.Key("gram.oauth.scope")
@@ -865,6 +874,13 @@ func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAut
 func OAuthClientName(v string) attribute.KeyValue { return OAuthClientNameKey.String(v) }
 func SlogOAuthClientName(v string) slog.Attr      { return slog.String(string(OAuthClientNameKey), v) }
 
+func OAuthClientSecretGenerated(v bool) attribute.KeyValue {
+	return OAuthClientSecretGeneratedKey.Bool(v)
+}
+func SlogOAuthClientSecretGenerated(v bool) slog.Attr {
+	return slog.Bool(string(OAuthClientSecretGeneratedKey), v)
+}
+
 func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
 func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
 
@@ -876,18 +892,42 @@ func SlogOAuthErrorDescription(v string) slog.Attr {
 	return slog.String(string(OAuthErrorDescriptionKey), v)
 }
 
+func OAuthFailureReason(v string) attribute.KeyValue { return OAuthFailureReasonKey.String(v) }
+func SlogOAuthFailureReason(v string) slog.Attr {
+	return slog.String(string(OAuthFailureReasonKey), v)
+}
+
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
 
 func OAuthIssuer(v string) attribute.KeyValue { return OAuthIssuerKey.String(v) }
 func SlogOAuthIssuer(v string) slog.Attr      { return slog.String(string(OAuthIssuerKey), v) }
 
+func OAuthPresentedAuthMethod(v string) attribute.KeyValue {
+	return OAuthPresentedAuthMethodKey.String(v)
+}
+func SlogOAuthPresentedAuthMethod(v string) slog.Attr {
+	return slog.String(string(OAuthPresentedAuthMethodKey), v)
+}
+
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }
+
+func OAuthRedirectURICount(v int) attribute.KeyValue { return OAuthRedirectURICountKey.Int(v) }
+func SlogOAuthRedirectURICount(v int) slog.Attr {
+	return slog.Int(string(OAuthRedirectURICountKey), v)
+}
 
 func OAuthRedirectURIFull(v string) attribute.KeyValue { return OAuthRedirectURIFullKey.String(v) }
 func SlogOAuthRedirectURIFull(v string) slog.Attr {
 	return slog.String(string(OAuthRedirectURIFullKey), v)
+}
+
+func OAuthRegisteredAuthMethod(v string) attribute.KeyValue {
+	return OAuthRegisteredAuthMethodKey.String(v)
+}
+func SlogOAuthRegisteredAuthMethod(v string) slog.Attr {
+	return slog.String(string(OAuthRegisteredAuthMethodKey), v)
 }
 
 func OAuthRegistrationEndpoint(v string) attribute.KeyValue {
@@ -1251,6 +1291,22 @@ func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey),
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }
+
+func MCPRequestedTags(v []string) attribute.KeyValue { return McpRequestedTagsKey.StringSlice(v) }
+func SlogMCPRequestedTags(v []string) slog.Attr {
+	return slog.Any(string(McpRequestedTagsKey), v)
+}
+
+func MCPToolsReturned(v int) attribute.KeyValue { return McpToolsReturnedKey.Int(v) }
+func SlogMCPToolsReturned(v int) slog.Attr      { return slog.Int(string(McpToolsReturnedKey), v) }
+
+func MCPToolsFiltered(v int) attribute.KeyValue { return McpToolsFilteredKey.Int(v) }
+func SlogMCPToolsFiltered(v int) slog.Attr      { return slog.Int(string(McpToolsFilteredKey), v) }
+
+func ToolVariationsGroupID(v string) attribute.KeyValue { return ToolVariationsGroupIDKey.String(v) }
+func SlogToolVariationsGroupID(v string) slog.Attr {
+	return slog.String(string(ToolVariationsGroupIDKey), v)
+}
 
 func MimeType(v string) attribute.KeyValue { return MimeTypeKey.String(v) }
 func SlogMimeType(v string) slog.Attr      { return slog.String(string(MimeTypeKey), v) }

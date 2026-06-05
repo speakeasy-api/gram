@@ -25,6 +25,7 @@ type Server struct {
 	UpdateToolset            http.Handler
 	DeleteToolset            http.Handler
 	GetToolset               http.Handler
+	ListToolFilters          http.Handler
 	CheckMCPSlugAvailability http.Handler
 	CloneToolset             http.Handler
 	AddExternalOAuthServer   http.Handler
@@ -32,6 +33,7 @@ type Server struct {
 	AddOAuthProxyServer      http.Handler
 	UpdateOAuthProxyServer   http.Handler
 	SetUserSessionIssuer     http.Handler
+	SetToolVariationsGroup   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -67,6 +69,7 @@ func New(
 			{"UpdateToolset", "POST", "/rpc/toolsets.update"},
 			{"DeleteToolset", "DELETE", "/rpc/toolsets.delete"},
 			{"GetToolset", "GET", "/rpc/toolsets.get"},
+			{"ListToolFilters", "GET", "/rpc/toolsets.listToolFilters"},
 			{"CheckMCPSlugAvailability", "GET", "/rpc/toolsets.checkMCPSlugAvailability"},
 			{"CloneToolset", "POST", "/rpc/toolsets.clone"},
 			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
@@ -74,6 +77,7 @@ func New(
 			{"AddOAuthProxyServer", "POST", "/rpc/toolsets.addOAuthProxyServer"},
 			{"UpdateOAuthProxyServer", "POST", "/rpc/toolsets.updateOAuthProxyServer"},
 			{"SetUserSessionIssuer", "POST", "/rpc/toolsets.setUserSessionIssuer"},
+			{"SetToolVariationsGroup", "POST", "/rpc/toolsets.setToolVariationsGroup"},
 		},
 		CreateToolset:            NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:             NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
@@ -81,6 +85,7 @@ func New(
 		UpdateToolset:            NewUpdateToolsetHandler(e.UpdateToolset, mux, decoder, encoder, errhandler, formatter),
 		DeleteToolset:            NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
 		GetToolset:               NewGetToolsetHandler(e.GetToolset, mux, decoder, encoder, errhandler, formatter),
+		ListToolFilters:          NewListToolFiltersHandler(e.ListToolFilters, mux, decoder, encoder, errhandler, formatter),
 		CheckMCPSlugAvailability: NewCheckMCPSlugAvailabilityHandler(e.CheckMCPSlugAvailability, mux, decoder, encoder, errhandler, formatter),
 		CloneToolset:             NewCloneToolsetHandler(e.CloneToolset, mux, decoder, encoder, errhandler, formatter),
 		AddExternalOAuthServer:   NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
@@ -88,6 +93,7 @@ func New(
 		AddOAuthProxyServer:      NewAddOAuthProxyServerHandler(e.AddOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
 		UpdateOAuthProxyServer:   NewUpdateOAuthProxyServerHandler(e.UpdateOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
 		SetUserSessionIssuer:     NewSetUserSessionIssuerHandler(e.SetUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		SetToolVariationsGroup:   NewSetToolVariationsGroupHandler(e.SetToolVariationsGroup, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -102,6 +108,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateToolset = m(s.UpdateToolset)
 	s.DeleteToolset = m(s.DeleteToolset)
 	s.GetToolset = m(s.GetToolset)
+	s.ListToolFilters = m(s.ListToolFilters)
 	s.CheckMCPSlugAvailability = m(s.CheckMCPSlugAvailability)
 	s.CloneToolset = m(s.CloneToolset)
 	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
@@ -109,6 +116,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.AddOAuthProxyServer = m(s.AddOAuthProxyServer)
 	s.UpdateOAuthProxyServer = m(s.UpdateOAuthProxyServer)
 	s.SetUserSessionIssuer = m(s.SetUserSessionIssuer)
+	s.SetToolVariationsGroup = m(s.SetToolVariationsGroup)
 }
 
 // MethodNames returns the methods served.
@@ -122,6 +130,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateToolsetHandler(mux, h.UpdateToolset)
 	MountDeleteToolsetHandler(mux, h.DeleteToolset)
 	MountGetToolsetHandler(mux, h.GetToolset)
+	MountListToolFiltersHandler(mux, h.ListToolFilters)
 	MountCheckMCPSlugAvailabilityHandler(mux, h.CheckMCPSlugAvailability)
 	MountCloneToolsetHandler(mux, h.CloneToolset)
 	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
@@ -129,6 +138,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountAddOAuthProxyServerHandler(mux, h.AddOAuthProxyServer)
 	MountUpdateOAuthProxyServerHandler(mux, h.UpdateOAuthProxyServer)
 	MountSetUserSessionIssuerHandler(mux, h.SetUserSessionIssuer)
+	MountSetToolVariationsGroupHandler(mux, h.SetToolVariationsGroup)
 }
 
 // Mount configures the mux to serve the toolsets endpoints.
@@ -431,6 +441,59 @@ func NewGetToolsetHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getToolset")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListToolFiltersHandler configures the mux to serve the "toolsets"
+// service "listToolFilters" endpoint.
+func MountListToolFiltersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/toolsets.listToolFilters", f)
+}
+
+// NewListToolFiltersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "listToolFilters" endpoint.
+func NewListToolFiltersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListToolFiltersRequest(mux, decoder)
+		encodeResponse = EncodeListToolFiltersResponse(encoder)
+		encodeError    = EncodeListToolFiltersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listToolFilters")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -803,6 +866,59 @@ func NewSetUserSessionIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setUserSessionIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetToolVariationsGroupHandler configures the mux to serve the
+// "toolsets" service "setToolVariationsGroup" endpoint.
+func MountSetToolVariationsGroupHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.setToolVariationsGroup", f)
+}
+
+// NewSetToolVariationsGroupHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "setToolVariationsGroup" endpoint.
+func NewSetToolVariationsGroupHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetToolVariationsGroupRequest(mux, decoder)
+		encodeResponse = EncodeSetToolVariationsGroupResponse(encoder)
+		encodeError    = EncodeSetToolVariationsGroupError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setToolVariationsGroup")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

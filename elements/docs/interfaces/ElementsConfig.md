@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.33.2**](../README.md)
+[**@gram-ai/elements v1.34.0**](../README.md)
 
 ***
 
@@ -25,6 +25,39 @@ const config: ElementsConfig = {
 > `optional` **systemPrompt**: `string`
 
 The system prompt to use for the Elements library.
+
+***
+
+### transport?
+
+> `optional` **transport**: `ChatTransport`\<`UIMessage`\<`unknown`, `UIDataTypes`, `UITools`\>\> \| [`ElementsTransportFactory`](../type-aliases/ElementsTransportFactory.md)
+
+Optional chat transport override. When provided, Elements uses this
+transport instead of its built-in client-side streaming transport — e.g.
+to route the conversation through a persistent server-side assistant that
+generates replies and is polled for them. When omitted, the default
+client-side transport is used.
+
+May be a ChatTransport directly, or an [ElementsTransportFactory](../type-aliases/ElementsTransportFactory.md)
+that Elements invokes inside the provider with the live chat context — use
+the factory form when the transport needs the active chat id at send time.
+
+***
+
+### allowMessageEdit?
+
+> `optional` **allowMessageEdit**: `boolean`
+
+Whether to expose the inline message-edit affordance on user messages.
+Edit relies on assistant-ui's local branch rewriting; transports backed by a
+persistent server-side assistant typically can't honour that, so the
+sidebar uses this to hide the action rather than offer a broken control.
+
+#### Default
+
+```ts
+true
+```
 
 ***
 

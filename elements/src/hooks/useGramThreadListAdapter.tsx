@@ -13,6 +13,7 @@ import {
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from "@/lib/messageConverter";
+import { sleep } from "@/lib/utils";
 import {
   useCallback,
   useEffect,
@@ -37,11 +38,46 @@ export function isLocalThreadId(threadId: string | null | undefined): boolean {
   return !!threadId?.startsWith(LOCAL_THREAD_ID_PREFIX);
 }
 
+/**
+ * Polls the shared local→remote id map until the transport assigns an id for
+ * `threadId`, or a deadline passes. Used in deferred-minting mode so a new
+ * thread adopts the backend-minted chat id instead of a client-generated one.
+ * The timeout is generous to tolerate cold serverless boots on the first send.
+ */
+async function waitForMappedId(
+  map: Map<string, string> | undefined,
+  threadId: string,
+  timeoutMs = 30_000,
+  intervalMs = 50,
+): Promise<string | undefined> {
+  if (!map) return undefined;
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const id = map.get(threadId);
+    if (id) return id;
+    if (Date.now() >= deadline) return undefined;
+    await sleep(intervalMs);
+  }
+}
+
 export interface ThreadListAdapterOptions {
   apiUrl: string;
   headers: Record<string, string>;
   /** Map to translate local thread IDs to UUIDs (shared with transport) */
   localIdToUuidMap?: Map<string, string>;
+  /**
+   * Extra query parameters forwarded to `chat.list` to filter which threads are
+   * listed. Opaque to the adapter — the consumer chooses the keys.
+   */
+  threadListFilters?: Record<string, string>;
+  /**
+   * Don't client-mint a chat id for a brand-new thread. When true, `initialize`
+   * waits for the transport to assign the id (via the shared `localIdToUuidMap`,
+   * e.g. a server-minted id reported through the transport context's
+   * `adoptChatId` bind closure) instead of generating one with
+   * `crypto.randomUUID()`. Use this when the backend owns chat-id creation.
+   */
+  deferThreadIdMinting?: boolean;
 }
 
 interface ListChatsResponse {
@@ -213,12 +249,14 @@ export function useGramThreadListAdapter(
 
       async list() {
         try {
-          const response = await fetch(
-            `${optionsRef.current.apiUrl}/rpc/chat.list`,
-            {
-              headers: optionsRef.current.headers,
-            },
-          );
+          const { apiUrl, headers, threadListFilters } = optionsRef.current;
+          const qs = threadListFilters
+            ? new URLSearchParams(threadListFilters).toString()
+            : "";
+          const listUrl = qs
+            ? `${apiUrl}/rpc/chat.list?${qs}`
+            : `${apiUrl}/rpc/chat.list`;
+          const response = await fetch(listUrl, { headers });
 
           if (!response.ok) {
             console.error("Failed to list chats:", response.status);
@@ -251,6 +289,30 @@ export function useGramThreadListAdapter(
               remoteId: existingUuid,
               externalId: existingUuid,
             };
+          }
+          // When the backend owns chat-id creation, don't client-mint: wait for
+          // the transport to report the server-minted id (it assigns it during
+          // the first send via the adoptChatId bind closure, populating the
+          // shared map — the same path the built-in transport uses).
+          if (optionsRef.current.deferThreadIdMinting) {
+            const mappedUuid = await waitForMappedId(
+              optionsRef.current.localIdToUuidMap,
+              threadId,
+            );
+            if (mappedUuid) {
+              return {
+                remoteId: mappedUuid,
+                externalId: mappedUuid,
+              };
+            }
+            // Falling through to crypto.randomUUID() here would defeat deferred
+            // minting: the client id would race the server-minted one reported
+            // later via the adoptChatId bind closure, leaving runtime state
+            // and the local→remote map disagreeing. Surface the failure to
+            // the user instead.
+            throw new Error(
+              "Backend did not mint a chat id in time — first send may have failed or is still in flight. Retry the send.",
+            );
           }
           // Otherwise generate a new one and store it
           const uuid = crypto.randomUUID();

@@ -530,3 +530,57 @@ func BuildPublishPluginsPayload(pluginsPublishPluginsBody string, pluginsPublish
 
 	return v, nil
 }
+
+// BuildGetMarketplaceSettingsPayload builds the payload for the plugins
+// getMarketplaceSettings endpoint from CLI flags.
+func BuildGetMarketplaceSettingsPayload(pluginsGetMarketplaceSettingsSessionToken string, pluginsGetMarketplaceSettingsProjectSlugInput string) (*plugins.GetMarketplaceSettingsPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsGetMarketplaceSettingsSessionToken != "" {
+			sessionToken = &pluginsGetMarketplaceSettingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsGetMarketplaceSettingsProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetMarketplaceSettingsProjectSlugInput
+		}
+	}
+	v := &plugins.GetMarketplaceSettingsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateMarketplaceSettingsPayload builds the payload for the plugins
+// updateMarketplaceSettings endpoint from CLI flags.
+func BuildUpdateMarketplaceSettingsPayload(pluginsUpdateMarketplaceSettingsBody string, pluginsUpdateMarketplaceSettingsSessionToken string, pluginsUpdateMarketplaceSettingsProjectSlugInput string) (*plugins.UpdateMarketplaceSettingsPayload, error) {
+	var err error
+	var body UpdateMarketplaceSettingsRequestBody
+	{
+		err = json.Unmarshal([]byte(pluginsUpdateMarketplaceSettingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"marketplace_name\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsUpdateMarketplaceSettingsSessionToken != "" {
+			sessionToken = &pluginsUpdateMarketplaceSettingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsUpdateMarketplaceSettingsProjectSlugInput != "" {
+			projectSlugInput = &pluginsUpdateMarketplaceSettingsProjectSlugInput
+		}
+	}
+	v := &plugins.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: body.MarketplaceName,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

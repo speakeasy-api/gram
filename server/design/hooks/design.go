@@ -11,7 +11,7 @@ var ClaudeHookPayload = Type("ClaudeHookPayload", func() {
 	Description("Unified payload for all Claude Code hook events")
 	Required("hook_event_name")
 	Attribute("hook_event_name", String, "The type of hook event", func() {
-		Enum("SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure",
+		Enum("SessionStart", "ConfigChange", "PreToolUse", "PostToolUse", "PostToolUseFailure",
 			"UserPromptSubmit", "Stop", "SessionEnd", "Notification")
 	})
 	// Tool-related fields (PreToolUse, PostToolUse, PostToolUseFailure)

@@ -1143,7 +1143,11 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("parse trigger instance id: %w", err)
 	}
-	chatID := deterministicChatID(assistant.ID, task.CorrelationID)
+	adapter, err := getSourceAdapter(sourceKind)
+	if err != nil {
+		return EnqueueResult{}, err
+	}
+	chatID := adapter.ChatID(assistant.ID, task.CorrelationID)
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1158,6 +1162,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
+		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
 		Title:          conv.ToPGText(assistant.Name),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
@@ -1202,6 +1207,36 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ThreadID:     threadID,
 		ShouldSignal: true,
 	}, nil
+}
+
+// dashboardChatUserID extracts the Gram user id from a dashboard turn payload
+// so UpsertAssistantChat can stamp it on the chats row. External-source turns
+// return empty — their chat rows are owner-less.
+func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
+	if sourceKind != sourceKindDashboard {
+		return ""
+	}
+	var dash dashboardEventPayload
+	if err := json.Unmarshal(normalizedPayloadJSON, &dash); err != nil {
+		return ""
+	}
+	return dash.UserID
+}
+
+// CheckDashboardChatOwnership returns nil when callerUserID owns the chats row
+// for (projectID, chatID), pgx.ErrNoRows when they don't, and a wrapped error
+// otherwise. Callers gate sendMessage on this so a leaked or guessed chat_id
+// can't be used to inject into another user's conversation.
+func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID, chatID uuid.UUID, callerUserID string) error {
+	_, err := assistantrepo.New(s.db).CallerOwnsDashboardChat(ctx, assistantrepo.CallerOwnsDashboardChatParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+		UserID:    conv.ToPGText(callerUserID),
+	})
+	if err != nil {
+		return fmt.Errorf("resolve dashboard chat access: %w", err)
+	}
+	return nil
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
@@ -1663,7 +1698,9 @@ func (s *ServiceCore) processEventTurn(
 	event assistantThreadEventRecord,
 ) error {
 	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID)
+		// MCP auth resumption is a system event with no human sender — act as
+		// the assistant's creator.
+		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, assistant.CreatedByUserID)
 		if err != nil {
 			return err
 		}
@@ -1681,7 +1718,7 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return fmt.Errorf("decode assistant turn: %w", err)
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, turnUserID(assistant, thread, event))
 	if err != nil {
 		return err
 	}
@@ -1689,6 +1726,22 @@ func (s *ServiceCore) processEventTurn(
 		return fmt.Errorf("run assistant turn: %w", err)
 	}
 	return nil
+}
+
+// turnUserID returns the Gram user whose identity a turn should act under.
+// Dashboard turns carry a Gram user id on the event payload (the sender), so
+// MCP calls, audit attribution, and per-user RBAC reflect the actual sender
+// rather than the assistant's creator. Other sources either don't carry a
+// Gram user identity (cron/wake) or carry an external one (Slack), so they
+// fall back to the creator.
+func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
+	if thread.SourceKind == sourceKindDashboard {
+		var payload dashboardEventPayload
+		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err == nil && payload.UserID != "" {
+			return payload.UserID
+		}
+	}
+	return assistant.CreatedByUserID
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -1742,11 +1795,11 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 // downstream, so platform tools that key on the calling thread (wake,
 // memory, telemetry) keep working under the v2 single-VM-per-assistant
 // runtime — the VM is shared but the auth identity is per-thread.
-func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID) (string, error) {
+func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, userID string) (string, error) {
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
-		UserID:      assistant.CreatedByUserID,
+		UserID:      userID,
 		AssistantID: assistant.ID,
 		ThreadID:    threadID,
 		TTL:         assistantRuntimeTokenTTL,
@@ -1818,11 +1871,26 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").Log(ctx, s.logger, logAttrs...)
 	}
 
+	// The managed-assistant platform toolset is granted only to the project's
+	// managed assistant; tools in it must not be reachable by any other
+	// assistant.
+	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
+	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
+	case mErr == nil:
+		if managed.ID == assistant.ID {
+			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+		}
+	case errors.Is(mErr, pgx.ErrNoRows):
+		// Project has no managed assistant; managed-only tools stay ungranted.
+	default:
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").Log(ctx, s.logger, logAttrs...)
+	}
+
 	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
 	// best-effort URLs rather than aborting the whole bootstrap. The runner
 	// will discover the failure when it tries to list tools and the
 	// assistant can tell the user which integration is broken.
-	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets)
+	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, platformSlugs)
 
 	instructions, err := composeInstructions(assistant.Instructions, thread)
 	if err != nil {
@@ -1858,24 +1926,19 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 // bound between refreshes for an idle runtime.
 const assistantRuntimeTokenTTL = 60 * time.Minute
 
-const outputChannelAddendum = `## Output channel
-
-Text responses not delivered to user. To communicate, call a tool (e.g. post Slack message, send email). No suitable tool = user won't see reply.
-
-## MCP authentication
+// mcpAuthAddendum is source-agnostic framing for MCP auth: who may see an
+// AuthURL, when auth events appear, and what each event carries. Per-source
+// delivery mechanics (Slack Block Kit button, dashboard Markdown link, etc.)
+// live in each adapter's OutputChannelGuidance.
+const mcpAuthAddendum = `## MCP authentication
 
 OAuth + MCP auth are owner-only: only owner can sign in and complete flow. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
 Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
 
-- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim via output tool (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID.
+- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners; if the current surface can't reach the owner privately, don't surface the URL — tell the requester (without URL) that owner must complete auth, then stop. The per-surface output preferences below describe how to deliver the URL on this surface.
 
-  Delivery rules — never post AuthURL to public or shared channel readable by non-owners. Pick most private channel available:
-    1. Conversation supports owner-only ephemeral message (single recipient) → send AuthURL there, addressed to owner.
-    2. Else DM the owner. AuthURL expires, so don't paste cold into DM owner hasn't engaged with recently. First ask owner if available to authenticate now; only after they confirm, re-attempt the tool call that required auth to issue a fresh AuthURL, then deliver new AuthURL in same DM.
-    3. Neither ephemeral nor DM possible → don't surface AuthURL; tell requester (without URL) that owner must complete auth, then stop.
-
-- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform user via output tool, include ErrorDescription if present.`
+- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
 func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
@@ -1890,7 +1953,7 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	if base != "" {
 		parts = append(parts, base)
 	}
-	parts = append(parts, outputChannelAddendum)
+	parts = append(parts, mcpAuthAddendum)
 	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
 		parts = append(parts, guidance)
 	}
@@ -1900,8 +1963,7 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
-func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow) []runtimeMCPServer {
-	platformToolsets := []string{platformtools.AssistantsPlatformToolsetSlug}
+func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow, platformToolsets []string) []runtimeMCPServer {
 	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
 		// Misconfiguration (no MCP slug, MCP disabled) is a tenant-side
@@ -1936,7 +1998,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		})
 	}
 
-	// Implicit platform toolsets granted to every assistant runtime; not
+	// Platform toolsets granted to this runtime (caller-determined); not
 	// surfaced as user-managed toolsets and not persisted in
 	// assistant_toolsets so users can't detach them. The "_platform-" ID
 	// prefix can't collide with user toolset slugs because the slug grammar

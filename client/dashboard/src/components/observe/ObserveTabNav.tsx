@@ -66,9 +66,7 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
             )}
           >
             {tab.label}
-            {tab.stage && (
-              <ReleaseStageBadge stage={tab.stage} size="xs" noTooltip />
-            )}
+            {tab.stage && <ReleaseStageBadge stage={tab.stage} noTooltip />}
           </Link>
         );
 

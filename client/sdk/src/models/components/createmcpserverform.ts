@@ -38,6 +38,10 @@ export type CreateMcpServerForm = {
    */
   remoteMcpServerId?: string | undefined;
   /**
+   * The ID of the tool variations group enabling MCP tool filtering for this server. Omit to leave filtering disabled.
+   */
+  toolVariationsGroupId?: string | undefined;
+  /**
    * The ID of the toolset to use as the backend
    */
   toolsetId?: string | undefined;
@@ -61,6 +65,7 @@ export type CreateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
   name: string;
   remote_mcp_server_id?: string | undefined;
+  tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
   user_session_issuer_id?: string | undefined;
   visibility: string;
@@ -75,6 +80,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
     environmentId: z.optional(z.string()),
     name: z.string(),
     remoteMcpServerId: z.optional(z.string()),
+    toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     visibility: CreateMcpServerFormVisibility$outboundSchema,
@@ -83,6 +89,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       environmentId: "environment_id",
       remoteMcpServerId: "remote_mcp_server_id",
+      toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",
       userSessionIssuerId: "user_session_issuer_id",
     });

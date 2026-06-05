@@ -344,6 +344,8 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
+        - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
+        - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
@@ -359,6 +361,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
         - "(*github.com/speakeasy-api/gram/server/internal/functions.ToolExtractor).Do("
+        - "github.com/speakeasy-api/gram/server/internal/mv.ToolVariationsGroupName("
 
       ignore-sig-regexps:
         - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/background\\/activities\\..+\\)\\.Do\\("

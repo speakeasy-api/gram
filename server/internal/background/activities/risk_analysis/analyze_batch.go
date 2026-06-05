@@ -24,6 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -93,6 +94,7 @@ type AnalyzeBatchArgs struct {
 	PolicyVersion        int64
 	MessageIDs           []uuid.UUID
 	Sources              []string
+	MessageTypes         []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
 	CustomRuleIds        []string
@@ -161,7 +163,14 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
+	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
 	scannedCount = len(messages)
+	if len(messages) == 0 {
+		if err := a.writeResults(ctx, args, nil); err != nil {
+			return nil, err
+		}
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
 
 	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds)
 	if err != nil {
@@ -215,6 +224,37 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 		return nil, fmt.Errorf("get message content batch: %w", err)
 	}
 	return messages, nil
+}
+
+func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, messageTypes []string) []repo.GetMessageContentBatchRow {
+	filtered := make([]repo.GetMessageContentBatchRow, 0, len(messages))
+	for _, msg := range messages {
+		messageType, ok := messageRowMessageType(msg)
+		if !ok {
+			continue
+		}
+		if len(messageTypes) > 0 && !slices.Contains(messageTypes, messageType) {
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+	return filtered
+}
+
+func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bool) {
+	switch msg.Role {
+	case "user":
+		return message.User, true
+	case "tool":
+		return message.ToolResponse, true
+	case "assistant":
+		if len(msg.ToolCalls) > 0 {
+			return message.ToolRequest, true
+		}
+		return message.Assistant, true
+	default:
+		return "", false
+	}
 }
 
 // scan runs enabled scanners concurrently. Gitleaks (CPU-bound), presidio

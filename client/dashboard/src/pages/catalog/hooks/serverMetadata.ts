@@ -317,17 +317,3 @@ export function filterAndSortServers(
 
   return filtered.map((s) => s.server);
 }
-
-/**
- * Count servers matching each category for display badges.
- */
-export function countByCategory(
-  servers: PulseMCPServer[],
-): Record<"all" | "popular", number> {
-  const serversWithMeta = servers.map((server) => parseServerMetadata(server));
-
-  return {
-    all: servers.length,
-    popular: serversWithMeta.filter((m) => m.visitorsMonth >= 100).length,
-  };
-}

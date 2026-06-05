@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@speakeasy-api/moonshine";
 import {
+  ArrowRight,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -51,11 +52,13 @@ import {
   List,
   MoreHorizontal,
   Plus,
+  Rocket,
   Settings,
   ShieldCheck,
   Star,
   UserPlus,
 } from "lucide-react";
+import { BrandGradientLine } from "@/components/brand-gradient-line";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
@@ -88,7 +91,7 @@ export default function OrgHome() {
   );
 }
 
-export function OrgHomeInner() {
+function OrgHomeInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const client = useSdkClient();
@@ -346,6 +349,13 @@ export function OrgHomeInner() {
                     </div>
                   )}
               </>
+            )}
+
+            {canAdmin && (
+              <section className="flex flex-col gap-3 pt-3">
+                <Heading variant="h4">Set up your organization</Heading>
+                <OnboardingShortcutCard orgSlug={orgSlug} />
+              </section>
             )}
           </main>
 
@@ -975,5 +985,36 @@ function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
         </Type>
       </div>
     </orgRoutes.access.challenges.Link>
+  );
+}
+
+function OnboardingShortcutCard({ orgSlug }: { orgSlug: string | undefined }) {
+  if (!orgSlug) return null;
+  return (
+    <Link
+      to={`/${orgSlug}/setup`}
+      className="group border-border bg-card hover:border-foreground/30 relative w-full max-w-md overflow-hidden rounded-lg border transition-all hover:shadow-md"
+    >
+      <div className="flex items-center gap-4 px-5 pt-4 pb-6">
+        <div className="bg-secondary text-foreground flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg">
+          <Rocket className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <Type
+            variant="subheading"
+            as="div"
+            className="text-foreground text-sm font-semibold"
+          >
+            Finish setting up your organization
+          </Type>
+          <Type small muted className="mt-0.5 text-xs">
+            Configure SSO, directory sync, your plugin marketplace, and agent
+            platforms in a few guided steps.
+          </Type>
+        </div>
+        <ArrowRight className="text-muted-foreground group-hover:text-foreground h-5 w-5 flex-shrink-0 transition-all group-hover:translate-x-1" />
+      </div>
+      <BrandGradientLine className="absolute right-0 bottom-0 left-0" />
+    </Link>
   );
 }

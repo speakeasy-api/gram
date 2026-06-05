@@ -37,6 +37,11 @@ func GetToolsetToolsetsPath() string {
 	return "/rpc/toolsets.get"
 }
 
+// ListToolFiltersToolsetsPath returns the URL path to the toolsets service listToolFilters HTTP endpoint.
+func ListToolFiltersToolsetsPath() string {
+	return "/rpc/toolsets.listToolFilters"
+}
+
 // CheckMCPSlugAvailabilityToolsetsPath returns the URL path to the toolsets service checkMCPSlugAvailability HTTP endpoint.
 func CheckMCPSlugAvailabilityToolsetsPath() string {
 	return "/rpc/toolsets.checkMCPSlugAvailability"
@@ -70,4 +75,9 @@ func UpdateOAuthProxyServerToolsetsPath() string {
 // SetUserSessionIssuerToolsetsPath returns the URL path to the toolsets service setUserSessionIssuer HTTP endpoint.
 func SetUserSessionIssuerToolsetsPath() string {
 	return "/rpc/toolsets.setUserSessionIssuer"
+}
+
+// SetToolVariationsGroupToolsetsPath returns the URL path to the toolsets service setToolVariationsGroup HTTP endpoint.
+func SetToolVariationsGroupToolsetsPath() string {
+	return "/rpc/toolsets.setToolVariationsGroup"
 }

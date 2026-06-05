@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/popover";
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -31,7 +30,7 @@ import {
 /**
  * Animation types and configurations
  */
-export interface AnimationConfig {
+interface AnimationConfig {
   /** Badge animation type */
   badgeAnimation?: "bounce" | "pulse" | "wiggle" | "fade" | "slide" | "none";
   /** Popover animation type */
@@ -618,6 +617,23 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       );
     }, [options, searchValue, searchable, isGroupedOptions]);
 
+    // We filter `options` into `filteredOptions` ourselves, so cmdk's built-in
+    // filtering is disabled (see <Command shouldFilter={false}> below). Leaving
+    // both filters enabled makes them race over a shrinking item set as the user
+    // types, which intermittently shows the empty state for valid matches and
+    // can leave it stuck when characters are deleted (AIS-84). Because
+    // shouldFilter={false} also disables cmdk's <CommandEmpty>, the empty state
+    // is derived from filteredOptions instead.
+    const filteredOptionCount = React.useMemo(() => {
+      if (isGroupedOptions(filteredOptions)) {
+        return filteredOptions.reduce(
+          (count, group) => count + group.options.length,
+          0,
+        );
+      }
+      return filteredOptions.length;
+    }, [filteredOptions, isGroupedOptions]);
+
     const handleInputKeyDown = (
       event: React.KeyboardEvent<HTMLInputElement>,
     ) => {
@@ -1061,7 +1077,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
             align="start"
             onEscapeKeyDown={() => setIsPopoverOpen(false)}
           >
-            <Command>
+            <Command shouldFilter={false}>
               {searchable && (
                 <CommandInput
                   placeholder="Search options..."
@@ -1084,9 +1100,14 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                   "overscroll-behavior-y-contain",
                 )}
               >
-                <CommandEmpty>
-                  {emptyIndicator || "No results found."}
-                </CommandEmpty>{" "}
+                {filteredOptionCount === 0 && !canCreateFromSearch && (
+                  <div
+                    data-slot="command-empty"
+                    className="py-6 text-center text-sm"
+                  >
+                    {emptyIndicator || "No results found."}
+                  </div>
+                )}{" "}
                 {canCreateFromSearch && (
                   <CommandGroup>
                     <CommandItem
