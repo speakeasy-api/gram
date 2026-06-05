@@ -2,11 +2,11 @@ import { GramLogo } from "@/components/gram-logo";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
-import { useCreateShadowMCPApprovalRequestMutation } from "@gram/client/react-query";
+import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-query/riskCreatePolicyBypassRequest.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useState } from "react";
 
-const REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
+const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";
 const inFlightSubmissions = new Map<string, Promise<void>>();
 
 type RequestAccessState =
@@ -25,7 +25,7 @@ export function ShadowMCPRequestAccessContent() {
     useState<SubmissionResult>("idle");
   const [retryCount, setRetryCount] = useState(0);
   const { mutateAsync: createApprovalRequest } =
-    useCreateShadowMCPApprovalRequestMutation();
+    useRiskCreatePolicyBypassRequestMutation();
 
   useEffect(() => {
     const meta = document.createElement("meta");
@@ -51,7 +51,7 @@ export function ShadowMCPRequestAccessContent() {
   useEffect(() => {
     if (!storedRequestToken || session.session) return;
 
-    window.location.href = buildLoginRedirectURL("/shadow-mcp/request");
+    window.location.href = buildLoginRedirectURL(window.location.pathname);
   }, [session.session, storedRequestToken]);
 
   useEffect(() => {

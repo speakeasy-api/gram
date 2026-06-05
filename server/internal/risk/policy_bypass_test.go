@@ -49,7 +49,7 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	assert.Equal(t, policy.ID, request.PolicyID)
 	assert.Equal(t, "requested", request.Status)
 	require.NotNil(t, request.TargetKind)
-	assert.Equal(t, authz.SelectorKeyServerURL, *request.TargetKind)
+	assert.Equal(t, "shadow_mcp_server", *request.TargetKind)
 	require.NotNil(t, request.TargetKey)
 	assert.Equal(t, fullURL, *request.TargetKey)
 	assert.Equal(t, fullURL, request.TargetDimensions[authz.SelectorKeyServerURL])
@@ -194,14 +194,26 @@ func TestCreatePolicyBypassRequest_AfterApprove_PreservesApprovedStateAndGrant(t
 	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 }
 
-func TestGeneratePolicyBypassRequestToken_RequiresFullURL(t *testing.T) {
+func TestCreatePolicyBypassRequest_WithoutFullURLCreatesWholePolicyTarget(t *testing.T) {
 	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass Whole Policy"),
+	})
+	require.NoError(t, err)
 
 	host := "mcp.example.com"
-	_, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
-		OrganizationID:         "org_test",
-		ProjectID:              "00000000-0000-0000-0000-000000000001",
-		RequesterUserID:        "user_test",
+	token, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              authCtx.ProjectID.String(),
+		RequesterUserID:        authCtx.UserID,
 		ObservedName:           nil,
 		ObservedFullURL:        nil,
 		ObservedURLHost:        &host,
@@ -209,10 +221,41 @@ func TestGeneratePolicyBypassRequestToken_RequiresFullURL(t *testing.T) {
 		ToolName:               nil,
 		ToolCall:               nil,
 		BlockReason:            nil,
+		RiskPolicyID:           policy.ID,
+		RiskResultID:           nil,
+	}, 5*time.Minute)
+	require.NoError(t, err)
+
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, policy.ID, request.PolicyID)
+	assert.Equal(t, "requested", request.Status)
+	assert.Nil(t, request.TargetKind)
+	require.NotNil(t, request.TargetKey)
+	assert.Equal(t, "policy", *request.TargetKey)
+	assert.Empty(t, request.TargetDimensions)
+}
+
+func TestGeneratePolicyBypassRequestToken_RequiresEvidence(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
+		OrganizationID:         "org_test",
+		ProjectID:              "00000000-0000-0000-0000-000000000001",
+		RequesterUserID:        "user_test",
+		ObservedName:           nil,
+		ObservedFullURL:        nil,
+		ObservedURLHost:        nil,
+		ObservedServerIdentity: nil,
+		ToolName:               nil,
+		ToolCall:               nil,
+		BlockReason:            nil,
 		RiskPolicyID:           "00000000-0000-0000-0000-000000000002",
 		RiskResultID:           nil,
 	}, 5*time.Minute)
-	require.ErrorContains(t, err, "observed_full_url is required")
+	require.ErrorContains(t, err, "policy bypass request evidence is required")
 }
 
 func riskPolicyBypassRequestToken(t *testing.T, authCtx *contextvalues.AuthContext, policyID string, fullURL string) string {

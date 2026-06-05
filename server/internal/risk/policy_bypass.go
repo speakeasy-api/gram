@@ -28,7 +28,41 @@ const (
 	riskPolicyBypassRequestStatusApproved  = "approved"
 	riskPolicyBypassRequestStatusDenied    = "denied"
 	riskPolicyBypassRequestStatusRevoked   = "revoked"
+
+	// PolicyBypassTargetKindShadowMCPServer identifies a Shadow MCP server target.
+	PolicyBypassTargetKindShadowMCPServer = "shadow_mcp_server"
+	// PolicyBypassWholePolicyTargetKey identifies a whole-policy target.
+	PolicyBypassWholePolicyTargetKey = "policy"
 )
+
+// PolicyBypassTarget identifies the generic resource a bypass request or
+// runtime bypass check applies to.
+type PolicyBypassTarget struct {
+	Kind       string
+	Label      string
+	Key        string
+	Dimensions map[string]string
+}
+
+// WholePolicyBypassTarget applies to the policy as a whole.
+func WholePolicyBypassTarget() PolicyBypassTarget {
+	return PolicyBypassTarget{
+		Kind:       "",
+		Label:      "",
+		Key:        PolicyBypassWholePolicyTargetKey,
+		Dimensions: map[string]string{},
+	}
+}
+
+// ShadowMCPServerPolicyBypassTarget applies to a specific Shadow MCP server URL.
+func ShadowMCPServerPolicyBypassTarget(serverURL string, label string) PolicyBypassTarget {
+	return PolicyBypassTarget{
+		Kind:       PolicyBypassTargetKindShadowMCPServer,
+		Label:      label,
+		Key:        serverURL,
+		Dimensions: map[string]string{authz.SelectorKeyServerURL: serverURL},
+	}
+}
 
 func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen.ListRiskPolicyBypassRequestsPayload) (*gen.ListRiskPolicyBypassRequestsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -130,9 +164,9 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		OrganizationID:   claims.OrganizationID,
 		ProjectID:        projectID,
 		RiskPolicyID:     policyID,
-		TargetKind:       conv.ToPGText(target.kind),
-		TargetLabel:      conv.ToPGTextEmpty(target.label),
-		TargetKey:        conv.ToPGText(target.key),
+		TargetKind:       conv.ToPGTextEmpty(target.Kind),
+		TargetLabel:      conv.ToPGTextEmpty(target.Label),
+		TargetKey:        conv.ToPGText(target.Key),
 		TargetDimensions: target.dimensions,
 		RequesterUserID:  authCtx.UserID,
 		RequesterEmail:   conv.ToPGTextEmpty(conv.PtrValOrEmpty(authCtx.Email, "")),
@@ -476,35 +510,37 @@ func validateRiskPolicyBypassRequestStatus(status *string) error {
 }
 
 type riskPolicyBypassRequestTarget struct {
-	kind       string
-	label      string
-	key        string
+	PolicyBypassTarget
 	dimensions []byte
 }
 
 func riskPolicyBypassTargetFromClaims(claims *policyBypassRequestClaims) (riskPolicyBypassRequestTarget, error) {
 	key := strings.TrimSpace(conv.PtrValOr(claims.ObservedFullURL, ""))
 	if key == "" {
-		return riskPolicyBypassRequestTarget{}, fmt.Errorf("observed_full_url is required")
-	}
-
-	dimensions, err := json.Marshal(map[string]string{
-		authz.SelectorKeyServerURL: key,
-	})
-	if err != nil {
-		return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
+		target := WholePolicyBypassTarget()
+		dimensions, err := json.Marshal(target.Dimensions)
+		if err != nil {
+			return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
+		}
+		return riskPolicyBypassRequestTarget{
+			PolicyBypassTarget: target,
+			dimensions:         dimensions,
+		}, nil
 	}
 
 	label := strings.TrimSpace(conv.PtrValOr(claims.ObservedName, ""))
 	if label == "" {
 		label = key
 	}
+	target := ShadowMCPServerPolicyBypassTarget(key, label)
+	dimensions, err := json.Marshal(target.Dimensions)
+	if err != nil {
+		return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
+	}
 
 	return riskPolicyBypassRequestTarget{
-		kind:       authz.SelectorKeyServerURL,
-		label:      label,
-		key:        key,
-		dimensions: dimensions,
+		PolicyBypassTarget: target,
+		dimensions:         dimensions,
 	}, nil
 }
 

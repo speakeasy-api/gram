@@ -251,6 +251,10 @@ const RouteProvider = () => {
           path="/shadow-mcp/request"
           element={<ShadowMCPRequestAccess />}
         />
+        <Route
+          path="/risk-policy-bypass/request"
+          element={<ShadowMCPRequestAccess />}
+        />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}

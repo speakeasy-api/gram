@@ -43,16 +43,16 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 	require.Empty(t, parsed.RawQuery)
 	require.Equal(t, "https", parsed.Scheme)
 	require.Equal(t, "app.example.test", parsed.Host)
-	require.Equal(t, "/shadow-mcp/request", parsed.Path)
+	require.Equal(t, "/risk-policy-bypass/request", parsed.Path)
 
 	fragment, err := url.ParseQuery(parsed.Fragment)
 	require.NoError(t, err)
 	require.NotContains(t, requestURL, "?request_token=")
-	require.Contains(t, fragment.Get("request_token"), "smar1.")
+	require.Contains(t, fragment.Get("request_token"), "rpbr1.")
 	require.Less(t, len(requestURL), 1200, "approval link should not embed full tool input")
 }
 
-func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
+func TestShadowMCPApprovalRequestURLRequiresFullURL(t *testing.T) {
 	t.Parallel()
 
 	siteURL, err := url.Parse("https://app.example.test")
@@ -83,7 +83,8 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 			URLHost:        "",
 			ServerIdentity: "github",
 		},
-		ToolName: "search",
+		ToolName:     "search",
+		RiskPolicyID: "00000000-0000-0000-0000-000000000002",
 	})
 	require.False(t, ok)
 }

@@ -1,20 +1,15 @@
 package hooks
 
 import (
-	"context"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	tsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -43,7 +38,7 @@ func TestCursorShadowMCPEvidence_DerivesURLAndServerIdentity(t *testing.T) {
 	require.Equal(t, "mcp.calendly.com", evidence.ServerIdentity)
 }
 
-func TestEnforceShadowMCPToolAccess_DenyRuleOverridesValidToolsetCall(t *testing.T) {
+func TestEnforceShadowMCPToolAccess_BypassGrantAllowsBlockedCall(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -51,119 +46,67 @@ func TestEnforceShadowMCPToolAccess_DenyRuleOverridesValidToolsetCall(t *testing
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolsetID := createHookToolsetWithHTTPTool(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "do_thing")
-	createHookAccessRule(t, ctx, ti, "", accesscontrol.AccessScopeOrganization, accesscontrol.DispositionDenied, shadowmcp.MatchBreadthURLHost, "blocked.example.com", "Blocked server")
+	policyID := uuid.NewString()
+	serverURL := "https://blocked.example.com/mcp"
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	selector[authz.SelectorKeyServerURL] = serverURL
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
+	}))
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
 		authCtx.UserID,
-		map[string]any{shadowmcp.XGramToolsetIDField: toolsetID.String()},
+		policyID,
+		map[string]any{},
 		"do_thing",
-		shadowmcp.AccessEvidence{FullURL: "https://blocked.example.com/mcp", URLHost: "", ServerIdentity: "blocked-server"},
+		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "blocked-server"},
+	)
+
+	require.False(t, denied)
+	require.Empty(t, detail)
+}
+
+func TestEnforceShadowMCPToolAccess_BypassGrantRequiresServerURLTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	policyID := uuid.NewString()
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	selector[authz.SelectorKeyServerURL] = "https://blocked.example.com/mcp"
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
+	}))
+
+	detail, denied := ti.service.enforceShadowMCPToolAccess(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+		authCtx.UserID,
+		policyID,
+		map[string]any{},
+		"do_thing",
+		shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: "local-server"},
 	)
 
 	require.True(t, denied)
-	require.Contains(t, detail, `matched denied Shadow MCP Access Rule "Blocked server"`)
-}
-
-func createHookToolsetWithHTTPTool(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, toolName string) uuid.UUID {
-	t.Helper()
-
-	toolsetSlug := "ts-" + uuid.NewString()[:8]
-	toolset, err := tsrepo.New(conn).CreateToolset(ctx, tsrepo.CreateToolsetParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		Name:           toolsetSlug,
-		Slug:           toolsetSlug,
-	})
-	require.NoError(t, err)
-
-	deploymentID := createHookCompletedDeployment(t, ctx, conn, organizationID, projectID)
-	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", uuid.NewString()[:8])
-	_, err = deploymentsrepo.New(conn).CreateOpenAPIv3ToolDefinition(ctx, deploymentsrepo.CreateOpenAPIv3ToolDefinitionParams{
-		ProjectID:           projectID,
-		DeploymentID:        deploymentID,
-		Openapiv3DocumentID: uuid.NullUUID{},
-		ToolUrn:             toolURN,
-		Name:                toolName,
-		UntruncatedName:     pgtype.Text{String: "", Valid: true},
-		Openapiv3Operation:  pgtype.Text{},
-		Summary:             "Test tool",
-		Description:         "A test tool",
-		Tags:                []string{},
-		Confirm:             pgtype.Text{},
-		ConfirmPrompt:       pgtype.Text{},
-		XGram:               pgtype.Bool{},
-		OriginalName:        pgtype.Text{},
-		OriginalSummary:     pgtype.Text{},
-		OriginalDescription: pgtype.Text{},
-		Security:            []byte("[]"),
-		HttpMethod:          "POST",
-		Path:                "/test",
-		SchemaVersion:       "3.0.0",
-		Schema:              []byte("{}"),
-		HeaderSettings:      []byte("{}"),
-		QuerySettings:       []byte("{}"),
-		PathSettings:        []byte("{}"),
-		ServerEnvVar:        "TEST_SERVER_URL",
-		DefaultServerUrl:    pgtype.Text{},
-		RequestContentType:  pgtype.Text{},
-		ResponseFilter:      nil,
-		ReadOnlyHint:        pgtype.Bool{},
-		DestructiveHint:     pgtype.Bool{},
-		IdempotentHint:      pgtype.Bool{},
-		OpenWorldHint:       pgtype.Bool{},
-	})
-	require.NoError(t, err)
-
-	_, err = tsrepo.New(conn).CreateToolsetVersion(ctx, tsrepo.CreateToolsetVersionParams{
-		ToolsetID:     toolset.ID,
-		Version:       1,
-		ToolUrns:      []urn.Tool{toolURN},
-		ResourceUrns:  []urn.Resource{},
-		PredecessorID: uuid.NullUUID{},
-	})
-	require.NoError(t, err)
-
-	return toolset.ID
-}
-
-func createHookCompletedDeployment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	deployments := deploymentsrepo.New(conn)
-	idempotencyKey := "test-" + uuid.NewString()
-	_, err := deployments.CreateDeployment(ctx, deploymentsrepo.CreateDeploymentParams{
-		IdempotencyKey: idempotencyKey,
-		UserID:         "test-user",
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		GithubRepo:     pgtype.Text{},
-		GithubPr:       pgtype.Text{},
-		GithubSha:      pgtype.Text{},
-		ExternalID:     pgtype.Text{},
-		ExternalUrl:    pgtype.Text{},
-	})
-	require.NoError(t, err)
-
-	deployment, err := deployments.GetDeploymentByIdempotencyKey(ctx, deploymentsrepo.GetDeploymentByIdempotencyKeyParams{
-		IdempotencyKey: idempotencyKey,
-		ProjectID:      projectID,
-	})
-	require.NoError(t, err)
-
-	for _, status := range []string{"created", "pending", "completed"} {
-		_, err = deployments.TransitionDeployment(ctx, deploymentsrepo.TransitionDeploymentParams{
-			DeploymentID: deployment.Deployment.ID,
-			Status:       status,
-			ProjectID:    projectID,
-			Event:        "test",
-			Message:      "test deployment status",
-		})
-		require.NoError(t, err)
-	}
-
-	return deployment.Deployment.ID
+	require.Contains(t, detail, "missing required")
 }
