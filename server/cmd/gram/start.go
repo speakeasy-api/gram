@@ -626,6 +626,7 @@ func newStartCommand() *cli.Command {
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			emailService := email.NewService(logger, loopsClient)
+			emailService.SetScheduler(&background.EmailScheduler{TemporalEnv: temporalEnv})
 
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
@@ -1162,6 +1163,7 @@ func newStartCommand() *cli.Command {
 						SvixClient:                     svixClient,
 						ProductFeatures:                productFeatures,
 						PluginPublisher:                pluginPublisher,
+						EmailService:                   emailService,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

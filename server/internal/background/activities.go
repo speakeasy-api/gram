@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -97,6 +98,7 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
+	sendEmail                       *activities.SendEmail
 }
 
 func NewActivities(
@@ -136,8 +138,17 @@ func NewActivities(
 	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
+	emailService *email.Service,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
+
+	// Keep the activity's dependency a nil interface (rather than a typed nil
+	// *email.Service) when email is not wired in, so the activity can detect
+	// the missing dependency and fail cleanly instead of panicking.
+	var emailSender activities.EmailSender
+	if emailService != nil {
+		emailSender = emailService
+	}
 
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
@@ -192,6 +203,7 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		sendEmail:                       activities.NewSendEmail(logger, emailSender),
 	}
 }
 
@@ -464,4 +476,8 @@ func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.Pub
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) SendEmail(ctx context.Context, msg email.ScheduledEmail) error {
+	return a.sendEmail.Do(ctx, msg)
 }

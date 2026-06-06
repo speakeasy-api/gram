@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -82,6 +83,7 @@ type WorkerOptions struct {
 	SvixClient                     *svix.Svix
 	ProductFeatures                *productfeatures.Client
 	PluginPublisher                *plugins.Service
+	EmailService                   *email.Service
 }
 
 func ForDeploymentProcessing(
@@ -129,6 +131,7 @@ func ForDeploymentProcessing(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		EmailService:                   nil,
 	}
 }
 
@@ -174,6 +177,7 @@ func NewTemporalWorker(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		EmailService:                   nil,
 	}
 
 	for _, o := range options {
@@ -212,6 +216,7 @@ func NewTemporalWorker(
 			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 		}
 	}
 
@@ -272,6 +277,7 @@ func NewTemporalWorker(
 		opts.SvixClient,
 		opts.ProductFeatures,
 		opts.PluginPublisher,
+		opts.EmailService,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -332,6 +338,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
+	temporalWorker.RegisterActivity(activities.SendEmail)
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIUsage)
@@ -378,6 +385,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
+	temporalWorker.RegisterWorkflow(SendEmailWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
