@@ -592,6 +592,19 @@ type GlobalRole struct {
 	Deleted           bool
 }
 
+type Group struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	WorkosDirectoryGroupID string
+	Name                   string
+	Attributes             []byte
+	AttributesContentHash  pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
 type HooksServerNameOverride struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -1509,6 +1522,16 @@ type User struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type UserGroupMembership struct {
+	ID                     uuid.UUID
+	UserID                 string
+	GroupID                uuid.UUID
+	WorkosDirectoryUserID  string
+	WorkosDirectoryGroupID string
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
 type UserOauthToken struct {
 	ID                    uuid.UUID
 	UserID                string
@@ -1587,39 +1610,12 @@ type UserSessionIssuer struct {
 }
 
 type WorkosDirectoryAttributesSync struct {
-	ID                   uuid.UUID
-	WorkosOrganizationID string
-	EntityID             string
-	EntityType           string
-	LastEventID          string
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-}
-
-type WorkosDirectoryGroup struct {
-	ID                     string
-	WorkosDirectoryGroupID string
-	WorkosOrganizationID   string
-	Name                   string
-	Attributes             []byte
-	AttributesContentHash  pgtype.Text
-	WorkosCreatedAt        pgtype.Timestamptz
-	WorkosUpdatedAt        pgtype.Timestamptz
-	WorkosDeletedAt        pgtype.Timestamptz
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-}
-
-type WorkosDirectoryUserGroupMembership struct {
-	ID                     string
-	UserID                 string
-	GroupID                string
-	WorkosDirectoryUserID  string
-	WorkosDirectoryGroupID string
-	JoinedAt               pgtype.Timestamptz
-	LeftAt                 pgtype.Timestamptz
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
+	ID          uuid.UUID
+	EntityID    string
+	EntityType  string
+	LastEventID string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
 
 type WorkosOrganizationSync struct {
