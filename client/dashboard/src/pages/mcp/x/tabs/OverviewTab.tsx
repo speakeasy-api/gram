@@ -6,9 +6,14 @@ import { useMcpEndpointUrl } from "@/hooks/useToolsetUrl";
 import { remoteMcpRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import type { McpEndpoint, McpServer } from "@gram/client/models/components";
+import type {
+  McpEndpoint,
+  McpServer,
+  ToolsetEntry,
+} from "@gram/client/models/components";
 import {
   useGetRemoteMcpServer,
+  useListToolsets,
   useRemoteSessionClients,
 } from "@gram/client/react-query/index.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
@@ -37,7 +42,6 @@ type OverviewTabProps = {
   isLoadingEndpoints: boolean;
   onShowEndpoints: () => void;
   onShowAuthentication: () => void;
-  onShowSettings: () => void;
 };
 
 type StatusTone = "ready" | "needs-setup";
@@ -60,11 +64,8 @@ type OverviewCardProps = {
   description: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   children?: ReactNode;
-  // Rendered top-right, aligned with the title. Used for the Server Address
-  // "Manage" affordance which sits in the header rather than below the body.
+  // Rendered top-right, aligned with the title (e.g. a Manage/View affordance).
   headerAction?: ReactNode;
-  // Rendered below the body content (primary call-to-action).
-  action?: ReactNode;
 };
 
 export function OverviewTab({
@@ -73,7 +74,6 @@ export function OverviewTab({
   isLoadingEndpoints,
   onShowEndpoints,
   onShowAuthentication,
-  onShowSettings,
 }: OverviewTabProps) {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
@@ -95,10 +95,15 @@ export function OverviewTab({
                 remoteMcpServerId={mcpServer.remoteMcpServerId}
               />
             ) : (
-              <ToolsOverviewCard onShowEndpoints={onShowEndpoints} />
+              // Toolset-backed servers are currently impossible to reach
+              // through the UI on this route: /x/mcp only renders for
+              // mcp_servers-backed (remote MCP) servers, which always carry a
+              // remoteMcpServerId. Kept for when toolset-backed servers migrate
+              // onto this page (see AGE-1902).
+              <ToolsOverviewCard toolsetId={mcpServer.toolsetId} />
             )}
           </div>
-          <EnhanceSection onCustomizeInstallPage={onShowSettings} />
+          <EnhanceSection />
         </>
       )}
     </div>
@@ -362,26 +367,44 @@ function SourceOverviewCard({
   );
 }
 
-function ToolsOverviewCard({
-  onShowEndpoints,
-}: {
-  onShowEndpoints: () => void;
-}) {
+function ToolsOverviewCard({ toolsetId }: { toolsetId: string | undefined }) {
+  const routes = useRoutes();
+  const navigate = useNavigate();
+  const { data: toolsetsResult, isLoading } = useListToolsets();
+  const toolset = toolsetsResult?.toolsets.find(
+    (t: ToolsetEntry) => t.id === toolsetId,
+  );
+
+  const ready = !isLoading && !!toolset;
+  const displayName = toolset?.name?.trim() || toolset?.slug;
+
   return (
     <OverviewCard
       title="Tools"
-      status={{ label: "Ready", tone: "ready" }}
+      status={ready ? { label: "Ready", tone: "ready" } : undefined}
       description="The capabilities and resources exposed to connecting clients."
       icon={Wrench}
-      action={
-        <Button variant="secondary" onClick={onShowEndpoints}>
-          <Button.Text>Manage</Button.Text>
-        </Button>
+      headerAction={
+        toolset ? (
+          <Button
+            variant="secondary"
+            onClick={() => navigate(routes.mcp.details.href(toolset.slug))}
+          >
+            <Button.Text>View</Button.Text>
+            <Button.RightIcon>
+              <ArrowUpRight className="size-4" />
+            </Button.RightIcon>
+          </Button>
+        ) : undefined
       }
     >
-      <Type muted small className="font-mono">
-        12 tools · 4 resources
-      </Type>
+      {isLoading || !toolset ? (
+        <Type muted small>
+          Loading tools…
+        </Type>
+      ) : (
+        displayName && <Type className="font-medium">{displayName}</Type>
+      )}
     </OverviewCard>
   );
 }
@@ -393,7 +416,6 @@ function OverviewCard({
   icon: Icon,
   children,
   headerAction,
-  action,
 }: OverviewCardProps) {
   // Amber only flags an actionable gap ("Needs Setup"); ready and in-flight
   // states both read as green so the card doesn't flicker amber while loading.
@@ -423,7 +445,6 @@ function OverviewCard({
           {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
         </div>
         {children}
-        {action ? <div>{action}</div> : null}
       </div>
     </section>
   );
@@ -444,11 +465,7 @@ function StatusLabel({ label, tone }: { label: string; tone: StatusTone }) {
   );
 }
 
-function EnhanceSection({
-  onCustomizeInstallPage,
-}: {
-  onCustomizeInstallPage: () => void;
-}) {
+function EnhanceSection() {
   return (
     <section>
       <Type
@@ -470,7 +487,6 @@ function EnhanceSection({
         description="Give users a branded, one-click page with setup instructions for connecting."
         meta="Default"
         actionLabel="Customize"
-        onAction={onCustomizeInstallPage}
         comingSoon
       />
     </section>
@@ -491,7 +507,7 @@ function EnhancementCard({
   description: string;
   meta: string;
   actionLabel: string;
-  onAction: () => void;
+  onAction?: () => void;
   comingSoon?: boolean;
 }) {
   return (
