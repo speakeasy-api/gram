@@ -116,7 +116,6 @@ ON workos_organization_syncs (workos_organization_id);
 
 CREATE TABLE IF NOT EXISTS workos_directory_attributes_syncs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  workos_organization_id TEXT NOT NULL,
   entity_id TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   last_event_id TEXT NOT NULL,
@@ -128,7 +127,7 @@ CREATE TABLE IF NOT EXISTS workos_directory_attributes_syncs (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS workos_directory_attributes_syncs_entity_key
-ON workos_directory_attributes_syncs (workos_organization_id, entity_type, entity_id);
+ON workos_directory_attributes_syncs (entity_type, entity_id);
 
 CREATE TABLE IF NOT EXISTS deployments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1663,52 +1662,46 @@ ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
-CREATE TABLE IF NOT EXISTS workos_directory_groups (
-  id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS groups (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
   workos_directory_group_id TEXT NOT NULL,
-  workos_organization_id TEXT NOT NULL,
   name TEXT NOT NULL,
   attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
   attributes_content_hash TEXT,
-  workos_created_at timestamptz,
-  workos_updated_at timestamptz,
-  workos_deleted_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT workos_directory_groups_pkey PRIMARY KEY (id)
+  CONSTRAINT groups_pkey PRIMARY KEY (id),
+  CONSTRAINT groups_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS workos_directory_groups_workos_directory_group_id_key
-ON workos_directory_groups (workos_directory_group_id);
+CREATE INDEX IF NOT EXISTS groups_organization_id_idx
+ON groups (organization_id);
 
-CREATE TABLE IF NOT EXISTS workos_directory_user_group_membership (
-  id TEXT NOT NULL,
+CREATE UNIQUE INDEX IF NOT EXISTS groups_workos_directory_group_id_key
+ON groups (workos_directory_group_id);
+
+CREATE TABLE IF NOT EXISTS user_group_memberships (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
   user_id TEXT NOT NULL,
-  group_id TEXT NOT NULL,
+  group_id uuid NOT NULL,
   workos_directory_user_id TEXT NOT NULL,
   workos_directory_group_id TEXT NOT NULL,
-  joined_at timestamptz NOT NULL,
-  left_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT workos_directory_user_group_membership_pkey PRIMARY KEY (id),
-  CONSTRAINT workos_directory_user_group_membership_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-  CONSTRAINT workos_directory_user_group_membership_group_id_fkey FOREIGN KEY (group_id) REFERENCES workos_directory_groups (id) ON DELETE CASCADE
+  CONSTRAINT user_group_memberships_pkey PRIMARY KEY (id),
+  CONSTRAINT user_group_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT user_group_memberships_group_id_fkey FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS workos_directory_user_group_membership_current_key
-ON workos_directory_user_group_membership (user_id, group_id)
-WHERE left_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS workos_directory_user_group_membership_user_history
-ON workos_directory_user_group_membership (user_id, joined_at DESC);
-
-CREATE INDEX IF NOT EXISTS workos_directory_user_group_membership_group_history
-ON workos_directory_user_group_membership (group_id, joined_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS user_group_memberships_current_key
+ON user_group_memberships (user_id, group_id);
 
 -- global_roles stores environment-level WorkOS roles (e.g. "admin", "member").
 -- These are not scoped to any organization.
