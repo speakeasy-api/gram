@@ -1,5 +1,6 @@
 import { CodeBlock } from "@/components/code";
 import { Heading } from "@/components/ui/heading";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useMcpEndpointUrl } from "@/hooks/useToolsetUrl";
@@ -47,7 +48,7 @@ type OverviewTabProps = {
 type StatusTone = "ready" | "needs-setup";
 type CardStatus = { label: string; tone: StatusTone };
 
-// "Ready" once set up, "Needs Setup" otherwise; hidden entirely while loading.
+/** "Ready" once set up, "Needs Setup" otherwise; undefined while loading. */
 function readyStatus(
   isLoading: boolean,
   isReady: boolean,
@@ -61,10 +62,15 @@ function readyStatus(
 type OverviewCardProps = {
   title: string;
   status?: CardStatus;
+  /**
+   * While the card's data is in flight, render a skeleton pill where the status
+   * label will land so the header doesn't reflow when it resolves.
+   */
+  statusLoading?: boolean;
   description: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   children?: ReactNode;
-  // Rendered top-right, aligned with the title (e.g. a Manage/View affordance).
+  /** Rendered top-right, aligned with the title (e.g. a Manage/View affordance). */
   headerAction?: ReactNode;
 };
 
@@ -75,44 +81,113 @@ export function OverviewTab({
   onShowEndpoints,
   onShowAuthentication,
 }: OverviewTabProps) {
+  // The parent redirects on error, so an undefined `mcpServer` here always means
+  // the top-level fetch is still in flight; show skeletons in place until then.
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      {mcpServer && (
-        <>
-          <EarlyAccessBanner />
-          <div className="space-y-5">
-            <ServerAddressCard
-              endpoints={endpoints}
-              isLoading={isLoadingEndpoints}
-              onManage={onShowEndpoints}
-            />
-            <AuthenticationOverviewCard
-              mcpServer={mcpServer}
-              onConfigure={onShowAuthentication}
-            />
-            {mcpServer.remoteMcpServerId ? (
-              <SourceOverviewCard
-                remoteMcpServerId={mcpServer.remoteMcpServerId}
-              />
-            ) : (
-              // Toolset-backed servers are currently impossible to reach
-              // through the UI on this route: /x/mcp only renders for
-              // mcp_servers-backed (remote MCP) servers, which always carry a
-              // remoteMcpServerId. Kept for when toolset-backed servers migrate
-              // onto this page (see AGE-1902).
-              <ToolsOverviewCard toolsetId={mcpServer.toolsetId} />
-            )}
-          </div>
-          <EnhanceSection />
-        </>
+      <EarlyAccessBanner />
+      <div className="space-y-5">
+        {mcpServer ? (
+          <OverviewCards
+            mcpServer={mcpServer}
+            endpoints={endpoints}
+            isLoadingEndpoints={isLoadingEndpoints}
+            onShowEndpoints={onShowEndpoints}
+            onShowAuthentication={onShowAuthentication}
+          />
+        ) : (
+          <OverviewCardsSkeleton />
+        )}
+      </div>
+      <EnhanceSection />
+    </div>
+  );
+}
+
+function OverviewCards({
+  mcpServer,
+  endpoints,
+  isLoadingEndpoints,
+  onShowEndpoints,
+  onShowAuthentication,
+}: {
+  mcpServer: McpServer;
+  endpoints: McpEndpoint[];
+  isLoadingEndpoints: boolean;
+  onShowEndpoints: () => void;
+  onShowAuthentication: () => void;
+}) {
+  return (
+    <>
+      <ServerAddressCard
+        endpoints={endpoints}
+        isLoading={isLoadingEndpoints}
+        onManage={onShowEndpoints}
+      />
+      <AuthenticationOverviewCard
+        mcpServer={mcpServer}
+        onConfigure={onShowAuthentication}
+      />
+      {mcpServer.remoteMcpServerId ? (
+        <SourceOverviewCard remoteMcpServerId={mcpServer.remoteMcpServerId} />
+      ) : (
+        // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
+        // always carry a remoteMcpServerId, so this branch is currently
+        // unreachable. Kept for when toolset-backed servers migrate here
+        // (AGE-1902).
+        <ToolsOverviewCard toolsetId={mcpServer.toolsetId} />
       )}
+    </>
+  );
+}
+
+function OverviewCardsSkeleton() {
+  return (
+    <>
+      <OverviewCardSkeleton bodyLines={2} />
+      <OverviewCardSkeleton bodyLines={1} />
+      <OverviewCardSkeleton bodyLines={2} />
+    </>
+  );
+}
+
+function OverviewCardSkeleton({ bodyLines = 2 }: { bodyLines?: number }) {
+  return (
+    <section className={CARD_SHELL}>
+      <Skeleton className="h-12 w-12 shrink-0 rounded-lg" />
+      <div className="min-w-0 flex-1 space-y-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-3.5 w-16 rounded" />
+            </div>
+            <Skeleton className="h-4 w-72 max-w-full" />
+          </div>
+          <Skeleton className="h-9 w-24 shrink-0 rounded-md" />
+        </div>
+        <div className="space-y-2">
+          {Array.from({ length: bodyLines }).map((_, i) => (
+            <Skeleton key={i} className="h-11 w-full" />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UrlFieldSkeleton() {
+  return (
+    <div className="space-y-1.5">
+      <Skeleton className="h-3 w-40" />
+      <Skeleton className="h-11 w-full" />
     </div>
   );
 }
 
 function EarlyAccessBanner() {
   return (
-    <section className="border-border bg-card flex gap-4 rounded-lg border p-5 shadow-sm">
+    <section className={CARD_SHELL}>
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-950/50">
         <Sparkles className="h-6 w-6 text-violet-600 dark:text-violet-300" />
       </div>
@@ -153,9 +228,9 @@ function ServerAddressCard({
   );
 
   // useMcpEndpointUrl returns undefined while a custom domain is still
-  // resolving. This card intentionally ignores verification state, so fall
-  // back to the platform URL built straight from the slug — the hook swaps in
-  // the custom-domain URL once it resolves.
+  // resolving. This card intentionally ignores verification state, so fall back
+  // to the platform URL built from the slug; the hook swaps in the custom-domain
+  // URL once it resolves.
   const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
   const mcpUrl =
     resolvedUrl ??
@@ -167,6 +242,7 @@ function ServerAddressCard({
     <OverviewCard
       title="Server Address"
       status={readyStatus(isLoading, configured)}
+      statusLoading={isLoading}
       description="This is where clients connect to your server. Add /install to the end to open a guided setup page you can share with users."
       icon={GlobeIcon}
       headerAction={
@@ -176,9 +252,10 @@ function ServerAddressCard({
       }
     >
       {isLoading ? (
-        <Type muted small>
-          Loading endpoint…
-        </Type>
+        <div className="space-y-4">
+          <UrlFieldSkeleton />
+          <UrlFieldSkeleton />
+        </div>
       ) : !configured ? (
         <StatusCallout tone="warning" icon={AlertTriangle}>
           A server address must be configured
@@ -225,11 +302,13 @@ function UrlField({
   );
 }
 
-// Auth posture is a function of three inputs: whether Gram OAuth gates the
-// server (a user_session_issuer paired with a *private* server), whether an
-// upstream remote identity provider is attached, and public vs private
-// visibility. A user_session_issuer alone is not "secured" — a public server
-// with no remote identity is open to anyone.
+/**
+ * Auth posture is a function of three inputs: whether Gram OAuth gates the
+ * server (a user_session_issuer paired with a *private* server), whether an
+ * upstream remote identity provider is attached, and public vs private
+ * visibility. A user_session_issuer alone is not "secured": a public server
+ * with no remote identity is open to anyone.
+ */
 type AuthState = "gram-only" | "gram-remote" | "remote-only" | "none";
 
 const AUTH_COPY: Record<AuthState, string> = {
@@ -270,14 +349,15 @@ function AuthenticationOverviewCard({
   else state = "none";
 
   const secure = state !== "none";
-  // While the remote-identity query is in flight the descriptive copy is
-  // undecided, so hold the body until it resolves.
+  // The remote-identity query only runs when an issuer exists, so gate the
+  // loading state on hasIssuer too.
   const loading = hasIssuer && isLoading;
 
   return (
     <OverviewCard
       title="Authentication"
       status={readyStatus(loading, secure)}
+      statusLoading={loading}
       description="Verify who is allowed to connect before traffic flows through."
       icon={secure ? ShieldCheck : Shield}
       headerAction={
@@ -290,9 +370,7 @@ function AuthenticationOverviewCard({
       }
     >
       {loading ? (
-        <Type muted small>
-          Loading authentication…
-        </Type>
+        <Skeleton className="h-12 w-full rounded-md" />
       ) : secure ? (
         <StatusCallout tone="ready" icon={ShieldCheck}>
           {AUTH_COPY[state]}
@@ -326,6 +404,7 @@ function SourceOverviewCard({
     <OverviewCard
       title="Source"
       status={ready ? { label: "Ready", tone: "ready" } : undefined}
+      statusLoading={isLoading}
       description="The remote MCP server this server proxies."
       icon={Network}
       headerAction={
@@ -350,9 +429,10 @@ function SourceOverviewCard({
       }
     >
       {isLoading || !remoteMcpServer ? (
-        <Type muted small>
-          Loading source…
-        </Type>
+        <div className="space-y-4">
+          <Skeleton className="h-5 w-44" />
+          <UrlFieldSkeleton />
+        </div>
       ) : (
         <div className="space-y-4">
           {trimmedName && <Type className="font-medium">{trimmedName}</Type>}
@@ -382,6 +462,7 @@ function ToolsOverviewCard({ toolsetId }: { toolsetId: string | undefined }) {
     <OverviewCard
       title="Tools"
       status={ready ? { label: "Ready", tone: "ready" } : undefined}
+      statusLoading={isLoading}
       description="The capabilities and resources exposed to connecting clients."
       icon={Wrench}
       headerAction={
@@ -399,9 +480,7 @@ function ToolsOverviewCard({ toolsetId }: { toolsetId: string | undefined }) {
       }
     >
       {isLoading || !toolset ? (
-        <Type muted small>
-          Loading tools…
-        </Type>
+        <Skeleton className="h-5 w-40" />
       ) : (
         displayName && <Type className="font-medium">{displayName}</Type>
       )}
@@ -412,6 +491,7 @@ function ToolsOverviewCard({ toolsetId }: { toolsetId: string | undefined }) {
 function OverviewCard({
   title,
   status,
+  statusLoading,
   description,
   icon: Icon,
   children,
@@ -420,8 +500,16 @@ function OverviewCard({
   // Amber only flags an actionable gap ("Needs Setup"); ready and in-flight
   // states both read as green so the card doesn't flicker amber while loading.
   const tone = ICON_TONES[status?.tone === "needs-setup" ? "amber" : "green"];
+
+  let statusNode: ReactNode = null;
+  if (status) {
+    statusNode = <StatusLabel label={status.label} tone={status.tone} />;
+  } else if (statusLoading) {
+    statusNode = <Skeleton className="h-3.5 w-16 rounded" />;
+  }
+
   return (
-    <section className="border-border bg-card flex gap-4 rounded-lg border p-5 shadow-sm">
+    <section className={CARD_SHELL}>
       <div
         className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${tone.frame}`}
       >
@@ -434,9 +522,7 @@ function OverviewCard({
               <Type variant="subheading" as="h3">
                 {title}
               </Type>
-              {status && (
-                <StatusLabel label={status.label} tone={status.tone} />
-              )}
+              {statusNode}
             </div>
             <Type muted small>
               {description}
@@ -557,6 +643,10 @@ function EnhancementCard({
     </section>
   );
 }
+
+/** Shared outer chrome for every overview status card (and its skeleton). */
+const CARD_SHELL =
+  "border-border bg-card flex gap-4 rounded-lg border p-5 shadow-sm";
 
 const ICON_TONES = {
   green: {
