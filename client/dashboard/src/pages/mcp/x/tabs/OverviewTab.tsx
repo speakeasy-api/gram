@@ -1,39 +1,71 @@
-import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
-import {
-  useMcpMetadataMetadataForm,
-  type UseMcpMetadataMetadataFormResult,
-} from "@/components/mcp_install_page/useMcpMetadataForm";
-import { DotCard } from "@/components/ui/dot-card";
+import { CodeBlock } from "@/components/code";
 import { Heading } from "@/components/ui/heading";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useMcpEndpointUrl } from "@/hooks/useToolsetUrl";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
-import {
-  formatRemoteMcpUrlForDisplay,
-  remoteMcpRouteParam,
-} from "@/lib/sources";
+import { remoteMcpRouteParam } from "@/lib/sources";
+import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import type {
-  McpEndpoint,
-  McpServer,
-  ToolsetEntry,
-} from "@gram/client/models/components";
+import type { McpEndpoint, McpServer } from "@gram/client/models/components";
 import {
-  useGetMcpMetadata,
   useGetRemoteMcpServer,
-  useListToolsets,
   useRemoteSessionClients,
 } from "@gram/client/react-query/index.js";
-import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import {
-  ArrowRight,
-  Lock,
+  AlertTriangle,
+  ArrowUpRight,
+  BookOpen,
+  GlobeIcon,
   Network,
-  Plus,
+  Shield,
   ShieldCheck,
+  Sparkles,
   Wrench,
 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import {
+  useMemo,
+  type ComponentType,
+  type ReactNode,
+  type SVGProps,
+} from "react";
+import { useNavigate } from "react-router";
+
+type OverviewTabProps = {
+  mcpServer: McpServer | undefined;
+  endpoints: McpEndpoint[];
+  isLoadingEndpoints: boolean;
+  onShowEndpoints: () => void;
+  onShowAuthentication: () => void;
+  onShowSettings: () => void;
+};
+
+type StatusTone = "ready" | "needs-setup";
+type CardStatus = { label: string; tone: StatusTone };
+
+// "Ready" once set up, "Needs Setup" otherwise; hidden entirely while loading.
+function readyStatus(
+  isLoading: boolean,
+  isReady: boolean,
+): CardStatus | undefined {
+  if (isLoading) return undefined;
+  return isReady
+    ? { label: "Ready", tone: "ready" }
+    : { label: "Needs Setup", tone: "needs-setup" };
+}
+
+type OverviewCardProps = {
+  title: string;
+  status?: CardStatus;
+  description: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  children?: ReactNode;
+  // Rendered top-right, aligned with the title. Used for the Server Address
+  // "Manage" affordance which sits in the header rather than below the body.
+  headerAction?: ReactNode;
+  // Rendered below the body content (primary call-to-action).
+  action?: ReactNode;
+};
 
 export function OverviewTab({
   mcpServer,
@@ -41,157 +73,176 @@ export function OverviewTab({
   isLoadingEndpoints,
   onShowEndpoints,
   onShowAuthentication,
-}: {
-  mcpServer: McpServer | undefined;
-  endpoints: McpEndpoint[];
-  isLoadingEndpoints: boolean;
-  onShowEndpoints: () => void;
-  onShowAuthentication: () => void;
-}) {
+  onShowSettings,
+}: OverviewTabProps) {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      {mcpServer ? (
-        <InstallPagesSection
-          mcpServer={mcpServer}
-          endpoints={endpoints}
-          isLoading={isLoadingEndpoints}
-          onShowEndpoints={onShowEndpoints}
-        />
-      ) : null}
       {mcpServer && (
-        <AuthenticationOverviewSection
-          mcpServer={mcpServer}
-          onNavigate={onShowAuthentication}
-        />
+        <>
+          <EarlyAccessBanner />
+          <div className="space-y-5">
+            <ServerAddressCard
+              endpoints={endpoints}
+              isLoading={isLoadingEndpoints}
+              onManage={onShowEndpoints}
+            />
+            <AuthenticationOverviewCard
+              mcpServer={mcpServer}
+              onConfigure={onShowAuthentication}
+            />
+            {mcpServer.remoteMcpServerId ? (
+              <SourceOverviewCard
+                remoteMcpServerId={mcpServer.remoteMcpServerId}
+              />
+            ) : (
+              <ToolsOverviewCard onShowEndpoints={onShowEndpoints} />
+            )}
+          </div>
+          <EnhanceSection onCustomizeInstallPage={onShowSettings} />
+        </>
       )}
-      {mcpServer && <SourcesSection mcpServer={mcpServer} />}
     </div>
   );
 }
 
-function InstallPagesSection({
-  mcpServer,
-  endpoints,
-  isLoading,
-  onShowEndpoints,
-}: {
-  mcpServer: McpServer;
-  endpoints: McpEndpoint[];
-  isLoading: boolean;
-  onShowEndpoints: () => void;
-}) {
-  // Custom-domain endpoints render first so the more prominent customer-facing
-  // URLs sit above the platform-hosted fallback.
-  const sortedEndpoints = useMemo(
-    () =>
-      [...endpoints].sort((a, b) => {
-        const aCustom = a.customDomainId ? 1 : 0;
-        const bCustom = b.customDomainId ? 1 : 0;
-        return bCustom - aCustom;
-      }),
-    [endpoints],
-  );
-
-  // Metadata lives at the mcp_server level, not the endpoint level — branding
-  // edits made from any row's dialog persist to the same row. The 404 path is
-  // load-bearing because servers without metadata yet return ErrNoRows from
-  // mcp_metadata.GetMetadataByMcpServerID.
-  const metadataResult = useGetMcpMetadata(
-    { mcpServerId: mcpServer.id },
-    undefined,
-    {
-      retry: (_, err) => {
-        if (err instanceof GramError && err.statusCode === 404) {
-          return false;
-        }
-        return true;
-      },
-      throwOnError: false,
-    },
-  );
-  const form = useMcpMetadataMetadataForm(
-    { kind: "mcp_server", mcpServerId: mcpServer.id },
-    metadataResult.data?.metadata,
-  );
-  const formIsLoading = metadataResult.isLoading || form.isLoading;
-
+function EarlyAccessBanner() {
   return (
-    <section>
-      <Heading variant="h4" className="mb-3">
-        Client Install
-      </Heading>
-      <Type muted small className="mb-4">
-        Share this page with your users to give simple instructions for getting
-        started with your MCP in their client like Cursor or Claude Desktop.
-      </Type>
-      {isLoading ? (
-        <Type muted small>
-          Loading endpoints…
+    <section className="border-border bg-card flex gap-4 rounded-lg border p-5 shadow-sm">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-950/50">
+        <Sparkles className="h-6 w-6 text-violet-600 dark:text-violet-300" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <Type variant="subheading" as="h3">
+          Remote MCP is in early access
         </Type>
-      ) : sortedEndpoints.length === 0 ? (
-        <Stack gap={2}>
-          <Type muted small>
-            No endpoints configured yet.
-          </Type>
-          <div>
-            <Button variant="secondary" onClick={onShowEndpoints}>
-              <Button.LeftIcon>
-                <Plus className="size-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Endpoint</Button.Text>
-            </Button>
-          </div>
-        </Stack>
-      ) : (
-        <Stack gap={3}>
-          {sortedEndpoints.map((endpoint) => (
-            <InstallPageRow
-              key={endpoint.id}
-              endpoint={endpoint}
-              form={form}
-              isLoading={formIsLoading}
-            />
-          ))}
-        </Stack>
-      )}
+        <Type muted small>
+          This feature is under active development and may change frequently.
+          We'd love your feedback:{" "}
+          <a
+            href="mailto:gram@speakeasy.com?subject=Remote%20MCP%20Feedback"
+            className="text-foreground font-medium underline underline-offset-2"
+          >
+            reach out to the Gram team
+          </a>{" "}
+          if you run into issues or have questions.
+        </Type>
+      </div>
     </section>
   );
 }
 
-function InstallPageRow({
-  endpoint,
-  form,
+function ServerAddressCard({
+  endpoints,
   isLoading,
+  onManage,
 }: {
-  endpoint: McpEndpoint;
-  form: UseMcpMetadataMetadataFormResult;
+  endpoints: McpEndpoint[];
   isLoading: boolean;
+  onManage: () => void;
 }) {
-  const { installPageUrl } = useMcpEndpointUrl(endpoint);
+  // Custom-domain endpoints are the customer-facing URL, so prefer them over
+  // the platform-hosted fallback when picking which address to display.
+  const endpoint = useMemo(
+    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
+    [endpoints],
+  );
 
-  if (!installPageUrl) {
-    return (
-      <Type muted small>
-        URL unavailable (custom domain still resolving).
-      </Type>
-    );
-  }
+  // useMcpEndpointUrl returns undefined while a custom domain is still
+  // resolving. This card intentionally ignores verification state, so fall
+  // back to the platform URL built straight from the slug — the hook swaps in
+  // the custom-domain URL once it resolves.
+  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
+  const mcpUrl =
+    resolvedUrl ??
+    (endpoint?.slug ? `${getServerURL()}/mcp/${endpoint.slug}` : undefined);
+  const installPageUrl = mcpUrl ? `${mcpUrl}/install` : undefined;
+  const configured = !!mcpUrl;
 
   return (
-    <InstallPageConfigForm
-      installPageUrl={installPageUrl}
-      form={form}
-      isLoading={isLoading}
-    />
+    <OverviewCard
+      title="Server Address"
+      status={readyStatus(isLoading, configured)}
+      description="This is where clients connect to your server. Add /install to the end to open a guided setup page you can share with users."
+      icon={GlobeIcon}
+      headerAction={
+        <Button variant="secondary" onClick={onManage}>
+          <Button.Text>Manage</Button.Text>
+        </Button>
+      }
+    >
+      {isLoading ? (
+        <Type muted small>
+          Loading endpoint…
+        </Type>
+      ) : !configured ? (
+        <StatusCallout tone="warning" icon={AlertTriangle}>
+          A server address must be configured
+        </StatusCallout>
+      ) : (
+        <div className="space-y-4">
+          <UrlField
+            label="MCP Server URL"
+            hint="Clients connect here"
+            url={mcpUrl}
+          />
+          {installPageUrl && (
+            <UrlField
+              label="Install Page URL"
+              hint="Share with your users"
+              url={installPageUrl}
+            />
+          )}
+        </div>
+      )}
+    </OverviewCard>
   );
 }
 
-function AuthenticationOverviewSection({
+function UrlField({
+  label,
+  hint,
+  url,
+}: {
+  label: string;
+  hint: string;
+  url: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground font-mono font-semibold tracking-wide uppercase">
+          {label}
+        </span>
+        <span className="text-muted-foreground">· {hint}</span>
+      </div>
+      <CodeBlock innerClassName="bg-muted/40 p-3 pr-12">{url}</CodeBlock>
+    </div>
+  );
+}
+
+// Auth posture is a function of three inputs: whether Gram OAuth gates the
+// server (a user_session_issuer paired with a *private* server), whether an
+// upstream remote identity provider is attached, and public vs private
+// visibility. A user_session_issuer alone is not "secured" — a public server
+// with no remote identity is open to anyone.
+type AuthState = "gram-only" | "gram-remote" | "remote-only" | "none";
+
+const AUTH_COPY: Record<AuthState, string> = {
+  "gram-only":
+    "Only members of this Speakeasy organization who have been given the appropriate roles & permissions are able to connect to this server.",
+  "gram-remote":
+    "Members of this Speakeasy organization who have been given the appropriate roles & permissions are able to connect to this server. They will also be required to log into the upstream service.",
+  "remote-only":
+    "Users are not required to be Speakeasy organization members, and roles & permissions will not apply. They will be required to log into the upstream service before connecting to the server.",
+  none: "Anyone can connect to and use this MCP server.",
+};
+
+function AuthenticationOverviewCard({
   mcpServer,
-  onNavigate,
+  onConfigure,
 }: {
   mcpServer: McpServer;
-  onNavigate: () => void;
+  onConfigure: () => void;
 }) {
   const userSessionIssuerId = mcpServer.userSessionIssuerId;
   const { data: clientsResult, isLoading } = useRemoteSessionClients(
@@ -200,241 +251,338 @@ function AuthenticationOverviewSection({
     { enabled: !!userSessionIssuerId },
   );
 
-  // Count distinct upstream identity providers (one user_session_issuer can be
-  // paired with the same remote_session_issuer through multiple clients).
-  const providerCount = clientsResult
-    ? new Set(
-        clientsResult.result.items.map(
-          (client) => client.remoteSessionIssuerId,
-        ),
-      ).size
-    : 0;
+  const isPublic = mcpServer.visibility === "public";
+  const hasIssuer = !!userSessionIssuerId;
+  // Whether any upstream identity provider is paired with this issuer.
+  const hasRemote = (clientsResult?.result.items.length ?? 0) > 0;
+  // Private + issuer means Gram OAuth gates org membership and RBAC.
+  const gramGated = hasIssuer && !isPublic;
+
+  let state: AuthState;
+  if (gramGated && !hasRemote) state = "gram-only";
+  else if (gramGated && hasRemote) state = "gram-remote";
+  else if (isPublic && hasRemote) state = "remote-only";
+  else state = "none";
+
+  const secure = state !== "none";
+  // While the remote-identity query is in flight the descriptive copy is
+  // undecided, so hold the body until it resolves.
+  const loading = hasIssuer && isLoading;
 
   return (
-    <section>
-      <Heading variant="h4" className="mb-3">
-        Authentication
-      </Heading>
-      <Type muted small className="mb-4">
-        Manage security for MCP Clients
-      </Type>
-      {!userSessionIssuerId ? (
-        <Stack gap={3}>
-          <Stack direction="horizontal" gap={2} align="center">
-            <Lock className="text-muted-foreground size-4" />
-            <Type className="font-medium">
-              No remote identity providers configured yet.
-            </Type>
-          </Stack>
-          <div>
-            <Button variant="secondary" onClick={onNavigate}>
-              <Button.LeftIcon>
-                <Plus className="size-4" />
-              </Button.LeftIcon>
-              <Button.Text>Configure Authentication</Button.Text>
-            </Button>
-          </div>
-        </Stack>
-      ) : (
-        <button
-          type="button"
-          onClick={onNavigate}
-          className="block w-full cursor-pointer text-left hover:no-underline"
+    <OverviewCard
+      title="Authentication"
+      status={readyStatus(loading, secure)}
+      description="Verify who is allowed to connect before traffic flows through."
+      icon={secure ? ShieldCheck : Shield}
+      headerAction={
+        <Button
+          variant={secure ? "secondary" : "primary"}
+          onClick={onConfigure}
         >
-          <DotCard
-            icon={<ShieldCheck className="text-muted-foreground h-8 w-8" />}
-          >
-            <div className="mb-2 flex items-start justify-between gap-2">
-              <Type
-                variant="subheading"
-                as="div"
-                className="text-md group-hover:text-primary transition-colors"
-              >
-                Platform authentication enabled
-              </Type>
-            </div>
-            {isLoading ? (
-              <Type muted small>
-                Loading identity providers…
-              </Type>
-            ) : providerCount === 0 ? (
-              <Stack direction="horizontal" gap={2} align="center">
-                <Lock className="text-muted-foreground size-4" />
-                <Type className="font-medium">
-                  No remote identity providers configured yet.
-                </Type>
-              </Stack>
-            ) : (
-              <Type muted small>
-                {providerCount === 1
-                  ? "1 remote identity provider configured."
-                  : `${providerCount} remote identity providers configured.`}
-              </Type>
-            )}
-            <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-              <Badge variant="success">
-                <Badge.Text>OAuth-gated</Badge.Text>
-              </Badge>
-              <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-                <span>Open</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </div>
-            </div>
-          </DotCard>
-        </button>
+          <Button.Text>{secure ? "Manage" : "Configure"}</Button.Text>
+        </Button>
+      }
+    >
+      {loading ? (
+        <Type muted small>
+          Loading authentication…
+        </Type>
+      ) : secure ? (
+        <StatusCallout tone="ready" icon={ShieldCheck}>
+          {AUTH_COPY[state]}
+        </StatusCallout>
+      ) : (
+        <StatusCallout tone="warning" icon={AlertTriangle}>
+          {AUTH_COPY[state]}
+        </StatusCallout>
       )}
-    </section>
+    </OverviewCard>
   );
 }
 
-function SourcesSection({ mcpServer }: { mcpServer: McpServer }) {
-  const isRemoteBacked = !!mcpServer.remoteMcpServerId;
-  const isToolsetBacked = !!mcpServer.toolsetId;
-
-  if (!isRemoteBacked && !isToolsetBacked) {
-    return null;
-  }
-
-  return (
-    <section>
-      <Heading variant="h4" className="mb-3">
-        Sources
-      </Heading>
-      <Type muted small className="mb-4">
-        {isRemoteBacked
-          ? "This MCP server is backed by a remote MCP server."
-          : "This MCP server is backed by built sources."}
-      </Type>
-      {isRemoteBacked && mcpServer.remoteMcpServerId && (
-        <RemoteSourceCard remoteMcpServerId={mcpServer.remoteMcpServerId} />
-      )}
-      {isToolsetBacked && mcpServer.toolsetId && (
-        <ToolsetSourceCard toolsetId={mcpServer.toolsetId} />
-      )}
-    </section>
-  );
-}
-
-function RemoteSourceCard({
+function SourceOverviewCard({
   remoteMcpServerId,
 }: {
   remoteMcpServerId: string;
 }) {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const { data: remoteMcpServer, isLoading } = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
     { throwOnError: false },
   );
 
-  if (isLoading || !remoteMcpServer) {
-    return (
-      <SourceSkeletonCard
-        icon={<Network className="text-muted-foreground h-8 w-8" />}
-      />
-    );
-  }
-
-  const trimmedName = remoteMcpServer.name?.trim();
-  const urlDisplay = formatRemoteMcpUrlForDisplay(remoteMcpServer.url);
+  const ready = !isLoading && !!remoteMcpServer;
+  const trimmedName = remoteMcpServer?.name?.trim();
 
   return (
-    <routes.sources.source.Link
-      params={["remotemcp", remoteMcpRouteParam(remoteMcpServer)]}
-      className="block hover:no-underline"
+    <OverviewCard
+      title="Source"
+      status={ready ? { label: "Ready", tone: "ready" } : undefined}
+      description="The remote MCP server this server proxies."
+      icon={Network}
+      headerAction={
+        remoteMcpServer ? (
+          <Button
+            variant="secondary"
+            onClick={() =>
+              navigate(
+                routes.sources.source.href(
+                  "remotemcp",
+                  remoteMcpRouteParam(remoteMcpServer),
+                ),
+              )
+            }
+          >
+            <Button.Text>View</Button.Text>
+            <Button.RightIcon>
+              <ArrowUpRight className="size-4" />
+            </Button.RightIcon>
+          </Button>
+        ) : undefined
+      }
     >
-      <SourceCardBody
-        icon={<Network className="text-muted-foreground h-8 w-8" />}
-        title={trimmedName || urlDisplay}
-        subtitle={trimmedName ? urlDisplay : undefined}
-        badgeLabel="Remote MCP"
-      />
-    </routes.sources.source.Link>
+      {isLoading || !remoteMcpServer ? (
+        <Type muted small>
+          Loading source…
+        </Type>
+      ) : (
+        <div className="space-y-4">
+          {trimmedName && <Type className="font-medium">{trimmedName}</Type>}
+          <UrlField
+            label="Upstream URL"
+            hint="Requests are forwarded here"
+            url={remoteMcpServer.url}
+          />
+        </div>
+      )}
+    </OverviewCard>
   );
 }
 
-function ToolsetSourceCard({ toolsetId }: { toolsetId: string }) {
-  const routes = useRoutes();
-  const { data: toolsetsResult, isLoading } = useListToolsets();
-  const toolset = toolsetsResult?.toolsets.find(
-    (t: ToolsetEntry) => t.id === toolsetId,
-  );
-
-  if (isLoading || !toolset) {
-    return (
-      <SourceSkeletonCard
-        icon={<Wrench className="text-muted-foreground h-8 w-8" />}
-      />
-    );
-  }
-
-  const displayName = toolset.name?.trim() || toolset.slug;
-
-  return (
-    <routes.mcp.details.Link
-      params={[toolset.slug]}
-      className="block hover:no-underline"
-    >
-      <SourceCardBody
-        icon={<Wrench className="text-muted-foreground h-8 w-8" />}
-        title={displayName}
-        badgeLabel="Toolset"
-      />
-    </routes.mcp.details.Link>
-  );
-}
-
-function SourceCardBody({
-  icon,
-  title,
-  subtitle,
-  badgeLabel,
+function ToolsOverviewCard({
+  onShowEndpoints,
 }: {
-  icon: ReactNode;
-  title: string;
-  subtitle?: string;
-  badgeLabel: string;
+  onShowEndpoints: () => void;
 }) {
   return (
-    <DotCard icon={icon}>
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <Type
-            variant="subheading"
-            as="div"
-            className="text-md group-hover:text-primary truncate transition-colors"
-            title={title}
-          >
-            {title}
-          </Type>
-          {subtitle && (
-            <Type as="div" muted small className="truncate" title={subtitle}>
-              {subtitle}
-            </Type>
-          )}
-        </div>
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <Badge variant="neutral">
-          <Badge.Text>{badgeLabel}</Badge.Text>
-        </Badge>
-        <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-          <span>Open</span>
-          <ArrowRight className="h-3.5 w-3.5" />
-        </div>
-      </div>
-    </DotCard>
+    <OverviewCard
+      title="Tools"
+      status={{ label: "Ready", tone: "ready" }}
+      description="The capabilities and resources exposed to connecting clients."
+      icon={Wrench}
+      action={
+        <Button variant="secondary" onClick={onShowEndpoints}>
+          <Button.Text>Manage</Button.Text>
+        </Button>
+      }
+    >
+      <Type muted small className="font-mono">
+        12 tools · 4 resources
+      </Type>
+    </OverviewCard>
   );
 }
 
-function SourceSkeletonCard({ icon }: { icon: React.ReactNode }) {
+function OverviewCard({
+  title,
+  status,
+  description,
+  icon: Icon,
+  children,
+  headerAction,
+  action,
+}: OverviewCardProps) {
+  // Amber only flags an actionable gap ("Needs Setup"); ready and in-flight
+  // states both read as green so the card doesn't flicker amber while loading.
+  const tone = ICON_TONES[status?.tone === "needs-setup" ? "amber" : "green"];
   return (
-    <DotCard icon={icon}>
-      <div className="bg-muted mb-2 h-5 w-1/3 animate-pulse rounded" />
-      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <div className="bg-muted h-5 w-20 animate-pulse rounded-full" />
-        <div className="bg-muted h-4 w-12 animate-pulse rounded" />
+    <section className="border-border bg-card flex gap-4 rounded-lg border p-5 shadow-sm">
+      <div
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${tone.frame}`}
+      >
+        <Icon className={`h-6 w-6 ${tone.icon}`} />
       </div>
-    </DotCard>
+      <div className="min-w-0 flex-1 space-y-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="mb-1 flex flex-wrap items-center gap-2.5">
+              <Type variant="subheading" as="h3">
+                {title}
+              </Type>
+              {status && (
+                <StatusLabel label={status.label} tone={status.tone} />
+              )}
+            </div>
+            <Type muted small>
+              {description}
+            </Type>
+          </div>
+          {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+        </div>
+        {children}
+        {action ? <div>{action}</div> : null}
+      </div>
+    </section>
+  );
+}
+
+function StatusLabel({ label, tone }: { label: string; tone: StatusTone }) {
+  const colorClassName =
+    tone === "ready"
+      ? "text-emerald-700 dark:text-emerald-300"
+      : "text-amber-600 dark:text-amber-300";
+
+  return (
+    <span
+      className={`font-mono text-[11px] font-semibold tracking-wide uppercase ${colorClassName}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function EnhanceSection({
+  onCustomizeInstallPage,
+}: {
+  onCustomizeInstallPage: () => void;
+}) {
+  return (
+    <section>
+      <Type
+        muted
+        small
+        className="font-mono text-xs tracking-[0.2em] uppercase"
+      >
+        Optional
+      </Type>
+      <Heading variant="h3" className="mt-1 mb-1 font-semibold normal-case">
+        Enhance your server
+      </Heading>
+      <Type muted small className="mb-5">
+        Add-ons that improve the experience. They won't block enabling.
+      </Type>
+      <EnhancementCard
+        icon={BookOpen}
+        title="Install page"
+        description="Give users a branded, one-click page with setup instructions for connecting."
+        meta="Default"
+        actionLabel="Customize"
+        onAction={onCustomizeInstallPage}
+        comingSoon
+      />
+    </section>
+  );
+}
+
+function EnhancementCard({
+  icon: Icon,
+  title,
+  description,
+  meta,
+  actionLabel,
+  onAction,
+  comingSoon = false,
+}: {
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  title: string;
+  description: string;
+  meta: string;
+  actionLabel: string;
+  onAction: () => void;
+  comingSoon?: boolean;
+}) {
+  return (
+    <section className="border-border bg-card flex min-h-[176px] flex-col rounded-lg border p-5 shadow-sm">
+      <div className="mb-5 flex items-center gap-3">
+        <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-md">
+          <Icon className="text-muted-foreground h-5 w-5" />
+        </div>
+        <Type variant="subheading" as="h3">
+          {title}
+        </Type>
+        {comingSoon && (
+          <Badge size="sm" variant="neutral" background>
+            <Badge.Text>Coming Soon</Badge.Text>
+          </Badge>
+        )}
+      </div>
+
+      <Type muted small className="mb-5">
+        {description}
+      </Type>
+
+      <div className="mt-auto flex items-center justify-between gap-4">
+        <Type
+          muted
+          small
+          className="font-mono text-xs tracking-[0.2em] uppercase"
+        >
+          {meta}
+        </Type>
+        {comingSoon ? (
+          // A disabled button swallows pointer events, so wrap it in a span
+          // for the tooltip trigger to register hover.
+          <SimpleTooltip tooltip="Coming Soon">
+            <span tabIndex={0}>
+              <Button variant="secondary" disabled>
+                <Button.Text>{actionLabel}</Button.Text>
+              </Button>
+            </span>
+          </SimpleTooltip>
+        ) : (
+          <Button variant="secondary" onClick={onAction}>
+            <Button.Text>{actionLabel}</Button.Text>
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const ICON_TONES = {
+  green: {
+    frame: "bg-emerald-100 dark:bg-emerald-950/50",
+    icon: "text-emerald-700 dark:text-emerald-300",
+  },
+  amber: {
+    frame: "bg-amber-100 dark:bg-amber-950/50",
+    icon: "text-amber-600 dark:text-amber-300",
+  },
+} as const;
+
+function StatusCallout({
+  tone,
+  icon: Icon,
+  children,
+}: {
+  tone: "ready" | "warning";
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  children: ReactNode;
+}) {
+  const styles =
+    tone === "ready"
+      ? {
+          box: "bg-emerald-50 dark:bg-emerald-950/40",
+          icon: "text-emerald-600 dark:text-emerald-300",
+          text: "text-emerald-700 dark:text-emerald-300",
+        }
+      : {
+          box: "bg-amber-50 dark:bg-amber-950/40",
+          icon: "text-amber-600 dark:text-amber-300",
+          text: "text-amber-700 dark:text-amber-300",
+        };
+
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-md px-3 py-2 ${styles.box}`}
+    >
+      <Icon className={`mt-0.5 size-4 shrink-0 ${styles.icon}`} />
+      <Type small className={styles.text}>
+        {children}
+      </Type>
+    </div>
   );
 }

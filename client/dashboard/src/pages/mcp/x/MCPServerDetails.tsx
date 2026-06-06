@@ -161,6 +161,7 @@ export default function MCPServerDetails() {
               isLoadingEndpoints={isLoadingEndpoints}
               onShowEndpoints={() => handleTabChange("endpoints")}
               onShowAuthentication={() => handleTabChange("authentication")}
+              onShowSettings={() => handleTabChange("settings")}
             />
           </TabsContent>
 
