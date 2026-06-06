@@ -1473,27 +1473,21 @@ type TriggerInstance struct {
 }
 
 type User struct {
-	ID              string
-	Email           string
-	DisplayName     string
-	PhotoUrl        pgtype.Text
-	Admin           bool
-	LastLogin       pgtype.Timestamptz
-	WorkosID        pgtype.Text
-	WorkosCreatedAt pgtype.Timestamptz
-	WorkosUpdatedAt pgtype.Timestamptz
-	WorkosDeletedAt pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-}
-
-type UserAttribute struct {
-	ID          string
-	UserID      string
-	Attributes  []byte
-	ContentHash string
-	CreatedAt   pgtype.Timestamptz
+	ID                    string
+	Email                 string
+	DisplayName           string
+	PhotoUrl              pgtype.Text
+	Admin                 bool
+	LastLogin             pgtype.Timestamptz
+	WorkosID              pgtype.Text
+	WorkosCreatedAt       pgtype.Timestamptz
+	WorkosUpdatedAt       pgtype.Timestamptz
+	WorkosDeletedAt       pgtype.Timestamptz
+	Attributes            []byte
+	AttributesContentHash pgtype.Text
+	DeletedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
 }
 
 type UserOauthToken struct {
@@ -1571,6 +1565,42 @@ type UserSessionIssuer struct {
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
 	Deleted            bool
+}
+
+type WorkosDirectoryAttributesSync struct {
+	ID                   uuid.UUID
+	WorkosOrganizationID string
+	EntityID             string
+	EntityType           string
+	LastEventID          string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type WorkosDirectoryGroup struct {
+	ID                     string
+	WorkosDirectoryGroupID string
+	WorkosOrganizationID   string
+	Name                   string
+	Attributes             []byte
+	AttributesContentHash  pgtype.Text
+	WorkosCreatedAt        pgtype.Timestamptz
+	WorkosUpdatedAt        pgtype.Timestamptz
+	WorkosDeletedAt        pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
+type WorkosDirectoryUserGroupMembership struct {
+	ID                     string
+	UserID                 string
+	GroupID                string
+	WorkosDirectoryUserID  string
+	WorkosDirectoryGroupID string
+	JoinedAt               pgtype.Timestamptz
+	LeftAt                 pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
 }
 
 type WorkosOrganizationSync struct {
