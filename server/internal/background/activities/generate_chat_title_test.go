@@ -32,6 +32,17 @@ func TestStripLeadingEnvelopesRemovesMultipleLeadingBlocks(t *testing.T) {
 	require.Equal(t, "What changed?", stripLeadingEnvelopes(input))
 }
 
+// "Explore with AI" turns arrive double-wrapped: the dashboard prepends a
+// <dashboard_context> block, then the runtime's source adapter wraps the whole
+// thing in <message-context>. Both must be stripped so the title reflects the
+// actual question.
+func TestStripLeadingEnvelopesRemovesDashboardContext(t *testing.T) {
+	t.Parallel()
+
+	input := "<message-context>\nEventID: e1\n</message-context>\n\n<dashboard_context>\nThe user clicked \"Explore with AI\" on the Top Users chart.\n</dashboard_context>\n\nWho are my top users?"
+	require.Equal(t, "Who are my top users?", stripLeadingEnvelopes(input))
+}
+
 func TestStripLeadingEnvelopesLeavesPlainTextUntouched(t *testing.T) {
 	t.Parallel()
 

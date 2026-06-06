@@ -14,7 +14,7 @@ import type {
   ElementsTransportFactory,
 } from "@gram-ai/elements";
 import { Chat, ChatHistory, GramElementsProvider } from "@gram-ai/elements";
-import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
+import { stripTranscriptFraming } from "@/lib/projectAssistantTranscript";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type { UIMessage } from "ai";
 import {
@@ -407,10 +407,11 @@ export function InsightsProvider({
         enabled: true,
         threadListFilters: { assistant_id: managedAssistantId },
         deferThreadIdMinting: true,
-        // The runtime persists each turn with a backend `<message-context>`
-        // framing block (needed for replay, noise for display). Strip it — and
-        // drop framing-only turns — before Elements renders the transcript.
-        transformChatMessage: stripMessageContextFraming,
+        // Each persisted turn carries leading framing the user never typed —
+        // the backend's `<message-context>` (needed for replay) and our own
+        // `<dashboard_context>` ("Explore with AI" page/chart context). Strip
+        // both — and drop framing-only turns — before Elements renders history.
+        transformChatMessage: stripTranscriptFraming,
       },
       api: {
         ...mcpConfig.api,

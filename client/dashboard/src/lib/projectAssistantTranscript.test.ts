@@ -1,6 +1,6 @@
 import type { GramChatMessage } from "@gram-ai/elements";
 import { describe, expect, it } from "vitest";
-import { stripMessageContextFraming } from "./projectAssistantTranscript";
+import { stripTranscriptFraming } from "./projectAssistantTranscript";
 
 function userMessage(content: GramChatMessage["content"]): GramChatMessage {
   return {
@@ -12,9 +12,9 @@ function userMessage(content: GramChatMessage["content"]): GramChatMessage {
   };
 }
 
-describe("stripMessageContextFraming", () => {
-  it("strips the leading framing block from string content", () => {
-    const result = stripMessageContextFraming(
+describe("stripTranscriptFraming", () => {
+  it("strips the leading message-context block from string content", () => {
+    const result = stripTranscriptFraming(
       userMessage(
         "<message-context>\nEventID: e1\nUserID: u1\n</message-context>\n\nWhich agents call the weather tool most?",
       ),
@@ -22,8 +22,26 @@ describe("stripMessageContextFraming", () => {
     expect(result?.content).toBe("Which agents call the weather tool most?");
   });
 
+  it("strips a leading dashboard_context block", () => {
+    const result = stripTranscriptFraming(
+      userMessage(
+        '<dashboard_context>\nThe user clicked "Explore with AI" on the Top Users chart.\n</dashboard_context>\n\nWho are my top users?',
+      ),
+    );
+    expect(result?.content).toBe("Who are my top users?");
+  });
+
+  it("strips both envelopes when an Explore-with-AI turn is double-wrapped", () => {
+    const result = stripTranscriptFraming(
+      userMessage(
+        "<message-context>\nEventID: e1\n</message-context>\n\n<dashboard_context>\nTop Servers chart.\n</dashboard_context>\n\nWhat changed?",
+      ),
+    );
+    expect(result?.content).toBe("What changed?");
+  });
+
   it("strips framing from a text content part", () => {
-    const result = stripMessageContextFraming(
+    const result = stripTranscriptFraming(
       userMessage([
         {
           type: "text",
@@ -35,7 +53,7 @@ describe("stripMessageContextFraming", () => {
   });
 
   it("drops a user turn that is only a framing block", () => {
-    const result = stripMessageContextFraming(
+    const result = stripTranscriptFraming(
       userMessage(
         "<message-context>\nEventType: assistant_mcp_auth_required\nAuthURL: https://example.test/oauth\n</message-context>\n",
       ),
@@ -43,13 +61,13 @@ describe("stripMessageContextFraming", () => {
     expect(result).toBeNull();
   });
 
-  it("only strips a leading block, leaving mid-text tags intact", () => {
+  it("only strips leading blocks, leaving mid-text tags intact", () => {
     const text = "why does my agent emit <message-context>x</message-context>?";
-    expect(stripMessageContextFraming(userMessage(text))?.content).toBe(text);
+    expect(stripTranscriptFraming(userMessage(text))?.content).toBe(text);
   });
 
   it("keeps a media turn whose text part is only framing", () => {
-    const result = stripMessageContextFraming(
+    const result = stripTranscriptFraming(
       userMessage([
         {
           type: "text",
@@ -74,6 +92,6 @@ describe("stripMessageContextFraming", () => {
       role: "assistant",
       content: "The travel-planner agent leads with 1,204 calls.",
     };
-    expect(stripMessageContextFraming(assistant)).toBe(assistant);
+    expect(stripTranscriptFraming(assistant)).toBe(assistant);
   });
 });

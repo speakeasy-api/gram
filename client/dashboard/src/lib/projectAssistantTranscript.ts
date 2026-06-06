@@ -1,20 +1,26 @@
 import type { GramChatMessage } from "@gram-ai/elements";
 
-// The Gram assistant runtime persists each turn's input with a
-// `<message-context>…</message-context>` framing block that the backend's source
-// adapter prepends when constructing the message for the runtime (EventID /
-// UserID lines, MCP auth events). The model needs that block on replay, but it
-// must never reach the dashboard transcript — left in, the first message of a
-// reopened thread renders as a raw bubble exposing internals like MCP AuthURLs.
+// The Project Assistant transcript carries two kinds of leading "framing" the
+// user never typed and shouldn't see rendered:
 //
-// This is a Gram-product transcript convention, so it lives in the dashboard and
-// is handed to Elements via `history.transformChatMessage` rather than baked
-// into the shared `@gram-ai/elements` library.
-const MESSAGE_CONTEXT_RE =
-  /^\s*<message-context>[\s\S]*?<\/message-context>\s*/;
+//   <message-context>…</message-context>   — prepended by the backend's source
+//       adapter when constructing the turn for the runtime (event/source
+//       metadata, MCP auth events). Needed for replay; noise for display.
+//   <dashboard_context>…</dashboard_context> — prepended client-side by the
+//       sidebar transport to carry the active page/chart context ("Explore
+//       with AI"). Steers the model; noise for display.
+//
+// Both ride at the START of the persisted user message (an "Explore with AI"
+// turn is double-wrapped: dashboard_context inside message-context). The live
+// bubble shows the clean text from the assistant-ui store, but on reload from
+// history the persisted content is rendered verbatim — so strip the leading
+// framing here. Each alternative pairs its own open/close tag so a mismatched
+// or user-typed tag mid-message is left intact.
+const LEADING_FRAMING_RE =
+  /^(?:\s*<message-context>[\s\S]*?<\/message-context>\s*|\s*<dashboard_context>[\s\S]*?<\/dashboard_context>\s*)+/;
 
 function stripFraming(text: string): string {
-  return text.replace(MESSAGE_CONTEXT_RE, "");
+  return text.replace(LEADING_FRAMING_RE, "");
 }
 
 function userText(content: GramChatMessage["content"]): string {
@@ -34,12 +40,13 @@ function hasMediaPart(content: GramChatMessage["content"]): boolean {
 }
 
 /**
- * Strips the backend's leading `<message-context>` framing from a persisted
- * message and drops user turns that are *only* framing (e.g. an injected
- * `assistant_mcp_auth_required` event with no human text), which would otherwise
- * render as a raw bubble. Intended for `ElementsConfig.history.transformChatMessage`.
+ * Strips leading transcript framing (`<message-context>`, `<dashboard_context>`)
+ * from a persisted message and drops user turns that are *only* framing (e.g. an
+ * injected `assistant_mcp_auth_required` event with no human text), which would
+ * otherwise render as a raw bubble. Intended for
+ * `ElementsConfig.history.transformChatMessage`.
  */
-export function stripMessageContextFraming(
+export function stripTranscriptFraming(
   message: GramChatMessage,
 ): GramChatMessage | null {
   // Framing only ever rides on the human turn; leave assistant/tool rows alone.
@@ -53,7 +60,7 @@ export function stripMessageContextFraming(
   const text = userText(message.content);
   if (
     !hasMediaPart(message.content) &&
-    text.includes("<message-context>") &&
+    text.trim() !== "" &&
     stripFraming(text).trim() === ""
   ) {
     return null;
