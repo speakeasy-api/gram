@@ -5,6 +5,33 @@
     <link rel="icon" id="favicon" href="/favicon.png" />
     <link rel="alternate icon" id="favicon-alt" href="/favicon.ico" />
 
+    <!-- Apply the theme class before first paint to avoid a flash of the
+         wrong theme on load. Mirrors App.tsx (key: "preferred-theme",
+         default: light). Keep these in sync. -->
+    <script>
+      (function () {
+        try {
+          var theme =
+            localStorage.getItem("preferred-theme") === "dark"
+              ? "dark"
+              : "light";
+          var root = document.documentElement;
+          root.classList.remove("light", "dark");
+          root.classList.add(theme);
+          var favicon = document.getElementById("favicon");
+          var faviconAlt = document.getElementById("favicon-alt");
+          if (favicon)
+            favicon.href =
+              theme === "dark" ? "/favicon-dark.png" : "/favicon.png";
+          if (faviconAlt)
+            faviconAlt.href =
+              theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
+        } catch (e) {
+          /* localStorage unavailable — fall back to CSS defaults */
+        }
+      })();
+    </script>
+
     <meta property="og:title" content="Speakeasy AI Control Plane" />
     <meta
       property="og:description"

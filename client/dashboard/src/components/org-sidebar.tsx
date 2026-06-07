@@ -8,6 +8,8 @@ import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
@@ -16,6 +18,11 @@ import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
+import { Link } from "react-router";
+import { GramLogo } from "./gram-logo";
+import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
+import { SidebarUserMenu } from "./sidebar-user-menu";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 
 function ScopeGatedNavItem({
   item,
@@ -55,7 +62,7 @@ function ScopeGatedTopLevelItem({
 export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const orgRoutes = useOrgRoutes();
   const isAdmin = useIsAdmin();
-  const { isRbacEnabled } = useRBAC();
+  const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
 
   const settingsActive = [
     orgRoutes.billing,
@@ -99,85 +106,103 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarContent className="pt-5">
-        <NavGroupProvider
-          activeGroup={activeGroup}
-          defaultOpenGroups={["Settings", "Secure"]}
-          activeItem={activeItem}
+      <SidebarHeader className="gap-3 pb-3">
+        <Link
+          to={orgRoutes.home.href()}
+          className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
         >
-          <SidebarMenu className="gap-1 px-2">
-            {/* Home — top-level */}
-            <ScopeGatedTopLevelItem
-              item={orgRoutes.home}
-              scope={["org:read", "project:read", "org:admin"]}
-            />
+          <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />
+        </Link>
+        <WorkspaceSwitcher />
+      </SidebarHeader>
+      <SidebarContent className="pt-2">
+        {rbacLoading ? (
+          <SidebarNavSkeleton />
+        ) : (
+          <NavGroupProvider
+            activeGroup={activeGroup}
+            defaultOpenGroups={["Settings", "Secure"]}
+            activeItem={activeItem}
+          >
+            <SidebarMenu className="gap-1 px-2">
+              {/* Home — top-level */}
+              <ScopeGatedTopLevelItem
+                item={orgRoutes.home}
+                scope={["org:read", "project:read", "org:admin"]}
+              />
 
-            {/* Collections — top-level */}
-            <ScopeGatedTopLevelItem
-              item={orgRoutes.collections}
-              scope={["org:read", "org:admin"]}
-            />
+              {/* Collections — top-level */}
+              <ScopeGatedTopLevelItem
+                item={orgRoutes.collections}
+                scope={["org:read", "org:admin"]}
+              />
 
-            {/* Team — top-level */}
-            <ScopeGatedTopLevelItem
-              item={orgRoutes.team}
-              scope={["org:read", "org:admin"]}
-            />
+              {/* Team — top-level */}
+              <ScopeGatedTopLevelItem
+                item={orgRoutes.team}
+                scope={["org:read", "org:admin"]}
+              />
 
-            {/* Settings group */}
-            <CollapsibleNavGroup
-              label="Settings"
-              Icon={(p) => <Icon {...p} name="settings" />}
-              defaultHref={orgRoutes.billing.href()}
-            >
-              <ScopeGatedNavItem
-                item={orgRoutes.billing}
-                scope={["org:read", "org:admin"]}
-              />
-              <ScopeGatedNavItem item={orgRoutes.apiKeys} scope="org:admin" />
-              <ScopeGatedNavItem
-                item={orgRoutes.domains}
-                scope={["org:read", "org:admin"]}
-              />
-              <ScopeGatedNavItem
-                item={orgRoutes.logs}
-                scope={["org:read", "org:admin"]}
-              />
-              <ScopeGatedNavItem
-                item={orgRoutes.webhooks}
-                scope={["org:read", "org:admin"]}
-              />
-              {isAdmin && <CollapsibleNavItem item={orgRoutes.adminSettings} />}
-            </CollapsibleNavGroup>
-
-            {/* Secure group */}
-            <CollapsibleNavGroup
-              label="Secure"
-              Icon={(p) => <Icon {...p} name="shield-check" />}
-              defaultHref={orgRoutes.auditLogs.href()}
-            >
-              <ScopeGatedNavItem
-                item={orgRoutes.auditLogs}
-                scope={["org:read", "org:admin"]}
-              />
-              <ScopeGatedNavItem
-                item={orgRoutes.identity}
-                scope={["org:read", "org:admin"]}
-              />
-              <ScopeGatedNavItem
-                item={orgRoutes.deviceAgent}
-                scope={["org:read", "org:admin"]}
-              />
-              {isRbacEnabled && (
+              {/* Settings group */}
+              <CollapsibleNavGroup
+                label="Settings"
+                Icon={(p) => <Icon {...p} name="settings" />}
+                defaultHref={orgRoutes.billing.href()}
+              >
                 <ScopeGatedNavItem
-                  item={orgRoutes.access}
+                  item={orgRoutes.billing}
                   scope={["org:read", "org:admin"]}
                 />
-              )}
-            </CollapsibleNavGroup>
-          </SidebarMenu>
-        </NavGroupProvider>
+                <ScopeGatedNavItem item={orgRoutes.apiKeys} scope="org:admin" />
+                <ScopeGatedNavItem
+                  item={orgRoutes.domains}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.logs}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.webhooks}
+                  scope={["org:read", "org:admin"]}
+                />
+                {isAdmin && (
+                  <CollapsibleNavItem item={orgRoutes.adminSettings} />
+                )}
+              </CollapsibleNavGroup>
+
+              {/* Secure group */}
+              <CollapsibleNavGroup
+                label="Secure"
+                Icon={(p) => <Icon {...p} name="shield-check" />}
+                defaultHref={orgRoutes.auditLogs.href()}
+              >
+                <ScopeGatedNavItem
+                  item={orgRoutes.auditLogs}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.identity}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.deviceAgent}
+                  scope={["org:read", "org:admin"]}
+                />
+                {isRbacEnabled && (
+                  <ScopeGatedNavItem
+                    item={orgRoutes.access}
+                    scope={["org:read", "org:admin"]}
+                  />
+                )}
+              </CollapsibleNavGroup>
+            </SidebarMenu>
+          </NavGroupProvider>
+        )}
       </SidebarContent>
+      <SidebarFooter className="border-t">
+        <SidebarUserMenu />
+      </SidebarFooter>
     </Sidebar>
   );
 }
