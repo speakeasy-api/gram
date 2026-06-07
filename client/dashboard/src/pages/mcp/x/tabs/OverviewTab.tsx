@@ -477,10 +477,10 @@ function ToolsOverviewCard({ toolsetId }: { toolsetId: string | undefined }) {
             </Button.RightIcon>
           </Button>
         ) : undefined
+      }
+    >
       {isLoading ? (
-        <Type muted small>
-          Loading tools…
-        </Type>
+        <Skeleton className="h-5 w-40" />
       ) : !toolset ? (
         <StatusCallout tone="warning" icon={AlertTriangle}>
           Couldn't load the linked toolset.
