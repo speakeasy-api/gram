@@ -34,9 +34,10 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 afterEach(cleanup);
 
 describe("WorkspaceSwitcher", () => {
-  it("shows the project slug and the gradient rail", () => {
+  it("shows the project name and the gradient rail", () => {
     render(<WorkspaceSwitcher />);
-    expect(screen.getByText("proj")).toBeTruthy();
+    // The trigger shows the project's display name (not the org/project slug).
+    expect(screen.getByText("Proj")).toBeTruthy();
     expect(screen.getByTestId("ws-rail")).toBeTruthy();
   });
 });

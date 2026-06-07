@@ -68,11 +68,10 @@ export default function App() {
       | "light"
       | "dark"
       | null;
-    const systemPrefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)",
-    ).matches;
 
-    const initialTheme = savedTheme || (systemPrefersDark ? "dark" : "light");
+    // Light mode is the default; only honor an explicit prior choice. The
+    // system color-scheme preference no longer forces dark on first load.
+    const initialTheme = savedTheme || "light";
     applyTheme(initialTheme);
   }, []);
 

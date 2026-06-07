@@ -69,10 +69,7 @@ export function WorkspaceSwitcher() {
               className="h-5 w-5 shrink-0 rounded"
             />
             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
-              <span className="text-muted-foreground">
-                {organization.slug} /{" "}
-              </span>
-              {project?.slug || projectSlug}
+              {project?.name || project?.slug || projectSlug}
             </span>
             <ChevronsUpDown className="text-muted-foreground ml-auto h-4 w-4 shrink-0 group-data-[collapsible=icon]:hidden" />
           </Button>

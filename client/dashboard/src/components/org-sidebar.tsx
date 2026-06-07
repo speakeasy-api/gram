@@ -105,12 +105,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
+      <SidebarHeader className="gap-3 pb-3">
         <Link
           to={orgRoutes.home.href()}
-          className="flex items-center px-1 hover:no-underline group-data-[collapsible=icon]:justify-center"
+          className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
         >
-          <GramLogo className="w-24 group-data-[collapsible=icon]:hidden" />
+          <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />
         </Link>
         <WorkspaceSwitcher />
       </SidebarHeader>

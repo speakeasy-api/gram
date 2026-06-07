@@ -38,7 +38,7 @@ export const AppLayout = () => {
     <SidebarProvider
       style={
         {
-          "--sidebar-width": "14rem",
+          "--sidebar-width": "16rem",
           "--header-offset": isImpersonating ? "2.25rem" : "0px",
           ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
         } as React.CSSProperties
@@ -199,7 +199,7 @@ export const OrgLayout = () => {
     <SidebarProvider
       style={
         {
-          "--sidebar-width": "14rem",
+          "--sidebar-width": "16rem",
           "--header-offset": isImpersonating ? "2.25rem" : "0px",
           ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
         } as React.CSSProperties

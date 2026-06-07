@@ -63,16 +63,37 @@ export function SidebarUserMenu() {
     user.email?.slice(0, 2).toUpperCase() ||
     "?";
 
+  // Only the first name in the compact footer preview so it never truncates.
+  const firstName = user.displayName?.trim().split(/\s+/)[0] || "User";
+
   return (
-    <div className="flex items-center gap-1 px-1 py-1">
+    <div className="flex items-center gap-2 px-1 py-1">
+      {/* Compact identity preview — expanded only */}
+      <div className="flex min-w-0 flex-1 items-center gap-2 group-data-[collapsible=icon]:hidden">
+        <Avatar className="size-7 shrink-0">
+          <AvatarImage
+            src={user.photoUrl}
+            alt={user.displayName || user.email}
+          />
+          <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
+        </Avatar>
+        <span className="truncate text-sm font-medium">{firstName}</span>
+      </div>
+
+      {/* Smaller inline theme switcher — expanded only */}
+      <ThemeSwitcher className="scale-90 group-data-[collapsible=icon]:hidden" />
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             data-testid="user-menu-trigger"
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md p-1 text-left hover:bg-accent group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center"
+            aria-label="Account menu"
+            className="border-border text-muted-foreground hover:bg-accent hover:text-foreground flex size-7 shrink-0 items-center justify-center rounded-full border group-data-[collapsible=icon]:mx-auto"
           >
-            <Avatar className="size-7 shrink-0">
+            <MoreHorizontal className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+            {/* Collapsed: the round trigger shows the avatar so the menu stays reachable */}
+            <Avatar className="hidden size-7 group-data-[collapsible=icon]:block">
               <AvatarImage
                 src={user.photoUrl}
                 alt={user.displayName || user.email}
@@ -81,10 +102,6 @@ export function SidebarUserMenu() {
                 {userInitials}
               </AvatarFallback>
             </Avatar>
-            <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
-              {user.displayName || "User"}
-            </span>
-            <MoreHorizontal className="ml-auto h-4 w-4 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="w-56">
@@ -194,7 +211,6 @@ export function SidebarUserMenu() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <ThemeSwitcher className="group-data-[collapsible=icon]:hidden" />
     </div>
   );
 }
