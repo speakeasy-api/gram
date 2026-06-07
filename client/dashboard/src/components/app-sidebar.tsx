@@ -18,7 +18,8 @@ import { SidebarUserMenu } from "./sidebar-user-menu";
 import { useSidebar } from "@/components/ui/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Scope } from "@/hooks/useRBAC";
+import { Scope, useRBAC } from "@/hooks/useRBAC";
+import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
@@ -72,6 +73,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
   const { state } = useSidebar();
+  // While grants reload (e.g. right after switching projects, when the query
+  // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
+  const { isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -158,116 +162,125 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent className="pt-2">
-        <NavGroupProvider
-          activeGroup={activeGroup}
-          defaultOpenGroups={
-            !activeGroup ? ["Connect", "Build", "Observe", "Secure"] : undefined
-          }
-          activeItem={activeItem}
-        >
-          <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
-            {/* Home — top-level, no group */}
-            <ScopeGatedTopLevelItem item={routes.home} scope="project:read" />
+        {rbacLoading ? (
+          <SidebarNavSkeleton />
+        ) : (
+          <NavGroupProvider
+            activeGroup={activeGroup}
+            defaultOpenGroups={
+              !activeGroup
+                ? ["Connect", "Build", "Observe", "Secure"]
+                : undefined
+            }
+            activeItem={activeItem}
+          >
+            <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
+              {/* Home — top-level, no group */}
+              <ScopeGatedTopLevelItem item={routes.home} scope="project:read" />
 
-            {/* Connect group */}
-            <CollapsibleNavGroup
-              label="Connect"
-              Icon={(p) => <Icon {...p} name="plug" />}
-              defaultHref={routes.sources.href()}
-              active={connectActive}
-            >
-              <ScopeGatedNavItem
-                item={routes.sources}
-                scope={["project:read", "project:write"]}
-              />
-              <ScopeGatedNavItem
-                item={routes.catalog}
-                scope={["project:read", "mcp:write"]}
-              />
-              <ScopeGatedNavItem
-                item={routes.playground}
-                scope={["mcp:read", "mcp:write", "mcp:connect"]}
-              />
-              {isDeploymentsPageEnabled && (
+              {/* Connect group */}
+              <CollapsibleNavGroup
+                label="Connect"
+                Icon={(p) => <Icon {...p} name="plug" />}
+                defaultHref={routes.sources.href()}
+                active={connectActive}
+              >
                 <ScopeGatedNavItem
-                  item={routes.deployments}
+                  item={routes.sources}
                   scope={["project:read", "project:write"]}
                 />
-              )}
-            </CollapsibleNavGroup>
-
-            {/* Build group */}
-            <CollapsibleNavGroup
-              label="Build"
-              Icon={(p) => <Icon {...p} name="hammer" />}
-              defaultHref={routes.mcp.href()}
-              active={buildActive}
-            >
-              <ScopeGatedNavItem
-                item={routes.mcp}
-                scope={["mcp:read", "mcp:write"]}
-              />
-              {isAssistantsEnabled && (
                 <ScopeGatedNavItem
-                  item={routes.assistants}
+                  item={routes.catalog}
+                  scope={["project:read", "mcp:write"]}
+                />
+                <ScopeGatedNavItem
+                  item={routes.playground}
+                  scope={["mcp:read", "mcp:write", "mcp:connect"]}
+                />
+                {isDeploymentsPageEnabled && (
+                  <ScopeGatedNavItem
+                    item={routes.deployments}
+                    scope={["project:read", "project:write"]}
+                  />
+                )}
+              </CollapsibleNavGroup>
+
+              {/* Build group */}
+              <CollapsibleNavGroup
+                label="Build"
+                Icon={(p) => <Icon {...p} name="hammer" />}
+                defaultHref={routes.mcp.href()}
+                active={buildActive}
+              >
+                <ScopeGatedNavItem
+                  item={routes.mcp}
+                  scope={["mcp:read", "mcp:write"]}
+                />
+                {isAssistantsEnabled && (
+                  <ScopeGatedNavItem
+                    item={routes.assistants}
+                    scope="project:read"
+                  />
+                )}
+                <ScopeGatedNavItem item={routes.clis} scope="project:read" />
+                <ScopeGatedNavItem
+                  item={routes.plugins}
+                  scope={["project:read", "project:write"]}
+                />
+                <ScopeGatedNavItem
+                  item={routes.environments}
+                  scope={["project:read", "project:write"]}
+                />
+              </CollapsibleNavGroup>
+
+              {/* Observe group */}
+              <CollapsibleNavGroup
+                label="Observe"
+                Icon={(p) => <Icon {...p} name="eye" />}
+                defaultHref={routes.insights.href()}
+                active={observeActive}
+              >
+                <ScopeGatedNavItem
+                  item={routes.insights}
                   scope="project:read"
                 />
-              )}
-              <ScopeGatedNavItem item={routes.clis} scope="project:read" />
-              <ScopeGatedNavItem
-                item={routes.plugins}
-                scope={["project:read", "project:write"]}
-              />
-              <ScopeGatedNavItem
-                item={routes.environments}
-                scope={["project:read", "project:write"]}
-              />
-            </CollapsibleNavGroup>
+                <ScopeGatedNavItem item={routes.logs} scope="project:read" />
+              </CollapsibleNavGroup>
 
-            {/* Observe group */}
-            <CollapsibleNavGroup
-              label="Observe"
-              Icon={(p) => <Icon {...p} name="eye" />}
-              defaultHref={routes.insights.href()}
-              active={observeActive}
-            >
-              <ScopeGatedNavItem item={routes.insights} scope="project:read" />
-              <ScopeGatedNavItem item={routes.logs} scope="project:read" />
-            </CollapsibleNavGroup>
+              {/* Security group */}
+              <CollapsibleNavGroup
+                label="Secure"
+                Icon={(p) => <Icon {...p} name="shield" />}
+                defaultHref={routes.riskOverview.href()}
+                stage="beta"
+                active={securityActive}
+              >
+                <ScopeGatedNavItem
+                  item={routes.riskOverview}
+                  scope="project:read"
+                />
+                <ScopeGatedNavItem
+                  item={routes.policyCenter}
+                  scope={["project:read", "project:write"]}
+                />
+                <ScopeGatedNavItem
+                  item={routes.approvalRequests}
+                  scope={["project:read", "project:write"]}
+                />
+                <ScopeGatedNavItem
+                  item={routes.detectionRules}
+                  scope={["project:read", "project:write"]}
+                />
+              </CollapsibleNavGroup>
 
-            {/* Security group */}
-            <CollapsibleNavGroup
-              label="Secure"
-              Icon={(p) => <Icon {...p} name="shield" />}
-              defaultHref={routes.riskOverview.href()}
-              stage="beta"
-              active={securityActive}
-            >
-              <ScopeGatedNavItem
-                item={routes.riskOverview}
-                scope="project:read"
+              {/* Settings — top-level, no group */}
+              <ScopeGatedTopLevelItem
+                item={routes.settings}
+                scope="project:write"
               />
-              <ScopeGatedNavItem
-                item={routes.policyCenter}
-                scope={["project:read", "project:write"]}
-              />
-              <ScopeGatedNavItem
-                item={routes.approvalRequests}
-                scope={["project:read", "project:write"]}
-              />
-              <ScopeGatedNavItem
-                item={routes.detectionRules}
-                scope={["project:read", "project:write"]}
-              />
-            </CollapsibleNavGroup>
-
-            {/* Settings — top-level, no group */}
-            <ScopeGatedTopLevelItem
-              item={routes.settings}
-              scope="project:write"
-            />
-          </SidebarMenu>
-        </NavGroupProvider>
+            </SidebarMenu>
+          </NavGroupProvider>
+        )}
 
         <div className="mt-auto px-2 py-3 group-data-[collapsible=icon]:px-0">
           <Link
