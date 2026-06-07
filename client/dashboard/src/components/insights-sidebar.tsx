@@ -187,10 +187,12 @@ export function InsightsTrigger({ className }: { className?: string }) {
         startSpin();
         setIsExpanded(!isExpanded);
       }}
-      aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
+      aria-label={
+        isExpanded ? "Close Project Assistant" : "Open Project Assistant"
+      }
       aria-keyshortcuts={shortcutAria}
       aria-pressed={isExpanded}
-      title={`AI Insights (${shortcutKeys.join("+")})`}
+      title={`Project Assistant (${shortcutKeys.join("+")})`}
       className={cn(
         "group border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
@@ -201,7 +203,7 @@ export function InsightsTrigger({ className }: { className?: string }) {
       <Wand2
         className={cn("size-3.5", spinning && "insights-trigger-spinning")}
       />
-      <span className="font-medium">AI Insights</span>
+      <span className="font-medium">Project Assistant</span>
       {/* Hover-revealed shortcut hint. The outer wrapper animates between
           0fr and 1fr grid columns so the contents transition cleanly from
           width 0 to their natural width without us hardcoding a pixel value.

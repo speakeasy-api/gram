@@ -1,7 +1,9 @@
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
+import { getProjectColors } from "@/components/project-colors";
 import { RequireScope } from "@/components/require-scope";
-import { Card, Cards } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { DotCard } from "@/components/ui/dot-card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -24,7 +26,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Info, Plus } from "lucide-react";
+import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
 import { MouseEvent } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
@@ -127,10 +129,10 @@ export default function AssistantsIndex() {
     ) : (
       <Page.Section>
         <Page.Section.Title stage="preview">Assistants</Page.Section.Title>
-        <Page.Section.Description>
-          Claude Code-inspired secure Assistants. Every assistant connects
-          through the MCPs and Skills your org already uses, with identity,
-          guardrails, and audit built in. Deployed to Slack.
+        <Page.Section.Description className="max-w-xl">
+          Openclaw-inspired secure Assistants. Every assistant connects through
+          the MCPs and Skills your org already uses, with identity, guardrails,
+          and audit built in. Deployed to Slack.
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope
@@ -156,11 +158,11 @@ export default function AssistantsIndex() {
               />
             </Stack>
           ) : (
-            <Cards>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {assistants.map((assistant) => (
                 <AssistantCard key={assistant.id} assistant={assistant} />
               ))}
-            </Cards>
+            </div>
           )}
         </Page.Section.Body>
       </Page.Section>
@@ -225,6 +227,58 @@ function UsageSection() {
   );
 }
 
+// Each assistant gets a deterministic gradient tile behind its Bot icon,
+// derived from its id via the same hash that powers project avatar colors.
+function AssistantIcon({ assistant }: { assistant: Pick<Assistant, "id"> }) {
+  const colors = getProjectColors(assistant.id);
+  return (
+    <div
+      className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br"
+      style={{
+        backgroundImage: `linear-gradient(${colors.angle}deg, ${colors.from}, ${colors.to})`,
+      }}
+    >
+      <Bot className="h-7 w-7 text-white" />
+    </div>
+  );
+}
+
+const MAX_VISIBLE_TOOLSETS = 3;
+
+function AssistantToolsets({ assistant }: { assistant: Assistant }) {
+  if (assistant.toolsets.length === 0) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
+        <Type muted small>
+          No MCP servers
+        </Type>
+      </div>
+    );
+  }
+
+  const visible = assistant.toolsets.slice(0, MAX_VISIBLE_TOOLSETS);
+  const overflow = assistant.toolsets.length - visible.length;
+
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        {visible.map((toolset) => (
+          <Badge
+            key={toolset.toolsetSlug}
+            variant="outline"
+            className="max-w-[10rem] truncate"
+          >
+            {toolset.toolsetSlug}
+          </Badge>
+        ))}
+        {overflow > 0 && <Badge variant="outline">+{overflow}</Badge>}
+      </div>
+    </div>
+  );
+}
+
 function AssistantCard({ assistant }: { assistant: Assistant }) {
   const routes = useRoutes();
   const queryClient = useQueryClient();
@@ -235,50 +289,57 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
     },
   });
 
-  const toolsetLabel = `${assistant.toolsets.length} MCP server${
-    assistant.toolsets.length !== 1 ? "s" : ""
-  }`;
-
   return (
     <routes.assistants.detail.Link
       params={[assistant.id]}
-      className="hover:no-underline"
+      className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <Card>
-        <Card.Header>
-          <Card.Title className="normal-case">{assistant.name}</Card.Title>
-          <MoreActions
-            actions={[
-              {
-                label: "Delete",
-                destructive: true,
-                icon: "trash",
-                onClick: () => {
-                  if (confirm(`Delete assistant "${assistant.name}"?`)) {
-                    deleteAssistant.mutate({ request: { id: assistant.id } });
-                  }
-                },
-              },
-            ]}
-          />
-        </Card.Header>
-        <Card.Content>
-          <Card.Description>
-            <Stack direction="horizontal" gap={3} align="center">
-              <StatusToggle assistant={assistant} />
-              <Type muted small>
-                {assistant.model}
-              </Type>
-            </Stack>
-          </Card.Description>
-        </Card.Content>
-        <Card.Footer>
-          <Type muted small>
-            {toolsetLabel}
+      <DotCard icon={<AssistantIcon assistant={assistant} />}>
+        {/* Header row: name + actions */}
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <Type
+            variant="subheading"
+            as="div"
+            className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
+            title={assistant.name}
+          >
+            {assistant.name}
           </Type>
+          <div onClick={stopLinkNavigation}>
+            <MoreActions
+              actions={[
+                {
+                  label: "Delete",
+                  destructive: true,
+                  icon: "trash",
+                  onClick: () => {
+                    if (confirm(`Delete assistant "${assistant.name}"?`)) {
+                      deleteAssistant.mutate({ request: { id: assistant.id } });
+                    }
+                  },
+                },
+              ]}
+            />
+          </div>
+        </div>
+
+        {/* Metadata: model + MCP servers */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1.5">
+            <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
+            <Type muted small className="truncate" title={assistant.model}>
+              {assistant.model}
+            </Type>
+          </div>
+          <AssistantToolsets assistant={assistant} />
+        </div>
+
+        {/* Footer row: status toggle + last updated */}
+        <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
+          <StatusToggle assistant={assistant} />
           <UpdatedAt date={new Date(assistant.updatedAt)} />
-        </Card.Footer>
-      </Card>
+        </div>
+      </DotCard>
     </routes.assistants.detail.Link>
   );
 }
