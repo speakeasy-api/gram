@@ -222,7 +222,22 @@ function PageHeaderBreadcrumbs({
   );
 }
 
+function PageHeaderActions({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("ml-auto flex shrink-0 items-center gap-2", className)}>
+      {children}
+    </div>
+  );
+}
+
 export const PageHeader = Object.assign(PageHeaderComponent, {
   Title: PageHeaderTitle,
   Breadcrumbs: PageHeaderBreadcrumbs,
+  Actions: PageHeaderActions,
 });
