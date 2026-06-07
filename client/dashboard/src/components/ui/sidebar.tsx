@@ -104,7 +104,7 @@ function SidebarProvider({
           {
             "--sidebar-width": SIDEBAR_WIDTH,
             "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-            "--header-offset": "3.5rem",
+            "--header-offset": "0px",
             ...style,
           } as React.CSSProperties
         }

@@ -7,10 +7,8 @@ import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
-import { BrandGradientLine } from "./brand-gradient-line.tsx";
 import { InsightsProvider } from "./insights-sidebar.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
-import { TopHeader } from "./top-header.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
@@ -41,12 +39,8 @@ export const AppLayout = () => {
       style={
         {
           "--sidebar-width": "14rem",
-          ...(isImpersonating
-            ? {
-                "--header-offset": "5.75rem",
-                "--banner-offset": "2.25rem",
-              }
-            : undefined),
+          "--header-offset": isImpersonating ? "2.25rem" : "0px",
+          ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
         } as React.CSSProperties
       }
     >
@@ -99,9 +93,7 @@ const AppLayoutContent = ({
   return (
     <div className="flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
-      <TopHeader />
-      <BrandGradientLine />
-      <div className="flex w-full flex-1 overflow-hidden pt-2">
+      <div className="flex w-full flex-1 overflow-hidden">
         <AppSidebar variant="inset" />
         <SidebarInset>
           <GlobalInsightsWrapper>
@@ -208,21 +200,15 @@ export const OrgLayout = () => {
       style={
         {
           "--sidebar-width": "14rem",
-          ...(isImpersonating
-            ? {
-                "--header-offset": "5.75rem",
-                "--banner-offset": "2.25rem",
-              }
-            : undefined),
+          "--header-offset": isImpersonating ? "2.25rem" : "0px",
+          ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
         } as React.CSSProperties
       }
     >
       <ModalProvider>
         <div className="flex h-screen w-full flex-col">
           {isImpersonating && <ImpersonationBanner />}
-          <TopHeader />
-          <BrandGradientLine />
-          <div className="flex w-full flex-1 overflow-hidden pt-2">
+          <div className="flex w-full flex-1 overflow-hidden">
             <OrgSidebar variant="inset" />
             <SidebarInset>
               <MembershipSyncGuard>
