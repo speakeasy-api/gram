@@ -5,7 +5,6 @@ import { AppRoute } from "@/routes";
 import { motion } from "motion/react";
 import React from "react";
 import { Link } from "react-router";
-import { BrandGradientRail } from "./brand-gradient-rail";
 import { ProductTierBadge } from "./product-tier-badge";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Type } from "./ui/type";
@@ -395,9 +394,6 @@ export function NavButton({
             : "text-muted-foreground hover:text-foreground font-medium",
         )}
       >
-        {active && (
-          <BrandGradientRail className="absolute top-1.5 bottom-1.5 left-0" />
-        )}
         {Icon && (
           <Icon
             className={cn(
@@ -438,14 +434,12 @@ export function CollapsibleNavGroup({
   Icon,
   defaultHref,
   stage,
-  active,
   children,
 }: {
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
   defaultHref?: string;
   stage?: ReleaseStage;
-  active?: boolean;
   children: React.ReactNode;
 }) {
   const { openGroups, toggleGroup, openGroup } =
@@ -481,9 +475,6 @@ export function CollapsibleNavGroup({
                 : "text-muted-foreground hover:text-foreground font-medium",
             )}
           >
-            {active && (
-              <BrandGradientRail className="absolute top-1.5 bottom-1.5 left-0 hidden group-data-[collapsible=icon]:block" />
-            )}
             <Icon
               className={cn(
                 "size-4 shrink-0 transition-colors",
@@ -585,9 +576,6 @@ export function CollapsibleNavItem({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {item.active && (
-            <BrandGradientRail className="absolute top-1 bottom-1 -left-2" />
-          )}
           <span className={cn("truncate", isLoading && "nav-shimmer")}>
             {item.title}
           </span>

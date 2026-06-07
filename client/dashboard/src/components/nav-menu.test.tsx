@@ -64,29 +64,9 @@ vi.mock("./release-stage-badge", () => ({
   ReleaseStageBadge: () => null,
 }));
 
-vi.mock("./brand-gradient-rail", () => ({
-  BrandGradientRail: ({ className }: { className?: string }) => (
-    <div data-testid="nav-rail" className={className} />
-  ),
-}));
-
 const TestIcon = ({ className }: { className?: string }) => (
   <svg data-testid="nav-icon" className={className} />
 );
-
-describe("NavButton active rail", () => {
-  afterEach(cleanup);
-
-  it("renders the gradient rail when active", () => {
-    render(<NavButton title="Home" Icon={TestIcon} active />);
-    expect(screen.getByTestId("nav-rail")).toBeTruthy();
-  });
-
-  it("does not render the rail when inactive", () => {
-    render(<NavButton title="Home" Icon={TestIcon} />);
-    expect(screen.queryByTestId("nav-rail")).toBeNull();
-  });
-});
 
 describe("NavButton click loading state", () => {
   beforeEach(() => {
