@@ -140,6 +140,7 @@ type assistantThreadEventRecord struct {
 	SourcePayloadJSON     []byte
 	Attempts              int
 	LastError             pgtype.Text
+	CreatedAt             time.Time
 }
 
 // assistantToolsetRow is the hydrated view of a row in assistant_toolsets
@@ -1892,7 +1893,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// assistant can tell the user which integration is broken.
 	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread, time.Now().UTC())
+	instructions, err := composeInstructions(assistant.Instructions, thread)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").Log(ctx, s.logger, logAttrs...)
 	}
@@ -1940,7 +1941,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
-func composeInstructions(base string, thread assistantThreadRecord, now time.Time) (string, error) {
+func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
 		return "", err
@@ -1949,15 +1950,10 @@ func composeInstructions(base string, thread assistantThreadRecord, now time.Tim
 	if err != nil {
 		return "", fmt.Errorf("load assistant thread context: %w", err)
 	}
-	parts := make([]string, 0, 5)
+	parts := make([]string, 0, 4)
 	if base != "" {
 		parts = append(parts, base)
 	}
-	// Re-inject the current date every turn. The instructions are otherwise a
-	// static embed, so without this the assistant has no anchor for relative
-	// time queries ("errors since Monday"). UTC YYYY-MM-DD matches the date the
-	// platform telemetry tools reason about.
-	parts = append(parts, fmt.Sprintf("The current date is %s.", now.UTC().Format(time.DateOnly)))
 	parts = append(parts, mcpAuthAddendum)
 	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
 		parts = append(parts, guidance)
@@ -2356,6 +2352,7 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 			SourcePayloadJSON:     row.SourcePayloadJson,
 			Attempts:              conv.SafeInt(row.Attempts),
 			LastError:             row.LastError,
+			CreatedAt:             row.CreatedAt.Time,
 		}, true, nil
 	}
 }

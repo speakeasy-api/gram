@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Re-inject the current date into the managed assistant's runtime instructions on every turn. The old AI Insights sidebar prompt included a dynamic date line; it was dropped when the prompt moved to a static server-side embed, leaving the assistant with no anchor for relative-time queries ("errors since Monday"). `composeInstructions` now appends `The current date is <UTC YYYY-MM-DD>.` per turn.
+Give the managed (Project) Assistant temporal grounding by stamping each dashboard turn with its timestamp. `dashboardAdapter.DecodeTurn` now adds a `Timestamp: <RFC3339 UTC>` line to the turn's `<message-context>` envelope, sourced from the event's immutable `created_at`. This restores the relative-time anchoring the old AI Insights sidebar had ("errors since Monday") but does it per-turn and append-only — it rides on the user message instead of the cached system prompt, so it stays fresh across long-lived sessions without busting the prompt cache, and re-decoding on retry/replay is byte-stable.

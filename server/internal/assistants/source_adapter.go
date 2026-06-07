@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -334,6 +335,15 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 	var b bytes.Buffer
 	b.WriteString("<message-context>\n")
 	fmt.Fprintf(&b, "EventID: %s\n", event.EventID)
+	// Stamp the turn's wall-clock so the assistant has temporal grounding for
+	// relative-time queries ("errors since Monday"). Per-turn and append-only —
+	// it rides on the user message rather than the cached system prompt, so it
+	// stays fresh across long sessions without busting the prompt cache. Sourced
+	// from the event's immutable created_at so re-decoding on retry/replay is
+	// byte-stable (the capture matcher compares stored vs replayed content).
+	if !event.CreatedAt.IsZero() {
+		fmt.Fprintf(&b, "Timestamp: %s\n", event.CreatedAt.UTC().Format(time.RFC3339))
+	}
 	if payload.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
 	}
