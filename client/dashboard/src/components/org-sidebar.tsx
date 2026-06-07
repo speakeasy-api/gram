@@ -8,6 +8,8 @@ import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
@@ -16,6 +18,10 @@ import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
+import { Link } from "react-router";
+import { GramLogo } from "./gram-logo";
+import { SidebarUserMenu } from "./sidebar-user-menu";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 
 function ScopeGatedNavItem({
   item,
@@ -99,7 +105,16 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarContent className="pt-5">
+      <SidebarHeader>
+        <Link
+          to={orgRoutes.home.href()}
+          className="flex items-center px-1 hover:no-underline group-data-[collapsible=icon]:justify-center"
+        >
+          <GramLogo className="w-24 group-data-[collapsible=icon]:hidden" />
+        </Link>
+        <WorkspaceSwitcher />
+      </SidebarHeader>
+      <SidebarContent className="pt-2">
         <NavGroupProvider
           activeGroup={activeGroup}
           defaultOpenGroups={["Settings", "Secure"]}
@@ -129,6 +144,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Settings"
               Icon={(p) => <Icon {...p} name="settings" />}
               defaultHref={orgRoutes.billing.href()}
+              active={settingsActive}
             >
               <ScopeGatedNavItem
                 item={orgRoutes.billing}
@@ -155,6 +171,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Secure"
               Icon={(p) => <Icon {...p} name="shield-check" />}
               defaultHref={orgRoutes.auditLogs.href()}
+              active={secureActive}
             >
               <ScopeGatedNavItem
                 item={orgRoutes.auditLogs}
@@ -178,6 +195,9 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenu>
         </NavGroupProvider>
       </SidebarContent>
+      <SidebarFooter className="border-t">
+        <SidebarUserMenu />
+      </SidebarFooter>
     </Sidebar>
   );
 }
