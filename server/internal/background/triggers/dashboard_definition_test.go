@@ -51,3 +51,26 @@ func TestDashboardDefinitionBuildDirectEvent(t *testing.T) {
 	_, err = def.BuildDirectEvent(instance, dashboardTriggerConfig{}, []byte(`{"text":"hi","user_id":"user-1","idempotency_key":"key-1"}`), receivedAt)
 	require.Error(t, err, "empty correlation id rejected")
 }
+
+func TestDashboardDefinitionBuildDirectEventWarm(t *testing.T) {
+	t.Parallel()
+
+	def := newDashboardDefinition()
+	instance := triggerrepo.TriggerInstance{ID: uuid.New(), DefinitionSlug: "dashboard"}
+	receivedAt := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
+
+	// Warm events carry no user message, so text/user_id are not required.
+	env, err := def.BuildDirectEvent(instance, dashboardTriggerConfig{}, []byte(`{"warm":true,"correlation_id":"__warm__","idempotency_key":"w-1"}`), receivedAt)
+	require.NoError(t, err, "warm event accepted without text/user_id")
+	require.Equal(t, "__warm__", env.CorrelationID)
+
+	// Warm must survive into the envelope's Event, or it's lost before reaching
+	// the normalized payload (the bug that sank the earlier `hidden` flag).
+	ev, ok := env.Event.(dashboardTriggerEvent)
+	require.True(t, ok)
+	require.True(t, ev.Warm)
+
+	// Idempotency key is still required even for warm events.
+	_, err = def.BuildDirectEvent(instance, dashboardTriggerConfig{}, []byte(`{"warm":true,"correlation_id":"__warm__"}`), receivedAt)
+	require.Error(t, err, "warm still requires an idempotency key")
+}

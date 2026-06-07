@@ -291,6 +291,10 @@ type dashboardSourceRef struct {
 type dashboardEventPayload struct {
 	Text   string `json:"text"`
 	UserID string `json:"user_id,omitempty"`
+	// Warm marks a no-op runtime-warming event (see dashboardTriggerEvent.Warm).
+	// processEventTurn short-circuits these: the runtime is already Ensure'd by
+	// ProcessThreadEvents before the event loop, so warming needs no turn.
+	Warm bool `json:"warm,omitempty"`
 }
 
 type dashboardAdapter struct{}

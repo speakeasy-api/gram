@@ -1224,6 +1224,20 @@ func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string
 	return dash.UserID
 }
 
+// isWarmDashboardEvent reports whether an event is a no-op runtime-warming
+// event. These carry no user turn; the runtime is Ensure'd by
+// ProcessThreadEvents before the event loop, so processEventTurn skips them.
+func isWarmDashboardEvent(sourceKind string, normalizedPayloadJSON []byte) bool {
+	if sourceKind != sourceKindDashboard {
+		return false
+	}
+	var dash dashboardEventPayload
+	if err := json.Unmarshal(normalizedPayloadJSON, &dash); err != nil {
+		return false
+	}
+	return dash.Warm
+}
+
 // CheckDashboardChatOwnership returns nil when callerUserID owns the chats row
 // for (projectID, chatID), pgx.ErrNoRows when they don't, and a wrapped error
 // otherwise. Callers gate sendMessage on this so a leaked or guessed chat_id
@@ -1708,6 +1722,13 @@ func (s *ServiceCore) processEventTurn(
 		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
 			return fmt.Errorf("run assistant turn: %w", err)
 		}
+		return nil
+	}
+
+	if isWarmDashboardEvent(thread.SourceKind, event.NormalizedPayloadJSON) {
+		// Warm event: ProcessThreadEvents already ran Ensure (booting/refreshing
+		// the runtime) before this loop, which is the entire point. There's no
+		// user turn to run — consuming the event keeps the VM warm with no work.
 		return nil
 	}
 

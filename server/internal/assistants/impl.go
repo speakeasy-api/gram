@@ -301,6 +301,14 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 		}
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "ensure project assistant")
 	}
+	// Eagerly warm the runtime VM so it's booted before the user's first turn —
+	// the dashboard calls this on sidebar open (and periodically while open).
+	// Best-effort: a warm failure just means a colder first turn, never a failed
+	// ensure.
+	if err := s.core.WarmManagedAssistant(ctx, *authCtx.ProjectID, record.ID); err != nil {
+		s.logger.WarnContext(ctx, "failed to warm project assistant runtime", attr.SlogError(err))
+	}
+
 	view, err := toHTTPAssistant(record)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)

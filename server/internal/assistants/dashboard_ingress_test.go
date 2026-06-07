@@ -153,6 +153,33 @@ func TestEnableManagedAssistantHealsMissingDashboardTrigger(t *testing.T) {
 	require.Len(t, instances, 1, "re-enable re-provisions the dashboard trigger")
 }
 
+func TestIsWarmDashboardEvent(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, isWarmDashboardEvent(sourceKindDashboard, []byte(`{"warm":true}`)))
+	require.False(t, isWarmDashboardEvent(sourceKindDashboard, []byte(`{"text":"hi","user_id":"u1"}`)), "a real turn is not warm")
+	require.False(t, isWarmDashboardEvent("slack", []byte(`{"warm":true}`)), "warm only applies to the dashboard source")
+	require.False(t, isWarmDashboardEvent(sourceKindDashboard, []byte(`not json`)), "malformed payload is not warm")
+}
+
+// A warm event must keep its warm marker all the way through
+// buildAssistantEventPayload into the normalized payload — otherwise
+// processEventTurn would run a real (empty) turn instead of skipping it. This is
+// the round-trip that the earlier `hidden` flag lost.
+func TestBuildAssistantEventPayloadDashboardWarm(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"text":"","warm":true}`)
+	kind, _, normalized, _, err := buildAssistantEventPayload(bgtriggers.Task{
+		DefinitionSlug: sourceKindDashboard,
+		EventJSON:      payload,
+		RawPayload:     payload,
+	})
+	require.NoError(t, err)
+	require.Equal(t, sourceKindDashboard, kind)
+	require.True(t, isWarmDashboardEvent(kind, normalized), "warm survives into the normalized payload")
+}
+
 func mustDefinitionKind(t *testing.T, slug string) bgtriggers.Kind {
 	t.Helper()
 	def, ok := bgtriggers.GetDefinition(slug)

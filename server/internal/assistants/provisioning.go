@@ -320,6 +320,8 @@ type dashboardIngestPayload struct {
 	UserID         string `json:"user_id"`
 	CorrelationID  string `json:"correlation_id"`
 	IdempotencyKey string `json:"idempotency_key"`
+	// Warm marks a no-op runtime-warming event (see dashboardTriggerEvent.Warm).
+	Warm bool `json:"warm,omitempty"`
 }
 
 // DashboardSendResult is what the sendMessage endpoint returns to the dashboard.
@@ -391,6 +393,50 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	}
 	result.ThreadID = threadID
 	return result, nil
+}
+
+// warmCorrelationID is the dedicated correlation for runtime-warming events.
+// All warm events for an assistant collapse onto a single internal warm chat
+// (owner-less, so ListChats — which filters by user_id — keeps it out of every
+// user's thread list), separate from real user conversations.
+const warmCorrelationID = "__warm__"
+
+// WarmManagedAssistant enqueues a no-op warm event that drives the coordinator
+// to Ensure (boot / refresh) the assistant's runtime VM, so it is ready before
+// the user's first real turn — the dominant latency in the dashboard sidebar is
+// a cold-start at send time. Best-effort and idempotent: fire it on sidebar
+// open and periodically while the sidebar stays open (each warm re-Ensures and
+// extends the warm window). The warm event runs no turn (see
+// isWarmDashboardEvent / processEventTurn).
+func (s *ServiceCore) WarmManagedAssistant(ctx context.Context, projectID, assistantID uuid.UUID) error {
+	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
+	if err != nil {
+		return err
+	}
+
+	instanceID, err := s.resolveDashboardTriggerInstance(ctx, assistant.OrganizationID, projectID, assistant.ID, assistant.Name)
+	if err != nil {
+		return err
+	}
+
+	if s.dashboardIngestor == nil {
+		return fmt.Errorf("dashboard ingestor is not configured")
+	}
+
+	payload, err := json.Marshal(dashboardIngestPayload{
+		Warm:           true,
+		CorrelationID:  warmCorrelationID,
+		IdempotencyKey: uuid.NewString(),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal warm message: %w", err)
+	}
+
+	if _, err := s.dashboardIngestor.IngestDirect(ctx, instanceID, payload, time.Now().UTC()); err != nil {
+		return fmt.Errorf("ingest warm message: %w", err)
+	}
+
+	return nil
 }
 
 // resolveDashboardTriggerInstance returns the managed assistant's dashboard

@@ -6,6 +6,11 @@ import {
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
 import type { ElementsTransportFactory } from "@gram-ai/elements";
 
+// How often to re-warm the runtime while the sidebar stays open. Kept under the
+// server's warm TTL so the VM never goes cold between a user's messages while
+// they read — eager warming is the dominant latency win over the send path.
+const WARM_KEEPALIVE_MS = 45_000;
+
 export interface UseServerAssistantTransportResult {
   /**
    * Transport factory for `ElementsConfig.transport`, available once the managed
@@ -116,6 +121,23 @@ export function useServerAssistantTransport(
   }, [enabled, projectSlug, ensureManagedMutate]);
 
   const ready = assistantId !== "";
+
+  // Keepalive: while the sidebar stays open, periodically re-ensure — which
+  // re-warms the runtime VM and extends its warm window — so it doesn't go cold
+  // between messages while the user reads. Fire-and-forget; only runs once the
+  // assistant has resolved, and stops on close/unmount.
+  useEffect(() => {
+    if (!enabled || !ready || !projectSlug) {
+      return;
+    }
+    const id = setInterval(() => {
+      if (currentSlugRef.current !== projectSlug) {
+        return;
+      }
+      ensureManagedMutate({});
+    }, WARM_KEEPALIVE_MS);
+    return () => clearInterval(id);
+  }, [enabled, ready, projectSlug, ensureManagedMutate]);
 
   const transport = useMemo<ElementsTransportFactory | undefined>(() => {
     if (!ready) {

@@ -196,6 +196,11 @@ type dashboardTriggerEvent struct {
 	UserID         string `json:"user_id,omitempty" cel:"user_id"`
 	CorrelationID  string `json:"correlation_id,omitempty" cel:"correlation_id"`
 	IdempotencyKey string `json:"idempotency_key,omitempty" cel:"idempotency_key"`
+	// Warm marks a no-op runtime-warming event: it carries no user message and
+	// exists only to drive the coordinator to Ensure (boot) the assistant's VM
+	// so it's ready before the user's first real turn. The assistant runtime
+	// short-circuits these without running a turn.
+	Warm bool `json:"warm,omitempty" cel:"warm"`
 }
 
 type slackEventRequest struct {
@@ -1004,11 +1009,15 @@ func newDashboardDefinition() Definition {
 			if err := json.Unmarshal(payload, &event); err != nil {
 				return nil, fmt.Errorf("decode dashboard message: %w", err)
 			}
-			if event.Text == "" {
-				return nil, fmt.Errorf("dashboard message text is required")
-			}
-			if event.UserID == "" {
-				return nil, fmt.Errorf("dashboard message user id is required")
+			// Warm events carry no user message — they only drive runtime
+			// warming — so text/user_id are not required for them.
+			if !event.Warm {
+				if event.Text == "" {
+					return nil, fmt.Errorf("dashboard message text is required")
+				}
+				if event.UserID == "" {
+					return nil, fmt.Errorf("dashboard message user id is required")
+				}
 			}
 			if event.IdempotencyKey == "" {
 				return nil, fmt.Errorf("dashboard message idempotency key is required")
