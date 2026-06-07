@@ -43,6 +43,7 @@ export function SidebarUserMenu() {
   const canAccessOrgRoutes = hasAnyScope(["org:read", "org:admin"]);
   const isMultiOrg = session.organizations.length > 1;
 
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pylonOpen, setPylonOpen] = useState(false);
   const togglePylon = useCallback(() => {
     if (pylonOpen) {
@@ -68,8 +69,13 @@ export function SidebarUserMenu() {
 
   return (
     <div className="flex items-center gap-2 px-1 py-1">
-      {/* Compact identity preview — expanded only */}
-      <div className="flex min-w-0 flex-1 items-center gap-2 group-data-[collapsible=icon]:hidden">
+      {/* Compact identity preview — clicking it opens the same menu. Expanded only. */}
+      <button
+        type="button"
+        aria-label="Open account menu"
+        onClick={() => setMenuOpen(true)}
+        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-md p-1 text-left group-data-[collapsible=icon]:hidden"
+      >
         <Avatar className="size-7 shrink-0">
           <AvatarImage
             src={user.photoUrl}
@@ -78,12 +84,12 @@ export function SidebarUserMenu() {
           <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
         </Avatar>
         <span className="truncate text-sm font-medium">{firstName}</span>
-      </div>
+      </button>
 
       {/* Smaller inline theme switcher — expanded only */}
       <ThemeSwitcher className="scale-90 group-data-[collapsible=icon]:hidden" />
 
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <button
             data-testid="user-menu-trigger"

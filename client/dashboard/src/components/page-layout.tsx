@@ -113,11 +113,16 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
           align="center"
           className="mb-6"
         >
-          <Stack gap={2}>
+          <Stack gap={2} className="min-w-0">
             {slots.title}
             {slots.description}
           </Stack>
-          <Stack direction="horizontal" gap={2} align="center">
+          <Stack
+            direction="horizontal"
+            gap={2}
+            align="center"
+            className="shrink-0"
+          >
             {slots.ctas.map((cta) => cta)}
             {slots.moreActions}
           </Stack>

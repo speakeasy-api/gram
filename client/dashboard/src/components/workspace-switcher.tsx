@@ -2,7 +2,6 @@ import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { CheckIcon, ChevronsUpDown, PlusIcon } from "lucide-react";
 import { useState } from "react";
-import { BrandGradientRail } from "./brand-gradient-rail";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
 import { Button } from "./ui/button";
@@ -46,8 +45,7 @@ export function WorkspaceSwitcher() {
   // Org-level pages have no project — render org context only.
   if (!projectSlug) {
     return (
-      <div className="relative flex items-center gap-2 overflow-hidden rounded-md border px-2 py-1.5 text-sm font-medium">
-        <BrandGradientRail className="absolute top-0 bottom-0 left-0 rounded-none" />
+      <div className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm font-medium">
         <span className="truncate">
           {organization.name || organization.slug}
         </span>
@@ -61,9 +59,8 @@ export function WorkspaceSwitcher() {
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
-            className="relative h-auto w-full justify-start gap-2 overflow-hidden rounded-md border px-2 py-1.5 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
+            className="h-auto w-full justify-start gap-2 rounded-md border px-2 py-1.5 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
           >
-            <BrandGradientRail className="absolute top-0 bottom-0 left-0 rounded-none" />
             <ProjectAvatar
               project={project}
               className="h-5 w-5 shrink-0 rounded"
@@ -76,9 +73,7 @@ export function WorkspaceSwitcher() {
         </PopoverTrigger>
         <PopoverContent className="w-[240px] p-0" align="start">
           <Command className="border-none">
-            <div className="border-b">
-              <CommandInput placeholder="Find Project..." className="h-10" />
-            </div>
+            <CommandInput placeholder="Find Project..." className="h-10" />
             <CommandList className="max-h-[250px] !p-1">
               <CommandEmpty>No projects found.</CommandEmpty>
               <CommandGroup heading="Projects">
@@ -104,9 +99,10 @@ export function WorkspaceSwitcher() {
               </CommandGroup>
             </CommandList>
           </Command>
+          <div className="bg-border h-px" />
           <button
             onClick={() => handleProjectSelect("new-project")}
-            className="hover:bg-accent flex w-full cursor-pointer items-center gap-2 border-t px-3 py-2 text-sm"
+            className="hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm"
           >
             <PlusIcon className="text-muted-foreground h-5 w-5 shrink-0" />
             <span>Create Project</span>

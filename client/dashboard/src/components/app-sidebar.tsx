@@ -150,7 +150,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="gap-3 pb-3">
         <Link
-          to={routes.home.href()}
+          to={`/${orgSlug}`}
           className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
         >
           <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />

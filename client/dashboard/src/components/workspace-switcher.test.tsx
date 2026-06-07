@@ -25,19 +25,15 @@ vi.mock("react-router", () => ({
 vi.mock("./project-menu", () => ({
   ProjectAvatar: () => <span data-testid="project-avatar" />,
 }));
-vi.mock("./brand-gradient-rail", () => ({
-  BrandGradientRail: () => <div data-testid="ws-rail" />,
-}));
 
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 afterEach(cleanup);
 
 describe("WorkspaceSwitcher", () => {
-  it("shows the project name and the gradient rail", () => {
+  it("shows the project name", () => {
     render(<WorkspaceSwitcher />);
     // The trigger shows the project's display name (not the org/project slug).
     expect(screen.getByText("Proj")).toBeTruthy();
-    expect(screen.getByTestId("ws-rail")).toBeTruthy();
   });
 });
