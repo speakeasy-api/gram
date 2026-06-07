@@ -335,12 +335,9 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 	var b bytes.Buffer
 	b.WriteString("<message-context>\n")
 	fmt.Fprintf(&b, "EventID: %s\n", event.EventID)
-	// Stamp the turn's wall-clock so the assistant has temporal grounding for
-	// relative-time queries ("errors since Monday"). Per-turn and append-only —
-	// it rides on the user message rather than the cached system prompt, so it
-	// stays fresh across long sessions without busting the prompt cache. Sourced
-	// from the event's immutable created_at so re-decoding on retry/replay is
-	// byte-stable (the capture matcher compares stored vs replayed content).
+	// Sourced from the event's immutable created_at, not time.Now(): DecodeTurn
+	// must be byte-stable across retry/replay, or the capture matcher treats the
+	// re-decoded turn as divergent and opens a spurious generation.
 	if !event.CreatedAt.IsZero() {
 		fmt.Fprintf(&b, "Timestamp: %s\n", event.CreatedAt.UTC().Format(time.RFC3339))
 	}
