@@ -36,7 +36,17 @@ import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  // Initialize from storage so React/Moonshine match the theme the pre-paint
+  // inline script (in index.html) already applied to <html> — avoids a flash.
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      return localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) === "dark"
+        ? "dark"
+        : "light";
+    } catch {
+      return "light";
+    }
+  });
 
   const applyTheme = (theme: "light" | "dark") => {
     const root = document.documentElement;
