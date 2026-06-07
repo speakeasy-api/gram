@@ -8,9 +8,13 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { GramLogo } from "./gram-logo";
+import { WorkspaceSwitcher } from "./workspace-switcher";
+import { SidebarUserMenu } from "./sidebar-user-menu";
 import { useSidebar } from "@/components/ui/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -144,7 +148,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarContent className="pt-5">
+      <SidebarHeader>
+        <Link
+          to={routes.home.href()}
+          className="flex items-center px-1 hover:no-underline group-data-[collapsible=icon]:justify-center"
+        >
+          <GramLogo className="w-24 group-data-[collapsible=icon]:hidden" />
+        </Link>
+        <WorkspaceSwitcher />
+      </SidebarHeader>
+      <SidebarContent className="pt-2">
         <NavGroupProvider
           activeGroup={activeGroup}
           defaultOpenGroups={
@@ -161,6 +174,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Connect"
               Icon={(p) => <Icon {...p} name="plug" />}
               defaultHref={routes.sources.href()}
+              active={connectActive}
             >
               <ScopeGatedNavItem
                 item={routes.sources}
@@ -187,6 +201,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Build"
               Icon={(p) => <Icon {...p} name="hammer" />}
               defaultHref={routes.mcp.href()}
+              active={buildActive}
             >
               <ScopeGatedNavItem
                 item={routes.mcp}
@@ -214,6 +229,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               label="Observe"
               Icon={(p) => <Icon {...p} name="eye" />}
               defaultHref={routes.insights.href()}
+              active={observeActive}
             >
               <ScopeGatedNavItem item={routes.insights} scope="project:read" />
               <ScopeGatedNavItem item={routes.logs} scope="project:read" />
@@ -225,6 +241,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               Icon={(p) => <Icon {...p} name="shield" />}
               defaultHref={routes.riskOverview.href()}
               stage="beta"
+              active={securityActive}
             >
               <ScopeGatedNavItem
                 item={routes.riskOverview}
@@ -265,8 +282,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </Link>
         </div>
       </SidebarContent>
-      <SidebarFooter className="group-data-[collapsible=icon]:hidden">
+      <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
+        <SidebarUserMenu />
       </SidebarFooter>
       <FeatureRequestModal
         isOpen={isUpgradeModalOpen}
