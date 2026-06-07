@@ -61,20 +61,20 @@ export function WorkspaceSwitcher() {
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
-            className="relative h-auto w-full justify-start gap-2 overflow-hidden rounded-md border px-2 py-1.5"
+            className="relative h-auto w-full justify-start gap-2 overflow-hidden rounded-md border px-2 py-1.5 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
           >
             <BrandGradientRail className="absolute top-0 bottom-0 left-0 rounded-none" />
             <ProjectAvatar
               project={project}
               className="h-5 w-5 shrink-0 rounded"
             />
-            <span className="truncate text-sm font-medium">
+            <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
               <span className="text-muted-foreground">
                 {organization.slug} /{" "}
               </span>
               {project?.slug || projectSlug}
             </span>
-            <ChevronsUpDown className="text-muted-foreground ml-auto h-4 w-4 shrink-0" />
+            <ChevronsUpDown className="text-muted-foreground ml-auto h-4 w-4 shrink-0 group-data-[collapsible=icon]:hidden" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[240px] p-0" align="start">
