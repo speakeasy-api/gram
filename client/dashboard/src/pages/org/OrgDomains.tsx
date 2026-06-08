@@ -39,7 +39,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 
 export default function OrgDomains() {
@@ -80,6 +80,8 @@ function validateIPEntry(entry: string): string {
   return "Enter a valid IP address (1.2.3.4) or CIDR range (10.0.0.0/24)";
 }
 
+type IPRow = { id: number; value: string; error: string | null };
+
 // Inline editor: each allowlist entry is its own editable field. Entries are
 // validated on blur (and on save, by the parent via `onValidityChange`) rather
 // than gated behind explicit add/remove actions.
@@ -93,82 +95,80 @@ function IPAllowlistEditor({
   onValidityChange?: (valid: boolean) => void;
 }) {
   // Local row state preserves in-progress (possibly invalid or duplicate)
-  // entries while editing; the parent only ever receives cleaned values.
-  const [rows, setRows] = useState<string[]>(() =>
-    ips.length > 0 ? ips : [""],
-  );
-  const [errors, setErrors] = useState<(string | null)[]>(() =>
-    (ips.length > 0 ? ips : [""]).map(() => null),
+  // entries while editing; the parent only ever receives cleaned values. Each
+  // row carries a stable `id` so React keys survive reordering/removal.
+  const nextId = useRef(0);
+  const makeRow = (value: string): IPRow => ({
+    id: nextId.current++,
+    value,
+    error: null,
+  });
+  const [rows, setRows] = useState<IPRow[]>(() =>
+    (ips.length > 0 ? ips : [""]).map(makeRow),
   );
 
-  function commit(next: string[]) {
-    const trimmed = next.map((r) => r.trim());
+  function commit(next: IPRow[]) {
+    const trimmed = next.map((r) => r.value.trim());
     const valid = trimmed.every((r) => r === "" || validateIPEntry(r) === "");
     const cleaned = Array.from(new Set(trimmed.filter((r) => r !== "")));
     onIpsChange(cleaned);
     onValidityChange?.(valid);
   }
 
-  function handleChange(index: number, value: string) {
-    const next = rows.slice();
-    next[index] = value;
+  function handleChange(id: number, value: string) {
+    const next = rows.map((r) =>
+      r.id === id ? { ...r, value, error: null } : r,
+    );
     setRows(next);
-    if (errors[index]) {
-      const nextErrors = errors.slice();
-      nextErrors[index] = null;
-      setErrors(nextErrors);
-    }
     commit(next);
   }
 
-  function handleBlur(index: number) {
-    const value = rows[index]?.trim() ?? "";
-    if (!value) return;
-    const nextErrors = errors.slice();
-    nextErrors[index] = validateIPEntry(value) || null;
-    setErrors(nextErrors);
+  function handleBlur(id: number) {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        const value = r.value.trim();
+        return { ...r, error: value ? validateIPEntry(value) || null : null };
+      }),
+    );
   }
 
-  function handleRemove(index: number) {
-    const next = rows.filter((_, i) => i !== index);
-    const nextErrors = errors.filter((_, i) => i !== index);
-    const finalRows = next.length > 0 ? next : [""];
-    const finalErrors = nextErrors.length > 0 ? nextErrors : [null];
-    setRows(finalRows);
-    setErrors(finalErrors);
-    commit(finalRows);
+  function handleRemove(id: number) {
+    const filtered = rows.filter((r) => r.id !== id);
+    const next = filtered.length > 0 ? filtered : [makeRow("")];
+    setRows(next);
+    commit(next);
   }
 
   function handleAddRow() {
-    setRows([...rows, ""]);
-    setErrors([...errors, null]);
+    setRows([...rows, makeRow("")]);
   }
 
   return (
     <div className="space-y-2">
-      {rows.map((row, index) => (
-        <div key={index} className="space-y-1">
+      {rows.map((row) => (
+        <div key={row.id} className="space-y-1">
           <div className="flex items-center gap-2">
             <Input
               placeholder="1.2.3.4 or 10.0.0.0/24"
-              value={row}
-              onChange={(val) => handleChange(index, val)}
-              onBlur={() => handleBlur(index)}
-              className={cn("font-mono", errors[index] && "border-destructive")}
+              value={row.value}
+              onChange={(val) => handleChange(row.id, val)}
+              onBlur={() => handleBlur(row.id)}
+              className={cn("font-mono", row.error && "border-destructive")}
             />
             <Button
               variant="tertiary"
               size="sm"
               className="hover:text-destructive shrink-0"
-              onClick={() => handleRemove(index)}
+              onClick={() => handleRemove(row.id)}
               aria-label="Remove entry"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
-          {errors[index] && (
+          {row.error && (
             <Type variant="body" className="text-destructive text-xs">
-              {errors[index]}
+              {row.error}
             </Type>
           )}
         </div>
