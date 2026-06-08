@@ -749,7 +749,11 @@ function FleetIdentity() {
 export default function DeviceAgent() {
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled =
-    telemetry.isFeatureEnabled("gram-device-agent") ?? false;
+  const isDeviceAgentEnabled = telemetry.isFeatureEnabled("gram-device-agent");
+
+  if (isDeviceAgentEnabled === undefined) {
+    return null;
+  }
 
   if (!isDeviceAgentEnabled) {
     return <Navigate to=".." replace />;
