@@ -285,6 +285,104 @@ func TestPluginsService_AddPluginServer_McpServerBacked(t *testing.T) {
 	require.Nil(t, server.ToolsetID)
 }
 
+func TestPluginsService_AddPluginServer_DuplicateToolsetReturnsConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dup Toolset"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "dup-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("First"),
+		Policy:      "required",
+	})
+	require.NoError(t, err)
+
+	// Adding the same toolset again (different display name) hits the
+	// plugin_id+toolset_id unique index, not the display-name one.
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Second"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "already been added")
+}
+
+func TestPluginsService_AddPluginServer_DuplicateMcpServerReturnsConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dup Remote"})
+	require.NoError(t, err)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Dup Remote Server", mcpservers.VisibilityPublic)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("First"),
+		Policy:      "required",
+	})
+	require.NoError(t, err)
+
+	// Adding the same mcp_server again (different display name) hits the
+	// plugin_id+mcp_server_id unique index, not the display-name one.
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("Second"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "already been added")
+}
+
+func TestPluginsService_AddPluginServer_DuplicateDisplayNameReturnsConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dup Name"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "dup-name-toolset")
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Dup Name Remote", mcpservers.VisibilityPublic)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Shared Name"),
+		Policy:      "required",
+	})
+	require.NoError(t, err)
+
+	// A different backend reusing the same display name hits the
+	// plugin_id+display_name unique index (the default conflict branch).
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("Shared Name"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "display name already exists")
+}
+
 func TestPluginsService_AddPluginServer_RequiresExactlyOneBackend(t *testing.T) {
 	t.Parallel()
 

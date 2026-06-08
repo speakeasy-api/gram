@@ -564,6 +564,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is disabled or has no published endpoint")
 		}
 		if displayName == "" {
+			// mcpServerDisplayName always returns a non-empty value (name, then
+			// slug, then the UUID id), so display_name is guaranteed set here.
 			displayName = mcpServerDisplayName(server)
 		}
 	} else {
@@ -582,12 +584,10 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
 		}
 		if displayName == "" {
+			// toolsets.name is NOT NULL CHECK (name <> ''), so display_name is
+			// guaranteed non-empty here.
 			displayName = toolset.Name
 		}
-	}
-
-	if displayName == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "display name is required")
 	}
 
 	tx, err := s.db.Begin(ctx)
