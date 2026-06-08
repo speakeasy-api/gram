@@ -34,6 +34,7 @@ import {
   type ServerToolsetStatus,
   useExternalMcpReleaseWorkflow,
 } from "./useExternalMcpReleaseWorkflow";
+import { filterToHttpRemotes } from "./remotes";
 
 /** Friendly display names and descriptions for known remote endpoints */
 const REMOTE_DISPLAY_INFO: Record<
@@ -206,15 +207,6 @@ export interface AddServerDialogProps {
   autoStartDeployment?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
   headless?: boolean;
-}
-
-function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
-  return {
-    ...server,
-    remotes: server.remotes?.filter(
-      (r) => r.transportType === "streamable-http",
-    ),
-  };
 }
 
 /**
