@@ -6,17 +6,23 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-let key: Buffer | undefined;
-let cert: Buffer | undefined;
-
-if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
-  key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
-  cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
-}
-
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
+
+  // Read dev HTTPS key/cert lazily inside the config callback so static
+  // analyzers (knip) that load this module don't fault when the SSL files
+  // aren't on disk (e.g. CI runners).
+  let key: Buffer | undefined;
+  let cert: Buffer | undefined;
+  if (
+    isDev &&
+    process.env["GRAM_SSL_KEY_FILE"] &&
+    process.env["GRAM_SSL_CERT_FILE"]
+  ) {
+    key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
+    cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
+  }
 
   const siteUrl = process.env["GRAM_SITE_URL"];
   if (isDev && !siteUrl) {
