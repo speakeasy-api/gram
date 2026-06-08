@@ -39,12 +39,17 @@ type UpdatePluginRequestBody struct {
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
-	// Gram toolset ID for the MCP server.
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
-	// Display name for the server.
-	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
-	Policy      string `form:"policy" json:"policy" xml:"policy"`
-	SortOrder   int32  `form:"sort_order" json:"sort_order" xml:"sort_order"`
+	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
+	// toolset_id or mcp_server_id.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
+	// toolset_id or mcp_server_id.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Display name for the server. Defaults to the backing toolset or mcp_server
+	// name when omitted.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	Policy      string  `form:"policy" json:"policy" xml:"policy"`
+	SortOrder   int32   `form:"sort_order" json:"sort_order" xml:"sort_order"`
 }
 
 // UpdatePluginServerRequestBody is the type of the "plugins" service
@@ -162,8 +167,12 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID.
+	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
+	// toolset_id / mcp_server_id is set).
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
+	// of toolset_id / mcp_server_id is set).
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -178,8 +187,12 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID.
+	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
+	// toolset_id / mcp_server_id is set).
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
+	// of toolset_id / mcp_server_id is set).
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -3238,8 +3251,12 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID.
+	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
+	// toolset_id / mcp_server_id is set).
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
+	// of toolset_id / mcp_server_id is set).
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -3300,6 +3317,7 @@ func NewAddPluginServerRequestBody(p *plugins.AddPluginServerPayload) *AddPlugin
 	body := &AddPluginServerRequestBody{
 		PluginID:    p.PluginID,
 		ToolsetID:   p.ToolsetID,
+		McpServerID: p.McpServerID,
 		DisplayName: p.DisplayName,
 		Policy:      p.Policy,
 		SortOrder:   p.SortOrder,
@@ -4266,7 +4284,8 @@ func NewDeletePluginGatewayError(body *DeletePluginGatewayErrorResponseBody) *go
 func NewAddPluginServerPluginServerCreated(body *AddPluginServerResponseBody) *plugins.PluginServer {
 	v := &plugins.PluginServer{
 		ID:          *body.ID,
-		ToolsetID:   *body.ToolsetID,
+		ToolsetID:   body.ToolsetID,
+		McpServerID: body.McpServerID,
 		DisplayName: *body.DisplayName,
 		Policy:      *body.Policy,
 		SortOrder:   *body.SortOrder,
@@ -4431,7 +4450,8 @@ func NewAddPluginServerGatewayError(body *AddPluginServerGatewayErrorResponseBod
 func NewUpdatePluginServerPluginServerOK(body *UpdatePluginServerResponseBody) *plugins.PluginServer {
 	v := &plugins.PluginServer{
 		ID:          *body.ID,
-		ToolsetID:   *body.ToolsetID,
+		ToolsetID:   body.ToolsetID,
+		McpServerID: body.McpServerID,
 		DisplayName: *body.DisplayName,
 		Policy:      *body.Policy,
 		SortOrder:   *body.SortOrder,
@@ -6189,9 +6209,6 @@ func ValidateAddPluginServerResponseBody(body *AddPluginServerResponseBody) (err
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
@@ -6209,6 +6226,9 @@ func ValidateAddPluginServerResponseBody(body *AddPluginServerResponseBody) (err
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
@@ -6227,9 +6247,6 @@ func ValidateUpdatePluginServerResponseBody(body *UpdatePluginServerResponseBody
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
@@ -6247,6 +6264,9 @@ func ValidateUpdatePluginServerResponseBody(body *UpdatePluginServerResponseBody
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
@@ -10223,9 +10243,6 @@ func ValidatePluginServerResponseBody(body *PluginServerResponseBody) (err error
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
@@ -10243,6 +10260,9 @@ func ValidatePluginServerResponseBody(body *PluginServerResponseBody) (err error
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
