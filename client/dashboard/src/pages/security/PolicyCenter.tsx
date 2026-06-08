@@ -1,7 +1,6 @@
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
@@ -23,6 +22,7 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import {
+  Badge,
   Button,
   type Column,
   DropdownMenu,
@@ -32,7 +32,7 @@ import {
   Icon,
   Table,
 } from "@speakeasy-api/moonshine";
-import type { IconName } from "@speakeasy-api/moonshine";
+import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
 import {
   Plus,
   Shield,
@@ -545,19 +545,28 @@ function PolicyCenterContent() {
     },
   ];
 
+  const dimIfDisabled = (policy: RiskPolicy) =>
+    policy.enabled ? "" : "opacity-50";
+
   const policyColumns: Column<RiskPolicy>[] = [
     {
       key: "name",
       header: "Name",
       width: "1fr",
-      render: (policy) => <span className="font-medium">{policy.name}</span>,
+      render: (policy) => (
+        <span className={cn("font-medium", dimIfDisabled(policy))}>
+          {policy.name}
+        </span>
+      ),
     },
     {
       key: "action",
       header: "Action",
       width: "0.5fr",
       render: (policy) => (
-        <ActionBadge action={(policy.action as PolicyAction) ?? "flag"} />
+        <span className={cn("inline-flex", dimIfDisabled(policy))}>
+          <ActionBadge action={(policy.action as PolicyAction) ?? "flag"} />
+        </span>
       ),
     },
     {
@@ -574,13 +583,14 @@ function PolicyCenterContent() {
         }
 
         return (
-          <div className="flex flex-wrap gap-1">
-            {categories.map((cat) => (
-              <Badge key={cat} variant="secondary">
-                {RULE_CATEGORY_META[cat].label}
-              </Badge>
-            ))}
-          </div>
+          <span
+            className={cn(
+              "text-muted-foreground text-sm",
+              dimIfDisabled(policy),
+            )}
+          >
+            {categories.map((cat) => RULE_CATEGORY_META[cat].label).join(", ")}
+          </span>
         );
       },
     },
@@ -592,19 +602,22 @@ function PolicyCenterContent() {
         const types = policyMessageTypesForDisplay(policy.messageTypes);
 
         return (
-          <div className="flex flex-wrap gap-1">
-            {types.map((type) => (
-              <Badge key={type} variant="secondary">
-                {POLICY_MESSAGE_TYPE_META[type].label}
-              </Badge>
-            ))}
-          </div>
+          <span
+            className={cn(
+              "text-muted-foreground text-sm",
+              dimIfDisabled(policy),
+            )}
+          >
+            {types
+              .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
+              .join(", ")}
+          </span>
         );
       },
     },
     {
       key: "enabled",
-      header: "Status",
+      header: "Enabled",
       width: "0.5fr",
       render: (policy) => (
         <div onClick={(e) => e.stopPropagation()}>
@@ -954,13 +967,15 @@ function PolicySheetBody({
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{meta.label}</span>
                       {!isAvailable && (
-                        <Badge variant="outline" className="text-[10px]">
-                          Coming Soon
+                        <Badge variant="neutral">
+                          <Badge.Text>Coming Soon</Badge.Text>
                         </Badge>
                       )}
                       {isExpandable && categorySelected && (
-                        <Badge variant="outline" className="text-[10px]">
-                          {enabledRuleCount}/{rules.length} on
+                        <Badge variant="neutral">
+                          <Badge.Text>
+                            {enabledRuleCount}/{rules.length}
+                          </Badge.Text>
                         </Badge>
                       )}
                     </div>
@@ -984,40 +999,6 @@ function PolicySheetBody({
                     findings. */}
                 {isAvailable && isExpanded && rules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-muted-foreground text-xs">
-                        {enabledRuleCount} of {rules.length} rules enabled
-                      </span>
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                          disabled={enabledRuleCount === rules.length}
-                          onClick={() => {
-                            const nextDisabled = new Set(disabledRules);
-                            for (const r of rules) nextDisabled.delete(r.id);
-                            setDisabledRules(nextDisabled);
-                            const nextCats = new Set(selectedCategories);
-                            nextCats.add(cat);
-                            setSelectedCategories(nextCats);
-                          }}
-                        >
-                          Enable all
-                        </button>
-                        <button
-                          type="button"
-                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                          disabled={!categorySelected || enabledRuleCount === 0}
-                          onClick={() => {
-                            const nextDisabled = new Set(disabledRules);
-                            for (const r of rules) nextDisabled.add(r.id);
-                            setDisabledRules(nextDisabled);
-                          }}
-                        >
-                          Disable all
-                        </button>
-                      </div>
-                    </div>
                     <div className="space-y-2 py-1">
                       {rules.map((rule) => {
                         const ruleEnabled =
@@ -1025,18 +1006,25 @@ function PolicySheetBody({
                         return (
                           <div
                             key={rule.id}
-                            className="flex items-center gap-3 py-1 pl-8"
+                            className="flex items-start gap-3 py-1"
                           >
+                            <label
+                              htmlFor={rule.id}
+                              className="min-w-0 flex-1 cursor-pointer"
+                            >
+                              <div className="font-mono text-sm">{rule.id}</div>
+                              <div className="text-muted-foreground text-xs">
+                                {rule.title}
+                              </div>
+                            </label>
                             <Checkbox
                               id={rule.id}
                               checked={ruleEnabled}
                               onCheckedChange={(checked) =>
                                 toggleRule(rule.id, !!checked)
                               }
+                              className="mt-0.5"
                             />
-                            <label htmlFor={rule.id} className="text-xs">
-                              {rule.title}
-                            </label>
                           </div>
                         );
                       })}
@@ -1354,9 +1342,9 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
 
 const ACTION_BADGE_CONFIG: Record<
   PolicyAction,
-  { label: string; variant: "secondary" | "destructive" }
+  { label: string; variant: NonNullable<BadgeProps["variant"]> }
 > = {
-  flag: { label: "Flag", variant: "secondary" },
+  flag: { label: "Flag", variant: "neutral" },
   block: { label: "Block", variant: "destructive" },
 };
 
@@ -1373,7 +1361,11 @@ const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
 
 function ActionBadge({ action }: { action: PolicyAction }) {
   const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
-  return <Badge variant={config.variant}>{config.label}</Badge>;
+  return (
+    <Badge variant={config.variant}>
+      <Badge.Text>{config.label}</Badge.Text>
+    </Badge>
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1450,10 +1442,18 @@ function CustomRulesPicker({
               {customRules.map((rule) => {
                 const checked = selectedCustomRuleIds.has(rule.id);
                 return (
-                  <div
-                    key={rule.id}
-                    className="flex items-center gap-3 py-1 pl-8"
-                  >
+                  <div key={rule.id} className="flex items-start gap-3 py-1">
+                    <label
+                      htmlFor={`custom-${rule.id}`}
+                      className="min-w-0 flex-1 cursor-pointer"
+                    >
+                      <div className="font-mono text-sm">{rule.id}</div>
+                      {rule.title && (
+                        <div className="text-muted-foreground text-xs">
+                          {rule.title}
+                        </div>
+                      )}
+                    </label>
                     <Checkbox
                       id={`custom-${rule.id}`}
                       checked={checked}
@@ -1466,18 +1466,8 @@ function CustomRulesPicker({
                         }
                         setSelectedCustomRuleIds(set);
                       }}
+                      className="mt-0.5"
                     />
-                    <label
-                      htmlFor={`custom-${rule.id}`}
-                      className="cursor-pointer text-xs"
-                    >
-                      <span className="text-foreground">
-                        {rule.title || rule.id}
-                      </span>
-                      <span className="text-muted-foreground ml-2 font-mono text-[10px]">
-                        {rule.id}
-                      </span>
-                    </label>
                   </div>
                 );
               })}
