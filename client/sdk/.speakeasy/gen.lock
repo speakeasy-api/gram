@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 87c6dd272f19e58f0731d4b3f49100c2
+  docChecksum: 8851f353bcad897e88d34185fd49bfc8
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2143,7 +2143,7 @@ trackedFiles:
   docs/models/operations/listchallengessecurity.md:
     last_write_checksum: sha1:612e100b48e95978d1923e12137035d03b5d6e35
   docs/models/operations/listchatsrequest.md:
-    last_write_checksum: sha1:5fc6e3b50a3bcfa46222dec7dfcbb9ac2612a0bb
+    last_write_checksum: sha1:1adb285d52e811d90c7f44df2145554698e4a348
   docs/models/operations/listchatssecurity.md:
     last_write_checksum: sha1:c76573b8e0ebe2778bfa7b1a48723ab02d93df84
   docs/models/operations/listchatssecurityoption1.md:
@@ -2807,7 +2807,7 @@ trackedFiles:
   docs/models/operations/settoolsetusersessionissuersecurityoption2.md:
     last_write_checksum: sha1:1268c85290fd4f2f3a7d2a2035350bca0e824919
   docs/models/operations/sortby.md:
-    last_write_checksum: sha1:d558b145505c962e750cbf3fec3d8610a7de74b4
+    last_write_checksum: sha1:b2e150822658597f6cfb93518a40d32b63feb204
   docs/models/operations/sortorder.md:
     last_write_checksum: sha1:4196564e695de57c938e01fd76df0f97b7f19a6b
   docs/models/operations/sourcekind.md:
@@ -5103,7 +5103,7 @@ trackedFiles:
   src/models/operations/listchallenges.ts:
     last_write_checksum: sha1:896d134449096d6fe8146621fa4d0ef257cfd16b
   src/models/operations/listchats.ts:
-    last_write_checksum: sha1:83588fac8ac036d1ef953ec20ad9faaa5e846e5b
+    last_write_checksum: sha1:6b7f2f0d2b775b1052ab7469e36ddaad2906ee37
   src/models/operations/listcollections.ts:
     last_write_checksum: sha1:7008055d09d615b4fe08ec3e801dc289b8cc34f3
   src/models/operations/listcollectionservers.ts:

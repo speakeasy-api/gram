@@ -6046,19 +6046,19 @@ paths:
               - "false"
             type: string
         - allowEmptyValue: true
-          description: Filter chats created after this timestamp (ISO 8601)
+          description: Filter chats last active after this timestamp (ISO 8601)
           in: query
           name: from
           schema:
-            description: Filter chats created after this timestamp (ISO 8601)
+            description: Filter chats last active after this timestamp (ISO 8601)
             format: date-time
             type: string
         - allowEmptyValue: true
-          description: Filter chats created before this timestamp (ISO 8601)
+          description: Filter chats last active before this timestamp (ISO 8601)
           in: query
           name: to
           schema:
-            description: Filter chats created before this timestamp (ISO 8601)
+            description: Filter chats last active before this timestamp (ISO 8601)
             format: date-time
             type: string
         - allowEmptyValue: true
@@ -6083,12 +6083,12 @@ paths:
             minimum: 0
             type: integer
         - allowEmptyValue: true
-          description: Field to sort by
+          description: Field to sort by. created_at sorts by latest chat message activity.
           in: query
           name: sort_by
           schema:
             default: created_at
-            description: Field to sort by
+            description: Field to sort by. created_at sorts by latest chat message activity.
             enum:
               - created_at
               - num_messages

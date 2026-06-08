@@ -397,6 +397,47 @@ func TestListChats_Filter_DateRange(t *testing.T) {
 	require.Equal(t, oldChat.String(), result.Chats[0].ID)
 }
 
+func TestListChats_DateRangeAndSortUseLastMessageTimestamp(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-activity")
+
+	now := time.Now().UTC().Truncate(time.Second)
+	oldCreatedAt := now.Add(-7 * 24 * time.Hour)
+	newCreatedAt := now.Add(-2 * time.Hour)
+
+	newerCreatedChat := seedChatAtTime(t, ctx, ti, "ext-activity", newCreatedAt)
+	_, err := repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    newerCreatedChat,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	resumedOldChat := seedChatAtTime(t, ctx, ti, "ext-activity", oldCreatedAt)
+	_, err = repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    resumedOldChat,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	from := now.Add(-24 * time.Hour).Format(time.RFC3339)
+	to := now.Add(24 * time.Hour).Format(time.RFC3339)
+	payload := defaultPayload()
+	payload.From = &from
+	payload.To = &to
+	payload.SortBy = "created_at"
+	payload.SortOrder = "desc"
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.Len(t, result.Chats, 2)
+	require.Equal(t, resumedOldChat.String(), result.Chats[0].ID)
+	require.Equal(t, newerCreatedChat.String(), result.Chats[1].ID)
+}
+
 // TestListChats_Pagination verifies that limit/offset correctly pages through results and that
 // the total count reflects all matching chats regardless of the page window.
 func TestListChats_Pagination(t *testing.T) {

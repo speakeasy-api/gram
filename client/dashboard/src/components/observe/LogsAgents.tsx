@@ -517,7 +517,7 @@ function AgentSessionsPageContent({
                   <SelectContent className="w-[280px]">
                     <SelectItem
                       value="chronological"
-                      description="Sort by when the chat was created"
+                      description="Sort by latest chat message activity"
                     >
                       Date
                     </SelectItem>

@@ -64,4 +64,23 @@ describe("ChatLogsTable", () => {
 
     expect(writeText).toHaveBeenCalledWith(chatId);
   });
+
+  it("shows created and last activity timestamps", () => {
+    render(
+      <ChatLogsTable
+        chats={[makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE")]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText(/^Created Jan 1, \d{2}:00$/)).toBeTruthy();
+    expect(screen.getByText(/^Last activity Jan 1, \d{2}:03$/)).toBeTruthy();
+  });
 });

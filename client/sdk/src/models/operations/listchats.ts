@@ -34,14 +34,14 @@ export const HasRisk = {
 export type HasRisk = ClosedEnum<typeof HasRisk>;
 
 /**
- * Field to sort by
+ * Field to sort by. created_at sorts by latest chat message activity.
  */
 export const SortBy = {
   CreatedAt: "created_at",
   NumMessages: "num_messages",
 } as const;
 /**
- * Field to sort by
+ * Field to sort by. created_at sorts by latest chat message activity.
  */
 export type SortBy = ClosedEnum<typeof SortBy>;
 
@@ -75,11 +75,11 @@ export type ListChatsRequest = {
    */
   hasRisk?: HasRisk | undefined;
   /**
-   * Filter chats created after this timestamp (ISO 8601)
+   * Filter chats last active after this timestamp (ISO 8601)
    */
   from?: Date | undefined;
   /**
-   * Filter chats created before this timestamp (ISO 8601)
+   * Filter chats last active before this timestamp (ISO 8601)
    */
   to?: Date | undefined;
   /**
@@ -91,7 +91,7 @@ export type ListChatsRequest = {
    */
   offset?: number | undefined;
   /**
-   * Field to sort by
+   * Field to sort by. created_at sorts by latest chat message activity.
    */
   sortBy?: SortBy | undefined;
   /**
