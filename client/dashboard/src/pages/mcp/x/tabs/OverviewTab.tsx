@@ -98,9 +98,11 @@ function OverviewRows({
       <Heading variant="h3" className="mb-1 font-semibold normal-case">
         Essentials
       </Heading>
-      <Type muted small>
-        Everything required to connect clients to this MCP server.
-      </Type>
+      <EssentialsReadinessSummary
+        mcpServer={mcpServer}
+        endpoints={endpoints}
+        isLoadingEndpoints={isLoadingEndpoints}
+      />
       <div>
         <ServerAddressRow
           endpoints={endpoints}
@@ -123,6 +125,152 @@ function OverviewRows({
       </div>
     </section>
   );
+}
+
+type EssentialReadiness = {
+  key: "server-url" | "authentication" | "source";
+  ready: boolean;
+  loading: boolean;
+  incompleteMessage: string;
+};
+
+function EssentialsReadinessSummary({
+  mcpServer,
+  endpoints,
+  isLoadingEndpoints,
+}: {
+  mcpServer: McpServer;
+  endpoints: McpEndpoint[];
+  isLoadingEndpoints: boolean;
+}) {
+  const serverUrl = useServerUrlReadiness(endpoints, isLoadingEndpoints);
+  const authentication = useAuthenticationReadiness(mcpServer);
+  const source = useSourceReadiness(mcpServer.remoteMcpServerId);
+
+  const essentials: EssentialReadiness[] = [
+    {
+      key: "server-url",
+      ready: serverUrl.ready,
+      loading: serverUrl.loading,
+      incompleteMessage: "Configure a server URL for clients to connect to.",
+    },
+    {
+      key: "authentication",
+      ready: authentication.ready,
+      loading: authentication.loading,
+      incompleteMessage:
+        "Configure authentication to control who can use this MCP server.",
+    },
+    {
+      key: "source",
+      ready: source.ready,
+      loading: source.loading,
+      incompleteMessage: "Connect a source to provide tools for LLMs to use.",
+    },
+  ];
+
+  const readyCount = essentials.filter((essential) => essential.ready).length;
+  const isLoading = essentials.some((essential) => essential.loading);
+  const nextEssential = essentials.find((essential) => !essential.ready);
+
+  let message =
+    "All essentials are ready. Clients can connect to this MCP server.";
+  if (isLoading) {
+    message = "Checking essentials...";
+  } else if (nextEssential) {
+    message = nextEssential.incompleteMessage;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div
+        className="flex items-center gap-1"
+        aria-label={`${readyCount} of ${essentials.length} essentials ready`}
+      >
+        {essentials.map((essential) => (
+          <span
+            key={essential.key}
+            className={readinessSegmentClassName(essential)}
+          />
+        ))}
+      </div>
+      <Type muted small as="div" className="flex min-w-0 flex-wrap gap-x-3">
+        <span>{message}</span>
+      </Type>
+    </div>
+  );
+}
+
+function readinessSegmentClassName(essential: EssentialReadiness): string {
+  let toneClass = "bg-amber-500";
+  if (essential.loading) {
+    toneClass = "bg-muted";
+  } else if (essential.ready) {
+    toneClass = "bg-green-500";
+  }
+
+  return `h-1.5 w-8 rounded-full ${toneClass}`;
+}
+
+function useServerUrlReadiness(
+  endpoints: McpEndpoint[],
+  isLoadingEndpoints: boolean,
+): { ready: boolean; loading: boolean } {
+  const endpoint = useMemo(
+    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
+    [endpoints],
+  );
+  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
+  const fallbackUrl = endpoint?.slug
+    ? `${getServerURL()}/mcp/${endpoint.slug}`
+    : undefined;
+  const mcpUrl = resolvedUrl ?? fallbackUrl;
+
+  return {
+    ready: !isLoadingEndpoints && !!mcpUrl,
+    loading: isLoadingEndpoints,
+  };
+}
+
+function useAuthenticationReadiness(mcpServer: McpServer): {
+  ready: boolean;
+  loading: boolean;
+} {
+  const userSessionIssuerId = mcpServer.userSessionIssuerId;
+  const { data: clientsResult, isLoading } = useRemoteSessionClients(
+    { userSessionIssuerId },
+    undefined,
+    { enabled: !!userSessionIssuerId },
+  );
+
+  const hasIssuer = !!userSessionIssuerId;
+  const hasRemote = (clientsResult?.result.items.length ?? 0) > 0;
+  const state = deriveAuthState({
+    isPublic: mcpServer.visibility === "public",
+    hasIssuer,
+    hasRemote,
+  });
+  const loading = hasIssuer && isLoading;
+
+  return { ready: !loading && state !== "none", loading };
+}
+
+function useSourceReadiness(remoteMcpServerId: string | undefined): {
+  ready: boolean;
+  loading: boolean;
+} {
+  const id = remoteMcpServerId ?? "";
+  const {
+    data: remoteMcpServer,
+    isLoading,
+    isError,
+  } = useGetRemoteMcpServer({ id }, undefined, {
+    enabled: id !== "",
+    throwOnError: false,
+  });
+  const loading = id !== "" && isLoading;
+
+  return { ready: !loading && !isError && !!remoteMcpServer, loading };
 }
 
 function OverviewRowsSkeleton() {
@@ -254,6 +402,23 @@ const AUTH_ROW_COPY: Record<AuthState, string> = {
   none: "No authentication method configured - anyone with the URL can connect.",
 };
 
+function deriveAuthState({
+  isPublic,
+  hasIssuer,
+  hasRemote,
+}: {
+  isPublic: boolean;
+  hasIssuer: boolean;
+  hasRemote: boolean;
+}): AuthState {
+  const gramGated = hasIssuer && !isPublic;
+
+  if (gramGated && !hasRemote) return "gram-only";
+  if (gramGated && hasRemote) return "gram-remote";
+  if (isPublic && hasRemote) return "remote-only";
+  return "none";
+}
+
 function AuthenticationOverviewRow({
   mcpServer,
   onConfigure,
@@ -272,14 +437,7 @@ function AuthenticationOverviewRow({
   const hasIssuer = !!userSessionIssuerId;
   // Whether any upstream identity provider is paired with this issuer.
   const hasRemote = (clientsResult?.result.items.length ?? 0) > 0;
-  // Private + issuer means Gram OAuth gates org membership and RBAC.
-  const gramGated = hasIssuer && !isPublic;
-
-  let state: AuthState;
-  if (gramGated && !hasRemote) state = "gram-only";
-  else if (gramGated && hasRemote) state = "gram-remote";
-  else if (isPublic && hasRemote) state = "remote-only";
-  else state = "none";
+  const state = deriveAuthState({ isPublic, hasIssuer, hasRemote });
 
   const secure = state !== "none";
   // The remote-identity query only runs when an issuer exists, so gate the
