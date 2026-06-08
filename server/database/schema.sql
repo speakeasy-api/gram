@@ -1730,7 +1730,8 @@ CREATE TABLE IF NOT EXISTS directory_user_group_memberships (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS directory_user_group_memberships_current_key
-ON directory_user_group_memberships (directory_user_id, directory_group_id);
+ON directory_user_group_memberships (directory_user_id, directory_group_id)
+WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS directory_user_group_memberships_directory_group_id_idx
 ON directory_user_group_memberships (directory_group_id);

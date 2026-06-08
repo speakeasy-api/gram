@@ -68,6 +68,6 @@ CREATE TABLE "directory_user_group_memberships" (
   CONSTRAINT "directory_user_group_memberships_directory_user_id_fkey" FOREIGN KEY ("directory_user_id") REFERENCES "directory_users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "directory_user_group_memberships_current_key" to table: "directory_user_group_memberships"
-CREATE UNIQUE INDEX "directory_user_group_memberships_current_key" ON "directory_user_group_memberships" ("directory_user_id", "directory_group_id");
+CREATE UNIQUE INDEX "directory_user_group_memberships_current_key" ON "directory_user_group_memberships" ("directory_user_id", "directory_group_id") WHERE "deleted" IS FALSE;
 -- Create index "directory_user_group_memberships_directory_group_id_idx" to table: "directory_user_group_memberships"
 CREATE INDEX "directory_user_group_memberships_directory_group_id_idx" ON "directory_user_group_memberships" ("directory_group_id");
