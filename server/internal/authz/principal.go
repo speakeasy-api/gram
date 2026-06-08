@@ -14,15 +14,20 @@ import (
 // active in-organization principal.
 var ErrPrincipalNotFound = errors.New("principal not found")
 
+// ErrPrincipalInvalid reports caller input that cannot be a concrete user
+// principal.
+var ErrPrincipalInvalid = errors.New("principal invalid")
+
 // ResolveUserPrincipals resolves user:<id> plus assigned role principals
 // only when the Gram user is an active member of the organization. Missing or
-// cross-org users return ErrPrincipalNotFound.
+// cross-org users return ErrPrincipalNotFound. Empty or reserved user IDs are
+// invalid.
 func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID string, userID string) ([]urn.Principal, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
 	}
-	if userID == "" {
-		return nil, ErrPrincipalNotFound
+	if userID == "" || userID == urn.AllUsersPrincipalID {
+		return nil, fmt.Errorf("%w: user id %q", ErrPrincipalInvalid, userID)
 	}
 
 	isMember, err := orgrepo.New(db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
@@ -112,7 +117,7 @@ func PatchPrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID string, pri
 }
 
 func AllUsersPrincipal() urn.Principal {
-	return urn.NewPrincipal(urn.PrincipalTypeUser, "all")
+	return urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID)
 }
 
 // rolePrincipals owns the canonical write principal and all principals that

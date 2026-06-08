@@ -22,6 +22,10 @@ const (
 // alongside the typed URNs, so consumers special-case it.
 const PrincipalWildcard = "*"
 
+// AllUsersPrincipalID is reserved for the user:all subject-set principal.
+// It must not be resolved as a concrete Gram user ID.
+const AllUsersPrincipalID = "all"
+
 var principalTypes = map[PrincipalType]struct{}{
 	PrincipalTypeUser:  {},
 	PrincipalTypeRole:  {},

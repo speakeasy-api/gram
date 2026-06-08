@@ -35,6 +35,7 @@ type OutcomeFilter = "all" | "deny" | "allow" | "resolved";
 function principalFilterLabel(value: string): string {
   switch (value) {
     case "all":
+      return "Everyone";
     case "user:all":
       return "All users";
     default:
@@ -447,7 +448,7 @@ export function ChallengesTab() {
             <SelectValue>{principalFilterLabel(principalFilter)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All users</SelectItem>
+            <SelectItem value="all">Everyone</SelectItem>
             {uniquePrincipals.map(([value, label]) => (
               <SelectItem key={value} value={value}>
                 {label}

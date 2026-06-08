@@ -50,6 +50,9 @@ func (r ResourceGrant) Validate() error {
 	if err := r.Resource.Validate(); err != nil {
 		return err
 	}
+	if err := validatePolicyEffect(r.Effect); err != nil {
+		return err
+	}
 	for _, principal := range r.Principals {
 		if _, err := principal.Value(); err != nil {
 			return fmt.Errorf("invalid grant principal: %w", err)
