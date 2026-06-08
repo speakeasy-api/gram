@@ -14,6 +14,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/agentevents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -49,6 +50,8 @@ type Service struct {
 	riskScanner        risk.RiskScanner
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
+	agentEventWriter   *AgentEventWriter
+	cursorEvents       *agentevents.Source[*gen.CursorPayload]
 	siteURL            *url.URL
 	jwtSecret          string
 }
@@ -100,10 +103,11 @@ func NewService(
 	riskScanner risk.RiskScanner,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
+	cursorEvents *agentevents.Source[*gen.CursorPayload],
 	siteURL *url.URL,
 	jwtSecret string,
 ) *Service {
-	return &Service{
+	svc := &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
@@ -118,9 +122,12 @@ func NewService(
 		riskScanner:        riskScanner,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		cursorEvents:       cursorEvents,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
 	}
+	svc.agentEventWriter = &AgentEventWriter{service: svc}
+	return svc
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
