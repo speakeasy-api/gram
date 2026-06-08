@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link as RouterLink } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link as RouterLink, useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
   useRiskCreatePolicyMutation,
   useRiskListPolicies,
   useRiskPoliciesDeleteMutation,
+  useRiskPoliciesUpdateMutation,
 } from "@gram/client/react-query/index.js";
 import { invalidateAllRiskPoliciesStatus } from "@gram/client/react-query/riskPoliciesStatus.js";
 import {
@@ -33,7 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Badge, Button, Link } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useSlugs } from "@/contexts/Sdk";
 import { StepContainer } from "../step-container";
 import {
@@ -44,6 +45,7 @@ import {
   type PolicyAction,
   type PolicyMessageType,
 } from "@/pages/security/policy-data";
+import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
 import { cn } from "@/lib/utils";
 
 interface ConfigurePoliciesStepProps {
@@ -83,17 +85,17 @@ const WIZARD_CATEGORIES: RuleCategory[] = [
 // the user just clicked through onboarding accepting everything.
 const DEFAULTS: Record<RuleCategory, CategoryConfig> = {
   secrets: {
-    enabled: true,
+    enabled: false,
     action: "block",
     messageTypes: new Set(["tool_request", "tool_response"]),
   },
   pii: {
-    enabled: true,
+    enabled: false,
     action: "flag",
     messageTypes: new Set(["tool_request", "tool_response"]),
   },
   prompt_injection: {
-    enabled: true,
+    enabled: false,
     action: "flag",
     messageTypes: new Set(["tool_response"]),
   },
@@ -148,13 +150,49 @@ const MESSAGE_TYPES: PolicyMessageType[] = [
   "assistant_message",
 ];
 
-// Categories with too many underlying rules to manage in a wizard list. Drawer
-// shows a "customize in Policy Center" handoff instead of a rule picker.
-const DEFER_RULES_TO_POLICY_CENTER: Partial<Record<RuleCategory, boolean>> = {
-  secrets: true,
-  prompt_injection: true,
-  pii: true,
-};
+const PRESIDIO_CATEGORIES: RuleCategory[] = [
+  "financial",
+  "pii",
+  "government_ids",
+  "healthcare",
+];
+
+function buildPolicyPayload(cat: RuleCategory): {
+  sources: string[];
+  presidioEntities?: string[];
+} {
+  if (cat === "shadow_mcp") return { sources: ["shadow_mcp"] };
+  if (cat === "secrets") return { sources: ["gitleaks"] };
+  if (cat === "prompt_injection") return { sources: ["prompt_injection"] };
+  if (PRESIDIO_CATEGORIES.includes(cat)) {
+    return {
+      sources: ["presidio"],
+      presidioEntities: DETECTION_RULES[cat]
+        .filter((r) => !r.hidden)
+        .map((r) => ruleIdToPresidioEntity(r.id)),
+    };
+  }
+  return { sources: [] };
+}
+
+function categoryMatchesPolicy(
+  cat: RuleCategory,
+  sources: string[],
+  presidioEntities?: string[],
+): boolean {
+  if (cat === "shadow_mcp") return sources.includes("shadow_mcp");
+  if (cat === "secrets") return sources.includes("gitleaks");
+  if (cat === "prompt_injection") return sources.includes("prompt_injection");
+  if (PRESIDIO_CATEGORIES.includes(cat)) {
+    if (!sources.includes("presidio") || !presidioEntities?.length)
+      return false;
+    const wire = new Set(
+      DETECTION_RULES[cat].map((r) => ruleIdToPresidioEntity(r.id)),
+    );
+    return presidioEntities.some((e) => wire.has(e));
+  }
+  return false;
+}
 
 function formatMessageTypes(types: Set<PolicyMessageType>): string {
   if (types.size === 0) return "Off — no message types";
@@ -164,11 +202,16 @@ function formatMessageTypes(types: Set<PolicyMessageType>): string {
     .join(", ");
 }
 
-export function ConfigurePoliciesStep({
-  onComplete,
-  onBack,
-}: ConfigurePoliciesStepProps) {
+export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
   const { orgSlug = "" } = useSlugs();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleComplete = () => {
+    const search = new URLSearchParams(location.search);
+    const projectSlug = search.get("projectSlug") || "default";
+    navigate(`/${orgSlug}/projects/${projectSlug}`);
+  };
   const [configs, setConfigs] = useState<Record<RuleCategory, CategoryConfig>>(
     () => {
       const next = {} as Record<RuleCategory, CategoryConfig>;
@@ -185,72 +228,130 @@ export function ConfigurePoliciesStep({
 
   const queryClient = useQueryClient();
   const { data: policiesData } = useRiskListPolicies();
-  const shadowPolicy = useMemo(
-    () =>
-      (policiesData?.policies ?? []).find((p) =>
-        (p.sources ?? []).includes("shadow_mcp"),
-      ),
-    [policiesData],
-  );
+  const policies = policiesData?.policies ?? [];
+
+  const policyForCategory = useMemo(() => {
+    const map = new Map<RuleCategory, (typeof policies)[number]>();
+    for (const cat of ["shadow_mcp" as RuleCategory, ...WIZARD_CATEGORIES]) {
+      const policy = policies.find((p) =>
+        categoryMatchesPolicy(cat, p.sources ?? [], p.presidioEntities),
+      );
+      if (policy) map.set(cat, policy);
+    }
+    return map;
+  }, [policies]);
 
   const invalidatePolicies = () => {
     invalidateAllRiskListPolicies(queryClient);
     invalidateAllRiskPoliciesStatus(queryClient);
   };
 
-  const createShadowMutation = useRiskCreatePolicyMutation({
+  const createPolicyMutation = useRiskCreatePolicyMutation({
     onSuccess: invalidatePolicies,
-    onError: () => {
-      setConfigs((prev) => ({
-        ...prev,
-        shadow_mcp: { ...prev.shadow_mcp, enabled: false },
-      }));
-    },
   });
-  const deleteShadowMutation = useRiskPoliciesDeleteMutation({
+  const deletePolicyMutation = useRiskPoliciesDeleteMutation({
     onSuccess: invalidatePolicies,
-    onError: () => {
-      setConfigs((prev) => ({
-        ...prev,
-        shadow_mcp: { ...prev.shadow_mcp, enabled: true },
-      }));
-    },
   });
+  const updatePolicyMutation = useRiskPoliciesUpdateMutation({
+    onSuccess: invalidatePolicies,
+  });
+
+  const persistConfigChange = (cat: RuleCategory, nextCfg: CategoryConfig) => {
+    const existing = policyForCategory.get(cat);
+    if (!existing) return;
+    updatePolicyMutation.mutate({
+      request: {
+        updateRiskPolicyRequestBody: {
+          id: existing.id,
+          name: existing.name,
+          enabled: nextCfg.enabled,
+          sources: existing.sources,
+          presidioEntities: existing.presidioEntities,
+          promptInjectionRules: existing.promptInjectionRules,
+          disabledRules: existing.disabledRules,
+          customRuleIds: existing.customRuleIds ?? [],
+          messageTypes: [...nextCfg.messageTypes],
+          action: nextCfg.action,
+          autoName: existing.autoName ?? true,
+          userMessage: existing.userMessage ?? "",
+        },
+      },
+    });
+  };
+
+  const settledRef = useRef(false);
+  const [animationsReady, setAnimationsReady] = useState(false);
 
   useEffect(() => {
+    if (policiesData === undefined) return;
     setConfigs((prev) => {
-      const desired = !!shadowPolicy;
-      if (prev.shadow_mcp.enabled === desired) return prev;
-      return {
-        ...prev,
-        shadow_mcp: { ...prev.shadow_mcp, enabled: desired },
-      };
+      let changed = false;
+      const next = { ...prev };
+      for (const cat of ["shadow_mcp" as RuleCategory, ...WIZARD_CATEGORIES]) {
+        const desired = policyForCategory.has(cat);
+        if (next[cat].enabled !== desired) {
+          next[cat] = { ...next[cat], enabled: desired };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
-  }, [shadowPolicy]);
+    if (!settledRef.current) {
+      settledRef.current = true;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => setAnimationsReady(true)),
+      );
+    }
+  }, [policiesData, policyForCategory]);
 
-  const handleShadowToggle = (checked: boolean) => {
+  const handleCategoryToggle = (cat: RuleCategory, checked: boolean) => {
     setConfigs((prev) => ({
       ...prev,
-      shadow_mcp: { ...prev.shadow_mcp, enabled: checked },
+      [cat]: { ...prev[cat], enabled: checked },
     }));
+    const existing = policyForCategory.get(cat);
     if (checked) {
-      if (shadowPolicy) return;
-      createShadowMutation.mutate({
-        request: {
-          createRiskPolicyRequestBody: {
-            enabled: true,
-            sources: ["shadow_mcp"],
-            messageTypes: ["tool_request"],
-            action: "block",
-            autoName: true,
+      if (existing) return;
+      const cfg = configs[cat];
+      createPolicyMutation.mutate(
+        {
+          request: {
+            createRiskPolicyRequestBody: {
+              enabled: true,
+              ...buildPolicyPayload(cat),
+              messageTypes: [...cfg.messageTypes],
+              action: cfg.action,
+              autoName: true,
+            },
           },
         },
-      });
+        {
+          onError: () => {
+            setConfigs((prev) => ({
+              ...prev,
+              [cat]: { ...prev[cat], enabled: false },
+            }));
+          },
+        },
+      );
     } else {
-      if (!shadowPolicy) return;
-      deleteShadowMutation.mutate({ request: { id: shadowPolicy.id } });
+      if (!existing) return;
+      deletePolicyMutation.mutate(
+        { request: { id: existing.id } },
+        {
+          onError: () => {
+            setConfigs((prev) => ({
+              ...prev,
+              [cat]: { ...prev[cat], enabled: true },
+            }));
+          },
+        },
+      );
     }
   };
+
+  const handleShadowToggle = (checked: boolean) =>
+    handleCategoryToggle("shadow_mcp", checked);
 
   const policyCenterHref = useMemo(
     () => (orgSlug ? `/${orgSlug}/risk-policies` : "/risk-policies"),
@@ -258,18 +359,21 @@ export function ConfigurePoliciesStep({
   );
 
   const updateConfig = (cat: RuleCategory, patch: Partial<CategoryConfig>) => {
-    setConfigs((prev) => ({
-      ...prev,
-      [cat]: { ...prev[cat], ...patch },
-    }));
+    setConfigs((prev) => {
+      const next = { ...prev[cat], ...patch };
+      persistConfigChange(cat, next);
+      return { ...prev, [cat]: next };
+    });
   };
 
   const toggleMessageType = (cat: RuleCategory, t: PolicyMessageType) => {
     setConfigs((prev) => {
-      const next = new Set(prev[cat].messageTypes);
-      if (next.has(t)) next.delete(t);
-      else next.add(t);
-      return { ...prev, [cat]: { ...prev[cat], messageTypes: next } };
+      const types = new Set(prev[cat].messageTypes);
+      if (types.has(t)) types.delete(t);
+      else types.add(t);
+      const next = { ...prev[cat], messageTypes: types };
+      persistConfigChange(cat, next);
+      return { ...prev, [cat]: next };
     });
   };
 
@@ -288,9 +392,6 @@ export function ConfigurePoliciesStep({
   const activeRuleCount = activeCategory
     ? (DETECTION_RULES[activeCategory]?.length ?? 0)
     : 0;
-  const deferRules =
-    activeCategory && DEFER_RULES_TO_POLICY_CENTER[activeCategory];
-
   return (
     <StepContainer
       icon={
@@ -300,13 +401,19 @@ export function ConfigurePoliciesStep({
       }
       title="Configure policies"
       description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, message scopes, and individual rules any time in the Policy Center."
-      onContinue={onComplete}
+      onContinue={handleComplete}
       continueLabel="Complete setup"
       showBack
       onBack={onBack}
     >
       <div className="space-y-12">
-        <ShadowMcpHero config={shadow} onToggle={handleShadowToggle} />
+        <div className={animationsReady ? "" : "[&_*]:!duration-0"}>
+          <ShadowMcpHero
+            config={shadow}
+            onToggle={handleShadowToggle}
+            animated={animationsReady}
+          />
+        </div>
 
         <div className="space-y-2">
           <div className="flex items-baseline justify-between px-1">
@@ -424,7 +531,7 @@ export function ConfigurePoliciesStep({
                       <Switch
                         checked={activeConfig.enabled}
                         onCheckedChange={(checked) =>
-                          updateConfig(activeCategory, { enabled: checked })
+                          handleCategoryToggle(activeCategory, checked)
                         }
                         aria-label="Enable detection"
                       />
@@ -516,29 +623,9 @@ export function ConfigurePoliciesStep({
                     <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
                       Rules
                     </p>
-                    <div className="bg-secondary/40 border-border flex items-start gap-3 rounded-md border p-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-foreground text-sm font-medium">
-                          {activeRuleCount} rule
-                          {activeRuleCount === 1 ? "" : "s"} enabled by default
-                        </p>
-                        <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                          {deferRules
-                            ? "Too many rules to manage here. Pick specific patterns to enable or disable in the Policy Center."
-                            : "All rules in this category are active. Disable individual rules in the Policy Center."}
-                        </p>
-                        <Link
-                          href={policyCenterHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          size="sm"
-                          iconSuffixName="external-link"
-                          className="mt-2"
-                        >
-                          Pick specific rules
-                        </Link>
-                      </div>
-                    </div>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      Rules can be managed in the Policy Center.
+                    </p>
                   </section>
                 )}
               </div>
@@ -563,9 +650,14 @@ export function ConfigurePoliciesStep({
 interface ShadowMcpHeroProps {
   config: CategoryConfig;
   onToggle: (checked: boolean) => void;
+  animated?: boolean;
 }
 
-function ShadowMcpHero({ config, onToggle }: ShadowMcpHeroProps) {
+function ShadowMcpHero({
+  config,
+  onToggle,
+  animated = true,
+}: ShadowMcpHeroProps) {
   return (
     <div
       className={cn(
@@ -643,9 +735,10 @@ function ShadowMcpHero({ config, onToggle }: ShadowMcpHeroProps) {
               strokeDasharray="10"
               strokeDashoffset={config.enabled ? 0 : 10}
               style={{
-                transition: config.enabled
-                  ? "stroke-dashoffset 250ms ease-out 100ms"
-                  : "none",
+                transition:
+                  animated && config.enabled
+                    ? "stroke-dashoffset 250ms ease-out 100ms"
+                    : "none",
               }}
             />
           </svg>
