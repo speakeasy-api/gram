@@ -604,6 +604,11 @@
         font-size: 1rem;
         line-height: 150%;
         font-family: var(--font-diatype-mono);
+        /* Diatype Mono ships contextual alternates/ligatures (calt/liga) that
+           collide adjacent glyphs in commands — e.g. the space in `" --url` is
+           swallowed visually. Render commands literally. */
+        font-variant-ligatures: none;
+        font-feature-settings: "liga" 0, "calt" 0;
         overflow-x: auto;
         margin: 0;
       }
@@ -1196,7 +1201,10 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
         <h1>Instructions</h1>
         <ol>
           <li class="instruction-item">
-            Add this configuration to your ~/.codex/config.toml:
+            Ensure the Codex CLI executable is available in your path
+          </li>
+          <li class="instruction-item">
+            Execute the following snippet in your shell:
             <div class="card code-container">
               <button class="copy-button waiting">
                 <svg
@@ -1217,13 +1225,64 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-toml" data-scope-url-text>[mcp_servers.{{ .MCPSlug }}]
-url = "{{ .MCPURL }}"
-http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }</code>
-            </div>
+              <code class="code-snippet language-sh" data-scope-url-text>codex mcp add "{{ .MCPSlug }}" --url "{{ .MCPURL }}"</code>
             </div>
           </li>
+          {{- if .IsOAuth }}
+          <li class="instruction-item">
+            This server uses OAuth, so authenticate with it before use:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-sh">codex mcp login "{{ .MCPSlug }}"</code>
+            </div>
+          </li>
+          {{- end }}
           {{- if .SecurityInputs }}
+          <li class="instruction-item">
+            Codex CLI cannot set custom request headers from the command line, so
+            add them to the <code>[mcp_servers.{{ .MCPSlug }}]</code> entry that
+            the command above created in your <code>~/.codex/config.toml</code>:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-toml">http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }</code>
+            </div>
+          </li>
           <li class="instruction-item">
             (optional) If you would rather use variables from your system's
             environment, replace the <code>http_headers</code> key from the config
@@ -1248,7 +1307,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 </svg>
               </button>
               <!-- prettier-ignore -->
-          <code class="code-snippet language-sh">env_http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "{{ $input.DisplayName | asPosixName }}"{{- end }} }</code>
+              <code class="code-snippet language-toml">env_http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "{{ $input.DisplayName | asPosixName }}"{{- end }} }</code>
             </div>
           </li>
           {{- end }}
