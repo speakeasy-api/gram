@@ -10,9 +10,10 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
 
-  // Read dev HTTPS key/cert lazily inside the config callback so static
-  // analyzers (knip) that load this module don't fault when the SSL files
-  // aren't on disk (e.g. CI runners).
+  // Dev HTTPS key/cert. Env vars are set repo-wide by mise.toml, but the
+  // referenced files only exist on dev laptops — CI runners (and tools
+  // like knip that load this config) get an ENOENT. Swallow the read
+  // error so non-dev consumers of the config still work.
   let key: Buffer | undefined;
   let cert: Buffer | undefined;
   if (
@@ -20,8 +21,12 @@ export default defineConfig(({ command }) => {
     process.env["GRAM_SSL_KEY_FILE"] &&
     process.env["GRAM_SSL_CERT_FILE"]
   ) {
-    key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
-    cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
+    try {
+      key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
+      cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
+    } catch {
+      // SSL files missing — fall through without HTTPS.
+    }
   }
 
   const siteUrl = process.env["GRAM_SITE_URL"];
