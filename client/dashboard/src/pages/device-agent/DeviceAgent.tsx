@@ -746,10 +746,14 @@ function FleetIdentity() {
   );
 }
 
-export default function DeviceAgent(): React.JSX.Element {
+export default function DeviceAgent(): React.JSX.Element | null {
   const telemetry = useTelemetry();
-  const isDeviceAgentEnabled =
-    telemetry.isFeatureEnabled("gram-device-agent") ?? false;
+  const isDeviceAgentEnabled = telemetry.isFeatureEnabled("gram-device-agent");
+
+  // Flags haven't resolved yet — render nothing rather than flashing a redirect.
+  if (isDeviceAgentEnabled === undefined) {
+    return null;
+  }
 
   if (!isDeviceAgentEnabled) {
     return <Navigate to=".." replace />;
