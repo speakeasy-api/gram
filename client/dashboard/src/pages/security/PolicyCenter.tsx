@@ -737,6 +737,10 @@ function PolicyCenterContent() {
           categories.push("custom");
         }
 
+        if (categories.length === 0) {
+          return <span className="text-muted-foreground text-sm">—</span>;
+        }
+
         return (
           <div className="flex flex-wrap gap-1">
             {categories.map((cat) => (
@@ -822,17 +826,16 @@ function PolicyCenterContent() {
               >
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() =>
-                  setTimeout(
-                    () => row.kind === "risk" && setRunPanelPolicy(row.policy),
-                    0,
-                  )
-                }
-              >
-                View Progress
-              </DropdownMenuItem>
+              {row.kind === "risk" && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() =>
+                    setTimeout(() => setRunPanelPolicy(row.policy), 0)
+                  }
+                >
+                  View Progress
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
                 onSelect={() => handleDelete(row)}
