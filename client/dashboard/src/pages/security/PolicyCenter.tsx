@@ -715,7 +715,7 @@ function PolicyCenterContent() {
     },
     {
       key: "sources",
-      header: "Categories / Prompt",
+      header: nlEnabled ? "Categories / Prompt" : "Categories",
       width: "2fr",
       render: (row) => {
         const policy = row.policy;
