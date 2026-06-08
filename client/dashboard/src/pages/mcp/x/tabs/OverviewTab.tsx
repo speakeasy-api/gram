@@ -9,6 +9,7 @@ import { useRoutes } from "@/routes";
 import type {
   McpEndpoint,
   McpServer,
+  RemoteMcpServer,
   ToolsetEntry,
 } from "@gram/client/models/components";
 import {
@@ -88,28 +89,31 @@ function OverviewRows({
   onShowEndpoints: () => void;
   onShowAuthentication: () => void;
 }) {
+  const serverAddress = useServerAddressOverview(endpoints, isLoadingEndpoints);
+  const authentication = useAuthenticationOverview(mcpServer);
+  const source = useSourceOverview(mcpServer.remoteMcpServerId);
+
   return (
     <section>
       <Heading variant="h3" className="mb-1 font-semibold normal-case">
         Essentials
       </Heading>
       <EssentialsReadinessSummary
-        mcpServer={mcpServer}
-        endpoints={endpoints}
-        isLoadingEndpoints={isLoadingEndpoints}
+        serverAddress={serverAddress}
+        authentication={authentication}
+        source={source}
       />
       <div>
         <ServerAddressRow
-          endpoints={endpoints}
-          isLoading={isLoadingEndpoints}
+          serverAddress={serverAddress}
           onConfigure={onShowEndpoints}
         />
         <AuthenticationOverviewRow
-          mcpServer={mcpServer}
+          authentication={authentication}
           onConfigure={onShowAuthentication}
         />
         {mcpServer.remoteMcpServerId ? (
-          <SourceOverviewRow remoteMcpServerId={mcpServer.remoteMcpServerId} />
+          <SourceOverviewRow source={source} />
         ) : (
           // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
           // always carry a remoteMcpServerId, so this branch is currently
@@ -122,6 +126,11 @@ function OverviewRows({
   );
 }
 
+type OverviewReadiness = {
+  ready: boolean;
+  loading: boolean;
+};
+
 type EssentialReadiness = {
   key: "server-url" | "authentication" | "source";
   ready: boolean;
@@ -130,23 +139,19 @@ type EssentialReadiness = {
 };
 
 function EssentialsReadinessSummary({
-  mcpServer,
-  endpoints,
-  isLoadingEndpoints,
+  serverAddress,
+  authentication,
+  source,
 }: {
-  mcpServer: McpServer;
-  endpoints: McpEndpoint[];
-  isLoadingEndpoints: boolean;
+  serverAddress: OverviewReadiness;
+  authentication: OverviewReadiness;
+  source: OverviewReadiness;
 }) {
-  const serverUrl = useServerUrlReadiness(endpoints, isLoadingEndpoints);
-  const authentication = useAuthenticationReadiness(mcpServer);
-  const source = useSourceReadiness(mcpServer.remoteMcpServerId);
-
   const essentials: EssentialReadiness[] = [
     {
       key: "server-url",
-      ready: serverUrl.ready,
-      loading: serverUrl.loading,
+      ready: serverAddress.ready,
+      loading: serverAddress.loading,
       incompleteMessage: "Configure a server URL for clients to connect to.",
     },
     {
@@ -206,10 +211,16 @@ function readinessSegmentClassName(essential: EssentialReadiness): string {
   return `h-1.5 w-8 rounded-full ${toneClass}`;
 }
 
-function useServerUrlReadiness(
+type ServerAddressOverview = OverviewReadiness & {
+  mcpUrl: string | undefined;
+  installPageUrl: string | undefined;
+  status: RowStatus | undefined;
+};
+
+function useServerAddressOverview(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,
-): { ready: boolean; loading: boolean } {
+): ServerAddressOverview {
   const endpoint = useMemo(
     () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
     [endpoints],
@@ -219,17 +230,26 @@ function useServerUrlReadiness(
     ? `${getServerURL()}/mcp/${endpoint.slug}`
     : undefined;
   const mcpUrl = resolvedUrl ?? fallbackUrl;
+  const ready = !isLoadingEndpoints && !!mcpUrl;
 
   return {
-    ready: !isLoadingEndpoints && !!mcpUrl,
+    ready,
     loading: isLoadingEndpoints,
+    mcpUrl,
+    installPageUrl: mcpUrl ? `${mcpUrl}/install` : undefined,
+    status: readyStatus(isLoadingEndpoints, ready),
   };
 }
 
-function useAuthenticationReadiness(mcpServer: McpServer): {
-  ready: boolean;
-  loading: boolean;
-} {
+type AuthenticationOverview = OverviewReadiness & {
+  state: AuthState;
+  secure: boolean;
+  status: RowStatus | undefined;
+};
+
+function useAuthenticationOverview(
+  mcpServer: McpServer,
+): AuthenticationOverview {
   const userSessionIssuerId = mcpServer.userSessionIssuerId;
   const { data: clientsResult, isLoading } = useRemoteSessionClients(
     { userSessionIssuerId },
@@ -245,14 +265,25 @@ function useAuthenticationReadiness(mcpServer: McpServer): {
     hasRemote,
   });
   const loading = hasIssuer && isLoading;
+  const secure = state !== "none";
 
-  return { ready: !loading && state !== "none", loading };
+  return {
+    ready: !loading && secure,
+    loading,
+    state,
+    secure,
+    status: readyStatus(loading, secure),
+  };
 }
 
-function useSourceReadiness(remoteMcpServerId: string | undefined): {
-  ready: boolean;
-  loading: boolean;
-} {
+type SourceOverview = OverviewReadiness & {
+  remoteMcpServer: RemoteMcpServer | undefined;
+  status: RowStatus | undefined;
+};
+
+function useSourceOverview(
+  remoteMcpServerId: string | undefined,
+): SourceOverview {
   const id = remoteMcpServerId ?? "";
   const {
     data: remoteMcpServer,
@@ -263,8 +294,14 @@ function useSourceReadiness(remoteMcpServerId: string | undefined): {
     throwOnError: false,
   });
   const loading = id !== "" && isLoading;
+  const ready = !loading && !isError && !!remoteMcpServer;
 
-  return { ready: !loading && !isError && !!remoteMcpServer, loading };
+  return {
+    ready,
+    loading,
+    remoteMcpServer,
+    status: readyStatus(loading, ready),
+  };
 }
 
 function OverviewRowsSkeleton() {
@@ -296,49 +333,33 @@ function OverviewRowSkeleton() {
 }
 
 function ServerAddressRow({
-  endpoints,
-  isLoading,
+  serverAddress,
   onConfigure,
 }: {
-  endpoints: McpEndpoint[];
-  isLoading: boolean;
+  serverAddress: ServerAddressOverview;
   onConfigure: () => void;
 }) {
-  // Custom-domain endpoints are the customer-facing URL, so prefer them over
-  // the platform-hosted fallback when picking which address to display.
-  const endpoint = useMemo(
-    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
-    [endpoints],
-  );
-
-  // useMcpEndpointUrl returns undefined while a custom domain is still
-  // resolving. This row intentionally ignores verification state, so fall back
-  // to the platform URL built from the slug; the hook swaps in the custom-domain
-  // URL once it resolves.
-  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
-  const fallbackUrl = endpoint?.slug
-    ? `${getServerURL()}/mcp/${endpoint.slug}`
-    : undefined;
-  const mcpUrl = resolvedUrl ?? fallbackUrl;
-  const installPageUrl = mcpUrl ? `${mcpUrl}/install` : undefined;
-  const configured = !!mcpUrl;
-
   const handleCopyUrl = () => {
-    if (!mcpUrl) return;
-    navigator.clipboard.writeText(mcpUrl);
-    toast.success("URL copied to clipboard");
+    if (!serverAddress.mcpUrl) return;
+
+    void navigator.clipboard
+      .writeText(serverAddress.mcpUrl)
+      .then(() => toast.success("URL copied to clipboard"))
+      .catch(() => toast.error("Couldn't copy URL"));
   };
 
   const handleOpenInstallPage = () => {
-    if (!installPageUrl) return;
-    window.open(installPageUrl, "_blank", "noopener,noreferrer");
+    if (!serverAddress.installPageUrl) return;
+    window.open(serverAddress.installPageUrl, "_blank", "noopener,noreferrer");
   };
 
   let description: ReactNode = "No endpoint configured yet.";
-  if (isLoading) {
+  if (serverAddress.loading) {
     description = <Skeleton className="h-4 w-96 max-w-full" />;
-  } else if (mcpUrl) {
-    description = <span className="font-mono break-all">{mcpUrl}</span>;
+  } else if (serverAddress.mcpUrl) {
+    description = (
+      <span className="font-mono break-all">{serverAddress.mcpUrl}</span>
+    );
   }
 
   let actions: ReactNode = (
@@ -347,9 +368,9 @@ function ServerAddressRow({
     </Button>
   );
 
-  if (isLoading) {
+  if (serverAddress.loading) {
     actions = <Skeleton className="h-9 w-28 rounded-md" />;
-  } else if (configured) {
+  } else if (serverAddress.ready) {
     actions = (
       <>
         <Button variant="secondary" onClick={handleCopyUrl}>
@@ -371,8 +392,8 @@ function ServerAddressRow({
   return (
     <OverviewRow
       title="Server URL"
-      status={readyStatus(isLoading, configured)}
-      statusLoading={isLoading}
+      status={serverAddress.status}
+      statusLoading={serverAddress.loading}
       description={description}
       actions={actions}
     />
@@ -414,46 +435,29 @@ function deriveAuthState({
 }
 
 function AuthenticationOverviewRow({
-  mcpServer,
+  authentication,
   onConfigure,
 }: {
-  mcpServer: McpServer;
+  authentication: AuthenticationOverview;
   onConfigure: () => void;
 }) {
-  const userSessionIssuerId = mcpServer.userSessionIssuerId;
-  const { data: clientsResult, isLoading } = useRemoteSessionClients(
-    { userSessionIssuerId },
-    undefined,
-    { enabled: !!userSessionIssuerId },
-  );
-
-  const isPublic = mcpServer.visibility === "public";
-  const hasIssuer = !!userSessionIssuerId;
-  // Whether any upstream identity provider is paired with this issuer.
-  const hasRemote = (clientsResult?.result.items.length ?? 0) > 0;
-  const state = deriveAuthState({ isPublic, hasIssuer, hasRemote });
-
-  const secure = state !== "none";
-  // The remote-identity query only runs when an issuer exists, so gate the
-  // loading state on hasIssuer too.
-  const loading = hasIssuer && isLoading;
-  const actionLabel = secure ? "Manage" : "Configure";
-  const actionVariant = secure ? "secondary" : "primary";
+  const actionLabel = authentication.secure ? "Manage" : "Configure";
+  const actionVariant = authentication.secure ? "secondary" : "primary";
 
   return (
     <OverviewRow
       title="Authentication"
-      status={readyStatus(loading, secure)}
-      statusLoading={loading}
+      status={authentication.status}
+      statusLoading={authentication.loading}
       description={
-        loading ? (
+        authentication.loading ? (
           <Skeleton className="h-4 w-[520px] max-w-full" />
         ) : (
-          AUTH_ROW_COPY[state]
+          AUTH_ROW_COPY[authentication.state]
         )
       }
       actions={
-        loading ? (
+        authentication.loading ? (
           <Skeleton className="h-9 w-28 rounded-md" />
         ) : (
           <Button variant={actionVariant} onClick={onConfigure}>
@@ -465,42 +469,28 @@ function AuthenticationOverviewRow({
   );
 }
 
-function SourceOverviewRow({
-  remoteMcpServerId,
-}: {
-  remoteMcpServerId: string;
-}) {
+function SourceOverviewRow({ source }: { source: SourceOverview }) {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const {
-    data: remoteMcpServer,
-    isLoading,
-    isError,
-  } = useGetRemoteMcpServer({ id: remoteMcpServerId }, undefined, {
-    enabled: remoteMcpServerId !== "",
-    throwOnError: false,
-  });
-
-  const ready = !isLoading && !isError && !!remoteMcpServer;
-  const status = readyStatus(isLoading, ready);
+  const remoteMcpServer = source.remoteMcpServer;
   const trimmedName = remoteMcpServer?.name?.trim();
 
   let description: ReactNode = "Linked source could not be loaded.";
-  if (isLoading) {
+  if (source.loading) {
     description = <Skeleton className="h-4 w-80 max-w-full" />;
-  } else if (ready) {
+  } else if (source.ready) {
     description = trimmedName || "Remote MCP source";
   }
 
   const detail =
-    ready && remoteMcpServer ? (
+    source.ready && remoteMcpServer ? (
       <Type muted small mono as="div" className="break-all">
         {remoteMcpServer.url}
       </Type>
     ) : undefined;
 
   const actions =
-    ready && remoteMcpServer ? (
+    source.ready && remoteMcpServer ? (
       <Button
         variant="secondary"
         onClick={() =>
@@ -522,8 +512,8 @@ function SourceOverviewRow({
   return (
     <OverviewRow
       title="Source"
-      status={status}
-      statusLoading={isLoading}
+      status={source.status}
+      statusLoading={source.loading}
       description={description}
       detail={detail}
       actions={actions}
