@@ -268,6 +268,7 @@ const routesToNavActions = (
         icon: typeof iconName === "string" ? iconName : undefined,
         onSelect: () => route.goTo(),
         group,
+        stage: route.stage,
       };
     });
 

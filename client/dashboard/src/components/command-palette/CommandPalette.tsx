@@ -6,15 +6,31 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useCommandPalette } from "@/contexts/CommandPalette";
+import { useSlugs } from "@/contexts/Sdk";
 import { Icon, IconName, Badge } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { requestAskAi } from "./askAiBridge";
 import { ResourceResults } from "./ResourceResults";
 
+// Speakeasy brand spectrum — the same brand-language gradient the Project
+// Assistant uses. Rendered as a thin hairline at the top of the palette so the
+// surface reads as Gram without leaning on display type or heavy chrome.
+const BRAND_GRADIENT =
+  "linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%)";
+
+const KBD_CLASS =
+  "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium select-none";
+
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
+  const { projectSlug } = useSlugs();
   const [query, setQuery] = useState("");
+
+  // Project Assistant and resource search are project-scoped. At the org level
+  // (no project in the URL) the palette still works for navigating org pages.
+  const inProject = Boolean(projectSlug);
 
   const closeAndReset = () => {
     setQuery("");
@@ -63,6 +79,12 @@ export function CommandPalette(): JSX.Element {
         if (!open) closeAndReset();
       }}
     >
+      {/* Speakeasy brand hairline */}
+      <div
+        aria-hidden
+        className="h-0.5 w-full shrink-0"
+        style={{ background: BRAND_GRADIENT }}
+      />
       {contextBadge && (
         <div className="px-3 pt-3 pb-2">
           <Badge variant="neutral">
@@ -71,7 +93,9 @@ export function CommandPalette(): JSX.Element {
         </div>
       )}
       <CommandInput
-        placeholder="Ask AI or search resources and pages…"
+        placeholder={
+          inProject ? "Ask AI or search resources and pages…" : "Search pages…"
+        }
         value={query}
         onValueChange={setQuery}
       />
@@ -79,18 +103,21 @@ export function CommandPalette(): JSX.Element {
         <CommandEmpty>No results found.</CommandEmpty>
 
         {/* Free-form AI escape hatch — always offered regardless of the filter
-            (forceMount) so the typed query can always be sent to the assistant. */}
-        <CommandGroup heading="Assistant">
-          <CommandItem
-            forceMount
-            value="__ask_ai__"
-            onSelect={handleAskAi}
-            className="flex items-center gap-2"
-          >
-            <Icon name="sparkles" className="size-4 shrink-0" />
-            <span className="truncate">{askAiLabel}</span>
-          </CommandItem>
-        </CommandGroup>
+            (forceMount) so the typed query can always be sent to the assistant.
+            Project Assistant is project-scoped, so only at the project level. */}
+        {inProject && (
+          <CommandGroup heading="Assistant">
+            <CommandItem
+              forceMount
+              value="__ask_ai__"
+              onSelect={handleAskAi}
+              className="flex items-center gap-2"
+            >
+              <Icon name="sparkles" className="text-primary size-4 shrink-0" />
+              <span className="truncate">{askAiLabel}</span>
+            </CommandItem>
+          </CommandGroup>
+        )}
 
         {sortedGroups.map(([groupName, groupActions]) => (
           <CommandGroup key={groupName} heading={groupName}>
@@ -105,6 +132,9 @@ export function CommandPalette(): JSX.Element {
                     <Icon name={action.icon as IconName} className="size-4" />
                   )}
                   <span>{action.label}</span>
+                  {action.stage && (
+                    <ReleaseStageBadge stage={action.stage} noTooltip />
+                  )}
                 </div>
                 {action.shortcut && (
                   <span className="text-muted-foreground text-xs">
@@ -118,8 +148,25 @@ export function CommandPalette(): JSX.Element {
 
         {/* Resource search results — only mounted while open, so the list
             fetches lazily on first open (React Query caches thereafter). */}
-        {isOpen && <ResourceResults onNavigate={closeAndReset} />}
+        {isOpen && inProject && <ResourceResults onNavigate={closeAndReset} />}
       </CommandList>
+
+      {/* Keyboard navigation hints */}
+      <div className="text-muted-foreground flex items-center gap-3 border-t px-3 py-2 text-xs">
+        <span className="flex items-center gap-1.5">
+          <kbd className={KBD_CLASS}>↑</kbd>
+          <kbd className={KBD_CLASS}>↓</kbd>
+          to navigate
+        </span>
+        <span className="flex items-center gap-1.5">
+          <kbd className={KBD_CLASS}>↵</kbd>
+          to select
+        </span>
+        <span className="flex items-center gap-1.5">
+          <kbd className={KBD_CLASS}>esc</kbd>
+          to close
+        </span>
+      </div>
     </CommandDialog>
   );
 }
