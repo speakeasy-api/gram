@@ -1,14 +1,21 @@
 import type { PostHog } from "posthog-js";
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { User } from "./Auth";
 
 export type Telemetry = Pick<
   PostHog,
-  "isFeatureEnabled" | "capture" | "identify" | "register" | "reset" | "group"
+  | "isFeatureEnabled"
+  | "onFeatureFlags"
+  | "capture"
+  | "identify"
+  | "register"
+  | "reset"
+  | "group"
 >;
 
 export const nullTelemetry: Telemetry = {
   isFeatureEnabled: () => false,
+  onFeatureFlags: () => () => {},
   capture: () => ({ uuid: "", event: "", properties: {} }),
   identify: () => {},
   register: () => {},
@@ -43,6 +50,7 @@ export const testTelemetry: Telemetry = {
     console.log("POSTHOG IS_FEATURE_ENABLED", feature);
     return true;
   },
+  onFeatureFlags: () => () => {},
   reset: () => {
     console.log("POSTHOG RESET");
   },
@@ -53,6 +61,36 @@ export const TelemetryContext = createContext<Telemetry>(
 );
 
 export const useTelemetry = (): Telemetry => useContext(TelemetryContext);
+
+/**
+ * Reactively read a PostHog feature flag.
+ *
+ * `telemetry.isFeatureEnabled` is a plain method call that reflects whatever
+ * flags PostHog has loaded *so far*. PostHog fetches flags asynchronously after
+ * init, so a component that reads the value during its first render gets
+ * `undefined` and — because the call isn't reactive — never re-renders when the
+ * flag later resolves. This hook subscribes to PostHog's `onFeatureFlags` event
+ * and re-renders the consumer once flags arrive (or change), so opt-in gates
+ * (`?? false`) reliably flip on instead of staying stuck hidden.
+ *
+ * Returns `undefined` until flags have resolved, then `true`/`false`.
+ */
+export const useFeatureFlag = (flag: string): boolean | undefined => {
+  const telemetry = useTelemetry();
+  const [enabled, setEnabled] = useState<boolean | undefined>(() =>
+    telemetry.isFeatureEnabled(flag),
+  );
+
+  useEffect(() => {
+    // Re-read synchronously in case flags resolved between render and effect.
+    setEnabled(telemetry.isFeatureEnabled(flag));
+    return telemetry.onFeatureFlags(() => {
+      setEnabled(telemetry.isFeatureEnabled(flag));
+    });
+  }, [telemetry, flag]);
+
+  return enabled;
+};
 
 export function useIdentifyUserForTelemetry(user: User | undefined): void {
   const telemetry = useTelemetry();
