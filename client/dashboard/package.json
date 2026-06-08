@@ -21,7 +21,7 @@
   "dependencies": {
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "^0.11.53",
-    "@assistant-ui/react-markdown": "^0.11.9",
+    "@assistant-ui/react-markdown": "^0.14.1",
     "@calcom/embed-react": "^1.5.3",
     "@datadog/browser-rum": "^6.24.1",
     "@dnd-kit/core": "^6.3.1",
