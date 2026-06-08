@@ -76,21 +76,21 @@ func TestBuildPubSubValues_StableOrder(t *testing.T) {
 	require.Nil(t, doc.PubSub.Topics[0].Spec.MessageRetentionDuration)
 	require.NotNil(t, doc.PubSub.Topics[1].Spec.MessageRetentionDuration)
 	require.Equal(t, "86400s", *doc.PubSub.Topics[1].Spec.MessageRetentionDuration)
-	// proto_message label carries the fully qualified protobuf message name
-	// alongside the existing managed_by label.
-	require.Equal(t, "example.v1.Alpha", doc.PubSub.Topics[0].Labels[protoMessageLabel])
-	require.Equal(t, "example.v1.Zebra", doc.PubSub.Topics[1].Labels[protoMessageLabel])
+	// proto_message label carries the protobuf message name sanitized into a
+	// valid GCP label value (kebab-cased) alongside the existing managed_by label.
+	require.Equal(t, "example-v1-alpha", doc.PubSub.Topics[0].Labels[protoMessageLabel])
+	require.Equal(t, "example-v1-zebra", doc.PubSub.Topics[1].Labels[protoMessageLabel])
 	require.Equal(t, managedByLabel, doc.PubSub.Topics[0].Labels["managed_by"])
 
 	// Subscriptions sorted alphabetically.
 	require.Len(t, doc.PubSub.Subscriptions, 2)
 	require.Equal(t, "alpha-sub", doc.PubSub.Subscriptions[0].Name)
 	require.Equal(t, "zebra-sub", doc.PubSub.Subscriptions[1].Name)
-	require.Equal(t, "example.v1.AlphaProcessor", doc.PubSub.Subscriptions[0].Labels[protoMessageLabel])
-	require.Equal(t, "example.v1.ZebraProcessor", doc.PubSub.Subscriptions[1].Labels[protoMessageLabel])
+	require.Equal(t, "example-v1-alpha-processor", doc.PubSub.Subscriptions[0].Labels[protoMessageLabel])
+	require.Equal(t, "example-v1-zebra-processor", doc.PubSub.Subscriptions[1].Labels[protoMessageLabel])
 	// Subscriptions also carry the consumed topic's message name.
-	require.Equal(t, "example.v1.Event", doc.PubSub.Subscriptions[0].Labels[topicMessageLabel])
-	require.Equal(t, "example.v1.Event", doc.PubSub.Subscriptions[1].Labels[topicMessageLabel])
+	require.Equal(t, "example-v1-event", doc.PubSub.Subscriptions[0].Labels[topicMessageLabel])
+	require.Equal(t, "example-v1-event", doc.PubSub.Subscriptions[1].Labels[topicMessageLabel])
 	// Topics do not get a topic_message label.
 	require.NotContains(t, doc.PubSub.Topics[0].Labels, topicMessageLabel)
 
@@ -140,9 +140,9 @@ func TestCCPubSub_WriteValues(t *testing.T) {
 	require.Contains(t, content, "outbox-processor")
 	require.Contains(t, content, "604800s")
 	require.Contains(t, content, "ackDeadlineSeconds: 30")
-	require.Contains(t, content, "proto_message: gram.outbox.v1.Event")
-	require.Contains(t, content, "proto_message: gram.outbox.v1.Processor")
-	require.Contains(t, content, "topic_proto_message: gram.outbox.v1.Event")
+	require.Contains(t, content, "proto_message: gram-outbox-v1-event")
+	require.Contains(t, content, "proto_message: gram-outbox-v1-processor")
+	require.Contains(t, content, "topic_proto_message: gram-outbox-v1-event")
 
 	// Per-resource metadata now lives in the chart template, not the values doc.
 	require.NotContains(t, content, "{{ .Values")

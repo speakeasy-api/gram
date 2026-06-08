@@ -5,9 +5,9 @@ pubsub:
   enabled: true
   subscriptions:
   - labels:
-      managed_by: proto_pubsub_orchestrator
-      proto_message: gram.ping.v1.Processor
-      topic_proto_message: gram.ping.v1.Message
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-ping-v1-processor
+      topic_proto_message: gram-ping-v1-message
     name: gram-ping-v1-processor
     spec:
       ackDeadlineSeconds: 30
@@ -24,14 +24,14 @@ pubsub:
         name: gram-ping-v1-message
   topics:
   - labels:
-      managed_by: proto_pubsub_orchestrator
-      proto_message: gram.ping.v1.Message
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-ping-v1-message
     name: gram-ping-v1-message
     spec:
       messageRetentionDuration: 86400s
   - labels:
       dlq_for: gram-ping-v1-processor
-      managed_by: proto_pubsub_orchestrator
-      proto_message: gram.ping.v1.Processor
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-ping-v1-processor
     name: gram-ping-v1-processor-dlq
     spec: {}
