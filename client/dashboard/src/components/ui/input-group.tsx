@@ -116,6 +116,22 @@ function InputGroupButton({
   );
 }
 
+function InputGroupInput({
+  className,
+  ...props
+}: React.ComponentProps<"input">) {
+  return (
+    <input
+      data-slot="input-group-control"
+      className={cn(
+        "placeholder:text-muted-foreground h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-3 text-sm shadow-none outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 function InputGroupTextarea({
   className,
   ...props
@@ -132,4 +148,10 @@ function InputGroupTextarea({
   );
 }
 
-export { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea };
+export {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  InputGroupTextarea,
+};
