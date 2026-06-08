@@ -1,4 +1,3 @@
-import { CodeBlock } from "@/components/code";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -18,17 +17,7 @@ import {
   useRemoteSessionClients,
 } from "@gram/client/react-query/index.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
-import {
-  AlertTriangle,
-  ArrowUpRight,
-  BookOpen,
-  GlobeIcon,
-  Network,
-  Shield,
-  ShieldCheck,
-  Sparkles,
-  Wrench,
-} from "lucide-react";
+import { ArrowUpRight, BookOpen, Copy, ExternalLink } from "lucide-react";
 import {
   useMemo,
   type ComponentType,
@@ -36,6 +25,7 @@ import {
   type SVGProps,
 } from "react";
 import { useNavigate } from "react-router";
+import { toast } from "sonner";
 
 type OverviewTabProps = {
   mcpServer: McpServer | undefined;
@@ -46,33 +36,22 @@ type OverviewTabProps = {
 };
 
 type StatusTone = "ready" | "needs-setup";
-type CardStatus = { label: string; tone: StatusTone };
+type RowStatus = { label: string; tone: StatusTone };
+
+const READY_STATUS: RowStatus = { label: "READY", tone: "ready" };
+const NEEDS_SETUP_STATUS: RowStatus = {
+  label: "NEEDS SETUP",
+  tone: "needs-setup",
+};
 
 /** "Ready" once set up, "Needs Setup" otherwise; undefined while loading. */
 function readyStatus(
   isLoading: boolean,
   isReady: boolean,
-): CardStatus | undefined {
+): RowStatus | undefined {
   if (isLoading) return undefined;
-  return isReady
-    ? { label: "Ready", tone: "ready" }
-    : { label: "Needs Setup", tone: "needs-setup" };
+  return isReady ? READY_STATUS : NEEDS_SETUP_STATUS;
 }
-
-type OverviewCardProps = {
-  title: string;
-  status?: CardStatus;
-  /**
-   * While the card's data is in flight, render a skeleton pill where the status
-   * label will land so the header doesn't reflow when it resolves.
-   */
-  statusLoading?: boolean;
-  description: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  children?: ReactNode;
-  /** Rendered top-right, aligned with the title (e.g. a Manage/View affordance). */
-  headerAction?: ReactNode;
-};
 
 export function OverviewTab({
   mcpServer,
@@ -85,26 +64,23 @@ export function OverviewTab({
   // the top-level fetch is still in flight; show skeletons in place until then.
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
-      <EarlyAccessBanner />
-      <div className="space-y-5">
-        {mcpServer ? (
-          <OverviewCards
-            mcpServer={mcpServer}
-            endpoints={endpoints}
-            isLoadingEndpoints={isLoadingEndpoints}
-            onShowEndpoints={onShowEndpoints}
-            onShowAuthentication={onShowAuthentication}
-          />
-        ) : (
-          <OverviewCardsSkeleton />
-        )}
-      </div>
+      {mcpServer ? (
+        <OverviewRows
+          mcpServer={mcpServer}
+          endpoints={endpoints}
+          isLoadingEndpoints={isLoadingEndpoints}
+          onShowEndpoints={onShowEndpoints}
+          onShowAuthentication={onShowAuthentication}
+        />
+      ) : (
+        <OverviewRowsSkeleton />
+      )}
       <EnhanceSection />
     </div>
   );
 }
 
-function OverviewCards({
+function OverviewRows({
   mcpServer,
   endpoints,
   isLoadingEndpoints,
@@ -118,107 +94,73 @@ function OverviewCards({
   onShowAuthentication: () => void;
 }) {
   return (
-    <>
-      <ServerAddressCard
-        endpoints={endpoints}
-        isLoading={isLoadingEndpoints}
-        onManage={onShowEndpoints}
-      />
-      <AuthenticationOverviewCard
-        mcpServer={mcpServer}
-        onConfigure={onShowAuthentication}
-      />
-      {mcpServer.remoteMcpServerId ? (
-        <SourceOverviewCard remoteMcpServerId={mcpServer.remoteMcpServerId} />
-      ) : (
-        // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
-        // always carry a remoteMcpServerId, so this branch is currently
-        // unreachable. Kept for when toolset-backed servers migrate here
-        // (AGE-1902).
-        <ToolsOverviewCard toolsetId={mcpServer.toolsetId} />
-      )}
-    </>
-  );
-}
-
-function OverviewCardsSkeleton() {
-  return (
-    <>
-      <OverviewCardSkeleton bodyLines={2} />
-      <OverviewCardSkeleton bodyLines={1} />
-      <OverviewCardSkeleton bodyLines={2} />
-    </>
-  );
-}
-
-function OverviewCardSkeleton({ bodyLines = 2 }: { bodyLines?: number }) {
-  return (
-    <section className={CARD_SHELL}>
-      <Skeleton className="h-12 w-12 shrink-0 rounded-lg" />
-      <div className="min-w-0 flex-1 space-y-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 space-y-2">
-            <div className="flex items-center gap-2.5">
-              <Skeleton className="h-5 w-32" />
-              <Skeleton className="h-3.5 w-16 rounded" />
-            </div>
-            <Skeleton className="h-4 w-72 max-w-full" />
-          </div>
-          <Skeleton className="h-9 w-24 shrink-0 rounded-md" />
-        </div>
-        <div className="space-y-2">
-          {Array.from({ length: bodyLines }).map((_, i) => (
-            <Skeleton key={i} className="h-11 w-full" />
-          ))}
-        </div>
+    <section>
+      <Heading variant="h3" className="mb-1 font-semibold normal-case">
+        Essentials
+      </Heading>
+      <Type muted small>
+        Everything required to connect clients to this MCP server.
+      </Type>
+      <div>
+        <ServerAddressRow
+          endpoints={endpoints}
+          isLoading={isLoadingEndpoints}
+          onConfigure={onShowEndpoints}
+        />
+        <AuthenticationOverviewRow
+          mcpServer={mcpServer}
+          onConfigure={onShowAuthentication}
+        />
+        {mcpServer.remoteMcpServerId ? (
+          <SourceOverviewRow remoteMcpServerId={mcpServer.remoteMcpServerId} />
+        ) : (
+          // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
+          // always carry a remoteMcpServerId, so this branch is currently
+          // unreachable. Kept for when toolset-backed servers migrate here
+          // (AGE-1902).
+          <ToolsOverviewRow toolsetId={mcpServer.toolsetId} />
+        )}
       </div>
     </section>
   );
 }
 
-function UrlFieldSkeleton() {
+function OverviewRowsSkeleton() {
   return (
-    <div className="space-y-1.5">
-      <Skeleton className="h-3 w-40" />
-      <Skeleton className="h-11 w-full" />
+    <section className="border-border border-y">
+      <OverviewRowSkeleton />
+      <OverviewRowSkeleton />
+      <OverviewRowSkeleton />
+    </section>
+  );
+}
+
+function OverviewRowSkeleton() {
+  return (
+    <div className="border-border flex flex-col gap-4 border-b py-6 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 gap-5">
+        <Skeleton className="mt-2 h-3 w-3 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-96 max-w-full" />
+        </div>
+      </div>
+      <Skeleton className="h-9 w-28 shrink-0 rounded-md sm:ml-6" />
     </div>
   );
 }
 
-function EarlyAccessBanner() {
-  return (
-    <section className={CARD_SHELL}>
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-950/50">
-        <Sparkles className="h-6 w-6 text-violet-600 dark:text-violet-300" />
-      </div>
-      <div className="min-w-0 flex-1 space-y-1">
-        <Type variant="subheading" as="h3">
-          Remote MCP is in early access
-        </Type>
-        <Type muted small>
-          This feature is under active development and may change frequently.
-          We'd love your feedback:{" "}
-          <a
-            href="mailto:gram@speakeasy.com?subject=Remote%20MCP%20Feedback"
-            className="text-foreground font-medium underline underline-offset-2"
-          >
-            reach out to the Gram team
-          </a>{" "}
-          if you run into issues or have questions.
-        </Type>
-      </div>
-    </section>
-  );
-}
-
-function ServerAddressCard({
+function ServerAddressRow({
   endpoints,
   isLoading,
-  onManage,
+  onConfigure,
 }: {
   endpoints: McpEndpoint[];
   isLoading: boolean;
-  onManage: () => void;
+  onConfigure: () => void;
 }) {
   // Custom-domain endpoints are the customer-facing URL, so prefer them over
   // the platform-hosted fallback when picking which address to display.
@@ -228,80 +170,72 @@ function ServerAddressCard({
   );
 
   // useMcpEndpointUrl returns undefined while a custom domain is still
-  // resolving. This card intentionally ignores verification state, so fall back
+  // resolving. This row intentionally ignores verification state, so fall back
   // to the platform URL built from the slug; the hook swaps in the custom-domain
   // URL once it resolves.
   const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
-  const mcpUrl =
-    resolvedUrl ??
-    (endpoint?.slug ? `${getServerURL()}/mcp/${endpoint.slug}` : undefined);
+  const fallbackUrl = endpoint?.slug
+    ? `${getServerURL()}/mcp/${endpoint.slug}`
+    : undefined;
+  const mcpUrl = resolvedUrl ?? fallbackUrl;
   const installPageUrl = mcpUrl ? `${mcpUrl}/install` : undefined;
   const configured = !!mcpUrl;
 
+  const handleCopyUrl = () => {
+    if (!mcpUrl) return;
+    navigator.clipboard.writeText(mcpUrl);
+    toast.success("URL copied to clipboard");
+  };
+
+  const handleOpenInstallPage = () => {
+    if (!installPageUrl) return;
+    window.open(installPageUrl, "_blank", "noopener,noreferrer");
+  };
+
+  let description: ReactNode = "No endpoint configured yet.";
+  if (isLoading) {
+    description = <Skeleton className="h-4 w-96 max-w-full" />;
+  } else if (mcpUrl) {
+    description = <span className="font-mono break-all">{mcpUrl}</span>;
+  }
+
+  let actions: ReactNode = (
+    <Button variant="primary" onClick={onConfigure}>
+      <Button.Text>Configure</Button.Text>
+    </Button>
+  );
+
+  if (isLoading) {
+    actions = <Skeleton className="h-9 w-28 rounded-md" />;
+  } else if (configured) {
+    actions = (
+      <>
+        <Button variant="secondary" onClick={handleCopyUrl}>
+          <Button.LeftIcon>
+            <Copy className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>Copy URL</Button.Text>
+        </Button>
+        <Button variant="secondary" onClick={handleOpenInstallPage}>
+          <Button.Text>Install page</Button.Text>
+          <Button.RightIcon>
+            <ExternalLink className="size-4" />
+          </Button.RightIcon>
+        </Button>
+      </>
+    );
+  }
+
   return (
-    <OverviewCard
-      title="Server Address"
+    <OverviewRow
+      title="Server URL"
       status={readyStatus(isLoading, configured)}
       statusLoading={isLoading}
-      description="This is where clients connect to your server. Add /install to the end to open a guided setup page you can share with users."
-      icon={GlobeIcon}
-      headerAction={
-        <Button variant="secondary" onClick={onManage}>
-          <Button.Text>Manage</Button.Text>
-        </Button>
-      }
-    >
-      {isLoading ? (
-        <div className="space-y-4">
-          <UrlFieldSkeleton />
-          <UrlFieldSkeleton />
-        </div>
-      ) : !configured ? (
-        <StatusCallout tone="warning" icon={AlertTriangle}>
-          A server address must be configured
-        </StatusCallout>
-      ) : (
-        <div className="space-y-4">
-          <UrlField
-            label="MCP Server URL"
-            hint="Clients connect here"
-            url={mcpUrl}
-          />
-          {installPageUrl && (
-            <UrlField
-              label="Install Page URL"
-              hint="Share with your users"
-              url={installPageUrl}
-            />
-          )}
-        </div>
-      )}
-    </OverviewCard>
+      description={description}
+      actions={actions}
+    />
   );
 }
-
-function UrlField({
-  label,
-  hint,
-  url,
-}: {
-  label: string;
-  hint: string;
-  url: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-muted-foreground font-mono font-semibold tracking-wide uppercase">
-          {label}
-        </span>
-        <span className="text-muted-foreground">· {hint}</span>
-      </div>
-      <CodeBlock innerClassName="bg-muted/40 p-3 pr-12">{url}</CodeBlock>
-    </div>
-  );
-}
-
 /**
  * Auth posture is a function of three inputs: whether Gram OAuth gates the
  * server (a user_session_issuer paired with a *private* server), whether an
@@ -311,17 +245,16 @@ function UrlField({
  */
 type AuthState = "gram-only" | "gram-remote" | "remote-only" | "none";
 
-const AUTH_COPY: Record<AuthState, string> = {
-  "gram-only":
-    "Only members of this Speakeasy organization who have been given the appropriate roles & permissions are able to connect to this server.",
+const AUTH_ROW_COPY: Record<AuthState, string> = {
+  "gram-only": "Requires Speakeasy organization access and MCP permissions.",
   "gram-remote":
-    "Members of this Speakeasy organization who have been given the appropriate roles & permissions are able to connect to this server. They will also be required to log into the upstream service.",
+    "Requires Speakeasy organization access, MCP permissions, and upstream login.",
   "remote-only":
-    "Users are not required to be Speakeasy organization members, and roles & permissions will not apply. They will be required to log into the upstream service before connecting to the server.",
-  none: "Anyone can connect to and use this MCP server.",
+    "Requires upstream login; Speakeasy organization roles do not apply.",
+  none: "No authentication method configured - anyone with the URL can connect.",
 };
 
-function AuthenticationOverviewCard({
+function AuthenticationOverviewRow({
   mcpServer,
   onConfigure,
 }: {
@@ -352,102 +285,101 @@ function AuthenticationOverviewCard({
   // The remote-identity query only runs when an issuer exists, so gate the
   // loading state on hasIssuer too.
   const loading = hasIssuer && isLoading;
+  const actionLabel = secure ? "Manage" : "Configure";
+  const actionVariant = secure ? "secondary" : "primary";
 
   return (
-    <OverviewCard
+    <OverviewRow
       title="Authentication"
       status={readyStatus(loading, secure)}
       statusLoading={loading}
-      description="Verify who is allowed to connect before traffic flows through."
-      icon={secure ? ShieldCheck : Shield}
-      headerAction={
-        <Button
-          variant={secure ? "secondary" : "primary"}
-          onClick={onConfigure}
-        >
-          <Button.Text>{secure ? "Manage" : "Configure"}</Button.Text>
-        </Button>
+      description={
+        loading ? (
+          <Skeleton className="h-4 w-[520px] max-w-full" />
+        ) : (
+          AUTH_ROW_COPY[state]
+        )
       }
-    >
-      {loading ? (
-        <Skeleton className="h-12 w-full rounded-md" />
-      ) : secure ? (
-        <StatusCallout tone="ready" icon={ShieldCheck}>
-          {AUTH_COPY[state]}
-        </StatusCallout>
-      ) : (
-        <StatusCallout tone="warning" icon={AlertTriangle}>
-          {AUTH_COPY[state]}
-        </StatusCallout>
-      )}
-    </OverviewCard>
+      actions={
+        loading ? (
+          <Skeleton className="h-9 w-28 rounded-md" />
+        ) : (
+          <Button variant={actionVariant} onClick={onConfigure}>
+            <Button.Text>{actionLabel}</Button.Text>
+          </Button>
+        )
+      }
+    />
   );
 }
 
-function SourceOverviewCard({
+function SourceOverviewRow({
   remoteMcpServerId,
 }: {
   remoteMcpServerId: string;
 }) {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { data: remoteMcpServer, isLoading } = useGetRemoteMcpServer(
-    { id: remoteMcpServerId },
-    undefined,
-    { throwOnError: false },
-  );
+  const {
+    data: remoteMcpServer,
+    isLoading,
+    isError,
+  } = useGetRemoteMcpServer({ id: remoteMcpServerId }, undefined, {
+    enabled: remoteMcpServerId !== "",
+    throwOnError: false,
+  });
 
-  const ready = !isLoading && !!remoteMcpServer;
+  const ready = !isLoading && !isError && !!remoteMcpServer;
+  const status = readyStatus(isLoading, ready);
   const trimmedName = remoteMcpServer?.name?.trim();
 
+  let description: ReactNode = "Linked source could not be loaded.";
+  if (isLoading) {
+    description = <Skeleton className="h-4 w-80 max-w-full" />;
+  } else if (ready) {
+    description = trimmedName || "Remote MCP source";
+  }
+
+  const detail =
+    ready && remoteMcpServer ? (
+      <Type muted small mono as="div" className="break-all">
+        {remoteMcpServer.url}
+      </Type>
+    ) : undefined;
+
+  const actions =
+    ready && remoteMcpServer ? (
+      <Button
+        variant="secondary"
+        onClick={() =>
+          navigate(
+            routes.sources.source.href(
+              "remotemcp",
+              remoteMcpRouteParam(remoteMcpServer),
+            ),
+          )
+        }
+      >
+        <Button.Text>View source</Button.Text>
+        <Button.RightIcon>
+          <ArrowUpRight className="size-4" />
+        </Button.RightIcon>
+      </Button>
+    ) : undefined;
+
   return (
-    <OverviewCard
+    <OverviewRow
       title="Source"
-      status={ready ? { label: "Ready", tone: "ready" } : undefined}
+      status={status}
       statusLoading={isLoading}
-      description="The remote MCP server this server proxies."
-      icon={Network}
-      headerAction={
-        remoteMcpServer ? (
-          <Button
-            variant="secondary"
-            onClick={() =>
-              navigate(
-                routes.sources.source.href(
-                  "remotemcp",
-                  remoteMcpRouteParam(remoteMcpServer),
-                ),
-              )
-            }
-          >
-            <Button.Text>View</Button.Text>
-            <Button.RightIcon>
-              <ArrowUpRight className="size-4" />
-            </Button.RightIcon>
-          </Button>
-        ) : undefined
-      }
-    >
-      {isLoading || !remoteMcpServer ? (
-        <div className="space-y-4">
-          <Skeleton className="h-5 w-44" />
-          <UrlFieldSkeleton />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {trimmedName && <Type className="font-medium">{trimmedName}</Type>}
-          <UrlField
-            label="Upstream URL"
-            hint="Requests are forwarded here"
-            url={remoteMcpServer.url}
-          />
-        </div>
-      )}
-    </OverviewCard>
+      description={description}
+      detail={detail}
+      actions={actions}
+    />
   );
 }
 
-function ToolsOverviewCard({ toolsetId }: { toolsetId: string | undefined }) {
+function ToolsOverviewRow({ toolsetId }: { toolsetId: string | undefined }) {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { data: toolsetsResult, isLoading } = useListToolsets();
@@ -458,118 +390,147 @@ function ToolsOverviewCard({ toolsetId }: { toolsetId: string | undefined }) {
   const ready = !isLoading && !!toolset;
   const displayName = toolset?.name?.trim() || toolset?.slug;
 
-  return (
-    <OverviewCard
-      title="Tools"
-      status={ready ? { label: "Ready", tone: "ready" } : undefined}
-      statusLoading={isLoading}
-      description="The capabilities and resources exposed to connecting clients."
-      icon={Wrench}
-      headerAction={
-        toolset ? (
-          <Button
-            variant="secondary"
-            onClick={() => navigate(routes.mcp.details.href(toolset.slug))}
-          >
-            <Button.Text>View</Button.Text>
-            <Button.RightIcon>
-              <ArrowUpRight className="size-4" />
-            </Button.RightIcon>
-          </Button>
-        ) : undefined
-      }
+  let description: ReactNode = "Couldn't load the linked toolset.";
+  if (isLoading) {
+    description = <Skeleton className="h-4 w-64 max-w-full" />;
+  } else if (displayName) {
+    description = displayName;
+  }
+
+  const actions = toolset ? (
+    <Button
+      variant="secondary"
+      onClick={() => navigate(routes.mcp.details.href(toolset.slug))}
     >
-      {isLoading ? (
-        <Skeleton className="h-5 w-40" />
-      ) : !toolset ? (
-        <StatusCallout tone="warning" icon={AlertTriangle}>
-          Couldn't load the linked toolset.
-        </StatusCallout>
-      ) : (
-        displayName && <Type className="font-medium">{displayName}</Type>
-      )}
-    </OverviewCard>
+      <Button.Text>View tools</Button.Text>
+      <Button.RightIcon>
+        <ArrowUpRight className="size-4" />
+      </Button.RightIcon>
+    </Button>
+  ) : undefined;
+
+  return (
+    <OverviewRow
+      title="Tools"
+      status={readyStatus(isLoading, ready)}
+      statusLoading={isLoading}
+      description={description}
+      actions={actions}
+    />
   );
 }
-
-function OverviewCard({
+function OverviewRow({
   title,
   status,
   statusLoading,
   description,
-  icon: Icon,
-  children,
-  headerAction,
-}: OverviewCardProps) {
-  // Amber only flags an actionable gap ("Needs Setup"); ready and in-flight
-  // states both read as green so the card doesn't flicker amber while loading.
-  const tone = ICON_TONES[status?.tone === "needs-setup" ? "amber" : "green"];
-
+  detail,
+  actions,
+}: {
+  title: string;
+  status?: RowStatus;
+  statusLoading?: boolean;
+  description: ReactNode;
+  detail?: ReactNode;
+  actions?: ReactNode;
+}) {
   let statusNode: ReactNode = null;
   if (status) {
-    statusNode = <StatusLabel label={status.label} tone={status.tone} />;
+    statusNode = <StatusBadge status={status} />;
   } else if (statusLoading) {
-    statusNode = <Skeleton className="h-3.5 w-16 rounded" />;
+    statusNode = <Skeleton className="h-5 w-20 rounded-full" />;
   }
 
   return (
-    <section className={CARD_SHELL}>
-      <div
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${tone.frame}`}
-      >
-        <Icon className={`h-6 w-6 ${tone.icon}`} />
-      </div>
-      <div className="min-w-0 flex-1 space-y-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="mb-1 flex flex-wrap items-center gap-2.5">
-              <Type variant="subheading" as="h3">
-                {title}
-              </Type>
-              {statusNode}
-            </div>
-            <Type muted small>
-              {description}
+    <div className="border-border flex flex-col gap-4 border-b py-6 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 gap-5">
+        <StatusDot status={status} loading={statusLoading} />
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2.5">
+            <Type variant="subheading" as="h3">
+              {title}
             </Type>
+            {statusNode}
           </div>
-          {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+          <Type muted small as="div" className="break-words">
+            {description}
+          </Type>
+          {detail ? <div className="mt-1">{detail}</div> : null}
         </div>
-        {children}
       </div>
-    </section>
+      {actions ? (
+        <div className="flex flex-wrap items-center gap-2 pl-8 sm:ml-6 sm:shrink-0 sm:justify-end sm:pl-0">
+          {actions}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
-function StatusLabel({ label, tone }: { label: string; tone: StatusTone }) {
+function StatusDot({
+  status,
+  loading,
+}: {
+  status?: RowStatus;
+  loading?: boolean;
+}) {
+  if (loading && !status) {
+    return <Skeleton className="mt-2 h-3 w-3 shrink-0 rounded-full" />;
+  }
+
   const colorClassName =
-    tone === "ready"
-      ? "text-emerald-700 dark:text-emerald-300"
-      : "text-amber-600 dark:text-amber-300";
+    status?.tone === "needs-setup" ? "bg-amber-500" : "bg-green-500";
 
   return (
     <span
-      className={`font-mono text-[11px] font-semibold tracking-wide uppercase ${colorClassName}`}
-    >
-      {label}
-    </span>
+      aria-hidden
+      className={`mt-2 h-3 w-3 shrink-0 rounded-full ${colorClassName}`}
+    />
   );
 }
+
+function StatusBadge({ status }: { status: RowStatus }) {
+  const variant = status.tone === "ready" ? "success" : "warning";
+  const toneClasses = STATUS_BADGE_TONE_CLASSES[status.tone];
+
+  return (
+    <Badge
+      variant={variant}
+      size="sm"
+      background
+      className={`shrink-0 px-2 py-0.5 ${toneClasses.root}`}
+    >
+      <Badge.Text
+        className={`font-mono text-[11px] font-semibold tracking-wide uppercase ${toneClasses.text}`}
+      >
+        {status.label}
+      </Badge.Text>
+    </Badge>
+  );
+}
+
+const STATUS_BADGE_TONE_CLASSES: Record<
+  StatusTone,
+  { root: string; text: string }
+> = {
+  ready: {
+    root: "border-green-500/20! bg-green-500/10! dark:border-green-500/30! dark:bg-green-500/15!",
+    text: "text-green-700! dark:text-green-300!",
+  },
+  "needs-setup": {
+    root: "border-amber-500/25! bg-amber-500/10! dark:border-amber-500/30! dark:bg-amber-500/15!",
+    text: "text-amber-700! dark:text-amber-300!",
+  },
+};
 
 function EnhanceSection() {
   return (
     <section>
-      <Type
-        muted
-        small
-        className="font-mono text-xs tracking-[0.2em] uppercase"
-      >
-        Optional
-      </Type>
       <Heading variant="h3" className="mt-1 mb-1 font-semibold normal-case">
-        Enhance your server
+        Enhancements
       </Heading>
       <Type muted small className="mb-5">
-        Add-ons that improve the experience. They won't block enabling.
+        Optional items to customize the MCP server.
       </Type>
       <EnhancementCard
         icon={BookOpen}
@@ -645,54 +606,5 @@ function EnhancementCard({
         )}
       </div>
     </section>
-  );
-}
-
-/** Shared outer chrome for every overview status card (and its skeleton). */
-const CARD_SHELL =
-  "border-border bg-card flex gap-4 rounded-lg border p-5 shadow-sm";
-
-const ICON_TONES = {
-  green: {
-    frame: "bg-emerald-100 dark:bg-emerald-950/50",
-    icon: "text-emerald-700 dark:text-emerald-300",
-  },
-  amber: {
-    frame: "bg-amber-100 dark:bg-amber-950/50",
-    icon: "text-amber-600 dark:text-amber-300",
-  },
-} as const;
-
-function StatusCallout({
-  tone,
-  icon: Icon,
-  children,
-}: {
-  tone: "ready" | "warning";
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  children: ReactNode;
-}) {
-  const styles =
-    tone === "ready"
-      ? {
-          box: "bg-emerald-50 dark:bg-emerald-950/40",
-          icon: "text-emerald-600 dark:text-emerald-300",
-          text: "text-emerald-700 dark:text-emerald-300",
-        }
-      : {
-          box: "bg-amber-50 dark:bg-amber-950/40",
-          icon: "text-amber-600 dark:text-amber-300",
-          text: "text-amber-700 dark:text-amber-300",
-        };
-
-  return (
-    <div
-      className={`flex items-start gap-2 rounded-md px-3 py-2 ${styles.box}`}
-    >
-      <Icon className={`mt-0.5 size-4 shrink-0 ${styles.icon}`} />
-      <Type small className={styles.text}>
-        {children}
-      </Type>
-    </div>
   );
 }
