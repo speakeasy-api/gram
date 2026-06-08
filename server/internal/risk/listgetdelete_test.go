@@ -7,10 +7,31 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
+
+func riskOnlyPolicies(policies []*types.RiskPolicy) []*types.RiskPolicy {
+	riskPolicies := make([]*types.RiskPolicy, 0, len(policies))
+	for _, policy := range policies {
+		if policy.Kind == "risk" {
+			riskPolicies = append(riskPolicies, policy)
+		}
+	}
+	return riskPolicies
+}
+
+func promptOnlyPolicies(policies []*types.RiskPolicy) []*types.RiskPolicy {
+	promptPolicies := make([]*types.RiskPolicy, 0, len(policies))
+	for _, policy := range policies {
+		if policy.Kind == "prompt" {
+			promptPolicies = append(promptPolicies, policy)
+		}
+	}
+	return promptPolicies
+}
 
 func TestListRiskPolicies_Empty(t *testing.T) {
 	t.Parallel()
@@ -21,7 +42,7 @@ func TestListRiskPolicies_Empty(t *testing.T) {
 
 	result, err := ti.service.ListRiskPolicies(ctx, &gen.ListRiskPoliciesPayload{})
 	require.NoError(t, err)
-	require.Empty(t, result.Policies)
+	require.Empty(t, riskOnlyPolicies(result.Policies))
 }
 
 func TestListRiskPolicies_ReturnsPolicies(t *testing.T) {
@@ -40,7 +61,7 @@ func TestListRiskPolicies_ReturnsPolicies(t *testing.T) {
 
 	result, err := ti.service.ListRiskPolicies(ctx, &gen.ListRiskPoliciesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Policies, 2)
+	require.Len(t, riskOnlyPolicies(result.Policies), 2)
 }
 
 func TestGetRiskPolicy_Success(t *testing.T) {
@@ -109,7 +130,7 @@ func TestDeleteRiskPolicy_NotInList(t *testing.T) {
 
 	result, err := ti.service.ListRiskPolicies(ctx, &gen.ListRiskPoliciesPayload{})
 	require.NoError(t, err)
-	require.Empty(t, result.Policies)
+	require.Empty(t, riskOnlyPolicies(result.Policies))
 }
 
 func TestListRiskResults_EmptyProject(t *testing.T) {

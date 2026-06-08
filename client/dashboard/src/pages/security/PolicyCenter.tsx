@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   Sheet,
   SheetContent,
@@ -34,20 +35,24 @@ import {
 } from "@speakeasy-api/moonshine";
 import type { IconName } from "@speakeasy-api/moonshine";
 import {
+  ArrowLeft,
   Plus,
   Shield,
   Ellipsis,
   Loader2,
   ChevronRight,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
+  useRiskCreatePromptPolicyMutation,
   useRiskCreatePolicyMutation,
   useRiskListPolicies,
   useRiskPoliciesDeleteMutation,
+  useRiskUpdatePromptPolicyMutation,
   useRiskPoliciesUpdateMutation,
 } from "@gram/client/react-query/index.js";
 import {
@@ -66,6 +71,8 @@ import {
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 import { useDetectionRulesStore } from "./detection-rules-data";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -104,6 +111,18 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
 ]);
+
+type PolicyKind = "risk" | "prompt";
+
+type PolicyRow =
+  | { kind: "risk"; policy: RiskPolicy }
+  | { kind: "prompt"; policy: RiskPolicy };
+
+const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
+  "tool_request",
+  "tool_response",
+]);
+const PROMPT_POLICY_MESSAGE_TYPES: PolicyMessageType[] = ["tool_request"];
 
 const ALL_POLICY_MESSAGE_TYPES = Object.keys(
   POLICY_MESSAGE_TYPE_META,
@@ -172,7 +191,9 @@ function categoriesToPayload(
         // serialized into the Presidio query just because their category is
         // selected. We only keep one if the policy being edited already
         // pinned it, so an edit round-trips without silently dropping it.
-        if (rule.hidden && !pinnedHidden.has(rule.id)) continue;
+        if ("hidden" in rule && rule.hidden && !pinnedHidden.has(rule.id)) {
+          continue;
+        }
         presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
     }
@@ -205,6 +226,7 @@ function pinnedHiddenRuleIds(presidioEntities?: string[]): Set<string> {
   for (const cat of PRESIDIO_CATEGORIES) {
     for (const rule of DETECTION_RULES[cat]) {
       if (
+        "hidden" in rule &&
         rule.hidden &&
         presidioEntities.includes(ruleIdToPresidioEntity(rule.id))
       ) {
@@ -255,6 +277,17 @@ function policyMessageTypesForDisplay(
   return [...policyMessageTypesForForm(messageTypes)];
 }
 
+function promptPolicyMessageTypes(): Set<PolicyMessageType> {
+  return new Set(PROMPT_POLICY_MESSAGE_TYPES);
+}
+
+function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
+  return (
+    types.size === TOOL_CALL_MESSAGE_TYPES.size &&
+    [...types].every((type) => TOOL_CALL_MESSAGE_TYPES.has(type))
+  );
+}
+
 function messageTypesSummary(
   selectedMessageTypes: Set<PolicyMessageType>,
 ): string {
@@ -262,7 +295,28 @@ function messageTypesSummary(
     return "All types";
   }
 
+  if (hasOnlyToolCallMessageTypes(selectedMessageTypes)) {
+    return "Tool Calls";
+  }
+
   return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
+}
+
+function truncatePrompt(prompt: string, maxLength = 40): string {
+  const singleLine = prompt.trim().replace(/\s+/g, " ");
+  if (singleLine.length <= maxLength) {
+    return singleLine;
+  }
+  return `${singleLine.slice(0, maxLength - 1)}…`;
+}
+
+function policyKind(policy: RiskPolicy): PolicyKind {
+  return policy.kind === "prompt" ? "prompt" : "risk";
+}
+
+function policyToRow(policy: RiskPolicy): PolicyRow {
+  const kind = policyKind(policy);
+  return { kind, policy };
 }
 
 export default function PolicyCenter() {
@@ -275,15 +329,28 @@ export default function PolicyCenter() {
 
 function PolicyCenterContent() {
   const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
-  const policies = data?.policies ?? [];
+  const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
+  const rawPolicies = data?.policies ?? [];
+  const policies = useMemo(
+    () =>
+      rawPolicies
+        .filter((policy) => nlEnabled || policyKind(policy) === "risk")
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    [nlEnabled, rawPolicies],
+  );
+  const policyRows = useMemo(() => policies.map(policyToRow), [policies]);
 
   const { customRules } = useDetectionRulesStore();
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
+  const [createStep, setCreateStep] = useState<"type" | "details">("details");
+  const [formPolicyKind, setFormPolicyKind] = useState<PolicyKind>("risk");
   const [formName, setFormName] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
+  const [formPromptInstruction, setFormPromptInstruction] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(new Set<RuleCategory>(["secrets", "pii"]));
@@ -319,29 +386,81 @@ function PolicyCenterContent() {
     },
   });
 
+  const createPromptMutation = useRiskCreatePromptPolicyMutation({
+    onSuccess: () => {
+      invalidate();
+      setSheetOpen(false);
+    },
+  });
+
+  const updatePromptMutation = useRiskUpdatePromptPolicyMutation({
+    onSuccess: () => {
+      invalidate();
+      setSheetOpen(false);
+    },
+  });
+
   const deleteMutation = useRiskPoliciesDeleteMutation({
     onSuccess: invalidate,
   });
 
-  const handleCreate = () => {
+  const configurePolicyKind = (kind: PolicyKind) => {
+    setFormPolicyKind(kind);
+    if (kind === "prompt") {
+      setSelectedMessageTypes(promptPolicyMessageTypes());
+      setFormAction("flag");
+      setFormAutoName(true);
+      return;
+    }
+
+    setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
+    setFormAction("flag");
+    setFormAutoName(true);
+  };
+
+  const handleCreate = (kind?: PolicyKind) => {
+    const nextKind = kind ?? "risk";
     setEditingPolicy(null);
+    setCreateStep(kind || !nlEnabled ? "details" : "type");
+    setFormPolicyKind(nextKind);
     setFormName("");
     setFormEnabled(true);
+    setFormPromptInstruction("");
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
-    setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
+    setSelectedMessageTypes(
+      nextKind === "prompt"
+        ? promptPolicyMessageTypes()
+        : new Set(ALL_POLICY_MESSAGE_TYPES),
+    );
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
     setSheetOpen(true);
   };
 
+  const handleChoosePolicyKind = (kind: PolicyKind) => {
+    configurePolicyKind(kind);
+    setCreateStep("details");
+  };
+
   const handleEdit = (policy: RiskPolicy) => {
+    const kind = policyKind(policy);
     const customRuleIds = policy.customRuleIds ?? [];
     setEditingPolicy(policy);
+    setCreateStep("details");
+    setFormPolicyKind(kind);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
+    setFormPromptInstruction(policy.promptInstruction ?? "");
+    if (kind === "prompt") {
+      setSelectedMessageTypes(promptPolicyMessageTypes());
+      setFormAction((policy.action as PolicyAction) ?? "flag");
+      setFormAutoName(policy.autoName ?? false);
+      setSheetOpen(true);
+      return;
+    }
     const categories = policyToCategories(
       policy.sources,
       policy.presidioEntities,
@@ -360,6 +479,39 @@ function PolicyCenterContent() {
   };
 
   const handleSave = () => {
+    if (formPolicyKind === "prompt") {
+      const messageTypes = PROMPT_POLICY_MESSAGE_TYPES;
+      if (editingPolicy) {
+        updatePromptMutation.mutate({
+          request: {
+            updatePromptPolicyRequestBody: {
+              id: editingPolicy.id,
+              name: formName,
+              enabled: formEnabled,
+              promptInstruction: formPromptInstruction,
+              messageTypes,
+              action: formAction,
+              autoName: formAutoName,
+            },
+          },
+        });
+      } else {
+        createPromptMutation.mutate({
+          request: {
+            createPromptPolicyRequestBody: {
+              ...(formAutoName ? {} : { name: formName }),
+              promptInstruction: formPromptInstruction,
+              messageTypes,
+              action: formAction,
+              autoName: formAutoName,
+            },
+          },
+        });
+      }
+      return;
+    }
+
+    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
     const {
       sources,
       presidioEntities,
@@ -370,7 +522,6 @@ function PolicyCenterContent() {
       disabledRules,
       pinnedHiddenRuleIds(editingPolicy?.presidioEntities),
     );
-    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
@@ -420,6 +571,18 @@ function PolicyCenterContent() {
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
+    if (policyKind(policy) === "prompt") {
+      updatePromptMutation.mutate({
+        request: {
+          updatePromptPolicyRequestBody: {
+            id: policy.id,
+            enabled,
+          },
+        },
+      });
+      return;
+    }
+
     updateMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -447,7 +610,7 @@ function PolicyCenterContent() {
     );
   }
 
-  if (policies.length === 0) {
+  if (policies.length === 0 && !sheetOpen) {
     return (
       <Page>
         <Page.Header>
@@ -459,49 +622,14 @@ function PolicyCenterContent() {
               <Shield className="text-muted-foreground h-6 w-6" />
             </div>
             <Type variant="subheading" className="mb-1">
-              No Risk Policies
+              No Policies
             </Type>
             <Type small muted className="mb-4 max-w-md text-center">
-              Risk policies scan your chat messages for secrets and sensitive
-              data. Create your first policy to get started.
+              Policies scan agent sessions for secrets, sensitive data, and
+              prompt-defined risks.
             </Type>
-            <Button
-              onClick={() => {
-                const {
-                  sources,
-                  presidioEntities,
-                  promptInjectionRules,
-                  disabledRules: payloadDisabled,
-                } = categoriesToPayload(
-                  new Set<RuleCategory>(["secrets", "pii"]),
-                  new Set(),
-                );
-                createMutation.mutate({
-                  request: {
-                    createRiskPolicyRequestBody: {
-                      autoName: true,
-                      enabled: true,
-                      sources,
-                      presidioEntities,
-                      promptInjectionRules,
-                      disabledRules: payloadDisabled,
-                      customRuleIds: [],
-                    },
-                  },
-                });
-              }}
-              disabled={createMutation.isPending}
-            >
-              <Button.Text>
-                {createMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  "Get Started"
-                )}
-              </Button.Text>
+            <Button onClick={() => handleCreate()}>
+              <Button.Text>Create Policy</Button.Text>
             </Button>
           </div>
         </Page.Body>
@@ -545,26 +673,50 @@ function PolicyCenterContent() {
     },
   ];
 
-  const policyColumns: Column<RiskPolicy>[] = [
+  const policyColumns: Column<PolicyRow>[] = [
     {
       key: "name",
       header: "Name",
       width: "1fr",
-      render: (policy) => <span className="font-medium">{policy.name}</span>,
+      render: (row) => (
+        <span className="flex min-w-0 items-center gap-1.5 font-medium">
+          {row.kind === "prompt" && (
+            <SimpleTooltip tooltip="Prompt-based policy">
+              <Sparkles
+                aria-label="Prompt-based policy"
+                className="text-muted-foreground h-3.5 w-3.5 shrink-0"
+              />
+            </SimpleTooltip>
+          )}
+          <span className="truncate">{row.policy.name}</span>
+        </span>
+      ),
     },
     {
       key: "action",
       header: "Action",
       width: "0.5fr",
-      render: (policy) => (
-        <ActionBadge action={(policy.action as PolicyAction) ?? "flag"} />
+      render: (row) => (
+        <ActionBadge action={(row.policy.action as PolicyAction) ?? "flag"} />
       ),
     },
     {
       key: "sources",
-      header: "Categories",
+      header: "Categories / Prompt",
       width: "2fr",
-      render: (policy) => {
+      render: (row) => {
+        const policy = row.policy;
+        if (row.kind === "prompt") {
+          const prompt = policy.promptInstruction ?? "";
+          return (
+            <SimpleTooltip tooltip={prompt}>
+              <span className="text-muted-foreground block max-w-full truncate text-sm italic">
+                {truncatePrompt(prompt)}
+              </span>
+            </SimpleTooltip>
+          );
+        }
+
         const categories = sourcesToCategories(
           policy.sources,
           policy.presidioEntities,
@@ -586,10 +738,28 @@ function PolicyCenterContent() {
     },
     {
       key: "messageTypes",
-      header: "Message Types",
+      header: "Applies To",
       width: "2.1fr",
-      render: (policy) => {
-        const types = policyMessageTypesForDisplay(policy.messageTypes);
+      render: (row) => {
+        const types =
+          row.kind === "prompt"
+            ? PROMPT_POLICY_MESSAGE_TYPES
+            : policyMessageTypesForDisplay(row.policy.messageTypes);
+        const typeSet = new Set(types);
+        const tooltip = types
+          .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
+          .join(", ");
+
+        if (
+          typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
+          hasOnlyToolCallMessageTypes(typeSet)
+        ) {
+          return (
+            <SimpleTooltip tooltip={tooltip}>
+              <Badge variant="secondary">{messageTypesSummary(typeSet)}</Badge>
+            </SimpleTooltip>
+          );
+        }
 
         return (
           <div className="flex flex-wrap gap-1">
@@ -606,11 +776,11 @@ function PolicyCenterContent() {
       key: "enabled",
       header: "Status",
       width: "0.5fr",
-      render: (policy) => (
+      render: (row) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Switch
-            checked={policy.enabled}
-            onCheckedChange={(checked) => handleToggle(policy, checked)}
+            checked={row.policy.enabled}
+            onCheckedChange={(checked) => handleToggle(row.policy, checked)}
           />
         </div>
       ),
@@ -619,7 +789,7 @@ function PolicyCenterContent() {
       key: "actions",
       header: "",
       width: "0.3fr",
-      render: (policy) => (
+      render: (row) => (
         <div onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -636,13 +806,21 @@ function PolicyCenterContent() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 className="cursor-pointer"
-                onSelect={() => setTimeout(() => setRunPanelPolicy(policy), 0)}
+                onSelect={() => setTimeout(() => handleEdit(row.policy), 0)}
+              >
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() =>
+                  setTimeout(() => setRunPanelPolicy(row.policy), 0)
+                }
               >
                 View Progress
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => handleDelete(policy.id)}
+                onSelect={() => handleDelete(row.policy.id)}
               >
                 Delete
               </DropdownMenuItem>
@@ -652,6 +830,19 @@ function PolicyCenterContent() {
       ),
     },
   ];
+
+  const isChoosingPolicyKind =
+    !editingPolicy && nlEnabled && createStep === "type";
+  let sheetTitle = "New Policy";
+  let sheetDescription = "Create a policy to scan agent session interactions.";
+  if (editingPolicy) {
+    sheetTitle = "Edit Policy";
+    sheetDescription = "Update this policy configuration.";
+  } else if (isChoosingPolicyKind) {
+    sheetTitle = "Choose Policy Type";
+    sheetDescription =
+      "Start with a detector-based policy or define criteria in plain language.";
+  }
 
   return (
     <Page>
@@ -667,13 +858,13 @@ function PolicyCenterContent() {
         />
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Risk Policies</h2>
+            <h2 className="text-lg font-semibold">Policies</h2>
             <p className="text-muted-foreground text-sm">
-              Configure risk analysis rules to detect secrets and sensitive
-              information in agent session interactions.
+              Configure policies to detect secrets, sensitive information, and
+              prompt-defined risks in agent session interactions.
             </p>
           </div>
-          <Button onClick={handleCreate}>
+          <Button onClick={() => handleCreate()}>
             <Button.LeftIcon>
               <Plus className="mr-2 h-4 w-4" />
             </Button.LeftIcon>
@@ -683,71 +874,107 @@ function PolicyCenterContent() {
 
         <Table
           columns={policyColumns}
-          data={policies}
-          rowKey={(policy) => policy.id}
-          onRowClick={handleEdit}
+          data={policyRows}
+          rowKey={(row) => row.policy.id}
+          onRowClick={(row) => handleEdit(row.policy)}
         />
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
             <SheetHeader className="px-6 pt-6">
-              <SheetTitle>
-                {editingPolicy ? "Edit Policy" : "New Policy"}
-              </SheetTitle>
-              <SheetDescription>
-                {editingPolicy
-                  ? "Update the risk analysis policy configuration."
-                  : "Create a new risk analysis policy to scan chat messages."}
-              </SheetDescription>
+              <SheetTitle>{sheetTitle}</SheetTitle>
+              <SheetDescription>{sheetDescription}</SheetDescription>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto px-6">
-              <PolicySheetBody
-                formName={formName}
-                setFormName={setFormName}
-                formEnabled={formEnabled}
-                setFormEnabled={setFormEnabled}
-                selectedCategories={selectedCategories}
-                setSelectedCategories={setSelectedCategories}
-                disabledRules={disabledRules}
-                setDisabledRules={setDisabledRules}
-                customRules={customRules}
-                selectedCustomRuleIds={selectedCustomRuleIds}
-                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                selectedMessageTypes={selectedMessageTypes}
-                setSelectedMessageTypes={setSelectedMessageTypes}
-                formAction={formAction}
-                setFormAction={setFormAction}
-                formAutoName={formAutoName}
-                setFormAutoName={setFormAutoName}
-                formUserMessage={formUserMessage}
-                setFormUserMessage={setFormUserMessage}
-              />
-            </div>
-            <SheetFooter className="px-6 pb-6">
-              <Button
-                onClick={handleSave}
-                disabled={
-                  (!formAutoName && !formName.trim()) ||
-                  selectedMessageTypes.size === 0 ||
-                  createMutation.isPending ||
-                  updateMutation.isPending
-                }
-              >
-                {(createMutation.isPending || updateMutation.isPending) && (
-                  <Button.LeftIcon>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </Button.LeftIcon>
+              <div className="space-y-6 py-4">
+                {isChoosingPolicyKind ? (
+                  <PolicyKindChoice onSelect={handleChoosePolicyKind} />
+                ) : formPolicyKind === "risk" ? (
+                  <PolicySheetBody
+                    formName={formName}
+                    setFormName={setFormName}
+                    formEnabled={formEnabled}
+                    setFormEnabled={setFormEnabled}
+                    selectedCategories={selectedCategories}
+                    setSelectedCategories={setSelectedCategories}
+                    disabledRules={disabledRules}
+                    setDisabledRules={setDisabledRules}
+                    customRules={customRules}
+                    selectedCustomRuleIds={selectedCustomRuleIds}
+                    setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+                    selectedMessageTypes={selectedMessageTypes}
+                    setSelectedMessageTypes={setSelectedMessageTypes}
+                    formAction={formAction}
+                    setFormAction={setFormAction}
+                    formAutoName={formAutoName}
+                    setFormAutoName={setFormAutoName}
+                    formUserMessage={formUserMessage}
+                    setFormUserMessage={setFormUserMessage}
+                  />
+                ) : (
+                  <PromptPolicySheetBody
+                    formName={formName}
+                    setFormName={setFormName}
+                    formPromptInstruction={formPromptInstruction}
+                    setFormPromptInstruction={setFormPromptInstruction}
+                    formAction={formAction}
+                    setFormAction={setFormAction}
+                    formAutoName={formAutoName}
+                    setFormAutoName={setFormAutoName}
+                    formEnabled={formEnabled}
+                    setFormEnabled={setFormEnabled}
+                  />
                 )}
-                <Button.Text>
-                  {createMutation.isPending || updateMutation.isPending
-                    ? "Saving..."
-                    : editingPolicy
-                      ? "Update"
-                      : "Create"}
-                </Button.Text>
-              </Button>
-            </SheetFooter>
+              </div>
+            </div>
+            {!isChoosingPolicyKind && (
+              <SheetFooter className="px-6 pb-6">
+                {!editingPolicy && nlEnabled && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCreateStep("type")}
+                  >
+                    <Button.LeftIcon>
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Back</Button.Text>
+                  </Button>
+                )}
+                <Button
+                  onClick={handleSave}
+                  disabled={
+                    (formPolicyKind === "prompt" &&
+                      !formPromptInstruction.trim()) ||
+                    (!formAutoName && !formName.trim()) ||
+                    selectedMessageTypes.size === 0 ||
+                    createMutation.isPending ||
+                    updateMutation.isPending ||
+                    createPromptMutation.isPending ||
+                    updatePromptMutation.isPending
+                  }
+                >
+                  {(createMutation.isPending ||
+                    updateMutation.isPending ||
+                    createPromptMutation.isPending ||
+                    updatePromptMutation.isPending) && (
+                    <Button.LeftIcon>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </Button.LeftIcon>
+                  )}
+                  <Button.Text>
+                    {createMutation.isPending ||
+                    updateMutation.isPending ||
+                    createPromptMutation.isPending ||
+                    updatePromptMutation.isPending
+                      ? "Saving..."
+                      : editingPolicy
+                        ? "Update"
+                        : "Create"}
+                  </Button.Text>
+                </Button>
+              </SheetFooter>
+            )}
           </SheetContent>
         </Sheet>
 
@@ -764,6 +991,163 @@ function PolicyCenterContent() {
         </Sheet>
       </Page.Body>
     </Page>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  PolicyKindChoice                                                          */
+/* -------------------------------------------------------------------------- */
+
+function PolicyKindChoice({
+  onSelect,
+}: {
+  onSelect: (kind: PolicyKind) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={() => onSelect("risk")}
+        className="border-border hover:bg-muted/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      >
+        <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+          <Shield className="text-muted-foreground h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <Type className="font-medium">Standard</Type>
+          <Type small muted>
+            Use built-in detectors and custom rules.
+          </Type>
+        </div>
+        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onSelect("prompt")}
+        className="border-border hover:bg-muted/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      >
+        <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+          <Sparkles className="text-muted-foreground h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <Type className="font-medium">Prompt-based</Type>
+          <Type small muted>
+            Describe tool-call criteria in plain language.
+          </Type>
+        </div>
+        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+      </button>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  PromptPolicySheetBody                                                     */
+/* -------------------------------------------------------------------------- */
+
+function PromptPolicySheetBody({
+  formName,
+  setFormName,
+  formPromptInstruction,
+  setFormPromptInstruction,
+  formAction,
+  setFormAction,
+  formAutoName,
+  setFormAutoName,
+  formEnabled,
+  setFormEnabled,
+}: {
+  formName: string;
+  setFormName: (v: string) => void;
+  formPromptInstruction: string;
+  setFormPromptInstruction: (v: string) => void;
+  formAction: PolicyAction;
+  setFormAction: (v: PolicyAction) => void;
+  formAutoName: boolean;
+  setFormAutoName: (v: boolean) => void;
+  formEnabled: boolean;
+  setFormEnabled: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Policy Name</Label>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">Auto</span>
+            <Switch checked={formAutoName} onCheckedChange={setFormAutoName} />
+          </div>
+        </div>
+        {formAutoName ? (
+          <p className="text-muted-foreground text-xs">
+            Name will be generated from the policy prompt.
+          </p>
+        ) : (
+          <Input
+            value={formName}
+            onChange={setFormName}
+            placeholder="e.g. No Production Deletes"
+          />
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Policy Prompt</Label>
+        <TextArea
+          value={formPromptInstruction}
+          onChange={setFormPromptInstruction}
+          placeholder="Describe the tool-call behavior this policy should match…"
+          rows={5}
+        />
+        <div className="flex flex-wrap gap-2 pt-1">
+          {PROMPT_POLICY_TEMPLATES.map((template) => (
+            <button
+              key={template.name}
+              type="button"
+              className="border-border bg-muted/30 hover:bg-muted max-w-full rounded-full border px-3 py-1.5 text-left text-xs transition-colors"
+              onClick={() => {
+                setFormPromptInstruction(template.prompt);
+                if (formAutoName) {
+                  setFormName(template.name);
+                }
+              }}
+            >
+              {template.prompt}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <PromptPolicyScopeSummary />
+
+      <ActionPicker formAction={formAction} setFormAction={setFormAction} />
+
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm font-medium">Enabled</Label>
+          <p className="text-muted-foreground text-xs">
+            Enable this policy to enforce the prompt.
+          </p>
+        </div>
+        <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+      </div>
+    </div>
+  );
+}
+
+function PromptPolicyScopeSummary() {
+  return (
+    <div className="border-border bg-muted/20 flex items-start justify-between gap-4 rounded-md border p-3">
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Applies To</Label>
+        <p className="text-muted-foreground text-xs">
+          Prompt-based policies evaluate tool requests only.
+        </p>
+      </div>
+      <Badge variant="secondary" className="shrink-0">
+        Tool Requests
+      </Badge>
+    </div>
   );
 }
 
@@ -815,14 +1199,9 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
   >(null);
-  const [messageTypesOpen, setMessageTypesOpen] = useState(
-    () => selectedMessageTypes.size !== ALL_POLICY_MESSAGE_TYPES.length,
-  );
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
-  const actionValue =
-    flagOnlySelected && formAction === "block" ? "flag" : formAction;
 
   return (
     <div className="space-y-6 py-4">
@@ -1059,131 +1438,16 @@ function PolicySheetBody({
         />
       )}
 
-      <Collapsible
-        open={messageTypesOpen}
-        onOpenChange={setMessageTypesOpen}
-        className="space-y-3"
-      >
-        <div className="space-y-1">
-          <Label className="text-sm font-medium">Message Types</Label>
-          <p className="text-muted-foreground text-xs">
-            Choose which parts of an agent session this policy scans. Leaving
-            all four selected applies the policy everywhere.
-          </p>
-        </div>
-        <div className="border-border rounded-lg border">
-          <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
-            <ChevronRight
-              className={cn(
-                "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                messageTypesOpen && "rotate-90",
-              )}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">
-                {messageTypesSummary(selectedMessageTypes)}
-              </div>
-              <div className="text-muted-foreground text-xs">
-                Advanced: narrow scanning to specific parts of a session
-              </div>
-            </div>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
-            <div className="divide-border divide-y">
-              {ALL_POLICY_MESSAGE_TYPES.map((type) => {
-                const meta = POLICY_MESSAGE_TYPE_META[type];
-                const checked = selectedMessageTypes.has(type);
+      <MessageTypesPicker
+        selectedMessageTypes={selectedMessageTypes}
+        setSelectedMessageTypes={setSelectedMessageTypes}
+      />
 
-                return (
-                  <label
-                    key={type}
-                    className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
-                  >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(next) => {
-                        const updated = new Set(selectedMessageTypes);
-                        if (next) {
-                          updated.add(type);
-                        } else {
-                          updated.delete(type);
-                        }
-                        setSelectedMessageTypes(updated);
-                      }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium">{meta.label}</div>
-                      <div className="text-muted-foreground text-xs">
-                        {meta.description}
-                      </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </CollapsibleContent>
-        </div>
-        {selectedMessageTypes.size === 0 && (
-          <p className="text-destructive text-xs">
-            Select at least one type. An empty API value means “all types,” so
-            the UI keeps that choice explicit here.
-          </p>
-        )}
-      </Collapsible>
-
-      {/* Action */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Action</Label>
-        <RadioGroup
-          value={actionValue}
-          onValueChange={(v) => {
-            if (flagOnlySelected && v === "block") {
-              return;
-            }
-            setFormAction(v as PolicyAction);
-          }}
-        >
-          <div className="border-border divide-border divide-y rounded-lg border">
-            {ACTION_OPTIONS.map((opt) => {
-              const disabled = flagOnlySelected && opt.value === "block";
-
-              return (
-                <label
-                  key={opt.value}
-                  htmlFor={`action-${opt.value}`}
-                  className={cn(
-                    "flex items-start gap-3 p-3",
-                    disabled
-                      ? "cursor-not-allowed opacity-60"
-                      : "hover:bg-muted/50 cursor-pointer",
-                  )}
-                >
-                  <RadioGroupItem
-                    value={opt.value}
-                    id={`action-${opt.value}`}
-                    className="mt-0.5"
-                    disabled={disabled}
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <ActionBadge action={opt.value} />
-                    </div>
-                    <div className="text-muted-foreground mt-1 text-xs">
-                      {opt.description}
-                    </div>
-                    {disabled && (
-                      <div className="text-destructive mt-1 text-xs font-medium">
-                        Destructive Tools and Destructive CLI Commands support
-                        flagging only.
-                      </div>
-                    )}
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        </RadioGroup>
-      </div>
+      <ActionPicker
+        formAction={formAction}
+        setFormAction={setFormAction}
+        flagOnlySelected={flagOnlySelected}
+      />
 
       {/* Custom message — only relevant for block-action policies that
           surface a user-facing reason at deny time. Flag-action policies
@@ -1370,6 +1634,160 @@ const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
 function ActionBadge({ action }: { action: PolicyAction }) {
   const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
   return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+function MessageTypesPicker({
+  selectedMessageTypes,
+  setSelectedMessageTypes,
+}: {
+  selectedMessageTypes: Set<PolicyMessageType>;
+  setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
+}) {
+  const [messageTypesOpen, setMessageTypesOpen] = useState(
+    () => selectedMessageTypes.size !== ALL_POLICY_MESSAGE_TYPES.length,
+  );
+
+  return (
+    <Collapsible
+      open={messageTypesOpen}
+      onOpenChange={setMessageTypesOpen}
+      className="space-y-3"
+    >
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Applies To</Label>
+        <p className="text-muted-foreground text-xs">
+          Choose which parts of an agent session this policy evaluates. Leaving
+          all four selected applies the policy everywhere.
+        </p>
+      </div>
+      <div className="border-border rounded-lg border">
+        <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
+          <ChevronRight
+            className={cn(
+              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+              messageTypesOpen && "rotate-90",
+            )}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">
+              {messageTypesSummary(selectedMessageTypes)}
+            </div>
+            <div className="text-muted-foreground text-xs">
+              Advanced: narrow evaluation to specific parts of a session
+            </div>
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
+          <div className="divide-border divide-y">
+            {ALL_POLICY_MESSAGE_TYPES.map((type) => {
+              const meta = POLICY_MESSAGE_TYPE_META[type];
+              const checked = selectedMessageTypes.has(type);
+
+              return (
+                <label
+                  key={type}
+                  className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(next) => {
+                      const updated = new Set(selectedMessageTypes);
+                      if (next) {
+                        updated.add(type);
+                      } else {
+                        updated.delete(type);
+                      }
+                      setSelectedMessageTypes(updated);
+                    }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{meta.label}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {meta.description}
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </CollapsibleContent>
+      </div>
+      {selectedMessageTypes.size === 0 && (
+        <p className="text-destructive text-xs">
+          Select at least one type. An empty API value means “all types,” so the
+          UI keeps that choice explicit here.
+        </p>
+      )}
+    </Collapsible>
+  );
+}
+
+function ActionPicker({
+  formAction,
+  setFormAction,
+  flagOnlySelected = false,
+}: {
+  formAction: PolicyAction;
+  setFormAction: (v: PolicyAction) => void;
+  flagOnlySelected?: boolean;
+}) {
+  const actionValue =
+    flagOnlySelected && formAction === "block" ? "flag" : formAction;
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Action</Label>
+      <RadioGroup
+        value={actionValue}
+        onValueChange={(v) => {
+          if (flagOnlySelected && v === "block") {
+            return;
+          }
+          setFormAction(v as PolicyAction);
+        }}
+      >
+        <div className="border-border divide-border divide-y rounded-lg border">
+          {ACTION_OPTIONS.map((opt) => {
+            const disabled = flagOnlySelected && opt.value === "block";
+
+            return (
+              <label
+                key={opt.value}
+                htmlFor={`action-${opt.value}`}
+                className={cn(
+                  "flex items-start gap-3 p-3",
+                  disabled
+                    ? "cursor-not-allowed opacity-60"
+                    : "hover:bg-muted/50 cursor-pointer",
+                )}
+              >
+                <RadioGroupItem
+                  value={opt.value}
+                  id={`action-${opt.value}`}
+                  className="mt-0.5"
+                  disabled={disabled}
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <ActionBadge action={opt.value} />
+                  </div>
+                  <div className="text-muted-foreground mt-1 text-xs">
+                    {opt.description}
+                  </div>
+                  {disabled && (
+                    <div className="text-destructive mt-1 text-xs font-medium">
+                      Destructive Tools and Destructive CLI Commands support
+                      flagging only.
+                    </div>
+                  )}
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </RadioGroup>
+    </div>
+  );
 }
 
 /* -------------------------------------------------------------------------- */

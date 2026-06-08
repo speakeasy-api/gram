@@ -262,6 +262,248 @@ func DecodeCreateRiskPolicyResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildCreatePromptPolicyRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "createPromptPolicy" endpoint
+func (c *Client) BuildCreatePromptPolicyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreatePromptPolicyRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "createPromptPolicy", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreatePromptPolicyRequest returns an encoder for requests sent to the
+// risk createPromptPolicy server.
+func EncodeCreatePromptPolicyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.CreatePromptPolicyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "createPromptPolicy", "*risk.CreatePromptPolicyPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreatePromptPolicyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "createPromptPolicy", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreatePromptPolicyResponse returns a decoder for responses returned by
+// the risk createPromptPolicy endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreatePromptPolicyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreatePromptPolicyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreatePromptPolicyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			res := NewCreatePromptPolicyRiskPolicyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreatePromptPolicyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			return nil, NewCreatePromptPolicyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreatePromptPolicyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			return nil, NewCreatePromptPolicyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreatePromptPolicyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			return nil, NewCreatePromptPolicyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreatePromptPolicyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			return nil, NewCreatePromptPolicyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreatePromptPolicyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			return nil, NewCreatePromptPolicyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreatePromptPolicyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			return nil, NewCreatePromptPolicyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreatePromptPolicyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			return nil, NewCreatePromptPolicyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreatePromptPolicyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+				}
+				err = ValidateCreatePromptPolicyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+				}
+				return nil, NewCreatePromptPolicyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreatePromptPolicyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+				}
+				err = ValidateCreatePromptPolicyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+				}
+				return nil, NewCreatePromptPolicyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "createPromptPolicy", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreatePromptPolicyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "createPromptPolicy", err)
+			}
+			err = ValidateCreatePromptPolicyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "createPromptPolicy", err)
+			}
+			return nil, NewCreatePromptPolicyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "createPromptPolicy", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRiskPoliciesRequest instantiates a HTTP request object with method
 // and path set to call the "risk" service "listRiskPolicies" endpoint
 func (c *Client) BuildListRiskPoliciesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1217,6 +1459,248 @@ func DecodeUpdateRiskPolicyResponse(decoder func(*http.Response) goahttp.Decoder
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("risk", "updateRiskPolicy", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdatePromptPolicyRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "updatePromptPolicy" endpoint
+func (c *Client) BuildUpdatePromptPolicyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdatePromptPolicyRiskPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "updatePromptPolicy", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdatePromptPolicyRequest returns an encoder for requests sent to the
+// risk updatePromptPolicy server.
+func EncodeUpdatePromptPolicyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.UpdatePromptPolicyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "updatePromptPolicy", "*risk.UpdatePromptPolicyPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdatePromptPolicyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "updatePromptPolicy", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdatePromptPolicyResponse returns a decoder for responses returned by
+// the risk updatePromptPolicy endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdatePromptPolicyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdatePromptPolicyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdatePromptPolicyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			res := NewUpdatePromptPolicyRiskPolicyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdatePromptPolicyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			return nil, NewUpdatePromptPolicyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdatePromptPolicyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			return nil, NewUpdatePromptPolicyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdatePromptPolicyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			return nil, NewUpdatePromptPolicyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdatePromptPolicyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			return nil, NewUpdatePromptPolicyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdatePromptPolicyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			return nil, NewUpdatePromptPolicyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdatePromptPolicyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			return nil, NewUpdatePromptPolicyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdatePromptPolicyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			return nil, NewUpdatePromptPolicyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdatePromptPolicyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+				}
+				err = ValidateUpdatePromptPolicyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+				}
+				return nil, NewUpdatePromptPolicyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdatePromptPolicyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+				}
+				err = ValidateUpdatePromptPolicyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+				}
+				return nil, NewUpdatePromptPolicyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "updatePromptPolicy", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdatePromptPolicyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "updatePromptPolicy", err)
+			}
+			err = ValidateUpdatePromptPolicyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "updatePromptPolicy", err)
+			}
+			return nil, NewUpdatePromptPolicyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "updatePromptPolicy", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -6087,18 +6571,25 @@ func DecodeTestDetectionRuleResponse(decoder func(*http.Response) goahttp.Decode
 // *types.RiskPolicy from a value of type *RiskPolicyResponseBody.
 func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody) *types.RiskPolicy {
 	res := &types.RiskPolicy{
-		ID:              *v.ID,
-		ProjectID:       *v.ProjectID,
-		Name:            *v.Name,
-		Enabled:         *v.Enabled,
-		Action:          *v.Action,
-		AutoName:        *v.AutoName,
-		UserMessage:     v.UserMessage,
-		Version:         *v.Version,
-		CreatedAt:       *v.CreatedAt,
-		UpdatedAt:       *v.UpdatedAt,
-		PendingMessages: *v.PendingMessages,
-		TotalMessages:   *v.TotalMessages,
+		ID:                *v.ID,
+		ProjectID:         *v.ProjectID,
+		Name:              *v.Name,
+		PromptInstruction: v.PromptInstruction,
+		Enabled:           *v.Enabled,
+		Action:            *v.Action,
+		AutoName:          *v.AutoName,
+		UserMessage:       v.UserMessage,
+		Version:           *v.Version,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
+		PendingMessages:   *v.PendingMessages,
+		TotalMessages:     *v.TotalMessages,
+	}
+	if v.Kind != nil {
+		res.Kind = *v.Kind
+	}
+	if v.Kind == nil {
+		res.Kind = "risk"
 	}
 	res.Sources = make([]string, len(v.Sources))
 	for i, val := range v.Sources {

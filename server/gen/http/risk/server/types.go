@@ -46,6 +46,22 @@ type CreateRiskPolicyRequestBody struct {
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 }
 
+// CreatePromptPolicyRequestBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP request body.
+type CreatePromptPolicyRequestBody struct {
+	// The policy name. If omitted, a name will be auto-generated.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Natural-language judge instruction.
+	PromptInstruction *string `form:"prompt_instruction,omitempty" json:"prompt_instruction,omitempty" xml:"prompt_instruction,omitempty"`
+	// Message types this policy applies to. When empty or omitted, the policy
+	// scans all supported types.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Policy action: flag or block.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name should be auto-generated.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
+}
+
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
 // "updateRiskPolicy" endpoint HTTP request body.
 type UpdateRiskPolicyRequestBody struct {
@@ -78,6 +94,26 @@ type UpdateRiskPolicyRequestBody struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding. Send an empty string to clear.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+}
+
+// UpdatePromptPolicyRequestBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP request body.
+type UpdatePromptPolicyRequestBody struct {
+	// The policy ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The policy name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Natural-language judge instruction.
+	PromptInstruction *string `form:"prompt_instruction,omitempty" json:"prompt_instruction,omitempty" xml:"prompt_instruction,omitempty"`
+	// Message types this policy applies to. Omit to preserve the current
+	// selection; send an empty array to apply to all types.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Whether the policy is active.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Policy action: flag or block.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name should be auto-generated.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 }
 
 // ApproveShadowMCPRequestBody is the type of the "risk" service
@@ -169,8 +205,65 @@ type CreateRiskPolicyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Policy kind: 'risk' (default) or 'prompt'.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The policy name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Natural-language judge instruction (prompt-based policies only).
+	PromptInstruction *string `form:"prompt_instruction,omitempty" json:"prompt_instruction,omitempty" xml:"prompt_instruction,omitempty"`
+	// Detection sources enabled for this policy.
+	Sources []string `form:"sources" json:"sources" xml:"sources"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
+	// policy author has unchecked within an otherwise-enabled category. Empty
+	// means every rule in the selected categories runs; matching findings are
+	// dropped at scan time.
+	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids enabled for this policy.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types this policy applies to. When empty or omitted, applies to all
+	// types. Valid values: user_message, tool_request, tool_response,
+	// assistant_message.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Whether the policy is active.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only) or block (deny in real-time).
+	Action string `form:"action" json:"action" xml:"action"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Policy version, incremented on each update.
+	Version int64 `form:"version" json:"version" xml:"version"`
+	// When the policy was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the policy was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Number of messages not yet analyzed at the current policy version.
+	PendingMessages int64 `form:"pending_messages" json:"pending_messages" xml:"pending_messages"`
+	// Total number of messages in the project.
+	TotalMessages int64 `form:"total_messages" json:"total_messages" xml:"total_messages"`
+}
+
+// CreatePromptPolicyResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body.
+type CreatePromptPolicyResponseBody struct {
+	// The risk policy ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Policy kind: 'risk' (default) or 'prompt'.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The policy name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Natural-language judge instruction (prompt-based policies only).
+	PromptInstruction *string `form:"prompt_instruction,omitempty" json:"prompt_instruction,omitempty" xml:"prompt_instruction,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -232,8 +325,12 @@ type GetRiskPolicyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Policy kind: 'risk' (default) or 'prompt'.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The policy name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Natural-language judge instruction (prompt-based policies only).
+	PromptInstruction *string `form:"prompt_instruction,omitempty" json:"prompt_instruction,omitempty" xml:"prompt_instruction,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -281,8 +378,65 @@ type UpdateRiskPolicyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Policy kind: 'risk' (default) or 'prompt'.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The policy name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Natural-language judge instruction (prompt-based policies only).
+	PromptInstruction *string `form:"prompt_instruction,omitempty" json:"prompt_instruction,omitempty" xml:"prompt_instruction,omitempty"`
+	// Detection sources enabled for this policy.
+	Sources []string `form:"sources" json:"sources" xml:"sources"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
+	// policy author has unchecked within an otherwise-enabled category. Empty
+	// means every rule in the selected categories runs; matching findings are
+	// dropped at scan time.
+	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids enabled for this policy.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types this policy applies to. When empty or omitted, applies to all
+	// types. Valid values: user_message, tool_request, tool_response,
+	// assistant_message.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Whether the policy is active.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only) or block (deny in real-time).
+	Action string `form:"action" json:"action" xml:"action"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Policy version, incremented on each update.
+	Version int64 `form:"version" json:"version" xml:"version"`
+	// When the policy was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the policy was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Number of messages not yet analyzed at the current policy version.
+	PendingMessages int64 `form:"pending_messages" json:"pending_messages" xml:"pending_messages"`
+	// Total number of messages in the project.
+	TotalMessages int64 `form:"total_messages" json:"total_messages" xml:"total_messages"`
+}
+
+// UpdatePromptPolicyResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body.
+type UpdatePromptPolicyResponseBody struct {
+	// The risk policy ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Policy kind: 'risk' (default) or 'prompt'.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The policy name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Natural-language judge instruction (prompt-based policies only).
+	PromptInstruction *string `form:"prompt_instruction,omitempty" json:"prompt_instruction,omitempty" xml:"prompt_instruction,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -726,6 +880,190 @@ type CreateRiskPolicyUnexpectedResponseBody struct {
 // CreateRiskPolicyGatewayErrorResponseBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP response body for the "gateway_error" error.
 type CreateRiskPolicyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyUnauthorizedResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body for the "unauthorized"
+// error.
+type CreatePromptPolicyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyForbiddenResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body for the "forbidden" error.
+type CreatePromptPolicyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyBadRequestResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body for the "bad_request" error.
+type CreatePromptPolicyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyNotFoundResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body for the "not_found" error.
+type CreatePromptPolicyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyConflictResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body for the "conflict" error.
+type CreatePromptPolicyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyUnsupportedMediaResponseBody is the type of the "risk"
+// service "createPromptPolicy" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreatePromptPolicyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyInvalidResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body for the "invalid" error.
+type CreatePromptPolicyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyInvariantViolationResponseBody is the type of the "risk"
+// service "createPromptPolicy" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreatePromptPolicyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyUnexpectedResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body for the "unexpected" error.
+type CreatePromptPolicyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePromptPolicyGatewayErrorResponseBody is the type of the "risk" service
+// "createPromptPolicy" endpoint HTTP response body for the "gateway_error"
+// error.
+type CreatePromptPolicyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1457,6 +1795,190 @@ type UpdateRiskPolicyUnexpectedResponseBody struct {
 // UpdateRiskPolicyGatewayErrorResponseBody is the type of the "risk" service
 // "updateRiskPolicy" endpoint HTTP response body for the "gateway_error" error.
 type UpdateRiskPolicyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyUnauthorizedResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body for the "unauthorized"
+// error.
+type UpdatePromptPolicyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyForbiddenResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body for the "forbidden" error.
+type UpdatePromptPolicyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyBadRequestResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body for the "bad_request" error.
+type UpdatePromptPolicyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyNotFoundResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body for the "not_found" error.
+type UpdatePromptPolicyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyConflictResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body for the "conflict" error.
+type UpdatePromptPolicyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyUnsupportedMediaResponseBody is the type of the "risk"
+// service "updatePromptPolicy" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdatePromptPolicyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyInvalidResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body for the "invalid" error.
+type UpdatePromptPolicyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyInvariantViolationResponseBody is the type of the "risk"
+// service "updatePromptPolicy" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdatePromptPolicyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyUnexpectedResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body for the "unexpected" error.
+type UpdatePromptPolicyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdatePromptPolicyGatewayErrorResponseBody is the type of the "risk" service
+// "updatePromptPolicy" endpoint HTTP response body for the "gateway_error"
+// error.
+type UpdatePromptPolicyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5211,8 +5733,12 @@ type RiskPolicyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Policy kind: 'risk' (default) or 'prompt'.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The policy name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Natural-language judge instruction (prompt-based policies only).
+	PromptInstruction *string `form:"prompt_instruction,omitempty" json:"prompt_instruction,omitempty" xml:"prompt_instruction,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -5474,18 +6000,92 @@ type TestDetectionRuleMatchResponseBody struct {
 // result of the "createRiskPolicy" endpoint of the "risk" service.
 func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyResponseBody {
 	body := &CreateRiskPolicyResponseBody{
-		ID:              res.ID,
-		ProjectID:       res.ProjectID,
-		Name:            res.Name,
-		Enabled:         res.Enabled,
-		Action:          res.Action,
-		AutoName:        res.AutoName,
-		UserMessage:     res.UserMessage,
-		Version:         res.Version,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
-		PendingMessages: res.PendingMessages,
-		TotalMessages:   res.TotalMessages,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		Kind:              res.Kind,
+		Name:              res.Name,
+		PromptInstruction: res.PromptInstruction,
+		Enabled:           res.Enabled,
+		Action:            res.Action,
+		AutoName:          res.AutoName,
+		UserMessage:       res.UserMessage,
+		Version:           res.Version,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+		PendingMessages:   res.PendingMessages,
+		TotalMessages:     res.TotalMessages,
+	}
+	{
+		var zero string
+		if body.Kind == zero {
+			body.Kind = "risk"
+		}
+	}
+	if res.Sources != nil {
+		body.Sources = make([]string, len(res.Sources))
+		for i, val := range res.Sources {
+			body.Sources[i] = val
+		}
+	} else {
+		body.Sources = []string{}
+	}
+	if res.PresidioEntities != nil {
+		body.PresidioEntities = make([]string, len(res.PresidioEntities))
+		for i, val := range res.PresidioEntities {
+			body.PresidioEntities[i] = val
+		}
+	}
+	if res.PromptInjectionRules != nil {
+		body.PromptInjectionRules = make([]string, len(res.PromptInjectionRules))
+		for i, val := range res.PromptInjectionRules {
+			body.PromptInjectionRules[i] = val
+		}
+	}
+	if res.DisabledRules != nil {
+		body.DisabledRules = make([]string, len(res.DisabledRules))
+		for i, val := range res.DisabledRules {
+			body.DisabledRules[i] = val
+		}
+	}
+	if res.CustomRuleIds != nil {
+		body.CustomRuleIds = make([]string, len(res.CustomRuleIds))
+		for i, val := range res.CustomRuleIds {
+			body.CustomRuleIds[i] = val
+		}
+	}
+	if res.MessageTypes != nil {
+		body.MessageTypes = make([]string, len(res.MessageTypes))
+		for i, val := range res.MessageTypes {
+			body.MessageTypes[i] = val
+		}
+	}
+	return body
+}
+
+// NewCreatePromptPolicyResponseBody builds the HTTP response body from the
+// result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyResponseBody(res *types.RiskPolicy) *CreatePromptPolicyResponseBody {
+	body := &CreatePromptPolicyResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		Kind:              res.Kind,
+		Name:              res.Name,
+		PromptInstruction: res.PromptInstruction,
+		Enabled:           res.Enabled,
+		Action:            res.Action,
+		AutoName:          res.AutoName,
+		UserMessage:       res.UserMessage,
+		Version:           res.Version,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+		PendingMessages:   res.PendingMessages,
+		TotalMessages:     res.TotalMessages,
+	}
+	{
+		var zero string
+		if body.Kind == zero {
+			body.Kind = "risk"
+		}
 	}
 	if res.Sources != nil {
 		body.Sources = make([]string, len(res.Sources))
@@ -5560,18 +6160,26 @@ func NewGetRiskCapabilitiesResponseBody(res *risk.RiskCapabilitiesResult) *GetRi
 // of the "getRiskPolicy" endpoint of the "risk" service.
 func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseBody {
 	body := &GetRiskPolicyResponseBody{
-		ID:              res.ID,
-		ProjectID:       res.ProjectID,
-		Name:            res.Name,
-		Enabled:         res.Enabled,
-		Action:          res.Action,
-		AutoName:        res.AutoName,
-		UserMessage:     res.UserMessage,
-		Version:         res.Version,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
-		PendingMessages: res.PendingMessages,
-		TotalMessages:   res.TotalMessages,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		Kind:              res.Kind,
+		Name:              res.Name,
+		PromptInstruction: res.PromptInstruction,
+		Enabled:           res.Enabled,
+		Action:            res.Action,
+		AutoName:          res.AutoName,
+		UserMessage:       res.UserMessage,
+		Version:           res.Version,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+		PendingMessages:   res.PendingMessages,
+		TotalMessages:     res.TotalMessages,
+	}
+	{
+		var zero string
+		if body.Kind == zero {
+			body.Kind = "risk"
+		}
 	}
 	if res.Sources != nil {
 		body.Sources = make([]string, len(res.Sources))
@@ -5618,18 +6226,92 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 // result of the "updateRiskPolicy" endpoint of the "risk" service.
 func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyResponseBody {
 	body := &UpdateRiskPolicyResponseBody{
-		ID:              res.ID,
-		ProjectID:       res.ProjectID,
-		Name:            res.Name,
-		Enabled:         res.Enabled,
-		Action:          res.Action,
-		AutoName:        res.AutoName,
-		UserMessage:     res.UserMessage,
-		Version:         res.Version,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
-		PendingMessages: res.PendingMessages,
-		TotalMessages:   res.TotalMessages,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		Kind:              res.Kind,
+		Name:              res.Name,
+		PromptInstruction: res.PromptInstruction,
+		Enabled:           res.Enabled,
+		Action:            res.Action,
+		AutoName:          res.AutoName,
+		UserMessage:       res.UserMessage,
+		Version:           res.Version,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+		PendingMessages:   res.PendingMessages,
+		TotalMessages:     res.TotalMessages,
+	}
+	{
+		var zero string
+		if body.Kind == zero {
+			body.Kind = "risk"
+		}
+	}
+	if res.Sources != nil {
+		body.Sources = make([]string, len(res.Sources))
+		for i, val := range res.Sources {
+			body.Sources[i] = val
+		}
+	} else {
+		body.Sources = []string{}
+	}
+	if res.PresidioEntities != nil {
+		body.PresidioEntities = make([]string, len(res.PresidioEntities))
+		for i, val := range res.PresidioEntities {
+			body.PresidioEntities[i] = val
+		}
+	}
+	if res.PromptInjectionRules != nil {
+		body.PromptInjectionRules = make([]string, len(res.PromptInjectionRules))
+		for i, val := range res.PromptInjectionRules {
+			body.PromptInjectionRules[i] = val
+		}
+	}
+	if res.DisabledRules != nil {
+		body.DisabledRules = make([]string, len(res.DisabledRules))
+		for i, val := range res.DisabledRules {
+			body.DisabledRules[i] = val
+		}
+	}
+	if res.CustomRuleIds != nil {
+		body.CustomRuleIds = make([]string, len(res.CustomRuleIds))
+		for i, val := range res.CustomRuleIds {
+			body.CustomRuleIds[i] = val
+		}
+	}
+	if res.MessageTypes != nil {
+		body.MessageTypes = make([]string, len(res.MessageTypes))
+		for i, val := range res.MessageTypes {
+			body.MessageTypes[i] = val
+		}
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyResponseBody builds the HTTP response body from the
+// result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyResponseBody(res *types.RiskPolicy) *UpdatePromptPolicyResponseBody {
+	body := &UpdatePromptPolicyResponseBody{
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		Kind:              res.Kind,
+		Name:              res.Name,
+		PromptInstruction: res.PromptInstruction,
+		Enabled:           res.Enabled,
+		Action:            res.Action,
+		AutoName:          res.AutoName,
+		UserMessage:       res.UserMessage,
+		Version:           res.Version,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+		PendingMessages:   res.PendingMessages,
+		TotalMessages:     res.TotalMessages,
+	}
+	{
+		var zero string
+		if body.Kind == zero {
+			body.Kind = "risk"
+		}
 	}
 	if res.Sources != nil {
 		body.Sources = make([]string, len(res.Sources))
@@ -6160,6 +6842,148 @@ func NewCreateRiskPolicyUnexpectedResponseBody(res *goa.ServiceError) *CreateRis
 // from the result of the "createRiskPolicy" endpoint of the "risk" service.
 func NewCreateRiskPolicyGatewayErrorResponseBody(res *goa.ServiceError) *CreateRiskPolicyGatewayErrorResponseBody {
 	body := &CreateRiskPolicyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyUnauthorizedResponseBody(res *goa.ServiceError) *CreatePromptPolicyUnauthorizedResponseBody {
+	body := &CreatePromptPolicyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyForbiddenResponseBody builds the HTTP response body
+// from the result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyForbiddenResponseBody(res *goa.ServiceError) *CreatePromptPolicyForbiddenResponseBody {
+	body := &CreatePromptPolicyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyBadRequestResponseBody builds the HTTP response body
+// from the result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyBadRequestResponseBody(res *goa.ServiceError) *CreatePromptPolicyBadRequestResponseBody {
+	body := &CreatePromptPolicyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyNotFoundResponseBody builds the HTTP response body from
+// the result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyNotFoundResponseBody(res *goa.ServiceError) *CreatePromptPolicyNotFoundResponseBody {
+	body := &CreatePromptPolicyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyConflictResponseBody builds the HTTP response body from
+// the result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyConflictResponseBody(res *goa.ServiceError) *CreatePromptPolicyConflictResponseBody {
+	body := &CreatePromptPolicyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createPromptPolicy" endpoint of the "risk"
+// service.
+func NewCreatePromptPolicyUnsupportedMediaResponseBody(res *goa.ServiceError) *CreatePromptPolicyUnsupportedMediaResponseBody {
+	body := &CreatePromptPolicyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyInvalidResponseBody builds the HTTP response body from
+// the result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyInvalidResponseBody(res *goa.ServiceError) *CreatePromptPolicyInvalidResponseBody {
+	body := &CreatePromptPolicyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createPromptPolicy" endpoint of the "risk"
+// service.
+func NewCreatePromptPolicyInvariantViolationResponseBody(res *goa.ServiceError) *CreatePromptPolicyInvariantViolationResponseBody {
+	body := &CreatePromptPolicyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyUnexpectedResponseBody(res *goa.ServiceError) *CreatePromptPolicyUnexpectedResponseBody {
+	body := &CreatePromptPolicyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePromptPolicyGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createPromptPolicy" endpoint of the "risk" service.
+func NewCreatePromptPolicyGatewayErrorResponseBody(res *goa.ServiceError) *CreatePromptPolicyGatewayErrorResponseBody {
+	body := &CreatePromptPolicyGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6726,6 +7550,148 @@ func NewUpdateRiskPolicyUnexpectedResponseBody(res *goa.ServiceError) *UpdateRis
 // from the result of the "updateRiskPolicy" endpoint of the "risk" service.
 func NewUpdateRiskPolicyGatewayErrorResponseBody(res *goa.ServiceError) *UpdateRiskPolicyGatewayErrorResponseBody {
 	body := &UpdateRiskPolicyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyUnauthorizedResponseBody(res *goa.ServiceError) *UpdatePromptPolicyUnauthorizedResponseBody {
+	body := &UpdatePromptPolicyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyForbiddenResponseBody builds the HTTP response body
+// from the result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyForbiddenResponseBody(res *goa.ServiceError) *UpdatePromptPolicyForbiddenResponseBody {
+	body := &UpdatePromptPolicyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyBadRequestResponseBody builds the HTTP response body
+// from the result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyBadRequestResponseBody(res *goa.ServiceError) *UpdatePromptPolicyBadRequestResponseBody {
+	body := &UpdatePromptPolicyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyNotFoundResponseBody builds the HTTP response body from
+// the result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyNotFoundResponseBody(res *goa.ServiceError) *UpdatePromptPolicyNotFoundResponseBody {
+	body := &UpdatePromptPolicyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyConflictResponseBody builds the HTTP response body from
+// the result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyConflictResponseBody(res *goa.ServiceError) *UpdatePromptPolicyConflictResponseBody {
+	body := &UpdatePromptPolicyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updatePromptPolicy" endpoint of the "risk"
+// service.
+func NewUpdatePromptPolicyUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdatePromptPolicyUnsupportedMediaResponseBody {
+	body := &UpdatePromptPolicyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyInvalidResponseBody builds the HTTP response body from
+// the result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyInvalidResponseBody(res *goa.ServiceError) *UpdatePromptPolicyInvalidResponseBody {
+	body := &UpdatePromptPolicyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updatePromptPolicy" endpoint of the "risk"
+// service.
+func NewUpdatePromptPolicyInvariantViolationResponseBody(res *goa.ServiceError) *UpdatePromptPolicyInvariantViolationResponseBody {
+	body := &UpdatePromptPolicyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyUnexpectedResponseBody(res *goa.ServiceError) *UpdatePromptPolicyUnexpectedResponseBody {
+	body := &UpdatePromptPolicyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdatePromptPolicyGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updatePromptPolicy" endpoint of the "risk" service.
+func NewUpdatePromptPolicyGatewayErrorResponseBody(res *goa.ServiceError) *UpdatePromptPolicyGatewayErrorResponseBody {
+	body := &UpdatePromptPolicyGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9714,6 +10680,33 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 	return v
 }
 
+// NewCreatePromptPolicyPayload builds a risk service createPromptPolicy
+// endpoint payload.
+func NewCreatePromptPolicyPayload(body *CreatePromptPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreatePromptPolicyPayload {
+	v := &risk.CreatePromptPolicyPayload{
+		Name:              body.Name,
+		PromptInstruction: *body.PromptInstruction,
+		AutoName:          body.AutoName,
+	}
+	if body.Action != nil {
+		v.Action = *body.Action
+	}
+	if body.MessageTypes != nil {
+		v.MessageTypes = make([]string, len(body.MessageTypes))
+		for i, val := range body.MessageTypes {
+			v.MessageTypes[i] = val
+		}
+	}
+	if body.Action == nil {
+		v.Action = "flag"
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListRiskPoliciesPayload builds a risk service listRiskPolicies endpoint
 // payload.
 func NewListRiskPoliciesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskPoliciesPayload {
@@ -9787,6 +10780,30 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
 		}
+	}
+	if body.MessageTypes != nil {
+		v.MessageTypes = make([]string, len(body.MessageTypes))
+		for i, val := range body.MessageTypes {
+			v.MessageTypes[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdatePromptPolicyPayload builds a risk service updatePromptPolicy
+// endpoint payload.
+func NewUpdatePromptPolicyPayload(body *UpdatePromptPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdatePromptPolicyPayload {
+	v := &risk.UpdatePromptPolicyPayload{
+		ID:                *body.ID,
+		Name:              body.Name,
+		PromptInstruction: body.PromptInstruction,
+		Enabled:           body.Enabled,
+		Action:            body.Action,
+		AutoName:          body.AutoName,
 	}
 	if body.MessageTypes != nil {
 		v.MessageTypes = make([]string, len(body.MessageTypes))
@@ -10111,6 +11128,20 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 	return
 }
 
+// ValidateCreatePromptPolicyRequestBody runs the validations defined on
+// CreatePromptPolicyRequestBody
+func ValidateCreatePromptPolicyRequestBody(body *CreatePromptPolicyRequestBody) (err error) {
+	if body.PromptInstruction == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_instruction", "body"))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "flag" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+		}
+	}
+	return
+}
+
 // ValidateUpdateRiskPolicyRequestBody runs the validations defined on
 // UpdateRiskPolicyRequestBody
 func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err error) {
@@ -10119,6 +11150,23 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "flag" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+		}
+	}
+	return
+}
+
+// ValidateUpdatePromptPolicyRequestBody runs the validations defined on
+// UpdatePromptPolicyRequestBody
+func ValidateUpdatePromptPolicyRequestBody(body *UpdatePromptPolicyRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

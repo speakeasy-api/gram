@@ -17,10 +17,12 @@ import (
 // Endpoints wraps the "risk" service endpoints.
 type Endpoints struct {
 	CreateRiskPolicy           goa.Endpoint
+	CreatePromptPolicy         goa.Endpoint
 	ListRiskPolicies           goa.Endpoint
 	GetRiskCapabilities        goa.Endpoint
 	GetRiskPolicy              goa.Endpoint
 	UpdateRiskPolicy           goa.Endpoint
+	UpdatePromptPolicy         goa.Endpoint
 	DeleteRiskPolicy           goa.Endpoint
 	ListRiskResults            goa.Endpoint
 	ListRiskResultsForAgent    goa.Endpoint
@@ -49,10 +51,12 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		CreateRiskPolicy:           NewCreateRiskPolicyEndpoint(s, a.APIKeyAuth),
+		CreatePromptPolicy:         NewCreatePromptPolicyEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicies:           NewListRiskPoliciesEndpoint(s, a.APIKeyAuth),
 		GetRiskCapabilities:        NewGetRiskCapabilitiesEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicy:              NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
 		UpdateRiskPolicy:           NewUpdateRiskPolicyEndpoint(s, a.APIKeyAuth),
+		UpdatePromptPolicy:         NewUpdatePromptPolicyEndpoint(s, a.APIKeyAuth),
 		DeleteRiskPolicy:           NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
 		ListRiskResults:            NewListRiskResultsEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsForAgent:    NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
@@ -79,10 +83,12 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "risk" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRiskPolicy = m(e.CreateRiskPolicy)
+	e.CreatePromptPolicy = m(e.CreatePromptPolicy)
 	e.ListRiskPolicies = m(e.ListRiskPolicies)
 	e.GetRiskCapabilities = m(e.GetRiskCapabilities)
 	e.GetRiskPolicy = m(e.GetRiskPolicy)
 	e.UpdateRiskPolicy = m(e.UpdateRiskPolicy)
+	e.UpdatePromptPolicy = m(e.UpdatePromptPolicy)
 	e.DeleteRiskPolicy = m(e.DeleteRiskPolicy)
 	e.ListRiskResults = m(e.ListRiskResults)
 	e.ListRiskResultsForAgent = m(e.ListRiskResultsForAgent)
@@ -161,6 +167,65 @@ func NewCreateRiskPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.CreateRiskPolicy(ctx, p)
+	}
+}
+
+// NewCreatePromptPolicyEndpoint returns an endpoint function that calls the
+// method "createPromptPolicy" of service "risk".
+func NewCreatePromptPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreatePromptPolicyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreatePromptPolicy(ctx, p)
 	}
 }
 
@@ -397,6 +462,65 @@ func NewUpdateRiskPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.UpdateRiskPolicy(ctx, p)
+	}
+}
+
+// NewUpdatePromptPolicyEndpoint returns an endpoint function that calls the
+// method "updatePromptPolicy" of service "risk".
+func NewUpdatePromptPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdatePromptPolicyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdatePromptPolicy(ctx, p)
 	}
 }
 

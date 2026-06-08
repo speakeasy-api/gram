@@ -53,6 +53,40 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicy", "type": "mutation"}`)
 	})
 
+	Method("createPromptPolicy", func() {
+		Description("Create a new prompt-based policy for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("name", String, "The policy name. If omitted, a name will be auto-generated.")
+			Attribute("prompt_instruction", String, "Natural-language judge instruction.")
+			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
+			Attribute("action", String, "Policy action: flag or block.", func() {
+				shared.RiskPolicyActionEnum()
+				Default("flag")
+			})
+			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
+			Required("prompt_instruction")
+		})
+
+		Result(shared.RiskPolicy)
+
+		HTTP(func() {
+			POST("/rpc/risk.promptPolicies.create")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createPromptPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.promptPolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "createPromptPolicy")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePromptPolicy", "type": "mutation"}`)
+	})
+
 	Method("listRiskPolicies", func() {
 		Description("List all risk analysis policies for the current project.")
 
@@ -171,6 +205,43 @@ var _ = Service("risk", func() {
 		Meta("openapi:operationId", "updateRiskPolicy")
 		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
 		Meta("openapi:extension:x-speakeasy-name-override", "update")
+	})
+
+	Method("updatePromptPolicy", func() {
+		Description("Update a prompt-based policy.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("name", String, "The policy name.")
+			Attribute("prompt_instruction", String, "Natural-language judge instruction.")
+			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
+			Attribute("enabled", Boolean, "Whether the policy is active.")
+			Attribute("action", String, "Policy action: flag or block.", func() {
+				shared.RiskPolicyActionEnum()
+			})
+			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
+			Required("id")
+		})
+
+		Result(shared.RiskPolicy)
+
+		HTTP(func() {
+			PUT("/rpc/risk.promptPolicies.update")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updatePromptPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.promptPolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "updatePromptPolicy")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUpdatePromptPolicy", "type": "mutation"}`)
 	})
 
 	Method("deleteRiskPolicy", func() {

@@ -19,6 +19,8 @@ import (
 type Service interface {
 	// Create a new risk analysis policy for the current project.
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
+	// Create a new prompt-based policy for the current project.
+	CreatePromptPolicy(context.Context, *CreatePromptPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
 	// Get server-side risk analysis capabilities for the current project.
@@ -27,6 +29,8 @@ type Service interface {
 	GetRiskPolicy(context.Context, *GetRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Update a risk analysis policy.
 	UpdateRiskPolicy(context.Context, *UpdateRiskPolicyPayload) (res *types.RiskPolicy, err error)
+	// Update a prompt-based policy.
+	UpdatePromptPolicy(context.Context, *UpdatePromptPolicyPayload) (res *types.RiskPolicy, err error)
 	// Delete a risk analysis policy.
 	DeleteRiskPolicy(context.Context, *DeleteRiskPolicyPayload) (err error)
 	// List risk analysis results for the current project.
@@ -113,7 +117,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [25]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [27]string{"createRiskPolicy", "createPromptPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "updatePromptPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -145,6 +149,25 @@ type CreateCustomDetectionRulePayload struct {
 	Regex string
 	// Severity level for findings produced by this rule.
 	Severity string
+}
+
+// CreatePromptPolicyPayload is the payload type of the risk service
+// createPromptPolicy method.
+type CreatePromptPolicyPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The policy name. If omitted, a name will be auto-generated.
+	Name *string
+	// Natural-language judge instruction.
+	PromptInstruction string
+	// Message types this policy applies to. When empty or omitted, the policy
+	// scans all supported types.
+	MessageTypes []string
+	// Policy action: flag or block.
+	Action string
+	// Whether the policy name should be auto-generated.
+	AutoName *bool
 }
 
 // CreateRiskPolicyPayload is the payload type of the risk service
@@ -692,6 +715,29 @@ type UpdateCustomDetectionRulePayload struct {
 	Regex string
 	// Severity level for findings produced by this rule.
 	Severity string
+}
+
+// UpdatePromptPolicyPayload is the payload type of the risk service
+// updatePromptPolicy method.
+type UpdatePromptPolicyPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The policy ID.
+	ID string
+	// The policy name.
+	Name *string
+	// Natural-language judge instruction.
+	PromptInstruction *string
+	// Message types this policy applies to. Omit to preserve the current
+	// selection; send an empty array to apply to all types.
+	MessageTypes []string
+	// Whether the policy is active.
+	Enabled *bool
+	// Policy action: flag or block.
+	Action *string
+	// Whether the policy name should be auto-generated.
+	AutoName *bool
 }
 
 // UpdateRiskPolicyPayload is the payload type of the risk service

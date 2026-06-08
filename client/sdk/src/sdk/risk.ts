@@ -9,6 +9,7 @@ import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
+import { PromptPolicies } from "./promptpolicies.js";
 import { Results } from "./results.js";
 import { Rules } from "./rules.js";
 
@@ -41,6 +42,11 @@ export class Risk extends ClientSDK {
   private _policies?: Policies;
   get policies(): Policies {
     return (this._policies ??= new Policies(this._options));
+  }
+
+  private _promptPolicies?: PromptPolicies;
+  get promptPolicies(): PromptPolicies {
+    return (this._promptPolicies ??= new PromptPolicies(this._options));
   }
 
   private _results?: Results;

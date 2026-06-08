@@ -17,10 +17,12 @@ import (
 // Client is the "risk" service client.
 type Client struct {
 	CreateRiskPolicyEndpoint           goa.Endpoint
+	CreatePromptPolicyEndpoint         goa.Endpoint
 	ListRiskPoliciesEndpoint           goa.Endpoint
 	GetRiskCapabilitiesEndpoint        goa.Endpoint
 	GetRiskPolicyEndpoint              goa.Endpoint
 	UpdateRiskPolicyEndpoint           goa.Endpoint
+	UpdatePromptPolicyEndpoint         goa.Endpoint
 	DeleteRiskPolicyEndpoint           goa.Endpoint
 	ListRiskResultsEndpoint            goa.Endpoint
 	ListRiskResultsForAgentEndpoint    goa.Endpoint
@@ -44,13 +46,15 @@ type Client struct {
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskCapabilities, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, listShadowMCPApprovals, approveShadowMCP, revokeShadowMCPApproval, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, createPromptPolicy, listRiskPolicies, getRiskCapabilities, getRiskPolicy, updateRiskPolicy, updatePromptPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, listShadowMCPApprovals, approveShadowMCP, revokeShadowMCPApproval, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:           createRiskPolicy,
+		CreatePromptPolicyEndpoint:         createPromptPolicy,
 		ListRiskPoliciesEndpoint:           listRiskPolicies,
 		GetRiskCapabilitiesEndpoint:        getRiskCapabilities,
 		GetRiskPolicyEndpoint:              getRiskPolicy,
 		UpdateRiskPolicyEndpoint:           updateRiskPolicy,
+		UpdatePromptPolicyEndpoint:         updatePromptPolicy,
 		DeleteRiskPolicyEndpoint:           deleteRiskPolicy,
 		ListRiskResultsEndpoint:            listRiskResults,
 		ListRiskResultsForAgentEndpoint:    listRiskResultsForAgent,
@@ -90,6 +94,29 @@ func NewClient(createRiskPolicy, listRiskPolicies, getRiskCapabilities, getRiskP
 func (c *Client) CreateRiskPolicy(ctx context.Context, p *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error) {
 	var ires any
 	ires, err = c.CreateRiskPolicyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskPolicy), nil
+}
+
+// CreatePromptPolicy calls the "createPromptPolicy" endpoint of the "risk"
+// service.
+// CreatePromptPolicy may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreatePromptPolicy(ctx context.Context, p *CreatePromptPolicyPayload) (res *types.RiskPolicy, err error) {
+	var ires any
+	ires, err = c.CreatePromptPolicyEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -179,6 +206,29 @@ func (c *Client) GetRiskPolicy(ctx context.Context, p *GetRiskPolicyPayload) (re
 func (c *Client) UpdateRiskPolicy(ctx context.Context, p *UpdateRiskPolicyPayload) (res *types.RiskPolicy, err error) {
 	var ires any
 	ires, err = c.UpdateRiskPolicyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskPolicy), nil
+}
+
+// UpdatePromptPolicy calls the "updatePromptPolicy" endpoint of the "risk"
+// service.
+// UpdatePromptPolicy may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdatePromptPolicy(ctx context.Context, p *UpdatePromptPolicyPayload) (res *types.RiskPolicy, err error) {
+	var ires any
+	ires, err = c.UpdatePromptPolicyEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
