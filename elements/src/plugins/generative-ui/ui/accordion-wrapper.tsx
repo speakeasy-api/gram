@@ -19,7 +19,7 @@ export interface AccordionWrapperProps {
 export function AccordionWrapper({
   type = "single",
   children,
-}: AccordionWrapperProps) {
+}: AccordionWrapperProps): React.JSX.Element {
   // Type assertion needed because Radix types are complex
   const AccordionRoot = AccordionPrimitive as React.FC<{
     type: "single" | "multiple";
@@ -47,7 +47,7 @@ export function AccordionItemWrapper({
   value,
   title,
   children,
-}: AccordionItemWrapperProps) {
+}: AccordionItemWrapperProps): React.JSX.Element {
   return (
     <AccordionItemPrimitive value={value}>
       <AccordionTrigger>{title}</AccordionTrigger>

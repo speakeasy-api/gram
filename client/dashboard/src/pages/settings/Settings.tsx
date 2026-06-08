@@ -8,7 +8,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 
-export default function Settings() {
+export default function Settings(): JSX.Element {
   const isAdmin = useIsAdmin();
   const organization = useOrganization();
   const project = useProject();

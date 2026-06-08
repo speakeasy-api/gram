@@ -24,7 +24,7 @@ function toServerSlug(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export interface SaveResult {
+interface SaveResult {
   /** True if a new environment was created by this save. */
   created: boolean;
   /** True if the save was skipped (nothing meaningful to persist). */
@@ -109,7 +109,7 @@ export function usePlaygroundEnvironment(
               },
             },
           });
-          invalidateAllListEnvironments(queryClient);
+          void invalidateAllListEnvironments(queryClient);
           return { created: true, skipped: false };
         }
         await updateMutation.mutateAsync({
@@ -121,7 +121,7 @@ export function usePlaygroundEnvironment(
             },
           },
         });
-        invalidateAllListEnvironments(queryClient);
+        void invalidateAllListEnvironments(queryClient);
         return { created: false, skipped: false };
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";

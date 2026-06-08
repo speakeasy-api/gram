@@ -211,8 +211,8 @@ describe("useExternalMcpReleaseWorkflow", () => {
     const state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
     expect(state.serverConfigs).toHaveLength(1);
-    expect(state.serverConfigs[0].name).toBe("My Server");
-    expect(state.serverConfigs[0].server).toBe(servers[0]);
+    expect(state.serverConfigs[0]!.name).toBe("My Server");
+    expect(state.serverConfigs[0]!.server).toBe(servers[0]);
   });
 
   it("falls back to registrySpecifier when title is missing", () => {
@@ -224,7 +224,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
     );
     const state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
-    expect(state.serverConfigs[0].name).toBe("org/fallback");
+    expect(state.serverConfigs[0]!.name).toBe("org/fallback");
   });
 
   it("re-initializes serverConfigs when servers prop changes", () => {
@@ -236,11 +236,11 @@ describe("useExternalMcpReleaseWorkflow", () => {
     );
     let state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
-    expect(state.serverConfigs[0].name).toBe("First");
+    expect(state.serverConfigs[0]!.name).toBe("First");
     rerender({ servers: servers2 });
     state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
-    expect(state.serverConfigs[0].name).toBe("Second");
+    expect(state.serverConfigs[0]!.name).toBe("Second");
   });
 
   // -------------------------------------------------------------------------
@@ -286,7 +286,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
     });
     const state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
-    expect(state.serverConfigs[0].name).toBe("Renamed");
+    expect(state.serverConfigs[0]!.name).toBe("Renamed");
   });
 
   // -------------------------------------------------------------------------
@@ -406,7 +406,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       const state = result.current;
       if (state.phase !== "configure") throw new Error("unexpected phase");
       expect(state.serverConfigs).toHaveLength(1);
-      expect(state.serverConfigs[0].name).toBe("Existing Copy");
+      expect(state.serverConfigs[0]!.name).toBe("Existing Copy");
     });
   });
 
@@ -496,7 +496,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
 
       let state = result.current;
       if (state.phase !== "configure") throw new Error("unexpected phase");
-      expect(state.serverConfigs[0].name).toBe("Pet Store");
+      expect(state.serverConfigs[0]!.name).toBe("Pet Store");
 
       await act(async () => {
         state = result.current;
@@ -795,8 +795,8 @@ describe("useExternalMcpReleaseWorkflow", () => {
       const state = result.current;
       if (state.phase !== "complete") throw new Error("unexpected phase");
       expect(state.toolsetStatuses).toHaveLength(1);
-      expect(state.toolsetStatuses[0].name).toBe("My Server");
-      expect(state.toolsetStatuses[0].slug).toBe("my-server");
+      expect(state.toolsetStatuses[0]!.name).toBe("My Server");
+      expect(state.toolsetStatuses[0]!.slug).toBe("my-server");
     });
 
     it("transitions to error when deployment status becomes failed", async () => {
@@ -862,7 +862,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       expect(mockToolsetsCreate).toHaveBeenCalledWith(
@@ -892,8 +892,8 @@ describe("useExternalMcpReleaseWorkflow", () => {
       );
       const state = result.current;
       if (state.phase !== "complete") throw new Error("unexpected phase");
-      expect(state.toolsetStatuses[0].toolsetSlug).toBe("my-server");
-      expect(state.toolsetStatuses[0].mcpSlug).toBe("mcp-my-server");
+      expect(state.toolsetStatuses[0]!.toolsetSlug).toBe("my-server");
+      expect(state.toolsetStatuses[0]!.mcpSlug).toBe("mcp-my-server");
     });
 
     it("creates a fork by deploying a new attachment under a distinct slug", async () => {
@@ -962,7 +962,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       expect(mockToolsetsCreate).toHaveBeenCalledWith(
@@ -1007,7 +1007,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       expect(mockToolsetsCreate).toHaveBeenCalledWith(
@@ -1067,7 +1067,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
@@ -1195,7 +1195,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
@@ -1245,12 +1245,12 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("failed");
+        expect(state.toolsetStatuses[0]!.status).toBe("failed");
       });
 
       const state = result.current;
       if (state.phase !== "complete") throw new Error("unexpected phase");
-      expect(state.toolsetStatuses[0].error).toBe("quota exceeded");
+      expect(state.toolsetStatuses[0]!.error).toBe("quota exceeded");
     });
 
     it("passes gram-project header during toolset creation", async () => {
@@ -1275,7 +1275,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       const reqOpts = { headers: { "gram-project": "proj-1" } };
@@ -1323,7 +1323,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       expect(result.current.phase).toBe("configure");
       const state = result.current;
       if (state.phase !== "configure") throw new Error("unexpected phase");
-      expect(state.serverConfigs[0].name).toBe("S");
+      expect(state.serverConfigs[0]!.name).toBe("S");
     });
   });
 });

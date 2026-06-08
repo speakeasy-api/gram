@@ -36,7 +36,7 @@ carries when `role === "tool"`.
 
 ### role
 
-> **role**: `"tool"` \| `"system"` \| `"developer"` \| `"user"` \| `"assistant"`
+> **role**: `"system"` \| `"developer"` \| `"user"` \| `"assistant"` \| `"tool"`
 
 ***
 

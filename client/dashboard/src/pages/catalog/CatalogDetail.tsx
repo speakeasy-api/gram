@@ -36,11 +36,11 @@ const SERVER_WEBSITE_MAP: Record<string, string> = {
   "com.notion/mcp": "notion.so",
 };
 
-export function CatalogDetailRoot() {
+export function CatalogDetailRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function CatalogDetail() {
+export default function CatalogDetail(): JSX.Element {
   const { serverSpecifier } = useParams<{ serverSpecifier: string }>();
   const routes = useRoutes();
   const client = useSdkClient();
@@ -440,7 +440,9 @@ export default function CatalogDetail() {
           servers={[server]}
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
-          onServersAdded={() => refetchDeployment()}
+          onServersAdded={() => {
+            void refetchDeployment();
+          }}
         />
       </Page.Body>
     </Page>
@@ -483,7 +485,9 @@ function ToolCard({ tool }: { tool: Tool }) {
   return (
     <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden rounded-lg p-3">
       <button
-        onClick={() => hasMoreContent && setIsExpanded(!isExpanded)}
+        onClick={() => {
+          void (hasMoreContent && setIsExpanded(!isExpanded));
+        }}
         className={`flex w-full flex-col gap-1 text-left ${hasMoreContent ? "cursor-pointer" : "cursor-default"}`}
       >
         <Stack

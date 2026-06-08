@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router";
 import { useSidebar } from "@/components/ui/sidebar-context";
 import { NewAssistantOnboarding } from "./onboarding/AssistantOnboarding";
 
-export default function NewAssistantPage() {
+export default function NewAssistantPage(): JSX.Element {
   const { setOpen } = useSidebar();
   const [searchParams, setSearchParams] = useSearchParams();
 

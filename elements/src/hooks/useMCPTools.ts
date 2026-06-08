@@ -42,10 +42,10 @@ export function useMCPTools({
   );
 
   const envQueryKey = Object.entries(environment ?? {}).map(
-    ([k, v]) => `${k}:${v}`,
+    ([k, v]) => `${k}:${String(v)}`,
   );
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
-    ([k, v]) => `${k}:${v}`,
+    ([k, v]) => `${k}:${String(v)}`,
   );
   const serversQueryKey = servers.map(
     (s) => `${s.url}|${s.name ?? ""}|${s.environment ?? ""}`,

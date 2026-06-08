@@ -1,6 +1,6 @@
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 
-export function getHttpStatusCode(error: unknown): number | undefined {
+function getHttpStatusCode(error: unknown): number | undefined {
   if (error instanceof GramError) {
     return error.statusCode;
   }

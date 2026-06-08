@@ -5,7 +5,7 @@ export const ProductTierBadge = ({
   tierOverride,
 }: {
   tierOverride?: ProductTier;
-}) => {
+}): JSX.Element => {
   const productTier = useProductTier();
 
   const finalTier = tierOverride ?? productTier;

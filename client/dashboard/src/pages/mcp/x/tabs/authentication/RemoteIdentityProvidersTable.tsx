@@ -27,7 +27,7 @@ export function RemoteIdentityProvidersTable({
   // tooltip. Used to surface the temporary single-provider constraint until
   // multi-client support lands.
   attachDisabledReason?: string;
-}) {
+}): JSX.Element {
   return (
     <section>
       <Heading variant="h4" className="mb-3">

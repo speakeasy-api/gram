@@ -23,7 +23,7 @@ export function SelectWrapper({
   placeholder,
   valuePath,
   options,
-}: SelectWrapperProps) {
+}: SelectWrapperProps): React.JSX.Element {
   return (
     <Select name={valuePath}>
       <SelectTrigger data-value-path={valuePath}>

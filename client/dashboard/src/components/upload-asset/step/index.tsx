@@ -12,7 +12,7 @@ type StepProps = {
   step: number;
 };
 
-export default function Step({ children, step }: StepProps) {
+export default function Step({ children, step }: StepProps): React.JSX.Element {
   const stepper = useStepper();
 
   stepper.registerStep(step);

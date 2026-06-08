@@ -21,7 +21,7 @@ import { useToolsets } from "@/pages/toolsets/useToolsets";
 import { StatusBadge } from "./SlackApp";
 import { buildDeepLinkUrl, buildInviteUrl } from "./slackManifest";
 
-export default function SlackAppDetailPage() {
+export default function SlackAppDetailPage(): JSX.Element {
   const routes = useRoutes();
   const queryClient = useQueryClient();
   const { slackAppId } = useParams<{ slackAppId: string }>();
@@ -36,7 +36,7 @@ export default function SlackAppDetailPage() {
   const handleDelete = async () => {
     if (!slackAppId) return;
     await deleteMutation.mutateAsync({ request: { id: slackAppId } });
-    invalidateAllListSlackApps(queryClient);
+    void invalidateAllListSlackApps(queryClient);
     routes.slackApps.goTo();
   };
 
@@ -120,7 +120,7 @@ export default function SlackAppDetailPage() {
               </Button>
               <Button
                 variant="destructive-primary"
-                onClick={handleDelete}
+                onClick={() => void handleDelete()}
                 disabled={deleteMutation.isPending}
               >
                 {deleteMutation.isPending ? "Deleting..." : "Delete Assistant"}
@@ -158,8 +158,8 @@ function DraftState({ app }: { app: SlackAppResult }) {
         },
       },
     });
-    invalidateGetSlackApp(queryClient, [{ id: app.id }]);
-    invalidateAllListSlackApps(queryClient);
+    void invalidateGetSlackApp(queryClient, [{ id: app.id }]);
+    void invalidateAllListSlackApps(queryClient);
   };
 
   return (
@@ -174,7 +174,9 @@ function DraftState({ app }: { app: SlackAppResult }) {
         </Type>
         <Button
           variant="secondary"
-          onClick={() => window.open(deepLinkUrl, "_blank")}
+          onClick={() => {
+            void window.open(deepLinkUrl, "_blank");
+          }}
         >
           <Button.LeftIcon>
             <Icon name="external-link" className="h-4 w-4" />
@@ -229,7 +231,7 @@ function DraftState({ app }: { app: SlackAppResult }) {
 
       <div>
         <Button
-          onClick={handleConfigure}
+          onClick={() => void handleConfigure()}
           disabled={!isValid || configureMutation.isPending}
         >
           {configureMutation.isPending ? "Configuring..." : "Configure"}
@@ -277,8 +279,8 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
         },
         {
           onSuccess: () => {
-            invalidateGetSlackApp(queryClient, [{ id: app.id }]);
-            invalidateAllListSlackApps(queryClient);
+            void invalidateGetSlackApp(queryClient, [{ id: app.id }]);
+            void invalidateAllListSlackApps(queryClient);
           },
         },
       );
@@ -307,14 +309,20 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => window.open("https://api.slack.com/apps", "_blank")}
+          onClick={() => {
+            void window.open("https://api.slack.com/apps", "_blank");
+          }}
         >
           <Button.LeftIcon>
             <Icon name="external-link" className="h-3.5 w-3.5" />
           </Button.LeftIcon>
           <Button.Text>Manage on Slack</Button.Text>
         </Button>
-        <Button variant="secondary" size="sm" onClick={handleCopyInviteLink}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void handleCopyInviteLink()}
+        >
           <Button.LeftIcon>
             <Icon name={copied ? "check" : "copy"} className="h-3.5 w-3.5" />
           </Button.LeftIcon>
@@ -398,7 +406,7 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
             <Button
               variant="secondary"
               size="sm"
-              onClick={handleCopyInviteLink}
+              onClick={() => void handleCopyInviteLink()}
             >
               <Button.LeftIcon>
                 <Icon

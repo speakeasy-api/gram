@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
  * Shared skeleton component used across all observability pages
  * (Insights, Agent Sessions, Logs) when logs are disabled.
  */
-export function ObservabilitySkeleton() {
+export function ObservabilitySkeleton(): JSX.Element {
   return (
     <div className="flex flex-col gap-6 overflow-hidden p-6">
       <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">

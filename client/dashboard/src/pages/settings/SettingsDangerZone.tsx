@@ -13,7 +13,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
-export function SettingsDangerZone() {
+export function SettingsDangerZone(): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
   const navigate = useNavigate();
@@ -34,7 +34,7 @@ export function SettingsDangerZone() {
         { organizationId: organization.id },
       ]);
       toast.success("Project deleted successfully");
-      navigate(`/${organization.slug}/default/settings`);
+      void navigate(`/${organization.slug}/default/settings`);
     },
     onError: (error) => {
       console.error("Failed to delete project:", error);

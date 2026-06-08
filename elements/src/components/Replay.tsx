@@ -63,17 +63,20 @@ export const Replay = ({
   userMessageDelay,
   assistantStartDelay,
   onComplete,
-}: ReplayProps) => {
-  const replayOptions: ReplayOptions = {
-    typingSpeed,
-    userMessageDelay,
-    assistantStartDelay,
-    onComplete,
-  };
+}: ReplayProps): React.JSX.Element => {
+  const replayOptions = useMemo<ReplayOptions>(
+    () => ({
+      typingSpeed,
+      userMessageDelay,
+      assistantStartDelay,
+      onComplete,
+    }),
+    [typingSpeed, userMessageDelay, assistantStartDelay, onComplete],
+  );
 
   const transport = useMemo(
     () => createReplayTransport(cassette, replayOptions),
-    [cassette, typingSpeed, userMessageDelay, assistantStartDelay, onComplete],
+    [cassette, replayOptions],
   );
 
   const runtime = useChatRuntime({ transport });
@@ -108,6 +111,7 @@ export const Replay = ({
       setIsOpen: () => {},
       plugins,
       mcpTools: undefined,
+      mcpToolsLoading: false,
     }),
     [config, plugins],
   );
@@ -148,7 +152,9 @@ export const Replay = ({
 // ---------------------------------------------------------------------------
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -238,11 +244,12 @@ const ReplayController = ({ cassette, options }: ReplayControllerProps) => {
       options.onComplete?.();
     };
 
-    runReplay();
+    void runReplay();
 
     return () => {
       cancelled = true;
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- run-once driver, see hasStarted ref
   }, []);
 
   return null;

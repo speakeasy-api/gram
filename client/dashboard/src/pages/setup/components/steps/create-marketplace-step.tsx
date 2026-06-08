@@ -18,7 +18,7 @@ interface CreateMarketplaceStepProps {
 export function CreateMarketplaceStep({
   onComplete,
   onBack,
-}: CreateMarketplaceStepProps) {
+}: CreateMarketplaceStepProps): JSX.Element {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"publish" | "manage">("publish");
@@ -27,7 +27,7 @@ export function CreateMarketplaceStep({
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
       setDialogOpen(false);
-      invalidateAllPublishStatus(queryClient);
+      void invalidateAllPublishStatus(queryClient);
       toast.success(
         dialogMode === "manage"
           ? "Collaborators added"

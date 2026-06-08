@@ -18,7 +18,7 @@ export function EnvironmentDropdown({
   label?: string;
   visibilityThreshold?: number;
   className?: string;
-}) {
+}): JSX.Element | null {
   const { data: environments } = useListEnvironments();
 
   const allItems = useMemo(() => {

@@ -39,6 +39,9 @@ import { useInstance } from "@gram/client/react-query/index.js";
 import {
   jsonSchema,
   lastAssistantMessageIsCompleteWithToolCalls,
+  type Schema,
+  type ToolSet,
+  type ToolUIPart,
   UIMessage,
 } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -53,8 +56,8 @@ import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 
 type CoreTool = {
   description?: string;
-  inputSchema: unknown;
-  execute?: (input: unknown) => unknown | Promise<unknown>;
+  inputSchema: Schema<unknown>;
+  execute?: (input: unknown) => unknown;
 };
 
 const defaultModel = {
@@ -89,7 +92,7 @@ export function ChatWindow({
   initialModel?: string;
   initialMaxTokens?: number;
   authWarning?: React.ReactNode;
-}) {
+}): JSX.Element {
   const [model, setModel] = useState(initialModel);
   const [temperature, setTemperature] = useState(initialTemperature);
   const [maxTokens, setMaxTokens] = useState(initialMaxTokens);
@@ -339,8 +342,7 @@ function ChatInner({
   // Create transport with dynamic configuration
   const transport = useMemo(() => {
     return new CustomChatTransport({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: openrouterChat as any,
+      model: openrouterChat,
       temperature: _temperature ?? 0.5,
       maxGeneratedTokens: maxTokens,
       getTools: async (messages: UIMessage[]) => {
@@ -391,16 +393,18 @@ function ChatInner({
           Please use only these tools to fulfill the request.`;
         }
 
+        const toolSet: ToolSet = Object.fromEntries(
+          Object.entries(tools).map(([name, tool]) => [
+            name,
+            {
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+            },
+          ]),
+        );
+
         return {
-          tools: Object.fromEntries(
-            Object.entries(tools).map(([name, tool]) => [
-              name,
-              {
-                description: tool.description,
-                inputSchema: tool.inputSchema,
-              },
-            ]),
-          ),
+          tools: toolSet,
           systemPrompt,
         };
       },
@@ -443,8 +447,7 @@ function ChatInner({
   } = useChat({
     // Include model in the chat ID to force a fresh session when switching models
     id: `${chat.id}-${model}`,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    transport: transport as any,
+    transport,
     // Automatically continue conversation when all tool calls are complete
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onError: (error) => {
@@ -458,12 +461,9 @@ function ChatInner({
       });
     },
     onToolCall: async ({ toolCall }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toolName = (toolCall as any).toolName;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toolArgs = (toolCall as any).input; // AI SDK 5 uses 'input' not 'args'
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toolCallId = (toolCall as any).toolCallId;
+      const { toolName, toolCallId } = toolCall;
+      // AI SDK 5 uses 'input' instead of 'args'
+      const toolArgs = toolCall.input;
 
       const tool = allToolsRef.current[toolName];
 
@@ -475,11 +475,11 @@ function ChatInner({
       try {
         const result = await tool.execute!(toolArgs);
 
-        addToolResult({
+        void addToolResult({
+          tool: toolName,
           toolCallId,
           output: result,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
+        });
       } catch (error) {
         appendDisplayOnlyMessage(
           `**Tool Error:** *${error instanceof Error ? error.message : "Unknown error"}*`,
@@ -532,7 +532,7 @@ function ChatInner({
         }
       }
 
-      sendMessage({ text: msg });
+      void sendMessage({ text: msg });
       setInputText("");
     },
     [
@@ -547,7 +547,7 @@ function ChatInner({
 
   useEffect(() => {
     chat.setAppendMessage((message) => {
-      sendMessage({ text: message.content as string });
+      void sendMessage({ text: message.content as string });
     });
   }, [sendMessage, chat]);
 
@@ -583,7 +583,7 @@ function ChatInner({
         <PromptInput
           onSubmit={(message) => {
             if (message.text) {
-              handleSend(message.text);
+              void handleSend(message.text);
             }
           }}
         >
@@ -638,8 +638,7 @@ function CustomMessageRenderer({
           // Handle tool invocations
           // AI SDK creates ToolUIPart with type "tool-{toolName}" when tools are passed as a typed object
           if (part.type.startsWith("tool-")) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const toolPart = part as any;
+            const toolPart = part as ToolUIPart;
             const toolName = part.type.replace("tool-", "");
             const tool = allTools[toolName];
 
@@ -657,7 +656,9 @@ function CustomMessageRenderer({
                       <HttpRoute method={tool.method} path={tool.path} />
                     </div>
                   )}
-                  {toolPart.input && <ToolInput input={toolPart.input} />}
+                  {toolPart.input !== undefined && (
+                    <ToolInput input={toolPart.input} />
+                  )}
                   {toolPart.output !== undefined && (
                     <ToolOutput
                       output={toolPart.output}

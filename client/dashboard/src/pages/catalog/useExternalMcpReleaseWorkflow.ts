@@ -25,14 +25,14 @@ export function generateSlug(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export type ReleasePhase =
+type ReleasePhase =
   | "selectRemotes"
   | "configure"
   | "deploying"
   | "complete"
   | "error";
 
-export interface ServerConfig {
+interface ServerConfig {
   server: PulseMCPServer;
   name: string;
   /** For multi-remote servers, track which remotes are selected */
@@ -40,7 +40,7 @@ export interface ServerConfig {
 }
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
-export interface MultiRemoteServerConfig {
+interface MultiRemoteServerConfig {
   server: PulseMCPServer;
   name: string;
   remotes: ExternalMCPRemote[];
@@ -350,7 +350,7 @@ export function useExternalMcpReleaseWorkflow({
 
     async function createToolsets() {
       for (let i = 0; i < serverConfigs.length; i++) {
-        const config = serverConfigs[i];
+        const config = serverConfigs[i]!;
 
         setToolsetStatuses((prev) =>
           prev.map((s, idx) =>
@@ -362,12 +362,12 @@ export function useExternalMcpReleaseWorkflow({
           const toolset = await client.toolsets.create(
             {
               createToolsetRequestBody: {
-                name: config.name,
+                name: config!.name!,
                 description:
-                  config.server.description ||
-                  `MCP server: ${config.server.registrySpecifier}`,
-                origin: buildToolsetOrigin(config.server),
-                toolUrns: buildToolUrns(config),
+                  config!.server.description! ||
+                  `MCP server: ${config!.server.registrySpecifier!}`,
+                origin: buildToolsetOrigin(config!.server!),
+                toolUrns: buildToolUrns(config!),
               },
             },
             undefined,
@@ -445,7 +445,7 @@ export function useExternalMcpReleaseWorkflow({
       }
     }
 
-    createToolsets();
+    void createToolsets();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- toolset creation should only trigger on phase transition to "complete", not when serverConfigs/toolsetStatuses change mid-creation
   }, [phase]);
 

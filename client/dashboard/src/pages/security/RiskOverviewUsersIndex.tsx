@@ -24,7 +24,7 @@ const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "30d",
 ];
 
-export default function RiskOverviewUsersIndex() {
+export default function RiskOverviewUsersIndex(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <Page>

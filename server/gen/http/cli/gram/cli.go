@@ -113,7 +113,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-organization-remote-session-issuer|update-organization-remote-session-issuer|list-organization-remote-session-issuers|get-organization-remote-session-issuer|delete-organization-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|create-prompt-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|update-prompt-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|suggest-custom-detection-rule|test-detection-rule)",
+		"risk (create-risk-policy|create-prompt-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|update-prompt-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|suggest-custom-detection-rule|test-detection-rule)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -1511,6 +1511,35 @@ func ParseEndpoint(
 		riskRevokeShadowMCPApprovalSessionTokenFlag     = riskRevokeShadowMCPApprovalFlags.String("session-token", "", "")
 		riskRevokeShadowMCPApprovalProjectSlugInputFlag = riskRevokeShadowMCPApprovalFlags.String("project-slug-input", "", "")
 
+		riskCreateRiskPolicyBypassRequestFlags            = flag.NewFlagSet("create-risk-policy-bypass-request", flag.ExitOnError)
+		riskCreateRiskPolicyBypassRequestBodyFlag         = riskCreateRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
+		riskCreateRiskPolicyBypassRequestSessionTokenFlag = riskCreateRiskPolicyBypassRequestFlags.String("session-token", "", "")
+
+		riskListRiskPolicyBypassRequestsFlags                = flag.NewFlagSet("list-risk-policy-bypass-requests", flag.ExitOnError)
+		riskListRiskPolicyBypassRequestsPolicyIDFlag         = riskListRiskPolicyBypassRequestsFlags.String("policy-id", "", "")
+		riskListRiskPolicyBypassRequestsStatusFlag           = riskListRiskPolicyBypassRequestsFlags.String("status", "", "")
+		riskListRiskPolicyBypassRequestsApikeyTokenFlag      = riskListRiskPolicyBypassRequestsFlags.String("apikey-token", "", "")
+		riskListRiskPolicyBypassRequestsSessionTokenFlag     = riskListRiskPolicyBypassRequestsFlags.String("session-token", "", "")
+		riskListRiskPolicyBypassRequestsProjectSlugInputFlag = riskListRiskPolicyBypassRequestsFlags.String("project-slug-input", "", "")
+
+		riskApproveRiskPolicyBypassRequestFlags                = flag.NewFlagSet("approve-risk-policy-bypass-request", flag.ExitOnError)
+		riskApproveRiskPolicyBypassRequestBodyFlag             = riskApproveRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
+		riskApproveRiskPolicyBypassRequestApikeyTokenFlag      = riskApproveRiskPolicyBypassRequestFlags.String("apikey-token", "", "")
+		riskApproveRiskPolicyBypassRequestSessionTokenFlag     = riskApproveRiskPolicyBypassRequestFlags.String("session-token", "", "")
+		riskApproveRiskPolicyBypassRequestProjectSlugInputFlag = riskApproveRiskPolicyBypassRequestFlags.String("project-slug-input", "", "")
+
+		riskDenyRiskPolicyBypassRequestFlags                = flag.NewFlagSet("deny-risk-policy-bypass-request", flag.ExitOnError)
+		riskDenyRiskPolicyBypassRequestBodyFlag             = riskDenyRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
+		riskDenyRiskPolicyBypassRequestApikeyTokenFlag      = riskDenyRiskPolicyBypassRequestFlags.String("apikey-token", "", "")
+		riskDenyRiskPolicyBypassRequestSessionTokenFlag     = riskDenyRiskPolicyBypassRequestFlags.String("session-token", "", "")
+		riskDenyRiskPolicyBypassRequestProjectSlugInputFlag = riskDenyRiskPolicyBypassRequestFlags.String("project-slug-input", "", "")
+
+		riskRevokeRiskPolicyBypassRequestFlags                = flag.NewFlagSet("revoke-risk-policy-bypass-request", flag.ExitOnError)
+		riskRevokeRiskPolicyBypassRequestBodyFlag             = riskRevokeRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
+		riskRevokeRiskPolicyBypassRequestApikeyTokenFlag      = riskRevokeRiskPolicyBypassRequestFlags.String("apikey-token", "", "")
+		riskRevokeRiskPolicyBypassRequestSessionTokenFlag     = riskRevokeRiskPolicyBypassRequestFlags.String("session-token", "", "")
+		riskRevokeRiskPolicyBypassRequestProjectSlugInputFlag = riskRevokeRiskPolicyBypassRequestFlags.String("project-slug-input", "", "")
+
 		riskTriggerRiskAnalysisFlags                = flag.NewFlagSet("trigger-risk-analysis", flag.ExitOnError)
 		riskTriggerRiskAnalysisBodyFlag             = riskTriggerRiskAnalysisFlags.String("body", "REQUIRED", "")
 		riskTriggerRiskAnalysisApikeyTokenFlag      = riskTriggerRiskAnalysisFlags.String("apikey-token", "", "")
@@ -2324,6 +2353,11 @@ func ParseEndpoint(
 	riskListShadowMCPApprovalsFlags.Usage = riskListShadowMCPApprovalsUsage
 	riskApproveShadowMCPFlags.Usage = riskApproveShadowMCPUsage
 	riskRevokeShadowMCPApprovalFlags.Usage = riskRevokeShadowMCPApprovalUsage
+	riskCreateRiskPolicyBypassRequestFlags.Usage = riskCreateRiskPolicyBypassRequestUsage
+	riskListRiskPolicyBypassRequestsFlags.Usage = riskListRiskPolicyBypassRequestsUsage
+	riskApproveRiskPolicyBypassRequestFlags.Usage = riskApproveRiskPolicyBypassRequestUsage
+	riskDenyRiskPolicyBypassRequestFlags.Usage = riskDenyRiskPolicyBypassRequestUsage
+	riskRevokeRiskPolicyBypassRequestFlags.Usage = riskRevokeRiskPolicyBypassRequestUsage
 	riskTriggerRiskAnalysisFlags.Usage = riskTriggerRiskAnalysisUsage
 	riskCreateCustomDetectionRuleFlags.Usage = riskCreateCustomDetectionRuleUsage
 	riskListCustomDetectionRulesFlags.Usage = riskListCustomDetectionRulesUsage
@@ -3430,6 +3464,21 @@ func ParseEndpoint(
 
 			case "revoke-shadow-mcp-approval":
 				epf = riskRevokeShadowMCPApprovalFlags
+
+			case "create-risk-policy-bypass-request":
+				epf = riskCreateRiskPolicyBypassRequestFlags
+
+			case "list-risk-policy-bypass-requests":
+				epf = riskListRiskPolicyBypassRequestsFlags
+
+			case "approve-risk-policy-bypass-request":
+				epf = riskApproveRiskPolicyBypassRequestFlags
+
+			case "deny-risk-policy-bypass-request":
+				epf = riskDenyRiskPolicyBypassRequestFlags
+
+			case "revoke-risk-policy-bypass-request":
+				epf = riskRevokeRiskPolicyBypassRequestFlags
 
 			case "trigger-risk-analysis":
 				epf = riskTriggerRiskAnalysisFlags
@@ -4628,6 +4677,21 @@ func ParseEndpoint(
 			case "revoke-shadow-mcp-approval":
 				endpoint = c.RevokeShadowMCPApproval()
 				data, err = riskc.BuildRevokeShadowMCPApprovalPayload(*riskRevokeShadowMCPApprovalPolicyIDFlag, *riskRevokeShadowMCPApprovalMatchFlag, *riskRevokeShadowMCPApprovalApikeyTokenFlag, *riskRevokeShadowMCPApprovalSessionTokenFlag, *riskRevokeShadowMCPApprovalProjectSlugInputFlag)
+			case "create-risk-policy-bypass-request":
+				endpoint = c.CreateRiskPolicyBypassRequest()
+				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag)
+			case "list-risk-policy-bypass-requests":
+				endpoint = c.ListRiskPolicyBypassRequests()
+				data, err = riskc.BuildListRiskPolicyBypassRequestsPayload(*riskListRiskPolicyBypassRequestsPolicyIDFlag, *riskListRiskPolicyBypassRequestsStatusFlag, *riskListRiskPolicyBypassRequestsApikeyTokenFlag, *riskListRiskPolicyBypassRequestsSessionTokenFlag, *riskListRiskPolicyBypassRequestsProjectSlugInputFlag)
+			case "approve-risk-policy-bypass-request":
+				endpoint = c.ApproveRiskPolicyBypassRequest()
+				data, err = riskc.BuildApproveRiskPolicyBypassRequestPayload(*riskApproveRiskPolicyBypassRequestBodyFlag, *riskApproveRiskPolicyBypassRequestApikeyTokenFlag, *riskApproveRiskPolicyBypassRequestSessionTokenFlag, *riskApproveRiskPolicyBypassRequestProjectSlugInputFlag)
+			case "deny-risk-policy-bypass-request":
+				endpoint = c.DenyRiskPolicyBypassRequest()
+				data, err = riskc.BuildDenyRiskPolicyBypassRequestPayload(*riskDenyRiskPolicyBypassRequestBodyFlag, *riskDenyRiskPolicyBypassRequestApikeyTokenFlag, *riskDenyRiskPolicyBypassRequestSessionTokenFlag, *riskDenyRiskPolicyBypassRequestProjectSlugInputFlag)
+			case "revoke-risk-policy-bypass-request":
+				endpoint = c.RevokeRiskPolicyBypassRequest()
+				data, err = riskc.BuildRevokeRiskPolicyBypassRequestPayload(*riskRevokeRiskPolicyBypassRequestBodyFlag, *riskRevokeRiskPolicyBypassRequestApikeyTokenFlag, *riskRevokeRiskPolicyBypassRequestSessionTokenFlag, *riskRevokeRiskPolicyBypassRequestProjectSlugInputFlag)
 			case "trigger-risk-analysis":
 				endpoint = c.TriggerRiskAnalysis()
 				data, err = riskc.BuildTriggerRiskAnalysisPayload(*riskTriggerRiskAnalysisBodyFlag, *riskTriggerRiskAnalysisApikeyTokenFlag, *riskTriggerRiskAnalysisSessionTokenFlag, *riskTriggerRiskAnalysisProjectSlugInputFlag)
@@ -10443,6 +10507,11 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approvals: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
 	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp: Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
 	fmt.Fprintln(os.Stderr, `    revoke-shadow-mcp-approval: Remove a previously-approved shadow-MCP server for a policy.`)
+	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-policy-bypass-requests: List current risk policy bypass request workflow records.`)
+	fmt.Fprintln(os.Stderr, `    approve-risk-policy-bypass-request: Approve a risk policy bypass request for the requested policy target.`)
+	fmt.Fprintln(os.Stderr, `    deny-risk-policy-bypass-request: Deny a risk policy bypass request, updating workflow state.`)
+	fmt.Fprintln(os.Stderr, `    revoke-risk-policy-bypass-request: Revoke a previously approved risk policy bypass request.`)
 	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `+"`"+`limit=0`+"`"+` to backfill every unanalyzed message.`)
 	fmt.Fprintln(os.Stderr, `    create-custom-detection-rule: Create a custom regex-backed detection rule for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-custom-detection-rules: List custom detection rules for the current project.`)
@@ -10953,6 +11022,124 @@ func riskRevokeShadowMCPApprovalUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk revoke-shadow-mcp-approval --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --match \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskCreateRiskPolicyBypassRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk create-risk-policy-bypass-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or refresh a risk policy bypass request from a signed request URL token.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func riskListRiskPolicyBypassRequestsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-policy-bypass-requests", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List current risk policy bypass request workflow records.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policy-bypass-requests --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"approved\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskApproveRiskPolicyBypassRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk approve-risk-policy-bypass-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve a risk policy bypass request for the requested policy target.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk approve-risk-policy-bypass-request --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskDenyRiskPolicyBypassRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk deny-risk-policy-bypass-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Deny a risk policy bypass request, updating workflow state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk deny-risk-policy-bypass-request --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskRevokeRiskPolicyBypassRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk revoke-risk-policy-bypass-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a previously approved risk policy bypass request.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk revoke-risk-policy-bypass-request --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskTriggerRiskAnalysisUsage() {

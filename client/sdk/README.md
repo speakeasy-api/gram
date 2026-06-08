@@ -485,6 +485,14 @@ run();
 * [trigger](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 * [update](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 
+### [Risk.PolicyBypassRequests](docs/sdks/policybypassrequests/README.md)
+
+* [approve](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
+* [create](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
+* [deny](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+* [list](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
+* [revoke](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
+
 ### [Risk.PromptPolicies](docs/sdks/promptpolicies/README.md)
 
 * [createPromptPolicy](docs/sdks/promptpolicies/README.md#createpromptpolicy) - createPromptPolicy risk
@@ -855,6 +863,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
 - [`riskPoliciesTrigger`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`riskPoliciesUpdate`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+- [`riskPolicyBypassRequestsApprove`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsCreate`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsDeny`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsList`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
+- [`riskPolicyBypassRequestsRevoke`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`riskPromptPoliciesCreatePromptPolicy`](docs/sdks/promptpolicies/README.md#createpromptpolicy) - createPromptPolicy risk
 - [`riskPromptPoliciesUpdatePromptPolicy`](docs/sdks/promptpolicies/README.md#updatepromptpolicy) - updatePromptPolicy risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
@@ -1168,16 +1181,20 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskApprovalsDeleteMutation`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
+- [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
 - [`useRiskApproveShadowMCPMutation`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
 - [`useRiskCapabilities`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
+- [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskCreatePromptPolicyMutation`](docs/sdks/promptpolicies/README.md#createpromptpolicy) - createPromptPolicy risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+- [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
+- [`useRiskListPolicyBypassRequests`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`useRiskListResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`useRiskListResultsForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
@@ -1188,6 +1205,7 @@ To learn about this feature and how to get started, check
 - [`useRiskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
 - [`useRiskPoliciesTriggerMutation`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+- [`useRiskRevokePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk

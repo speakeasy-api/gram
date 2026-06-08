@@ -2,7 +2,7 @@ import { CodeBlock } from "@/components/code";
 import { Type } from "@/components/ui/type";
 import { Stack } from "@speakeasy-api/moonshine";
 
-export function GettingStartedInstructions() {
+export function GettingStartedInstructions(): JSX.Element {
   const commands = [
     {
       label: "Create a new function project",

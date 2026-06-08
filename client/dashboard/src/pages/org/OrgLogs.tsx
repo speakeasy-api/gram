@@ -12,7 +12,7 @@ import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query";
 
-export default function OrgLogs() {
+export default function OrgLogs(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -27,7 +27,7 @@ export default function OrgLogs() {
   );
 }
 
-export function OrgLogsInner() {
+function OrgLogsInner() {
   const { data: featuresData, isLoading: featuresLoading } =
     useProductFeatures();
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);

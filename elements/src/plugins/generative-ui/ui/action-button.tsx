@@ -25,7 +25,7 @@ export function ActionButton({
   className,
   disabled,
   ...props
-}: ActionButtonProps) {
+}: ActionButtonProps): React.JSX.Element {
   const { executeTool, isToolAvailable } = useToolExecution();
   const [isLoading, setIsLoading] = React.useState(false);
 
@@ -56,7 +56,9 @@ export function ActionButton({
         variant={error ? "destructive" : variant}
         size={size}
         className={cn(className)}
-        onClick={handleClick}
+        onClick={() => {
+          void handleClick();
+        }}
         disabled={disabled || isLoading || !toolAvailable}
         {...props}
       >

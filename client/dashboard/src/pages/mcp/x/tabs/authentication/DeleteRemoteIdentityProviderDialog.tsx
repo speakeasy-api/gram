@@ -26,7 +26,7 @@ export function DeleteRemoteIdentityProviderDialog({
   // remote_session_issuer record alone so other servers can still use it.
   userSessionIssuerId: string;
   issuer: RemoteSessionIssuer;
-}) {
+}): JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content>
@@ -154,7 +154,7 @@ function DeleteRemoteIdentityProviderDialogBody({
         <Button
           variant="destructive-primary"
           disabled={!inputMatches || submitting}
-          onClick={handleConfirm}
+          onClick={() => void handleConfirm()}
         >
           {submitting ? (
             <>

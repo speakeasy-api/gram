@@ -99,6 +99,7 @@ type Service struct {
 	shadowMCPClient  *shadowmcp.Client
 	accessStore      accesscontrol.Store
 	audit            *audit.Logger
+	jwtSecret        string
 	piClassifier     bool
 	// Scanners reused by the rule-playground endpoint (testDetectionRule)
 	// so the dashboard sees the exact same matcher output the worker
@@ -133,6 +134,7 @@ func NewObserver(
 		shadowMCPClient:  nil,
 		accessStore:      nil,
 		audit:            auditLogger,
+		jwtSecret:        "",
 		piClassifier:     false,
 		piiScanner:       nil,
 		piScanner:        nil,
@@ -150,6 +152,7 @@ func NewService(
 	shadowMCPClient *shadowmcp.Client,
 	accessStore accesscontrol.Store,
 	auditLogger *audit.Logger,
+	jwtSecret string,
 	piClassifier bool,
 	piiScanner ra.PIIScanner,
 	piScanner *ra.PromptInjectionScanner,
@@ -168,6 +171,7 @@ func NewService(
 		shadowMCPClient:  shadowMCPClient,
 		accessStore:      accessStore,
 		audit:            auditLogger,
+		jwtSecret:        jwtSecret,
 		piClassifier:     piClassifier,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,

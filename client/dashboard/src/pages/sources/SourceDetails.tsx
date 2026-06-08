@@ -51,12 +51,13 @@ function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
     case "externalmcp":
     case "remotemcp":
       return "external_mcp";
+    case undefined:
     default:
       return "openapi";
   }
 }
 
-export default function SourceDetails() {
+export default function SourceDetails(): JSX.Element {
   const { sourceKind, sourceSlug } = useParams<{
     sourceKind: string;
     sourceSlug: string;
@@ -187,7 +188,7 @@ export default function SourceDetails() {
   );
   const { updateTool, isUpdating } = useToolUpdate({
     telemetryEvent: "source_event",
-    onSuccess: refetchTools,
+    onSuccess: () => void refetchTools(),
   });
 
   const uniqueRuntimes = useMemo(() => {
@@ -350,7 +351,9 @@ export default function SourceDetails() {
                     variant="secondary"
                     size="sm"
                     className="mt-4"
-                    onClick={() => refetchSpec()}
+                    onClick={() => {
+                      void refetchSpec();
+                    }}
                   >
                     <Button.Text>Retry</Button.Text>
                   </Button>

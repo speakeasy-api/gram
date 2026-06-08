@@ -20,7 +20,10 @@ interface TriggerLogRowProps {
   onLogClick: (log: TelemetryLogRecord) => void;
 }
 
-export function TriggerLogRow({ trace, onLogClick }: TriggerLogRowProps) {
+export function TriggerLogRow({
+  trace,
+  onLogClick,
+}: TriggerLogRowProps): JSX.Element {
   const log = trace.log;
   const severity = log?.severityText || "INFO";
   const body = log?.body || "trigger event";

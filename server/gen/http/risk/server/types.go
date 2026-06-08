@@ -127,6 +127,34 @@ type ApproveShadowMCPRequestBody struct {
 	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 }
 
+// CreateRiskPolicyBypassRequestRequestBody is the type of the "risk" service
+// "createRiskPolicyBypassRequest" endpoint HTTP request body.
+type CreateRiskPolicyBypassRequestRequestBody struct {
+	// Signed request token generated when a risk policy blocks an action.
+	RequestToken *string `form:"request_token,omitempty" json:"request_token,omitempty" xml:"request_token,omitempty"`
+}
+
+// ApproveRiskPolicyBypassRequestRequestBody is the type of the "risk" service
+// "approveRiskPolicyBypassRequest" endpoint HTTP request body.
+type ApproveRiskPolicyBypassRequestRequestBody struct {
+	// The resource ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
+// DenyRiskPolicyBypassRequestRequestBody is the type of the "risk" service
+// "denyRiskPolicyBypassRequest" endpoint HTTP request body.
+type DenyRiskPolicyBypassRequestRequestBody struct {
+	// The resource ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
+// RevokeRiskPolicyBypassRequestRequestBody is the type of the "risk" service
+// "revokeRiskPolicyBypassRequest" endpoint HTTP request body.
+type RevokeRiskPolicyBypassRequestRequestBody struct {
+	// The resource ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // TriggerRiskAnalysisRequestBody is the type of the "risk" service
 // "triggerRiskAnalysis" endpoint HTTP request body.
 type TriggerRiskAnalysisRequestBody struct {
@@ -171,7 +199,7 @@ type UpdateCustomDetectionRuleRequestBody struct {
 // DeleteCustomDetectionRuleRequestBody is the type of the "risk" service
 // "deleteCustomDetectionRule" endpoint HTTP request body.
 type DeleteCustomDetectionRuleRequestBody struct {
-	// The custom detection rule ID.
+	// The resource ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
@@ -614,6 +642,153 @@ type ApproveShadowMCPResponseBody struct {
 	ApprovedBy *string `form:"approved_by,omitempty" json:"approved_by,omitempty" xml:"approved_by,omitempty"`
 	// When the approval was recorded.
 	ApprovedAt string `form:"approved_at" json:"approved_at" xml:"approved_at"`
+}
+
+// CreateRiskPolicyBypassRequestResponseBody is the type of the "risk" service
+// "createRiskPolicyBypassRequest" endpoint HTTP response body.
+type CreateRiskPolicyBypassRequestResponseBody struct {
+	// The bypass request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The risk policy ID.
+	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
+	// Optional target namespace for the request, such as server_url.
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Optional display label for the target.
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Canonical key for the target.
+	TargetKey *string `form:"target_key,omitempty" json:"target_key,omitempty" xml:"target_key,omitempty"`
+	// Selector dimensions for the request target.
+	TargetDimensions map[string]string `form:"target_dimensions" json:"target_dimensions" xml:"target_dimensions"`
+	// Requester user ID.
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	// Requester email when known.
+	RequesterEmail *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	// Requester note.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// Current request status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// User ID that approved, denied, or revoked the request.
+	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	// Principal URNs granted when approved.
+	GrantedPrincipalUrns []string `form:"granted_principal_urns" json:"granted_principal_urns" xml:"granted_principal_urns"`
+	// Decision timestamp.
+	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// Creation timestamp.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Last update timestamp.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListRiskPolicyBypassRequestsResponseBody is the type of the "risk" service
+// "listRiskPolicyBypassRequests" endpoint HTTP response body.
+type ListRiskPolicyBypassRequestsResponseBody struct {
+	// Current risk policy bypass request records.
+	Requests []*RiskPolicyBypassRequestResponseBody `form:"requests" json:"requests" xml:"requests"`
+}
+
+// ApproveRiskPolicyBypassRequestResponseBody is the type of the "risk" service
+// "approveRiskPolicyBypassRequest" endpoint HTTP response body.
+type ApproveRiskPolicyBypassRequestResponseBody struct {
+	// The bypass request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The risk policy ID.
+	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
+	// Optional target namespace for the request, such as server_url.
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Optional display label for the target.
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Canonical key for the target.
+	TargetKey *string `form:"target_key,omitempty" json:"target_key,omitempty" xml:"target_key,omitempty"`
+	// Selector dimensions for the request target.
+	TargetDimensions map[string]string `form:"target_dimensions" json:"target_dimensions" xml:"target_dimensions"`
+	// Requester user ID.
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	// Requester email when known.
+	RequesterEmail *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	// Requester note.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// Current request status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// User ID that approved, denied, or revoked the request.
+	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	// Principal URNs granted when approved.
+	GrantedPrincipalUrns []string `form:"granted_principal_urns" json:"granted_principal_urns" xml:"granted_principal_urns"`
+	// Decision timestamp.
+	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// Creation timestamp.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Last update timestamp.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// DenyRiskPolicyBypassRequestResponseBody is the type of the "risk" service
+// "denyRiskPolicyBypassRequest" endpoint HTTP response body.
+type DenyRiskPolicyBypassRequestResponseBody struct {
+	// The bypass request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The risk policy ID.
+	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
+	// Optional target namespace for the request, such as server_url.
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Optional display label for the target.
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Canonical key for the target.
+	TargetKey *string `form:"target_key,omitempty" json:"target_key,omitempty" xml:"target_key,omitempty"`
+	// Selector dimensions for the request target.
+	TargetDimensions map[string]string `form:"target_dimensions" json:"target_dimensions" xml:"target_dimensions"`
+	// Requester user ID.
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	// Requester email when known.
+	RequesterEmail *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	// Requester note.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// Current request status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// User ID that approved, denied, or revoked the request.
+	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	// Principal URNs granted when approved.
+	GrantedPrincipalUrns []string `form:"granted_principal_urns" json:"granted_principal_urns" xml:"granted_principal_urns"`
+	// Decision timestamp.
+	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// Creation timestamp.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Last update timestamp.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RevokeRiskPolicyBypassRequestResponseBody is the type of the "risk" service
+// "revokeRiskPolicyBypassRequest" endpoint HTTP response body.
+type RevokeRiskPolicyBypassRequestResponseBody struct {
+	// The bypass request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The risk policy ID.
+	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
+	// Optional target namespace for the request, such as server_url.
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Optional display label for the target.
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Canonical key for the target.
+	TargetKey *string `form:"target_key,omitempty" json:"target_key,omitempty" xml:"target_key,omitempty"`
+	// Selector dimensions for the request target.
+	TargetDimensions map[string]string `form:"target_dimensions" json:"target_dimensions" xml:"target_dimensions"`
+	// Requester user ID.
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	// Requester email when known.
+	RequesterEmail *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	// Requester note.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// Current request status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// User ID that approved, denied, or revoked the request.
+	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	// Principal URNs granted when approved.
+	GrantedPrincipalUrns []string `form:"granted_principal_urns" json:"granted_principal_urns" xml:"granted_principal_urns"`
+	// Decision timestamp.
+	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// Creation timestamp.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Last update timestamp.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateCustomDetectionRuleResponseBody is the type of the "risk" service
@@ -4220,6 +4395,956 @@ type RevokeShadowMCPApprovalGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateRiskPolicyBypassRequestUnauthorizedResponseBody is the type of the
+// "risk" service "createRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "unauthorized" error.
+type CreateRiskPolicyBypassRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestForbiddenResponseBody is the type of the "risk"
+// service "createRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateRiskPolicyBypassRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestBadRequestResponseBody is the type of the
+// "risk" service "createRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "bad_request" error.
+type CreateRiskPolicyBypassRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestNotFoundResponseBody is the type of the "risk"
+// service "createRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "not_found" error.
+type CreateRiskPolicyBypassRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestConflictResponseBody is the type of the "risk"
+// service "createRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "conflict" error.
+type CreateRiskPolicyBypassRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestUnsupportedMediaResponseBody is the type of the
+// "risk" service "createRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "unsupported_media" error.
+type CreateRiskPolicyBypassRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestInvalidResponseBody is the type of the "risk"
+// service "createRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "invalid" error.
+type CreateRiskPolicyBypassRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestInvariantViolationResponseBody is the type of
+// the "risk" service "createRiskPolicyBypassRequest" endpoint HTTP response
+// body for the "invariant_violation" error.
+type CreateRiskPolicyBypassRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestUnexpectedResponseBody is the type of the
+// "risk" service "createRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "unexpected" error.
+type CreateRiskPolicyBypassRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateRiskPolicyBypassRequestGatewayErrorResponseBody is the type of the
+// "risk" service "createRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "gateway_error" error.
+type CreateRiskPolicyBypassRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsUnauthorizedResponseBody is the type of the
+// "risk" service "listRiskPolicyBypassRequests" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListRiskPolicyBypassRequestsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsForbiddenResponseBody is the type of the "risk"
+// service "listRiskPolicyBypassRequests" endpoint HTTP response body for the
+// "forbidden" error.
+type ListRiskPolicyBypassRequestsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsBadRequestResponseBody is the type of the "risk"
+// service "listRiskPolicyBypassRequests" endpoint HTTP response body for the
+// "bad_request" error.
+type ListRiskPolicyBypassRequestsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsNotFoundResponseBody is the type of the "risk"
+// service "listRiskPolicyBypassRequests" endpoint HTTP response body for the
+// "not_found" error.
+type ListRiskPolicyBypassRequestsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsConflictResponseBody is the type of the "risk"
+// service "listRiskPolicyBypassRequests" endpoint HTTP response body for the
+// "conflict" error.
+type ListRiskPolicyBypassRequestsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsUnsupportedMediaResponseBody is the type of the
+// "risk" service "listRiskPolicyBypassRequests" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListRiskPolicyBypassRequestsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsInvalidResponseBody is the type of the "risk"
+// service "listRiskPolicyBypassRequests" endpoint HTTP response body for the
+// "invalid" error.
+type ListRiskPolicyBypassRequestsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsInvariantViolationResponseBody is the type of
+// the "risk" service "listRiskPolicyBypassRequests" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListRiskPolicyBypassRequestsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsUnexpectedResponseBody is the type of the "risk"
+// service "listRiskPolicyBypassRequests" endpoint HTTP response body for the
+// "unexpected" error.
+type ListRiskPolicyBypassRequestsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskPolicyBypassRequestsGatewayErrorResponseBody is the type of the
+// "risk" service "listRiskPolicyBypassRequests" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListRiskPolicyBypassRequestsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestUnauthorizedResponseBody is the type of the
+// "risk" service "approveRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "unauthorized" error.
+type ApproveRiskPolicyBypassRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestForbiddenResponseBody is the type of the
+// "risk" service "approveRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "forbidden" error.
+type ApproveRiskPolicyBypassRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestBadRequestResponseBody is the type of the
+// "risk" service "approveRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "bad_request" error.
+type ApproveRiskPolicyBypassRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestNotFoundResponseBody is the type of the "risk"
+// service "approveRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "not_found" error.
+type ApproveRiskPolicyBypassRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestConflictResponseBody is the type of the "risk"
+// service "approveRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "conflict" error.
+type ApproveRiskPolicyBypassRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestUnsupportedMediaResponseBody is the type of
+// the "risk" service "approveRiskPolicyBypassRequest" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ApproveRiskPolicyBypassRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestInvalidResponseBody is the type of the "risk"
+// service "approveRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "invalid" error.
+type ApproveRiskPolicyBypassRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestInvariantViolationResponseBody is the type of
+// the "risk" service "approveRiskPolicyBypassRequest" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ApproveRiskPolicyBypassRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestUnexpectedResponseBody is the type of the
+// "risk" service "approveRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "unexpected" error.
+type ApproveRiskPolicyBypassRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveRiskPolicyBypassRequestGatewayErrorResponseBody is the type of the
+// "risk" service "approveRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "gateway_error" error.
+type ApproveRiskPolicyBypassRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestUnauthorizedResponseBody is the type of the
+// "risk" service "denyRiskPolicyBypassRequest" endpoint HTTP response body for
+// the "unauthorized" error.
+type DenyRiskPolicyBypassRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestForbiddenResponseBody is the type of the "risk"
+// service "denyRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "forbidden" error.
+type DenyRiskPolicyBypassRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestBadRequestResponseBody is the type of the "risk"
+// service "denyRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "bad_request" error.
+type DenyRiskPolicyBypassRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestNotFoundResponseBody is the type of the "risk"
+// service "denyRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "not_found" error.
+type DenyRiskPolicyBypassRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestConflictResponseBody is the type of the "risk"
+// service "denyRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "conflict" error.
+type DenyRiskPolicyBypassRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestUnsupportedMediaResponseBody is the type of the
+// "risk" service "denyRiskPolicyBypassRequest" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DenyRiskPolicyBypassRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestInvalidResponseBody is the type of the "risk"
+// service "denyRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "invalid" error.
+type DenyRiskPolicyBypassRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestInvariantViolationResponseBody is the type of the
+// "risk" service "denyRiskPolicyBypassRequest" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DenyRiskPolicyBypassRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestUnexpectedResponseBody is the type of the "risk"
+// service "denyRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "unexpected" error.
+type DenyRiskPolicyBypassRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyRiskPolicyBypassRequestGatewayErrorResponseBody is the type of the
+// "risk" service "denyRiskPolicyBypassRequest" endpoint HTTP response body for
+// the "gateway_error" error.
+type DenyRiskPolicyBypassRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestUnauthorizedResponseBody is the type of the
+// "risk" service "revokeRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "unauthorized" error.
+type RevokeRiskPolicyBypassRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestForbiddenResponseBody is the type of the "risk"
+// service "revokeRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "forbidden" error.
+type RevokeRiskPolicyBypassRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestBadRequestResponseBody is the type of the
+// "risk" service "revokeRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "bad_request" error.
+type RevokeRiskPolicyBypassRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestNotFoundResponseBody is the type of the "risk"
+// service "revokeRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "not_found" error.
+type RevokeRiskPolicyBypassRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestConflictResponseBody is the type of the "risk"
+// service "revokeRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "conflict" error.
+type RevokeRiskPolicyBypassRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestUnsupportedMediaResponseBody is the type of the
+// "risk" service "revokeRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "unsupported_media" error.
+type RevokeRiskPolicyBypassRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestInvalidResponseBody is the type of the "risk"
+// service "revokeRiskPolicyBypassRequest" endpoint HTTP response body for the
+// "invalid" error.
+type RevokeRiskPolicyBypassRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestInvariantViolationResponseBody is the type of
+// the "risk" service "revokeRiskPolicyBypassRequest" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RevokeRiskPolicyBypassRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestUnexpectedResponseBody is the type of the
+// "risk" service "revokeRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "unexpected" error.
+type RevokeRiskPolicyBypassRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeRiskPolicyBypassRequestGatewayErrorResponseBody is the type of the
+// "risk" service "revokeRiskPolicyBypassRequest" endpoint HTTP response body
+// for the "gateway_error" error.
+type RevokeRiskPolicyBypassRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TriggerRiskAnalysisUnauthorizedResponseBody is the type of the "risk"
 // service "triggerRiskAnalysis" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -5953,6 +7078,41 @@ type ShadowMCPApprovalResponseBody struct {
 	ApprovedAt string `form:"approved_at" json:"approved_at" xml:"approved_at"`
 }
 
+// RiskPolicyBypassRequestResponseBody is used to define fields on response
+// body types.
+type RiskPolicyBypassRequestResponseBody struct {
+	// The bypass request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The risk policy ID.
+	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
+	// Optional target namespace for the request, such as server_url.
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Optional display label for the target.
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Canonical key for the target.
+	TargetKey *string `form:"target_key,omitempty" json:"target_key,omitempty" xml:"target_key,omitempty"`
+	// Selector dimensions for the request target.
+	TargetDimensions map[string]string `form:"target_dimensions" json:"target_dimensions" xml:"target_dimensions"`
+	// Requester user ID.
+	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
+	// Requester email when known.
+	RequesterEmail *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	// Requester note.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// Current request status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// User ID that approved, denied, or revoked the request.
+	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	// Principal URNs granted when approved.
+	GrantedPrincipalUrns []string `form:"granted_principal_urns" json:"granted_principal_urns" xml:"granted_principal_urns"`
+	// Decision timestamp.
+	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	// Creation timestamp.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// Last update timestamp.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // RiskCustomDetectionRuleResponseBody is used to define fields on response
 // body types.
 type RiskCustomDetectionRuleResponseBody struct {
@@ -6603,6 +7763,178 @@ func NewApproveShadowMCPResponseBody(res *types.ShadowMCPApproval) *ApproveShado
 		ServerName: res.ServerName,
 		ApprovedBy: res.ApprovedBy,
 		ApprovedAt: res.ApprovedAt,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestResponseBody builds the HTTP response body
+// from the result of the "createRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewCreateRiskPolicyBypassRequestResponseBody(res *risk.RiskPolicyBypassRequest) *CreateRiskPolicyBypassRequestResponseBody {
+	body := &CreateRiskPolicyBypassRequestResponseBody{
+		ID:              res.ID,
+		PolicyID:        res.PolicyID,
+		TargetKind:      res.TargetKind,
+		TargetLabel:     res.TargetLabel,
+		TargetKey:       res.TargetKey,
+		RequesterUserID: res.RequesterUserID,
+		RequesterEmail:  res.RequesterEmail,
+		Note:            res.Note,
+		Status:          res.Status,
+		DecidedBy:       res.DecidedBy,
+		DecidedAt:       res.DecidedAt,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
+	}
+	if res.TargetDimensions != nil {
+		body.TargetDimensions = make(map[string]string, len(res.TargetDimensions))
+		for key, val := range res.TargetDimensions {
+			tk := key
+			tv := val
+			body.TargetDimensions[tk] = tv
+		}
+	}
+	if res.GrantedPrincipalUrns != nil {
+		body.GrantedPrincipalUrns = make([]string, len(res.GrantedPrincipalUrns))
+		for i, val := range res.GrantedPrincipalUrns {
+			body.GrantedPrincipalUrns[i] = val
+		}
+	} else {
+		body.GrantedPrincipalUrns = []string{}
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsResponseBody builds the HTTP response body
+// from the result of the "listRiskPolicyBypassRequests" endpoint of the "risk"
+// service.
+func NewListRiskPolicyBypassRequestsResponseBody(res *risk.ListRiskPolicyBypassRequestsResult) *ListRiskPolicyBypassRequestsResponseBody {
+	body := &ListRiskPolicyBypassRequestsResponseBody{}
+	if res.Requests != nil {
+		body.Requests = make([]*RiskPolicyBypassRequestResponseBody, len(res.Requests))
+		for i, val := range res.Requests {
+			if val == nil {
+				body.Requests[i] = nil
+				continue
+			}
+			body.Requests[i] = marshalRiskRiskPolicyBypassRequestToRiskPolicyBypassRequestResponseBody(val)
+		}
+	} else {
+		body.Requests = []*RiskPolicyBypassRequestResponseBody{}
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestResponseBody builds the HTTP response body
+// from the result of the "approveRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewApproveRiskPolicyBypassRequestResponseBody(res *risk.RiskPolicyBypassRequest) *ApproveRiskPolicyBypassRequestResponseBody {
+	body := &ApproveRiskPolicyBypassRequestResponseBody{
+		ID:              res.ID,
+		PolicyID:        res.PolicyID,
+		TargetKind:      res.TargetKind,
+		TargetLabel:     res.TargetLabel,
+		TargetKey:       res.TargetKey,
+		RequesterUserID: res.RequesterUserID,
+		RequesterEmail:  res.RequesterEmail,
+		Note:            res.Note,
+		Status:          res.Status,
+		DecidedBy:       res.DecidedBy,
+		DecidedAt:       res.DecidedAt,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
+	}
+	if res.TargetDimensions != nil {
+		body.TargetDimensions = make(map[string]string, len(res.TargetDimensions))
+		for key, val := range res.TargetDimensions {
+			tk := key
+			tv := val
+			body.TargetDimensions[tk] = tv
+		}
+	}
+	if res.GrantedPrincipalUrns != nil {
+		body.GrantedPrincipalUrns = make([]string, len(res.GrantedPrincipalUrns))
+		for i, val := range res.GrantedPrincipalUrns {
+			body.GrantedPrincipalUrns[i] = val
+		}
+	} else {
+		body.GrantedPrincipalUrns = []string{}
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestResponseBody builds the HTTP response body
+// from the result of the "denyRiskPolicyBypassRequest" endpoint of the "risk"
+// service.
+func NewDenyRiskPolicyBypassRequestResponseBody(res *risk.RiskPolicyBypassRequest) *DenyRiskPolicyBypassRequestResponseBody {
+	body := &DenyRiskPolicyBypassRequestResponseBody{
+		ID:              res.ID,
+		PolicyID:        res.PolicyID,
+		TargetKind:      res.TargetKind,
+		TargetLabel:     res.TargetLabel,
+		TargetKey:       res.TargetKey,
+		RequesterUserID: res.RequesterUserID,
+		RequesterEmail:  res.RequesterEmail,
+		Note:            res.Note,
+		Status:          res.Status,
+		DecidedBy:       res.DecidedBy,
+		DecidedAt:       res.DecidedAt,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
+	}
+	if res.TargetDimensions != nil {
+		body.TargetDimensions = make(map[string]string, len(res.TargetDimensions))
+		for key, val := range res.TargetDimensions {
+			tk := key
+			tv := val
+			body.TargetDimensions[tk] = tv
+		}
+	}
+	if res.GrantedPrincipalUrns != nil {
+		body.GrantedPrincipalUrns = make([]string, len(res.GrantedPrincipalUrns))
+		for i, val := range res.GrantedPrincipalUrns {
+			body.GrantedPrincipalUrns[i] = val
+		}
+	} else {
+		body.GrantedPrincipalUrns = []string{}
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestResponseBody builds the HTTP response body
+// from the result of the "revokeRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewRevokeRiskPolicyBypassRequestResponseBody(res *risk.RiskPolicyBypassRequest) *RevokeRiskPolicyBypassRequestResponseBody {
+	body := &RevokeRiskPolicyBypassRequestResponseBody{
+		ID:              res.ID,
+		PolicyID:        res.PolicyID,
+		TargetKind:      res.TargetKind,
+		TargetLabel:     res.TargetLabel,
+		TargetKey:       res.TargetKey,
+		RequesterUserID: res.RequesterUserID,
+		RequesterEmail:  res.RequesterEmail,
+		Note:            res.Note,
+		Status:          res.Status,
+		DecidedBy:       res.DecidedBy,
+		DecidedAt:       res.DecidedAt,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
+	}
+	if res.TargetDimensions != nil {
+		body.TargetDimensions = make(map[string]string, len(res.TargetDimensions))
+		for key, val := range res.TargetDimensions {
+			tk := key
+			tv := val
+			body.TargetDimensions[tk] = tv
+		}
+	}
+	if res.GrantedPrincipalUrns != nil {
+		body.GrantedPrincipalUrns = make([]string, len(res.GrantedPrincipalUrns))
+		for i, val := range res.GrantedPrincipalUrns {
+			body.GrantedPrincipalUrns[i] = val
+		}
+	} else {
+		body.GrantedPrincipalUrns = []string{}
 	}
 	return body
 }
@@ -9438,6 +10770,756 @@ func NewRevokeShadowMCPApprovalGatewayErrorResponseBody(res *goa.ServiceError) *
 	return body
 }
 
+// NewCreateRiskPolicyBypassRequestUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestUnauthorizedResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestUnauthorizedResponseBody {
+	body := &CreateRiskPolicyBypassRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestForbiddenResponseBody builds the HTTP
+// response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestForbiddenResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestForbiddenResponseBody {
+	body := &CreateRiskPolicyBypassRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestBadRequestResponseBody builds the HTTP
+// response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestBadRequestResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestBadRequestResponseBody {
+	body := &CreateRiskPolicyBypassRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestNotFoundResponseBody builds the HTTP
+// response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestNotFoundResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestNotFoundResponseBody {
+	body := &CreateRiskPolicyBypassRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestConflictResponseBody builds the HTTP
+// response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestConflictResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestConflictResponseBody {
+	body := &CreateRiskPolicyBypassRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestUnsupportedMediaResponseBody {
+	body := &CreateRiskPolicyBypassRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestInvalidResponseBody builds the HTTP response
+// body from the result of the "createRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewCreateRiskPolicyBypassRequestInvalidResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestInvalidResponseBody {
+	body := &CreateRiskPolicyBypassRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestInvariantViolationResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestInvariantViolationResponseBody {
+	body := &CreateRiskPolicyBypassRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestUnexpectedResponseBody builds the HTTP
+// response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestUnexpectedResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestUnexpectedResponseBody {
+	body := &CreateRiskPolicyBypassRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateRiskPolicyBypassRequestGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewCreateRiskPolicyBypassRequestGatewayErrorResponseBody(res *goa.ServiceError) *CreateRiskPolicyBypassRequestGatewayErrorResponseBody {
+	body := &CreateRiskPolicyBypassRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listRiskPolicyBypassRequests" endpoint
+// of the "risk" service.
+func NewListRiskPolicyBypassRequestsUnauthorizedResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsUnauthorizedResponseBody {
+	body := &ListRiskPolicyBypassRequestsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsForbiddenResponseBody builds the HTTP
+// response body from the result of the "listRiskPolicyBypassRequests" endpoint
+// of the "risk" service.
+func NewListRiskPolicyBypassRequestsForbiddenResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsForbiddenResponseBody {
+	body := &ListRiskPolicyBypassRequestsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsBadRequestResponseBody builds the HTTP
+// response body from the result of the "listRiskPolicyBypassRequests" endpoint
+// of the "risk" service.
+func NewListRiskPolicyBypassRequestsBadRequestResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsBadRequestResponseBody {
+	body := &ListRiskPolicyBypassRequestsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsNotFoundResponseBody builds the HTTP response
+// body from the result of the "listRiskPolicyBypassRequests" endpoint of the
+// "risk" service.
+func NewListRiskPolicyBypassRequestsNotFoundResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsNotFoundResponseBody {
+	body := &ListRiskPolicyBypassRequestsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsConflictResponseBody builds the HTTP response
+// body from the result of the "listRiskPolicyBypassRequests" endpoint of the
+// "risk" service.
+func NewListRiskPolicyBypassRequestsConflictResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsConflictResponseBody {
+	body := &ListRiskPolicyBypassRequestsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listRiskPolicyBypassRequests" endpoint
+// of the "risk" service.
+func NewListRiskPolicyBypassRequestsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsUnsupportedMediaResponseBody {
+	body := &ListRiskPolicyBypassRequestsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsInvalidResponseBody builds the HTTP response
+// body from the result of the "listRiskPolicyBypassRequests" endpoint of the
+// "risk" service.
+func NewListRiskPolicyBypassRequestsInvalidResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsInvalidResponseBody {
+	body := &ListRiskPolicyBypassRequestsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "listRiskPolicyBypassRequests"
+// endpoint of the "risk" service.
+func NewListRiskPolicyBypassRequestsInvariantViolationResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsInvariantViolationResponseBody {
+	body := &ListRiskPolicyBypassRequestsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listRiskPolicyBypassRequests" endpoint
+// of the "risk" service.
+func NewListRiskPolicyBypassRequestsUnexpectedResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsUnexpectedResponseBody {
+	body := &ListRiskPolicyBypassRequestsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskPolicyBypassRequestsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listRiskPolicyBypassRequests" endpoint
+// of the "risk" service.
+func NewListRiskPolicyBypassRequestsGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskPolicyBypassRequestsGatewayErrorResponseBody {
+	body := &ListRiskPolicyBypassRequestsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestUnauthorizedResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestUnauthorizedResponseBody {
+	body := &ApproveRiskPolicyBypassRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestForbiddenResponseBody builds the HTTP
+// response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestForbiddenResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestForbiddenResponseBody {
+	body := &ApproveRiskPolicyBypassRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestBadRequestResponseBody builds the HTTP
+// response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestBadRequestResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestBadRequestResponseBody {
+	body := &ApproveRiskPolicyBypassRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestNotFoundResponseBody builds the HTTP
+// response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestNotFoundResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestNotFoundResponseBody {
+	body := &ApproveRiskPolicyBypassRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestConflictResponseBody builds the HTTP
+// response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestConflictResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestConflictResponseBody {
+	body := &ApproveRiskPolicyBypassRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestUnsupportedMediaResponseBody {
+	body := &ApproveRiskPolicyBypassRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestInvalidResponseBody builds the HTTP
+// response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestInvalidResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestInvalidResponseBody {
+	body := &ApproveRiskPolicyBypassRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestInvariantViolationResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestInvariantViolationResponseBody {
+	body := &ApproveRiskPolicyBypassRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestUnexpectedResponseBody builds the HTTP
+// response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestUnexpectedResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestUnexpectedResponseBody {
+	body := &ApproveRiskPolicyBypassRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveRiskPolicyBypassRequestGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewApproveRiskPolicyBypassRequestGatewayErrorResponseBody(res *goa.ServiceError) *ApproveRiskPolicyBypassRequestGatewayErrorResponseBody {
+	body := &ApproveRiskPolicyBypassRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "denyRiskPolicyBypassRequest" endpoint
+// of the "risk" service.
+func NewDenyRiskPolicyBypassRequestUnauthorizedResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestUnauthorizedResponseBody {
+	body := &DenyRiskPolicyBypassRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestForbiddenResponseBody builds the HTTP response
+// body from the result of the "denyRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewDenyRiskPolicyBypassRequestForbiddenResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestForbiddenResponseBody {
+	body := &DenyRiskPolicyBypassRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestBadRequestResponseBody builds the HTTP
+// response body from the result of the "denyRiskPolicyBypassRequest" endpoint
+// of the "risk" service.
+func NewDenyRiskPolicyBypassRequestBadRequestResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestBadRequestResponseBody {
+	body := &DenyRiskPolicyBypassRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestNotFoundResponseBody builds the HTTP response
+// body from the result of the "denyRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewDenyRiskPolicyBypassRequestNotFoundResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestNotFoundResponseBody {
+	body := &DenyRiskPolicyBypassRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestConflictResponseBody builds the HTTP response
+// body from the result of the "denyRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewDenyRiskPolicyBypassRequestConflictResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestConflictResponseBody {
+	body := &DenyRiskPolicyBypassRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "denyRiskPolicyBypassRequest" endpoint
+// of the "risk" service.
+func NewDenyRiskPolicyBypassRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestUnsupportedMediaResponseBody {
+	body := &DenyRiskPolicyBypassRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestInvalidResponseBody builds the HTTP response
+// body from the result of the "denyRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewDenyRiskPolicyBypassRequestInvalidResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestInvalidResponseBody {
+	body := &DenyRiskPolicyBypassRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "denyRiskPolicyBypassRequest" endpoint
+// of the "risk" service.
+func NewDenyRiskPolicyBypassRequestInvariantViolationResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestInvariantViolationResponseBody {
+	body := &DenyRiskPolicyBypassRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestUnexpectedResponseBody builds the HTTP
+// response body from the result of the "denyRiskPolicyBypassRequest" endpoint
+// of the "risk" service.
+func NewDenyRiskPolicyBypassRequestUnexpectedResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestUnexpectedResponseBody {
+	body := &DenyRiskPolicyBypassRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyRiskPolicyBypassRequestGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "denyRiskPolicyBypassRequest" endpoint
+// of the "risk" service.
+func NewDenyRiskPolicyBypassRequestGatewayErrorResponseBody(res *goa.ServiceError) *DenyRiskPolicyBypassRequestGatewayErrorResponseBody {
+	body := &DenyRiskPolicyBypassRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestUnauthorizedResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestUnauthorizedResponseBody {
+	body := &RevokeRiskPolicyBypassRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestForbiddenResponseBody builds the HTTP
+// response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestForbiddenResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestForbiddenResponseBody {
+	body := &RevokeRiskPolicyBypassRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestBadRequestResponseBody builds the HTTP
+// response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestBadRequestResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestBadRequestResponseBody {
+	body := &RevokeRiskPolicyBypassRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestNotFoundResponseBody builds the HTTP
+// response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestNotFoundResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestNotFoundResponseBody {
+	body := &RevokeRiskPolicyBypassRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestConflictResponseBody builds the HTTP
+// response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestConflictResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestConflictResponseBody {
+	body := &RevokeRiskPolicyBypassRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestUnsupportedMediaResponseBody {
+	body := &RevokeRiskPolicyBypassRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestInvalidResponseBody builds the HTTP response
+// body from the result of the "revokeRiskPolicyBypassRequest" endpoint of the
+// "risk" service.
+func NewRevokeRiskPolicyBypassRequestInvalidResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestInvalidResponseBody {
+	body := &RevokeRiskPolicyBypassRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestInvariantViolationResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestInvariantViolationResponseBody {
+	body := &RevokeRiskPolicyBypassRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestUnexpectedResponseBody builds the HTTP
+// response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestUnexpectedResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestUnexpectedResponseBody {
+	body := &RevokeRiskPolicyBypassRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeRiskPolicyBypassRequestGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+func NewRevokeRiskPolicyBypassRequestGatewayErrorResponseBody(res *goa.ServiceError) *RevokeRiskPolicyBypassRequestGatewayErrorResponseBody {
+	body := &RevokeRiskPolicyBypassRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewTriggerRiskAnalysisUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "triggerRiskAnalysis" endpoint of the "risk" service.
 func NewTriggerRiskAnalysisUnauthorizedResponseBody(res *goa.ServiceError) *TriggerRiskAnalysisUnauthorizedResponseBody {
@@ -10989,6 +13071,69 @@ func NewRevokeShadowMCPApprovalPayload(policyID string, match string, apikeyToke
 	return v
 }
 
+// NewCreateRiskPolicyBypassRequestPayload builds a risk service
+// createRiskPolicyBypassRequest endpoint payload.
+func NewCreateRiskPolicyBypassRequestPayload(body *CreateRiskPolicyBypassRequestRequestBody, sessionToken *string) *risk.CreateRiskPolicyBypassRequestPayload {
+	v := &risk.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: *body.RequestToken,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListRiskPolicyBypassRequestsPayload builds a risk service
+// listRiskPolicyBypassRequests endpoint payload.
+func NewListRiskPolicyBypassRequestsPayload(policyID *string, status *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskPolicyBypassRequestsPayload {
+	v := &risk.ListRiskPolicyBypassRequestsPayload{}
+	v.PolicyID = policyID
+	v.Status = status
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewApproveRiskPolicyBypassRequestPayload builds a risk service
+// approveRiskPolicyBypassRequest endpoint payload.
+func NewApproveRiskPolicyBypassRequestPayload(body *ApproveRiskPolicyBypassRequestRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ApproveRiskPolicyBypassRequestPayload {
+	v := &risk.ApproveRiskPolicyBypassRequestPayload{
+		ID: *body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDenyRiskPolicyBypassRequestPayload builds a risk service
+// denyRiskPolicyBypassRequest endpoint payload.
+func NewDenyRiskPolicyBypassRequestPayload(body *DenyRiskPolicyBypassRequestRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.DenyRiskPolicyBypassRequestPayload {
+	v := &risk.DenyRiskPolicyBypassRequestPayload{
+		ID: *body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewRevokeRiskPolicyBypassRequestPayload builds a risk service
+// revokeRiskPolicyBypassRequest endpoint payload.
+func NewRevokeRiskPolicyBypassRequestPayload(body *RevokeRiskPolicyBypassRequestRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.RevokeRiskPolicyBypassRequestPayload {
+	v := &risk.RevokeRiskPolicyBypassRequestPayload{
+		ID: *body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewTriggerRiskAnalysisPayload builds a risk service triggerRiskAnalysis
 // endpoint payload.
 func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.TriggerRiskAnalysisPayload {
@@ -11190,6 +13335,51 @@ func ValidateApproveShadowMCPRequestBody(body *ApproveShadowMCPRequestBody) (err
 	}
 	if body.PolicyID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCreateRiskPolicyBypassRequestRequestBody runs the validations
+// defined on CreateRiskPolicyBypassRequestRequestBody
+func ValidateCreateRiskPolicyBypassRequestRequestBody(body *CreateRiskPolicyBypassRequestRequestBody) (err error) {
+	if body.RequestToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_token", "body"))
+	}
+	return
+}
+
+// ValidateApproveRiskPolicyBypassRequestRequestBody runs the validations
+// defined on ApproveRiskPolicyBypassRequestRequestBody
+func ValidateApproveRiskPolicyBypassRequestRequestBody(body *ApproveRiskPolicyBypassRequestRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateDenyRiskPolicyBypassRequestRequestBody runs the validations defined
+// on DenyRiskPolicyBypassRequestRequestBody
+func ValidateDenyRiskPolicyBypassRequestRequestBody(body *DenyRiskPolicyBypassRequestRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRevokeRiskPolicyBypassRequestRequestBody runs the validations
+// defined on RevokeRiskPolicyBypassRequestRequestBody
+func ValidateRevokeRiskPolicyBypassRequestRequestBody(body *RevokeRiskPolicyBypassRequestRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

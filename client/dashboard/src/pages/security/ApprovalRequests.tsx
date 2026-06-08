@@ -3,7 +3,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useProject } from "@/contexts/Auth";
 
-export default function ApprovalRequests() {
+export default function ApprovalRequests(): JSX.Element {
   const project = useProject();
 
   return (

@@ -27,8 +27,6 @@ import { isDisplayableBucket } from "./challengeHelpers";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
-export type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
-
 type BucketOutcome = ChallengeBucket["outcome"];
 type OutcomeFilter = "all" | "deny" | "allow" | "resolved";
 
@@ -68,7 +66,7 @@ export function OutcomeBadge({
 }: {
   outcome: BucketOutcome;
   resolved?: boolean;
-}) {
+}): JSX.Element {
   if (resolved) {
     return (
       <MoonshineBadge variant="neutral">
@@ -135,7 +133,7 @@ export function ChallengesEmptyState({
   outcomeFilter,
 }: {
   outcomeFilter: OutcomeFilter;
-}) {
+}): JSX.Element {
   return (
     <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
       <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
@@ -241,7 +239,7 @@ function flattenWithExpanded(
   return result;
 }
 
-export function ChallengesTab() {
+export function ChallengesTab(): JSX.Element {
   const [searchParams] = useSearchParams();
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("deny");
   const [principalFilter, setPrincipalFilter] = useState(

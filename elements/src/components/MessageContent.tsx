@@ -26,6 +26,7 @@ const STUB_CONTEXT: ElementsContextType = {
   setIsOpen: () => {},
   plugins: recommended,
   mcpTools: undefined,
+  mcpToolsLoading: false,
 };
 
 export interface MessageContentProps {

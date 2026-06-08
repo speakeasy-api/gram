@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { CheckIcon, CopyIcon, ChevronDownIcon } from "lucide-react";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { codeToHtml } from "shiki";
 
@@ -31,7 +31,9 @@ function CopyButton({ content }: { content: string }) {
 
   return (
     <button
-      onClick={handleCopy}
+      onClick={(e) => {
+        void handleCopy(e);
+      }}
       className="rounded p-1 text-slate-400 transition-colors hover:text-slate-200"
       aria-label="Copy to clipboard"
     >
@@ -67,7 +69,7 @@ function SyntaxHighlightedCode({
     setHighlightedCode(null);
     if (!canHighlight) return;
     let cancelled = false;
-    codeToHtml(displayText, {
+    void codeToHtml(displayText, {
       lang: "json",
       theme: "github-dark-default",
       rootStyle: "background-color: transparent;",
@@ -121,7 +123,7 @@ function SyntaxHighlightedCode({
 
 interface CodeBlockProps {
   /** The content to display - can be string or object (will be JSON stringified) */
-  content: string | Record<string, unknown> | unknown;
+  content: unknown;
   /** Optional title/label for the code block */
   title?: string;
   /** Whether to start expanded (default: false) */
@@ -132,7 +134,11 @@ interface CodeBlockProps {
   maxHeight?: number;
 }
 
-export function CodeBlock({ content, title, className }: CodeBlockProps) {
+export function CodeBlock({
+  content,
+  title,
+  className,
+}: CodeBlockProps): JSX.Element {
   // Format the content as a string (always JSON for this use case)
   const formattedContent = useMemo(() => {
     if (typeof content === "string") {
@@ -162,57 +168,6 @@ export function CodeBlock({ content, title, className }: CodeBlockProps) {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-/** Collapsible section with code block - similar to Elements ToolUISection */
-interface CollapsibleCodeSectionProps {
-  title: string;
-  content: string | Record<string, unknown> | unknown;
-  defaultExpanded?: boolean;
-}
-
-export function CollapsibleCodeSection({
-  title,
-  content,
-  defaultExpanded = false,
-}: CollapsibleCodeSectionProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-
-  const formattedContent = useMemo(() => {
-    if (typeof content === "string") {
-      try {
-        return JSON.stringify(JSON.parse(content), null, 2);
-      } catch {
-        return content;
-      }
-    }
-    return JSON.stringify(content, null, 2);
-  }, [content]);
-
-  return (
-    <div className="border-border border-t">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between px-4 py-2.5 text-left transition-colors"
-      >
-        <span className="text-muted-foreground text-sm">{title}</span>
-        <div className="flex items-center gap-1">
-          <CopyButton content={formattedContent} />
-          <ChevronDownIcon
-            className={cn(
-              "text-muted-foreground size-4 transition-transform duration-200",
-              isExpanded && "rotate-180",
-            )}
-          />
-        </div>
-      </button>
-      {isExpanded && (
-        <div className="border-border border-t">
-          <CodeBlock content={content} />
-        </div>
-      )}
     </div>
   );
 }

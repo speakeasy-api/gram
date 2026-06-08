@@ -13,7 +13,11 @@ type Props = {
   onOpenChange: (open: boolean) => void;
 };
 
-export function CloneEnvironmentDialog({ source, open, onOpenChange }: Props) {
+export function CloneEnvironmentDialog({
+  source,
+  open,
+  onOpenChange,
+}: Props): JSX.Element {
   const [name, setName] = useState(source ? `${source.name} (copy)` : "");
   const [copyValues, setCopyValues] = useState(false);
 

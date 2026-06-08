@@ -23,7 +23,7 @@ export function RemoveSourceDialogContent({
   asset,
   onConfirmRemoval,
   onClose,
-}: RemoveSourceDialogContentProps) {
+}: RemoveSourceDialogContentProps): JSX.Element {
   const [pending, setPending] = useState(false);
   const [inputMatches, setInputMatches] = useState(false);
 
@@ -62,7 +62,7 @@ export function RemoveSourceDialogContent({
       <Button
         disabled={!inputMatches}
         variant="destructive-primary"
-        onClick={handleConfirm}
+        onClick={() => void handleConfirm()}
       >
         Delete {sourceLabel}
       </Button>

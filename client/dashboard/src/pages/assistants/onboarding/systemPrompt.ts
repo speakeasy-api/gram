@@ -180,7 +180,11 @@ export function buildWelcome({
 }: {
   mode: "create" | "edit";
   assistantName?: string;
-}) {
+}): {
+  title: string;
+  subtitle: string;
+  suggestions: Array<{ title: string; label: string; prompt: string }>;
+} {
   if (mode === "create") {
     return {
       title: "Build your assistant",

@@ -546,7 +546,7 @@ function ReviewRequestSheet({
 
         <SheetFooter>
           <Button
-            onClick={submit}
+            onClick={() => void submit()}
             disabled={!canSubmit || isSubmitting}
             className="w-full"
           >
@@ -745,7 +745,7 @@ function AccessRuleSheet({
 
         <SheetFooter>
           <Button
-            onClick={submit}
+            onClick={() => void submit()}
             disabled={!canSubmit || isSubmitting}
             className="w-full"
           >
@@ -778,10 +778,18 @@ function RuleActionsMenu({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setTimeout(onEdit, 0)}>
+          <DropdownMenuItem
+            onSelect={() => {
+              void setTimeout(onEdit, 0);
+            }}
+          >
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setTimeout(onDelete, 0)}>
+          <DropdownMenuItem
+            onSelect={() => {
+              void setTimeout(onDelete, 0);
+            }}
+          >
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -837,7 +845,11 @@ function ManagePoliciesButton() {
   );
 }
 
-export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
+export function ApprovalRequestsContent({
+  projectId,
+}: {
+  projectId: string;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const client = useSdkClient();
   const organization = useOrganization();
@@ -1460,7 +1472,7 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
             </Button>
             <Button
               variant="destructive-primary"
-              onClick={confirmDeleteRule}
+              onClick={() => void confirmDeleteRule()}
               disabled={deleteRule.isPending}
             >
               {deleteRule.isPending ? (

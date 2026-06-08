@@ -1,6 +1,7 @@
+import type { GramChatMessage } from "@/lib/messageConverter";
 import { MODELS } from "@/lib/models";
-import type { FrontendTool } from "@/lib/tools";
 import {
+  AssistantTool,
   ImageMessagePartComponent,
   ReasoningGroupComponent,
   ReasoningMessagePartComponent,
@@ -662,8 +663,15 @@ export type ToolsFilter =
   | string[]
   | (({ toolName }: { toolName: string }) => boolean);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type FrontendTools = Record<string, FrontendTool<any, any>>;
+// FrontendTools holds heterogeneous, user-defined tools. Each entry was made by
+// `defineFrontendTool<TArgs, TResult>` with its own narrow generics, but
+// assistant-ui's `AssistantToolProps<TArgs, TResult>` is invariant in both
+// parameters (input position in `execute`, output position in `streamCall`), so
+// no single `FrontendTool<...>` parameterisation can stand in for an arbitrary
+// one. The SDK addresses this on its own `AssistantTool` shape with
+// `unstable_tool: AssistantToolProps<any, any>`; we mirror that here for the
+// record's value type.
+export type FrontendTools = Record<string, AssistantTool>;
 
 /**
  * ToolsConfig is used to configure tool support in the Elements library.
@@ -842,6 +850,12 @@ export interface ContextCompactionConfig {
 }
 
 export interface WelcomeConfig {
+  /**
+   * Optional logo image URL shown above the title on the empty-thread welcome
+   * screen.
+   */
+  logo?: string;
+
   /**
    * The welcome message to display when the thread is empty.
    */
@@ -1076,6 +1090,26 @@ export interface HistoryConfig {
   deferThreadIdMinting?: boolean;
 
   /**
+   * Optional hook to transform or drop each persisted message before it is
+   * rendered from history. Return a (possibly rewritten) message to render it,
+   * or `null` to omit it entirely. Elements applies this to every message
+   * returned by `chat.load` before conversion.
+   *
+   * Use this to keep product- or backend-specific transcript conventions out of
+   * the library — e.g. stripping a server-injected framing block from a turn's
+   * text, or hiding system events that carry no user-facing content. Elements
+   * itself stays agnostic to any such convention.
+   *
+   * @example
+   * // Strip a server-injected framing block and hide framing-only turns.
+   * transformChatMessage: (msg) => {
+   *   const cleaned = stripFraming(msg);
+   *   return isFramingOnly(cleaned) ? null : cleaned;
+   * }
+   */
+  transformChatMessage?: (message: GramChatMessage) => GramChatMessage | null;
+
+  /**
    * Whether to show the thread list sidebar/panel.
    * Only applicable for widget and sidecar variants.
    * Only applies when history is enabled.
@@ -1116,4 +1150,6 @@ export type ElementsContextType = {
   setIsOpen: (isOpen: boolean) => void;
   plugins: Plugin[];
   mcpTools: Record<string, unknown> | undefined;
+  /** True while the MCP tool list is actively being fetched. */
+  mcpToolsLoading: boolean;
 };

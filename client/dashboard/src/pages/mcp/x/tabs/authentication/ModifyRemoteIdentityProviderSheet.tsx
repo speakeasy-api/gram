@@ -43,7 +43,7 @@ export function ModifyRemoteIdentityProviderSheet({
   onOpenChange: (open: boolean) => void;
   userSessionIssuer: UserSessionIssuer;
   issuer: RemoteSessionIssuer;
-}) {
+}): JSX.Element {
   // Fetch every remote_session_client tied to this issuer (across all
   // user_session_issuers in the project), walking every page. We need the
   // unfiltered list to compute which OTHER MCP servers are also using this
@@ -339,7 +339,9 @@ function ModifyRemoteIdentityProviderSheetBody({
           onTokenEndpointChange={setTokenEndpoint}
           onRegistrationEndpointChange={setRegistrationEndpoint}
           onJwksUriChange={setJwksUri}
-          onDiscover={() => runDiscover(issuerUrl)}
+          onDiscover={() => {
+            runDiscover(issuerUrl);
+          }}
           onResetEndpoints={handleResetEndpoints}
         />
 

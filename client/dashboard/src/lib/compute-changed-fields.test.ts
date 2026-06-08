@@ -61,14 +61,14 @@ describe("computeChangedFields", () => {
     const after = { Items: [1, 2, 3] };
     const result = computeChangedFields(before, after);
     expect(result).toHaveLength(1);
-    expect(result[0].field).toBe("Items");
+    expect(result[0]!.field).toBe("Items");
   });
 
   it("sorts results alphabetically by field name", () => {
     const before = { Zebra: 1, Apple: 1 };
     const after = { Zebra: 2, Apple: 2 };
     const result = computeChangedFields(before, after);
-    expect(result[0].field).toBe("Apple");
-    expect(result[1].field).toBe("Zebra");
+    expect(result[0]!.field).toBe("Apple");
+    expect(result[1]!.field).toBe("Zebra");
   });
 });

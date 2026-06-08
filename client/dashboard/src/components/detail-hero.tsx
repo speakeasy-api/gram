@@ -13,7 +13,11 @@ interface DetailHeroProps {
  *
  * Used on MCP detail, source detail, built-in MCP detail, and external MCP detail pages.
  */
-export function DetailHero({ children, actions, className }: DetailHeroProps) {
+export function DetailHero({
+  children,
+  actions,
+  className,
+}: DetailHeroProps): JSX.Element {
   return (
     <div
       className={cn(

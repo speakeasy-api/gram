@@ -18,7 +18,7 @@ import { getServerURL } from "@/lib/utils";
  * Use this wrapper anywhere in the dashboard instead of importing
  * `TimeRangePicker` directly from `@gram-ai/elements`.
  */
-export function TimeRangePicker(props: TimeRangePickerProps) {
+export function TimeRangePicker(props: TimeRangePickerProps): JSX.Element {
   const { session } = useSession();
   return (
     <ElementsTimeRangePicker

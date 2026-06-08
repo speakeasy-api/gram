@@ -19,19 +19,29 @@ export const SuggestionSchema = z.object({
   ),
 });
 
-export type ToolifyContextType = {
-  toolset: ToolsetEntry;
-  purpose: string;
-  suggestion: z.infer<typeof SuggestionSchema>;
-};
+// Discriminated state: either the toolify dialog hasn't run (`toolset` is
+// undefined and the other fields don't exist), or it has and every field is
+// populated. Consumers narrow on `ctx.toolset` to access the rest.
+export type ToolifyContextType =
+  | {
+      toolset?: undefined;
+      purpose?: undefined;
+      suggestion?: undefined;
+    }
+  | {
+      toolset: ToolsetEntry;
+      purpose: string;
+      suggestion: z.infer<typeof SuggestionSchema>;
+    };
 
-//eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const emptyCtx: ToolifyContextType = {} as any;
+export const emptyCtx: ToolifyContextType = {};
 
 export const ToolifyContext = createContext<
   ToolifyContextType & { set: (t: ToolifyContextType) => void }
 >({ ...emptyCtx, set: () => {} });
 
-export const useToolifyContext = () => {
+export const useToolifyContext = (): ToolifyContextType & {
+  set: (t: ToolifyContextType) => void;
+} => {
   return useContext(ToolifyContext);
 };

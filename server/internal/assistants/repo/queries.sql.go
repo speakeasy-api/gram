@@ -179,7 +179,7 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at
 `
 
 type ClaimNextPendingEventParams struct {
@@ -202,6 +202,7 @@ type ClaimNextPendingEventRow struct {
 	SourcePayloadJson     []byte
 	Attempts              int64
 	LastError             pgtype.Text
+	CreatedAt             pgtype.Timestamptz
 }
 
 func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendingEventParams) (ClaimNextPendingEventRow, error) {
@@ -225,6 +226,7 @@ func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendin
 		&i.SourcePayloadJson,
 		&i.Attempts,
 		&i.LastError,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -1358,39 +1360,6 @@ func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg 
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProjectMCPToolsetSlugs = `-- name: ListProjectMCPToolsetSlugs :many
-SELECT slug
-FROM toolsets
-WHERE project_id = $1
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-ORDER BY created_at
-`
-
-// Slugs of every MCP-reachable toolset in a project, used to attach all of a
-// project's toolsets to its managed assistant at provisioning time. Toolsets
-// without an mcp_slug can't be addressed by the runtime, so they're excluded
-// (mirrors the guard in EnableMCPForToolsets).
-func (q *Queries) ListProjectMCPToolsetSlugs(ctx context.Context, projectID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, listProjectMCPToolsetSlugs, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var slug string
-		if err := rows.Scan(&slug); err != nil {
-			return nil, err
-		}
-		items = append(items, slug)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -20,7 +20,7 @@ import { MustacheHighlight } from "./ToolBuilder";
 import { ToolifyDialog, ToolifyProvider } from "./Toolify";
 import { useCustomTools } from "./useCustomTools";
 
-export function CustomToolsRoot() {
+export function CustomToolsRoot(): JSX.Element {
   return (
     <ToolifyProvider>
       <Outlet />
@@ -28,7 +28,7 @@ export function CustomToolsRoot() {
   );
 }
 
-export default function CustomTools() {
+export default function CustomTools(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -84,13 +84,13 @@ function CustomToolsInner() {
   );
 }
 
-export function CustomToolCard({ template }: { template: PromptTemplate }) {
+function CustomToolCard({ template }: { template: PromptTemplate }) {
   const routes = useRoutes();
   const queryClient = useQueryClient();
 
   const deleteTemplate = useDeleteTemplateMutation({
     onSuccess: () => {
-      invalidateAllTemplates(queryClient);
+      void invalidateAllTemplates(queryClient);
     },
   });
 

@@ -31,29 +31,6 @@ export type DetectionRule = {
   hidden?: boolean;
 };
 
-export type McpServerScope = {
-  slug: string;
-  allTools: boolean;
-  selectedTools: string[];
-};
-
-export type McpScope =
-  | { mode: "all" }
-  | { mode: "selected"; servers: McpServerScope[] };
-
-export type DlpPolicy = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  ruleCategories: RuleCategory[];
-  selectedRules: string[];
-  action: PolicyAction;
-  types: PolicyMessageType[];
-  mcpScope: McpScope;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 export const RULE_CATEGORY_META: Record<
   RuleCategory,
   { label: string; description: string; icon: string }
@@ -1422,76 +1399,3 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
   cli_destructive: [],
   custom: [],
 };
-
-// Mock policies for initial display
-export const MOCK_POLICIES: DlpPolicy[] = [
-  {
-    id: "pol-1",
-    name: "Production Secret Scanner",
-    enabled: true,
-    ruleCategories: ["secrets"],
-    selectedRules: [
-      "secret.private_key",
-      "secret.aws_access_token",
-      "secret.github_pat",
-      "secret.anthropic_api_key",
-      "secret.openai_api_key",
-      "secret.generic_api_key",
-      "secret.jwt",
-    ],
-    action: "block",
-    types: [
-      "user_message",
-      "tool_request",
-      "tool_response",
-      "assistant_message",
-    ],
-    mcpScope: { mode: "all" },
-    createdAt: new Date("2026-03-15"),
-    updatedAt: new Date("2026-04-10"),
-  },
-  {
-    id: "pol-2",
-    name: "PII Protection",
-    enabled: true,
-    ruleCategories: ["pii", "government_ids"],
-    selectedRules: [
-      "pii.email_address",
-      "pii.phone_number",
-      "pii.us_ssn",
-      "pii.us_passport",
-    ],
-    action: "flag",
-    types: ["user_message", "assistant_message", "tool_response"],
-    mcpScope: { mode: "all" },
-    createdAt: new Date("2026-03-20"),
-    updatedAt: new Date("2026-04-08"),
-  },
-  {
-    id: "pol-3",
-    name: "Financial Data Guard",
-    enabled: false,
-    ruleCategories: ["financial"],
-    selectedRules: ["pii.credit_card", "pii.iban_code", "pii.us_bank_number"],
-    action: "block",
-    types: ["user_message", "tool_request", "tool_response"],
-    mcpScope: { mode: "all" },
-    createdAt: new Date("2026-04-01"),
-    updatedAt: new Date("2026-04-01"),
-  },
-];
-
-export function createEmptyPolicy(): DlpPolicy {
-  return {
-    id: `pol-${Date.now()}`,
-    name: "",
-    enabled: true,
-    ruleCategories: [],
-    selectedRules: [],
-    action: "flag",
-    types: ["user_message", "tool_request", "tool_response"],
-    mcpScope: { mode: "all" },
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-}

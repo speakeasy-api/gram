@@ -27,7 +27,7 @@ export const DeleteRoleDialog = ({
   members,
   defaultRole,
   children,
-}: DeleteRoleDialogProps) => {
+}: DeleteRoleDialogProps): JSX.Element => {
   const hasMembers = members.length > 0;
   const soleRoleMembers = role
     ? members.filter((m) => m.roleIds.length === 1)

@@ -16,7 +16,7 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Column, Table } from "@speakeasy-api/moonshine";
 import { SkeletonTable } from "@/components/ui/skeleton";
-import { useMemo, useState } from "react";
+import { useMemo, useState, ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@speakeasy-api/moonshine";
 
@@ -242,7 +242,7 @@ export function MCPTeamAccessTab({
 }: {
   resourceId: string;
   tools?: Tool[];
-}) {
+}): ReactElement | null {
   const orgRoutes = useOrgRoutes();
   const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData, isLoading: rolesLoading } = useRoles();

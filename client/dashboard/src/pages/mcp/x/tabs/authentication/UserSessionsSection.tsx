@@ -58,7 +58,7 @@ export function UserSessionsSection({
   userSessionIssuer,
 }: {
   userSessionIssuer: UserSessionIssuer;
-}) {
+}): JSX.Element {
   const queryClient = useQueryClient();
   const initialSplit = splitIntoUnit(userSessionIssuer.sessionDurationHours);
   const [durationNumber, setDurationNumber] = useState(initialSplit.number);

@@ -84,7 +84,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Grid,
   Icon,
   Stack,
 } from "@speakeasy-api/moonshine";
@@ -110,13 +109,13 @@ import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { useToolsets } from "../toolsets/useToolsets";
 import { getSystemProvidedVariables } from "./environmentVariableUtils";
-import { useMcpConfigs, useMcpSlugValidation } from "./mcp-details-utils";
+import { useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
-export function MCPDetailsRoot() {
+export function MCPDetailsRoot(): React.JSX.Element {
   return <Outlet />;
 }
 
@@ -169,7 +168,7 @@ function MCPLoading() {
   );
 }
 
-export function MCPDetailPage() {
+export function MCPDetailPage(): React.JSX.Element {
   return (
     <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
       <MCPDetailPageInner />
@@ -371,7 +370,7 @@ function MCPDetailPageContent({
                   size="sm"
                   onClick={() => {
                     if (mcpUrl) {
-                      navigator.clipboard.writeText(mcpUrl);
+                      void navigator.clipboard.writeText(mcpUrl);
                       toast.success("URL copied to clipboard");
                     }
                   }}
@@ -533,8 +532,8 @@ function RenameMCPServerButton({ toolset }: { toolset: Toolset }) {
       },
       {
         onSuccess: () => {
-          invalidateAllToolset(queryClient);
-          invalidateAllListToolsets(queryClient);
+          void invalidateAllToolset(queryClient);
+          void invalidateAllListToolsets(queryClient);
           telemetry.capture("mcp_event", {
             action: "mcp_server_renamed",
             slug: toolset.slug,
@@ -660,7 +659,7 @@ const STATUS_OPTIONS: {
   },
 ];
 
-export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
+function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
@@ -731,8 +730,8 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
       },
       {
         onSuccess: () => {
-          invalidateAllToolset(queryClient);
-          invalidateAllGetPeriodUsage(queryClient);
+          void invalidateAllToolset(queryClient);
+          void invalidateAllGetPeriodUsage(queryClient);
           telemetry.capture("mcp_event", {
             action:
               status === "disabled"
@@ -985,13 +984,15 @@ function ServerInstructionsSection({
         <Stack direction="horizontal" gap={2} justify="end">
           <GenerateInstructionsButton toolset={toolset} form={form} />
           <Button
-            onClick={async () => {
-              try {
-                await form.saveAsync();
-                toast.success("Server instructions saved.");
-              } catch {
-                toast.error("Failed to save instructions.");
-              }
+            onClick={() => {
+              void (async () => {
+                try {
+                  await form.saveAsync();
+                  toast.success("Server instructions saved.");
+                } catch {
+                  toast.error("Failed to save instructions.");
+                }
+              })();
             }}
             disabled={isLoading || !form.instructionsDirty}
             size="sm"
@@ -1025,8 +1026,7 @@ function GenerateInstructionsButton({
     setGenerating(true);
     try {
       const res = await generateText({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        model: model as any,
+        model,
         prompt: `Write server instructions for the MCP server described below. Server instructions are returned to LLMs when they connect — they serve as a "user manual" independent of individual tool descriptions.
 
 Best practices:
@@ -1058,7 +1058,7 @@ Respond with ONLY the server instructions as plain text. Do not wrap in JSON or 
     <Button
       variant="secondary"
       size="sm"
-      onClick={handleGenerate}
+      onClick={() => void handleGenerate()}
       disabled={generating || tools.length === 0}
     >
       <Button.LeftIcon>
@@ -1132,8 +1132,8 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", { action: "toolset_updated" });
-      refetch();
-      invalidateAllToolset(queryClient);
+      void refetch();
+      void invalidateAllToolset(queryClient);
     },
     onError: (error) => {
       telemetry.capture("toolset_event", {
@@ -1198,8 +1198,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     // can add or remove filter scopes, so the read-only filtering panel above
     // must be invalidated too — otherwise new tags only appear after a reload.
     onSuccess: () => {
-      refetch();
-      invalidateListToolsetToolFilters(queryClient, [{ slug: toolset.slug }]);
+      void refetch();
+      void invalidateListToolsetToolFilters(queryClient, [
+        { slug: toolset.slug },
+      ]);
     },
   });
 
@@ -1321,23 +1323,25 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           open={addToolsDialogOpen}
           onOpenChange={setAddToolsDialogOpen}
           toolset={fullToolset}
-          onAddTools={async (toolUrns) => {
-            const currentUrns = fullToolset.toolUrns || [];
-            const newUrns = [...new Set([...currentUrns, ...toolUrns])];
+          onAddTools={(toolUrns) => {
+            void (async (toolUrns) => {
+              const currentUrns = fullToolset.toolUrns || [];
+              const newUrns = [...new Set([...currentUrns, ...toolUrns])];
 
-            await client.toolsets.updateBySlug({
-              slug: toolset.slug,
-              updateToolsetRequestBody: {
-                toolUrns: newUrns,
-              },
-            });
+              await client.toolsets.updateBySlug({
+                slug: toolset.slug,
+                updateToolsetRequestBody: {
+                  toolUrns: newUrns,
+                },
+              });
 
-            toast.success(
-              `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
-            );
+              toast.success(
+                `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
+              );
 
-            await refetch();
-            invalidateAllToolset(queryClient);
+              await refetch();
+              void invalidateAllToolset(queryClient);
+            })(toolUrns);
           }}
         />
       )}
@@ -1356,7 +1360,7 @@ function MCPResourcesTab({ toolset }: { toolset: Toolset }) {
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", { action: "toolset_updated" });
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
     },
   });
 
@@ -1381,7 +1385,7 @@ function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", { action: "toolset_updated" });
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
     },
   });
 
@@ -1498,9 +1502,9 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         slug: toolset.slug,
       });
 
-      invalidateAllToolset(queryClient, { refetchType: "none" });
-      invalidateAllGetPeriodUsage(queryClient);
-      refetchDeployment();
+      void invalidateAllToolset(queryClient, { refetchType: "none" });
+      void invalidateAllGetPeriodUsage(queryClient);
+      void refetchDeployment();
       // Wait for the toolset list to refresh before navigating so the
       // listing page never renders a card for the deleted toolset (which
       // would trigger a per-card getBySlug refetch that 404s).
@@ -1519,7 +1523,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
       toast.success("MCP settings saved successfully");
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
@@ -1735,7 +1739,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               <Button
                 variant="secondary"
                 size="md"
-                onClick={handleExportJson}
+                onClick={() => void handleExportJson()}
                 disabled={!toolset?.mcpEnabled || !toolset?.mcpSlug}
               >
                 <Button.LeftIcon>
@@ -1805,7 +1809,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               </Button>
               <Button
                 variant="destructive-primary"
-                onClick={handleDeleteMcpServer}
+                onClick={() => void handleDeleteMcpServer()}
                 disabled={isDeletingMcpServer}
               >
                 Delete MCP Server
@@ -1853,14 +1857,14 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
       const servers = serveQueries[i]?.data?.servers ?? [];
       for (const server of servers) {
         if (server.toolsetId === toolset.id) {
-          ids.add(collections[i].id);
+          ids.add(collections[i]!.id!);
           break;
         }
 
         const parts = server.registrySpecifier?.split("/") ?? [];
         const slug = parts[parts.length - 1];
         if (slug === toolset.mcpSlug) {
-          ids.add(collections[i].id);
+          ids.add(collections[i]!.id!);
           break;
         }
       }
@@ -1990,7 +1994,11 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
         {hasChanges && (
           <BlockInner>
             <Stack direction="horizontal" gap={2}>
-              <Button size="sm" disabled={isSaving} onClick={handleSave}>
+              <Button
+                size="sm"
+                disabled={isSaving}
+                onClick={() => void handleSave()}
+              >
                 <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
               </Button>
               <Button
@@ -2007,11 +2015,6 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
       </Block>
     </PageSection>
   );
-}
-
-// Keep the old MCPDetails for backward compatibility (can be removed later)
-export function MCPDetails({ toolset }: { toolset: Toolset }) {
-  return <MCPSettingsTab toolset={toolset} />;
 }
 
 export function PageSection({
@@ -2031,7 +2034,7 @@ export function PageSection({
   headingExtra?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-}) {
+}): React.JSX.Element {
   return (
     <Stack gap={2} className={cn("mb-8", className)}>
       <div className="flex items-center justify-between">
@@ -2054,82 +2057,6 @@ export function PageSection({
   );
 }
 
-export function MCPJson({
-  toolset,
-  fullWidth = false,
-  className,
-}: {
-  toolset: Toolset;
-  fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
-  className?: string;
-}) {
-  const telemetry = useTelemetry();
-
-  const {
-    public: mcpJsonPublic,
-    internal: mcpJsonInternal,
-    requiresGramKey,
-    hasOAuth,
-  } = useMcpConfigs(toolset);
-
-  const onCopy = () => {
-    telemetry.capture("mcp_event", {
-      action: "mcp_json_copied",
-      slug: toolset.slug,
-    });
-  };
-
-  const showManagedAuth = !hasOAuth;
-
-  return (
-    <Grid
-      gap={4}
-      className={cn("my-4!", className)}
-      columns={
-        !fullWidth && showManagedAuth
-          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
-          : 1
-      }
-    >
-      {[
-        <Grid.Item key="passthrough">
-          <Type className="font-medium">Pass-through Authentication</Type>
-          <Type muted small className="mb-2! max-w-3xl">
-            Pass API credentials directly to the MCP server.
-            <br />
-            <span
-              className={
-                requiresGramKey
-                  ? "text-warning-foreground font-medium"
-                  : "italic"
-              }
-            >
-              {requiresGramKey
-                ? "Requires a platform API key."
-                : "No platform API key required."}
-            </span>
-          </Type>
-          <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-        </Grid.Item>,
-        ...(showManagedAuth
-          ? [
-              <Grid.Item key="managed">
-                <Type className="font-medium">Managed Authentication</Type>
-                <Type muted small className="mb-2! max-w-3xl">
-                  Manage API authentication with platform environments.
-                  <br />
-                  Users need a single platform API Key rather than bringing
-                  their own keys.
-                </Type>
-                <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
-              </Grid.Item>,
-            ]
-          : []),
-      ]}
-    </Grid>
-  );
-}
-
 export function OAuthDetailsModal({
   isOpen,
   onClose,
@@ -2140,13 +2067,13 @@ export function OAuthDetailsModal({
   onClose: () => void;
   toolset: Toolset;
   onEditRequest: () => void;
-}) {
+}): React.JSX.Element {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const queryClient = useQueryClient();
 
   const removeOAuthMutation = useRemoveOAuthServerMutation({
     onSuccess: () => {
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
       onClose();
     },
   });
@@ -2414,13 +2341,13 @@ export function GramOAuthProxyModal({
   isOpen: boolean;
   onClose: () => void;
   toolset: Toolset;
-}) {
+}): React.JSX.Element {
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
 
   const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
     onSuccess: () => {
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
       toast.success("Platform OAuth configured successfully");
       telemetry.capture("mcp_event", {
         action: "gram_oauth_proxy_configured",

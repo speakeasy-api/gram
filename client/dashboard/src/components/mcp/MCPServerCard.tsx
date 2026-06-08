@@ -23,7 +23,7 @@ export function MCPServerCard({
 }: {
   server: McpServer;
   endpointCount: number;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
 
   const mcpEnabled = server.visibility !== "disabled";
@@ -63,23 +63,5 @@ export function MCPServerCard({
         </div>
       </DotCard>
     </Link>
-  );
-}
-
-export function MCPServerCardSkeleton() {
-  return (
-    <DotCard>
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="bg-muted h-5 w-2/3 animate-pulse rounded" />
-        <div className="bg-muted h-5 w-20 animate-pulse rounded-full" />
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <div className="flex items-center gap-2">
-          <div className="bg-muted h-2.5 w-2.5 animate-pulse rounded-full" />
-          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
-        </div>
-        <div className="bg-muted h-3.5 w-10 animate-pulse rounded" />
-      </div>
-    </DotCard>
   );
 }

@@ -29,11 +29,11 @@ import { ServerCard } from "./ServerCard";
 import { ServerTableRow } from "./ServerTableRow";
 import { SortDropdown } from "./SortDropdown";
 
-export function CatalogRoot() {
+export function CatalogRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Catalog() {
+export default function Catalog(): JSX.Element {
   return (
     <RequireScope scope={["project:read", "mcp:write"]} level="page">
       <CatalogInner />
@@ -138,8 +138,8 @@ function CatalogInner() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
+        if (entries[0]!.isIntersecting! && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
         }
       },
       { threshold: 0.1 },
@@ -340,7 +340,9 @@ function CatalogInner() {
             clearSelection();
           }
         }}
-        onServersAdded={() => refetchDeployment()}
+        onServersAdded={() => {
+          void refetchDeployment();
+        }}
       />
       <CommandBar
         selectedCount={selectedServers.size}

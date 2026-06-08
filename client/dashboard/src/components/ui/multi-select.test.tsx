@@ -26,7 +26,7 @@ function openEmailSelect() {
   render(
     <MultiSelect
       options={EMAILS.map((e) => ({ label: e, value: e }))}
-      onValueChange={onValueChange}
+      onValueChange={() => void onValueChange()}
       placeholder="Filter by user email"
       hideSelectAll
       singleLine

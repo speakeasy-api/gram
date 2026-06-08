@@ -10,7 +10,7 @@ type StepContextApi = {
 
 export const StepContext = React.createContext<StepContextApi>(null!);
 
-export const useStep = () => {
+export const useStep = (): StepContextApi => {
   const ctx = React.useContext(StepContext);
 
   if (!ctx) {

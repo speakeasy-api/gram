@@ -122,7 +122,12 @@ function SetupRequiredModal({
   onNavigateToElements,
 }: SetupRequiredModalProps) {
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        void (!isOpen && onClose());
+      }}
+    >
       <Dialog.Content className="sm:max-w-md">
         <Dialog.Header className="text-center">
           <div className="bg-muted mx-auto mb-2 flex size-14 items-center justify-center rounded-full">
@@ -171,19 +176,6 @@ function SetupRequiredModal({
         </div>
       </Dialog.Content>
     </Dialog>
-  );
-}
-
-function ViewSessionsLink({ from, to }: { from: Date; to: Date }) {
-  const routes = useRoutes();
-  return (
-    <routes.logs.agents.Link
-      queryParams={{ from: from.toISOString(), to: to.toISOString() }}
-      className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm no-underline transition-colors hover:no-underline"
-    >
-      View sessions
-      <ChevronRight className="size-4" />
-    </routes.logs.agents.Link>
   );
 }
 
@@ -240,7 +232,7 @@ const FILTER_PLURAL_LABELS: Record<FilterDimension, string> = {
   agent: "Agents",
 };
 
-export type InsightsContentProps = {
+type InsightsContentProps = {
   data: GetObservabilityOverviewResult;
   summary: GetObservabilityOverviewResult["summary"];
   comparison: GetObservabilityOverviewResult["comparison"];
@@ -422,12 +414,12 @@ function parseLocalDate(dateStr: string): Date {
     if (match) {
       const [, year, month, day, hours, minutes, seconds] = match;
       return new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hours),
-        parseInt(minutes),
-        parseInt(seconds),
+        parseInt(year!),
+        parseInt(month!) - 1,
+        parseInt(day!),
+        parseInt(hours!),
+        parseInt(minutes!),
+        parseInt(seconds!),
       );
     }
     return utcDate;
@@ -435,7 +427,7 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(dateStr);
 }
 
-export function InsightsMCPContent() {
+export function InsightsMCPContent(): React.JSX.Element {
   return (
     <InsightsOverviewShell noDataKind="tools" showMcpFilter>
       {(props) => <ToolsInsightsContent {...props} />}
@@ -443,7 +435,7 @@ export function InsightsMCPContent() {
   );
 }
 
-export function InsightsOverviewShell({
+function InsightsOverviewShell({
   children,
   noDataKind,
   showMcpFilter,
@@ -789,7 +781,7 @@ export function InsightsOverviewShell({
           onTimeRangeSelect={(from, to) => {
             setCustomRangeParam(from, to);
           }}
-          refetch={refetch}
+          refetch={() => void refetch()}
           hasSeenSetupModal={hasSeenSetupModal}
           onSetupModalSeen={markSetupModalSeen}
           showSetupRequiredModal={showSetupRequiredModal}
@@ -1001,7 +993,7 @@ function InsightsOverviewContent({
       }
 
       const queryString = params.toString();
-      navigate(queryString ? `${logsUrl}?${queryString}` : logsUrl);
+      void navigate(queryString ? `${logsUrl}?${queryString}` : logsUrl);
     },
     [routes.logs, navigate, customRange, dateRange],
   );
@@ -1585,142 +1577,6 @@ function ToolCallsChart({
           <Line data={chartData} options={options} />
         </ChartWithSelection>
       </div>
-    </div>
-  );
-}
-
-export function SessionDurationChart({
-  data,
-  timeRangeMs,
-  title,
-  onTimeRangeSelect,
-  isLoading,
-  from,
-  to,
-  showNoData,
-}: {
-  data: Array<{
-    bucketTimeUnixNano?: string;
-    avgSessionDurationMs?: number;
-  }>;
-  timeRangeMs: number;
-  title: string;
-  onTimeRangeSelect?: (from: Date, to: Date) => void;
-  isLoading?: boolean;
-  showNoData?: boolean;
-  from: Date;
-  to: Date;
-}) {
-  const labels = data.map((d) => {
-    const timestamp = Number(d.bucketTimeUnixNano) / 1_000_000;
-    const date = new Date(timestamp);
-    return formatChartLabel(date, timeRangeMs);
-  });
-
-  const rawData = data.map((d) => (d.avgSessionDurationMs ?? 0) / 1000);
-  const durationData = smoothData(rawData);
-
-  const chartData = {
-    labels,
-    datasets: [
-      {
-        label: " Avg Duration",
-        data: durationData,
-        borderColor: "#8b5cf6",
-        backgroundColor: "rgba(139, 92, 246, 0.1)",
-        pointBackgroundColor: "#8b5cf6",
-        fill: true,
-        tension: 0.45,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      },
-    ],
-  };
-
-  const formatDuration = (seconds: number) => {
-    if (seconds >= 60) {
-      const mins = Math.floor(seconds / 60);
-      const secs = Math.round(seconds % 60);
-      return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
-    }
-    return `${seconds.toFixed(1)}s`;
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: "index" as const,
-      intersect: false,
-    },
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        backgroundColor: "rgba(0, 0, 0, 0.85)",
-        titleColor: "#fff",
-        bodyColor: "#e5e7eb",
-        borderColor: "rgba(255, 255, 255, 0.1)",
-        borderWidth: 1,
-        padding: 12,
-        boxPadding: 4,
-        usePointStyle: true,
-        callbacks: {
-          label: (context: TooltipItem<"line">) => {
-            const value = context.parsed.y ?? 0;
-            return ` Avg Duration: ${formatDuration(value)}`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          display: true,
-          color: "rgba(128, 128, 128, 0.1)",
-          lineWidth: 1,
-        },
-        ticks: {
-          maxTicksLimit: 8,
-        },
-      },
-      y: {
-        beginAtZero: true,
-        grid: {
-          color: "rgba(128, 128, 128, 0.2)",
-        },
-        ticks: {
-          callback: (value: number | string) => {
-            const num = typeof value === "string" ? parseFloat(value) : value;
-            return formatDuration(num);
-          },
-        },
-      },
-    },
-  };
-
-  return (
-    <div className="border-border bg-card rounded-lg border p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <ViewSessionsLink from={from} to={to} />
-      </div>
-      <div className="relative">
-        {isLoading && (
-          <div className="bg-background/60 absolute inset-0 flex items-center justify-center rounded">
-            <div className="border-muted-foreground/50 size-5 animate-spin rounded-full border-2 border-t-transparent" />
-          </div>
-        )}
-        {showNoData && <NoDataOverlay />}
-        <ChartWithSelection data={data} onTimeRangeSelect={onTimeRangeSelect}>
-          <Line data={chartData} options={options} />
-        </ChartWithSelection>
-      </div>
-      <p className="text-muted-foreground mt-3 text-xs">
-        Values are rolled up and averaged across the time window interval
-      </p>
     </div>
   );
 }

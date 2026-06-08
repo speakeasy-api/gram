@@ -9,7 +9,9 @@ type BrandGradientLineProps = {
  * across the 9 language colors. Use exactly once per surface. Pulls the
  * gradient from Moonshine so it stays in sync with brand updates.
  */
-export function BrandGradientLine({ className }: BrandGradientLineProps) {
+export function BrandGradientLine({
+  className,
+}: BrandGradientLineProps): JSX.Element {
   return (
     <div
       aria-hidden

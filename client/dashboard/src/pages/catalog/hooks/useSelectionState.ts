@@ -5,7 +5,11 @@ import { useSearchParams } from "react-router";
  * Hook to manage selected servers with URL synchronization.
  * Selected servers persist across navigation.
  */
-export function useSelectionState() {
+export function useSelectionState(): {
+  selectedServers: Set<string>;
+  toggleServerSelection: (serverKey: string) => void;
+  clearSelection: () => void;
+} {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse selected servers from URL

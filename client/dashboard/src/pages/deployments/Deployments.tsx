@@ -20,7 +20,7 @@ import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
 
-export default function DeploymentsPage() {
+export default function DeploymentsPage(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -37,7 +37,7 @@ export default function DeploymentsPage() {
   );
 }
 
-export function DeploymentsRoot() {
+export function DeploymentsRoot(): JSX.Element {
   return <Outlet />;
 }
 
@@ -122,7 +122,7 @@ function DeploymentActionsDropdown({
   );
 }
 
-export function DeploymentsTable({
+function DeploymentsTable({
   showHeader = true,
 }: { showHeader?: boolean } = {}) {
   const routes = useRoutes();
@@ -263,7 +263,7 @@ export function DeploymentsTable({
   );
 }
 
-export function DeploymentLink({ id }: { id: string }) {
+function DeploymentLink({ id }: { id: string }) {
   const routes = useRoutes();
   return (
     <routes.deployments.deployment.Link params={[id]}>
