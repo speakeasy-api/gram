@@ -2,17 +2,25 @@ import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useNavigate } from "react-router";
+import { Gram } from "@gram/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AccessMember, Role } from "@gram/client/models/components";
 import { Operator } from "@gram/client/models/components";
+import type { GetHooksSummaryResult } from "@gram/client/models/components/gethookssummaryresult.js";
+import { OK } from "@gram/client/types/fp";
+import { GramProvider } from "@gram/client/react-query";
 import { DEFAULT_HOOK_TYPES } from "./observeFilterConstants";
 import { useObserveFilters } from "./useObserveFilters";
+import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/roles.js", () => ({
   useRoles: vi.fn(),
+}));
+vi.mock("@gram/client/funcs/telemetryGetHooksSummary", () => ({
+  telemetryGetHooksSummary: vi.fn(),
 }));
 
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -26,6 +34,19 @@ function useObserveFiltersWithNavigation() {
 
 describe("useObserveFilters", () => {
   afterEach(() => vi.clearAllMocks());
+
+  const gram = new Gram({ serverURL: "http://localhost" });
+  const emptyHooksSummary: GetHooksSummaryResult = {
+    breakdown: [],
+    servers: [],
+    skillBreakdown: [],
+    skillTimeSeries: [],
+    skills: [],
+    timeSeries: [],
+    totalEvents: 0,
+    totalSessions: 0,
+    users: [],
+  };
 
   const mockMembers: AccessMember[] = [
     {
@@ -74,6 +95,9 @@ describe("useObserveFilters", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    vi.mocked(telemetryGetHooksSummary).mockResolvedValue(
+      OK(emptyHooksSummary),
+    );
     const membersResult = {
       data: { members: mockMembers },
       isLoading: false,
@@ -91,7 +115,11 @@ describe("useObserveFilters", () => {
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={[initialUrl]}>{children}</MemoryRouter>
+          <GramProvider client={gram}>
+            <MemoryRouter initialEntries={[initialUrl]}>
+              {children}
+            </MemoryRouter>
+          </GramProvider>
         </QueryClientProvider>
       );
     }
@@ -102,6 +130,9 @@ describe("useObserveFilters", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    vi.mocked(telemetryGetHooksSummary).mockResolvedValue(
+      OK(emptyHooksSummary),
+    );
     const membersResult = {
       data: { members: [] },
       isLoading: false,
@@ -119,15 +150,17 @@ describe("useObserveFilters", () => {
     function RouterWrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={qc}>
-          <MemoryRouter
-            initialEntries={[
-              "/?server=api&user=alex@example.com&hookTypes=mcp",
-              "/?server=api-v2&user=becca@example.com&hookTypes=local,skill",
-            ]}
-            initialIndex={1}
-          >
-            {children}
-          </MemoryRouter>
+          <GramProvider client={gram}>
+            <MemoryRouter
+              initialEntries={[
+                "/?server=api&user=alex@example.com&hookTypes=mcp",
+                "/?server=api-v2&user=becca@example.com&hookTypes=local,skill",
+              ]}
+              initialIndex={1}
+            >
+              {children}
+            </MemoryRouter>
+          </GramProvider>
         </QueryClientProvider>
       );
     }
@@ -174,6 +207,9 @@ describe("useObserveFilters", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    vi.mocked(telemetryGetHooksSummary).mockResolvedValue(
+      OK(emptyHooksSummary),
+    );
     const membersResult = {
       data: { members: [] },
       isLoading: false,
@@ -191,9 +227,11 @@ describe("useObserveFilters", () => {
     function RouterWrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={["/?hookTypes=local"]}>
-            {children}
-          </MemoryRouter>
+          <GramProvider client={gram}>
+            <MemoryRouter initialEntries={["/?hookTypes=local"]}>
+              {children}
+            </MemoryRouter>
+          </GramProvider>
         </QueryClientProvider>
       );
     }
