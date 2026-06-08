@@ -6,12 +6,13 @@ import { Link as ExternalLink } from "@/components/ui/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { useOrgRoutes } from "@/routes";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import React from "react";
-import { Link } from "react-router";
+import { Link, Navigate } from "react-router";
 
 // Public, unauthenticated bucket the release pipeline publishes to. The
 // manifest (releases.json) lists the current version + per-platform URLs;
@@ -746,6 +747,14 @@ function FleetIdentity() {
 }
 
 export default function DeviceAgent() {
+  const telemetry = useTelemetry();
+  const isDeviceAgentEnabled =
+    telemetry.isFeatureEnabled("gram-device-agent") ?? false;
+
+  if (!isDeviceAgentEnabled) {
+    return <Navigate to=".." replace />;
+  }
+
   return (
     <Page>
       <Page.Header>
