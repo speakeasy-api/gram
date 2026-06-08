@@ -304,11 +304,11 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
   ];
 
   return (
-    <routes.assistants.detail.Link
-      params={[assistant.id]}
-      className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-    >
-      <CardContextMenu actions={actions}>
+    <CardContextMenu actions={actions}>
+      <routes.assistants.detail.Link
+        params={[assistant.id]}
+        className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      >
         <DotCard icon={<AssistantIcon assistant={assistant} />}>
           {/* Header row: name + actions */}
           <div className="mb-3 flex items-start justify-between gap-2">
@@ -342,7 +342,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
             <UpdatedAt date={new Date(assistant.updatedAt)} />
           </div>
         </DotCard>
-      </CardContextMenu>
-    </routes.assistants.detail.Link>
+      </routes.assistants.detail.Link>
+    </CardContextMenu>
   );
 }

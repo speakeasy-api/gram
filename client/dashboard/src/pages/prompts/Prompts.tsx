@@ -109,11 +109,11 @@ export function PromptTemplateCard({
   ];
 
   return (
-    <routes.prompts.prompt.Link
-      params={[template.name]}
-      className="hover:no-underline"
-    >
-      <CardContextMenu actions={actions}>
+    <CardContextMenu actions={actions}>
+      <routes.prompts.prompt.Link
+        params={[template.name]}
+        className="block h-full hover:no-underline"
+      >
         <Card>
           <Card.Header>
             <Card.Title className="normal-case">{template.name}</Card.Title>
@@ -131,7 +131,7 @@ export function PromptTemplateCard({
             <UpdatedAt date={new Date(template.updatedAt)} />
           </Card.Footer>
         </Card>
-      </CardContextMenu>
-    </routes.prompts.prompt.Link>
+      </routes.prompts.prompt.Link>
+    </CardContextMenu>
   );
 }

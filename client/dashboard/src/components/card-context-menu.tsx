@@ -31,7 +31,10 @@ export function CardContextMenu({
     <ContextMenu>
       {/* Own the trigger element (a full-height wrapper) rather than asChild on
           the card — card components don't all forward refs/props, so the
-          contextmenu handler must land on an element we control. */}
+          contextmenu handler must land on an element we control. Callers should
+          place CardContextMenu around the card's outermost focusable element
+          (e.g. a <Link>) so that keyboard Shift+F10 dispatches contextmenu on
+          that element and the event bubbles up to this trigger. */}
       <ContextMenuTrigger asChild>
         <div className={cn("h-full", className)}>{children}</div>
       </ContextMenuTrigger>

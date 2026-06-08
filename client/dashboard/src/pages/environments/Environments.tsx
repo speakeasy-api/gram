@@ -185,11 +185,11 @@ function EnvironmentCard({
     : [];
 
   return (
-    <routes.environments.environment.Link
-      params={[environment.slug]}
-      className="hover:no-underline"
-    >
-      <CardContextMenu actions={actions}>
+    <CardContextMenu actions={actions}>
+      <routes.environments.environment.Link
+        params={[environment.slug]}
+        className="block h-full hover:no-underline"
+      >
         <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
           <div className="mb-2 flex items-start justify-between gap-2">
             <Type
@@ -220,7 +220,7 @@ function EnvironmentCard({
             </div>
           </div>
         </DotCard>
-      </CardContextMenu>
-    </routes.environments.environment.Link>
+      </routes.environments.environment.Link>
+    </CardContextMenu>
   );
 }

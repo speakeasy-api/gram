@@ -159,12 +159,12 @@ export function SourceCard({
   })();
 
   return (
-    <routes.sources.source.Link
-      key={asset.id}
-      params={[sourceKind, asset.slug]}
-      className="hover:no-underline"
-    >
-      <CardContextMenu actions={actions}>
+    <CardContextMenu actions={actions}>
+      <routes.sources.source.Link
+        key={asset.id}
+        params={[sourceKind, asset.slug]}
+        className="block h-full hover:no-underline"
+      >
         <DotCard icon={iconContent}>
           {/* Header row with name and actions */}
           <div className="mb-2 flex items-start justify-between gap-2">
@@ -208,8 +208,8 @@ export function SourceCard({
             </div>
           </div>
         </DotCard>
-      </CardContextMenu>
-    </routes.sources.source.Link>
+      </routes.sources.source.Link>
+    </CardContextMenu>
   );
 }
 

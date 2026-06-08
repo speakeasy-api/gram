@@ -109,11 +109,11 @@ function CustomToolCard({ template }: { template: PromptTemplate }) {
   ];
 
   return (
-    <routes.customTools.toolBuilder.Link
-      params={[template.canonicalName]}
-      className="hover:no-underline"
-    >
-      <CardContextMenu actions={actions}>
+    <CardContextMenu actions={actions}>
+      <routes.customTools.toolBuilder.Link
+        params={[template.canonicalName]}
+        className="block h-full hover:no-underline"
+      >
         <Card>
           <Card.Header>
             <Card.Title className="normal-case">{template.name}</Card.Title>
@@ -134,7 +134,7 @@ function CustomToolCard({ template }: { template: PromptTemplate }) {
             <UpdatedAt date={new Date(template.updatedAt)} />
           </Card.Footer>
         </Card>
-      </CardContextMenu>
-    </routes.customTools.toolBuilder.Link>
+      </routes.customTools.toolBuilder.Link>
+    </CardContextMenu>
   );
 }
