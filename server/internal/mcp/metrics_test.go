@@ -72,3 +72,64 @@ func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
 		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", 100*time.Millisecond)
 	})
 }
+
+func TestNewMetrics_CreatesOAuthFlowCounters(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := newMetrics(meter, testenv.NewLogger(t))
+	require.NotNil(t, m)
+	require.NotNil(t, m.oauthFlowStartedCounter)
+	require.NotNil(t, m.oauthFlowCompletedCounter)
+	require.NotNil(t, m.oauthFlowFailedCounter)
+	require.NotNil(t, m.oauthFlowDeclinedCounter)
+}
+
+func TestMetrics_RecordOAuthFlowStarted(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := newMetrics(meter, testenv.NewLogger(t))
+
+	// Should not panic with a valid counter.
+	m.RecordOAuthFlowStarted(t.Context(), "issuer-1", "mcp-slug-1")
+}
+
+func TestMetrics_RecordOAuthFlowCompleted(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := newMetrics(meter, testenv.NewLogger(t))
+
+	m.RecordOAuthFlowCompleted(t.Context(), "issuer-1", "mcp-slug-1")
+}
+
+func TestMetrics_RecordOAuthFlowFailed(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := newMetrics(meter, testenv.NewLogger(t))
+
+	m.RecordOAuthFlowFailed(t.Context(), "issuer-1", "mcp-slug-1", oauthFlowStageToken)
+}
+
+func TestMetrics_RecordOAuthFlowDeclined(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := newMetrics(meter, testenv.NewLogger(t))
+
+	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", oauthFlowStageConsent)
+}
+
+func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
+	t.Parallel()
+
+	m := &metrics{}
+
+	// All four must be nil-safe (counter construction can fail at startup).
+	m.RecordOAuthFlowStarted(t.Context(), "issuer-1", "mcp-slug-1")
+	m.RecordOAuthFlowCompleted(t.Context(), "issuer-1", "mcp-slug-1")
+	m.RecordOAuthFlowFailed(t.Context(), "issuer-1", "mcp-slug-1", oauthFlowStageConsent)
+	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", oauthFlowStageIDPCallback)
+}
