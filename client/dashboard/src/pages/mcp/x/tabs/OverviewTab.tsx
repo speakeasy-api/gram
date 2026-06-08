@@ -17,13 +17,8 @@ import {
   useRemoteSessionClients,
 } from "@gram/client/react-query/index.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
-import { ArrowUpRight, BookOpen, Copy, ExternalLink } from "lucide-react";
-import {
-  useMemo,
-  type ComponentType,
-  type ReactNode,
-  type SVGProps,
-} from "react";
+import { ArrowUpRight, Copy, ExternalLink } from "lucide-react";
+import { useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -173,8 +168,7 @@ function EssentialsReadinessSummary({
   const isLoading = essentials.some((essential) => essential.loading);
   const nextEssential = essentials.find((essential) => !essential.ready);
 
-  let message =
-    "All essentials are ready. Clients can connect to this MCP server.";
+  let message = "This MCP server is ready to be used.";
   if (isLoading) {
     message = "Checking essentials...";
   } else if (nextEssential) {
@@ -182,7 +176,7 @@ function EssentialsReadinessSummary({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
       <div
         className="flex items-center gap-1"
         aria-label={`${readyCount} of ${essentials.length} essentials ready`}
@@ -690,11 +684,10 @@ function EnhanceSection() {
       <Type muted small className="mb-5">
         Optional items to customize the MCP server.
       </Type>
-      <EnhancementCard
-        icon={BookOpen}
+      <EnhancementRow
         title="Install page"
-        description="Give users a branded, one-click page with setup instructions for connecting."
-        meta="Default"
+        description="Customize what users see when they visit the server's install page."
+        configured={false}
         actionLabel="Customize"
         comingSoon
       />
@@ -702,67 +695,78 @@ function EnhanceSection() {
   );
 }
 
-function EnhancementCard({
-  icon: Icon,
+function EnhancementRow({
   title,
   description,
-  meta,
+  configured,
   actionLabel,
   onAction,
   comingSoon = false,
 }: {
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
   title: string;
   description: string;
-  meta: string;
+  configured: boolean;
   actionLabel: string;
   onAction?: () => void;
   comingSoon?: boolean;
 }) {
-  return (
-    <section className="border-border bg-card flex min-h-[176px] flex-col rounded-lg border p-5 shadow-sm">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-md">
-          <Icon className="text-muted-foreground h-5 w-5" />
-        </div>
-        <Type variant="subheading" as="h3">
-          {title}
-        </Type>
-        {comingSoon && (
-          <Badge size="sm" variant="neutral" background>
-            <Badge.Text>Coming Soon</Badge.Text>
-          </Badge>
-        )}
-      </div>
+  let actionNode: ReactNode = (
+    <Button variant="secondary" onClick={onAction}>
+      <Button.Text>{actionLabel}</Button.Text>
+    </Button>
+  );
 
-      <Type muted small className="mb-5">
-        {description}
-      </Type>
-
-      <div className="mt-auto flex items-center justify-between gap-4">
-        <Type
-          muted
-          small
-          className="font-mono text-xs tracking-[0.2em] uppercase"
-        >
-          {meta}
-        </Type>
-        {comingSoon ? (
-          // A disabled button swallows pointer events, so wrap it in a span
-          // for the tooltip trigger to register hover.
-          <SimpleTooltip tooltip="Coming Soon">
-            <span tabIndex={0}>
-              <Button variant="secondary" disabled>
-                <Button.Text>{actionLabel}</Button.Text>
-              </Button>
-            </span>
-          </SimpleTooltip>
-        ) : (
-          <Button variant="secondary" onClick={onAction}>
+  if (comingSoon) {
+    actionNode = (
+      // A disabled button swallows pointer events, so wrap it in a span
+      // for the tooltip trigger to register hover.
+      <SimpleTooltip tooltip="Coming Soon">
+        <span tabIndex={0}>
+          <Button variant="secondary" disabled>
             <Button.Text>{actionLabel}</Button.Text>
           </Button>
-        )}
+        </span>
+      </SimpleTooltip>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 gap-5">
+        <EnhancementStatusDot configured={configured} />
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2.5">
+            <Type variant="subheading" as="h3">
+              {title}
+            </Type>
+            {comingSoon && (
+              <Badge size="sm" variant="neutral" background>
+                <Badge.Text>Coming Soon</Badge.Text>
+              </Badge>
+            )}
+          </div>
+          <Type muted small as="div" className="break-words">
+            {description}
+          </Type>
+        </div>
       </div>
-    </section>
+      <div className="flex flex-wrap items-center gap-2 pl-8 sm:ml-6 sm:shrink-0 sm:justify-end sm:pl-0">
+        {actionNode}
+      </div>
+    </div>
+  );
+}
+
+function EnhancementStatusDot({ configured }: { configured: boolean }) {
+  let colorClassName = "bg-muted-foreground/40";
+  if (configured) {
+    colorClassName = "bg-green-500";
+  }
+
+  return (
+    <span
+      aria-hidden
+      className={`mt-2 h-3 w-3 shrink-0 rounded-full ${colorClassName}`}
+    />
   );
 }
