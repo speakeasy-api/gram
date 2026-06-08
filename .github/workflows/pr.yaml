@@ -45,6 +45,7 @@ jobs:
       elements: ${{ steps.gates.outputs.elements }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
+      infra: ${{ steps.gates.outputs.infra }}
       sdk: ${{ steps.gates.outputs.sdk }}
       sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
       risk_accuracy: ${{ steps.gates.outputs.risk_accuracy }}
@@ -120,6 +121,13 @@ jobs:
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.infra }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "infra=true" >> $GITHUB_OUTPUT
+            echo "Infra jobs will run."
+          else
+            echo "Infra jobs will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -672,6 +680,56 @@ jobs:
         run: |
           mise run db:migrate --dry
           mise run git:porcelain
+
+  infra-build-lint:
+    name: Lint and generate infra
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      # TODO: re-enable once buf.yaml + infra/proto exist on main. The breaking
+      # check compares against origin/main, which has no protos until this
+      # scaffolding lands, so `buf breaking` fails with "no .proto files" on the
+      # bootstrap PR. Uncomment both steps in a follow-up after the initial merge.
+      # - name: Fetch main branch
+      #   run: git fetch --depth=1 origin main
+      #
+      # - name: Lint proto files
+      #   run: mise run lint:infra --against ".git#ref=origin/main"
+
+      - name: Run code generators
+        run: mise run gen:infra
+
+      - name: Check for dirty files
+        run: mise run git:porcelain
 
   cli-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1687,6 +1745,7 @@ jobs:
       - ts-sdk-build-lint
       - cli-build-lint
       - plog-build-lint
+      - infra-build-lint
       - functions-build-host
       - functions-image
       - assistant-runtime-image

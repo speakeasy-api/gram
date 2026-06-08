@@ -5,6 +5,7 @@
     "hverlin.mise-vscode",
     "oxc.oxc-vscode",
     "redhat.vscode-yaml",
-    "stateful.runme"
+    "stateful.runme",
+    "bufbuild.vscode-buf"
   ]
 }

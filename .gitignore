@@ -1,3 +1,4 @@
+*.tmp-*
 *.log
 mise.local.toml
 mise.*.local.toml
@@ -71,6 +72,5 @@ package-lock.json
 .claude/hooks/*
 **/.claude/scheduled_tasks.lock
 flagged-chats.jsonl
-
-# Superpowers brainstorm/visual-companion scratch
+**/descriptors.pb
 .superpowers/
