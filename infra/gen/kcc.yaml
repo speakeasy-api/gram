@@ -3,5 +3,35 @@ pubsub:
   apis:
   - pubsub.googleapis.com
   enabled: true
-  subscriptions: []
-  topics: []
+  subscriptions:
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-ping-v1-processor
+      topic_proto_message: gram-ping-v1-message
+    name: gram-ping-v1-processor
+    spec:
+      ackDeadlineSeconds: 30
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-ping-v1-processor-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 3600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-ping-v1-message
+  topics:
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-ping-v1-message
+    name: gram-ping-v1-message
+    spec:
+      messageRetentionDuration: 86400s
+  - labels:
+      dlq_for: gram-ping-v1-processor
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-ping-v1-processor
+    name: gram-ping-v1-processor-dlq
+    spec: {}
