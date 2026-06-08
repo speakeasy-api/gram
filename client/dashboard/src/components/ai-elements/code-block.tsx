@@ -36,7 +36,7 @@ export const CodeBlock = ({
   className,
   children,
   ...props
-}: CodeBlockProps) => {
+}: CodeBlockProps): JSX.Element => {
   const [html, setHtml] = useState<string>("");
   const [darkHtml, setDarkHtml] = useState<string>("");
   const mounted = useRef(false);
@@ -44,12 +44,14 @@ export const CodeBlock = ({
   useEffect(() => {
     mounted.current = true;
 
-    highlightCode(code, language, showLineNumbers).then(([light, dark]) => {
-      if (mounted.current) {
-        setHtml(light);
-        setDarkHtml(dark);
-      }
-    });
+    void highlightCode(code, language, showLineNumbers).then(
+      ([light, dark]) => {
+        if (mounted.current) {
+          setHtml(light);
+          setDarkHtml(dark);
+        }
+      },
+    );
 
     return () => {
       mounted.current = false;
@@ -100,7 +102,7 @@ export const CodeBlockCopyButton = ({
   children,
   className,
   ...props
-}: CodeBlockCopyButtonProps) => {
+}: CodeBlockCopyButtonProps): JSX.Element => {
   const [isCopied, setIsCopied] = useState(false);
   const { code } = useContext(CodeBlockContext);
 
@@ -125,7 +127,7 @@ export const CodeBlockCopyButton = ({
   return (
     <Button
       className={cn("shrink-0", className)}
-      onClick={copyToClipboard}
+      onClick={() => void copyToClipboard()}
       size="icon"
       variant="ghost"
       {...props}

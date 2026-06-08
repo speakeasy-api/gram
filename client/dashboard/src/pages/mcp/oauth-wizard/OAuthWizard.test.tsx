@@ -224,7 +224,7 @@ describe("OAuthWizard — rendering", () => {
 describe("OAuthWizard — happy proxy create", () => {
   it("walks path selection → metadata → credentials → success", async () => {
     const onClose = vi.fn();
-    renderWizard({ onClose });
+    renderWizard({ onClose: () => void onClose() });
 
     fireEvent.click(screen.getByRole("button", { name: /OAuth Proxy/ }));
 

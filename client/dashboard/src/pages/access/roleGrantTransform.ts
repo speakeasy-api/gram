@@ -73,7 +73,7 @@ export function grantsFromRole(role: Role): Record<string, RoleGrant> {
       (effect === "allow" &&
         isUnrestrictedSelectorList(g.selectors as Selector[]))
     ) {
-      result[g.scope].rules.push({
+      result[g.scope]!.rules.push({
         id: crypto.randomUUID(),
         effect,
         selectors: null,
@@ -95,7 +95,7 @@ export function grantsFromRole(role: Role): Record<string, RoleGrant> {
             .map((s) => DISPOSITION_TO_ANNOTATION[s.disposition!])
             .filter((a): a is AnnotationHint => !!a);
         }
-        result[g.scope].rules.push(rule);
+        result[g.scope]!.rules.push(rule)!;
       }
     }
   }

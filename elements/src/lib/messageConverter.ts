@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 /**
  * Message format converter for Gram API <-> assistant-ui.
  *
@@ -195,7 +193,18 @@ function buildAssistantContentParts(
     });
   }
 
-  let toolCalls = tryParseJSON(msg.tool_calls || "[]");
+  // Accept both the OpenAI/OpenRouter shape (`{ id, function: { name, arguments } }`)
+  // and the assistant-ui shape (`{ toolCallId, toolName, args }`). Tool calls
+  // arrive as JSON the server stored opaquely, so we model the union here.
+  type WireToolCall = {
+    id?: string;
+    toolCallId?: string;
+    function?: { name?: string; arguments?: string | Record<string, unknown> };
+    toolName?: string;
+    args?: string | Record<string, unknown>;
+  };
+
+  let toolCalls = tryParseJSON<WireToolCall[]>(msg.tool_calls || "[]");
   if (!Array.isArray(toolCalls)) {
     console.warn("Invalid tool_calls format, expected an array.");
     toolCalls = [];
@@ -564,7 +573,7 @@ function mediaTypeFromURL(url: string): string {
   return match?.[1] || unspecified;
 }
 
-function tryParseJSON<T = any>(str: string): T | null {
+function tryParseJSON<T = unknown>(str: string): T | null {
   try {
     return JSON.parse(str) as T;
   } catch {

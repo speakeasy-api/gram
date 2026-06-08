@@ -117,13 +117,13 @@ export const WindowTrail = memo(function WindowTrail() {
     }
 
     const { camera, size } = state;
-    const posAttr = geometry.attributes.position;
-    const sizeAttr = geometry.attributes.size;
-    const lifetimeAttr = geometry.attributes.lifetime;
-    const durationAttr = geometry.attributes.duration;
+    const posAttr = geometry.attributes.position!;
+    const sizeAttr = geometry.attributes.size!;
+    const lifetimeAttr = geometry.attributes.lifetime!;
+    const durationAttr = geometry.attributes.duration!;
 
     // Update shader time uniform
-    material.uniforms.time.value = state.clock.elapsedTime;
+    material.uniforms.time!.value = state.clock.elapsedTime;
 
     let needsUpdate = false;
 
@@ -207,8 +207,8 @@ export const WindowTrail = memo(function WindowTrail() {
           worldPos.z - Math.random() * 0.5,
         );
         sizeAttr.setX(idx, 35 + Math.random() * 25);
-        lifetimeAttr.setX(idx, state.clock.elapsedTime);
-        durationAttr.setX(idx, 3.0 + Math.random() * 0.5); // Consistent duration for reliable trails
+        lifetimeAttr.setX(idx, state.clock.elapsedTime)!;
+        durationAttr.setX(idx, 3.0 + Math.random() * 0.5)!; // Consistent duration for reliable trails
 
         nextIdx.current = (nextIdx.current + 1) % 600;
       }

@@ -74,7 +74,7 @@ type SelectedRule =
   | { kind: "builtin"; rule: BuiltinRule }
   | { kind: "custom"; rule: CustomDetectionRule };
 
-export default function DetectionRules() {
+export default function DetectionRules(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <Page>
@@ -367,7 +367,12 @@ function RuleDetailSheet({
   onDeleteCustomRule: (id: string) => void;
 }) {
   return (
-    <Sheet open={!!selection} onOpenChange={(open) => !open && onClose()}>
+    <Sheet
+      open={!!selection}
+      onOpenChange={(open) => {
+        void (!open && onClose());
+      }}
+    >
       <SheetContent className="flex flex-col overflow-y-auto sm:max-w-xl">
         {selection?.kind === "builtin" && (
           <BuiltinRuleDetail rule={selection.rule} />
@@ -542,7 +547,7 @@ function CustomRuleDetail({
             disabled={
               !dirty || !!regexError || !title.trim() || saveState === "saving"
             }
-            onClick={handleSave}
+            onClick={() => void handleSave()}
           >
             {saveState === "saving" && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -913,7 +918,7 @@ function ChatPlayground({
         <Button
           size="sm"
           disabled={!selectedChat || running}
-          onClick={handleRun}
+          onClick={() => void handleRun()}
         >
           {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Run on chat

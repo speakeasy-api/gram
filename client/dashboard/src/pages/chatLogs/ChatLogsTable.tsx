@@ -79,7 +79,7 @@ function CopyButton({
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't trigger row selection
-      navigator.clipboard.writeText(value);
+      void navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     },
@@ -122,7 +122,7 @@ export function ChatLogsTable({
   onDeleteChat,
   isLoading,
   error,
-}: ChatLogsTableProps) {
+}: ChatLogsTableProps): JSX.Element {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -296,7 +296,9 @@ export function ChatLogsTable({
 
       <Dialog
         open={deleteConfirmId !== null}
-        onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+        onOpenChange={(open) => {
+          void (!open && setDeleteConfirmId(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>

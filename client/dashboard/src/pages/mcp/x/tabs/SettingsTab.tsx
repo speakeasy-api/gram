@@ -84,7 +84,7 @@ export function SettingsTab({
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
-}) {
+}): JSX.Element {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-6 px-8 py-8">
       <DisplayNameCard mcpServer={mcpServer} />
@@ -250,7 +250,7 @@ function DisplayNameCard({ mcpServer }: { mcpServer: McpServer }) {
       // invalidating queries so the refetch uses the new lookup args and the
       // page-level not-found guard doesn't bounce the user back to /mcp.
       const nextParam = mcpServerRouteParam(updated);
-      navigate(routes.mcp.x.href(nextParam), { replace: true });
+      void navigate(routes.mcp.x.href(nextParam), { replace: true });
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
@@ -274,7 +274,7 @@ function DisplayNameCard({ mcpServer }: { mcpServer: McpServer }) {
             variant="primary"
             size="md"
             disabled={saveDisabled}
-            onClick={handleSave}
+            onClick={() => void handleSave()}
           >
             <FooterSaveButtonContent pending={update.isPending} />
           </Button>
@@ -690,7 +690,7 @@ function NewPlatformAddressRow({
           size="md"
           variant="primary"
           disabled={!suffix.trim() || !!slugError || submitting}
-          onClick={handleCreate}
+          onClick={() => void handleCreate()}
         >
           <RowSaveButtonContent pending={submitting} />
         </Button>
@@ -798,7 +798,7 @@ function NewCustomAddressRow({
           size="md"
           variant="primary"
           disabled={!slug.trim() || !domainId || !!slugError || submitting}
-          onClick={handleCreate}
+          onClick={() => void handleCreate()}
         >
           <RowSaveButtonContent pending={submitting} />
         </Button>
@@ -1013,7 +1013,7 @@ function DangerZoneCard({
             onClose={() => setDeleteDialogOpen(false)}
             onSuccess={() => {
               setDeleteDialogOpen(false);
-              navigate(routes.mcp.href());
+              void navigate(routes.mcp.href());
             }}
           />
         </Dialog.Content>

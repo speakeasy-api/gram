@@ -30,7 +30,7 @@ describe("ChartCard", () => {
   it("calls onExpand with chartId when the expand button is clicked", () => {
     const onExpand = vi.fn();
     render(
-      <ChartCard {...defaultProps} onExpand={onExpand}>
+      <ChartCard {...defaultProps} onExpand={() => void onExpand()}>
         -
       </ChartCard>,
     );
@@ -44,7 +44,7 @@ describe("ChartCard", () => {
       <ChartCard
         {...defaultProps}
         expandedChart="server-usage"
-        onExpand={onExpand}
+        onExpand={() => void onExpand()}
       >
         -
       </ChartCard>,

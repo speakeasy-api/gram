@@ -40,7 +40,7 @@ export function ChatLogsFilters({
   hasRisk,
   onHasRiskChange,
   disabled,
-}: ChatLogsFiltersProps) {
+}: ChatLogsFiltersProps): JSX.Element {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
   // Sync local state when prop changes externally (e.g., browser back/forward)

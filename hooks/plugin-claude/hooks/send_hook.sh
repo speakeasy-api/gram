@@ -14,16 +14,26 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$script_dir/identity.sh" ]; then
+  . "$script_dir/identity.sh"
+fi
+
+payload=$(cat)
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  payload=$(gram_enrich_identity_payload "$payload")
+fi
+
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
 
-response=$(curl -s -w "\n%{http_code}" -X POST \
+response=$(printf '%s' "$payload" | curl -s -w "\n%{http_code}" -X POST \
   -H "Content-Type: application/json" \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  -d @- \
+  --data-binary @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.claude")
 

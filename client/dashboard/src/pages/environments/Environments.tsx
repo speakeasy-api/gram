@@ -1,10 +1,12 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { CardContextMenu } from "@/components/card-context-menu";
 import { DotCard } from "@/components/ui/dot-card";
-import { MoreActions } from "@/components/ui/more-actions";
+import { Action, MoreActions } from "@/components/ui/more-actions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/index.js";
@@ -16,11 +18,11 @@ import { Type } from "@/components/ui/type";
 import { handleAPIError } from "@/lib/errors";
 import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";
 import { useEnvironments } from "./useEnvironments";
-export function EnvironmentsRoot() {
+export function EnvironmentsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Environments() {
+export default function Environments(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -166,50 +168,59 @@ function EnvironmentCard({
   onClone: (environment: Environment) => void;
 }) {
   const routes = useRoutes();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("environment:write");
+
+  // Gate the actions by scope so the right-click menu honors the same
+  // environment:write guard as the visible ⋯ button (which is wrapped in
+  // RequireScope). Empty actions → CardContextMenu renders children unwrapped.
+  const actions: Action[] = canWrite
+    ? [
+        {
+          label: "Clone",
+          onClick: () => onClone(environment),
+          icon: "copy",
+        },
+      ]
+    : [];
 
   return (
-    <routes.environments.environment.Link
-      params={[environment.slug]}
-      className="hover:no-underline"
-    >
-      <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <Type
-            variant="subheading"
-            as="div"
-            className="text-md group-hover:text-primary flex-1 truncate transition-colors"
-            title={environment.name}
-          >
-            {environment.name}
-          </Type>
-          <RequireScope scope="environment:write" level="component">
-            <div onClick={(e) => e.stopPropagation()}>
-              <MoreActions
-                actions={[
-                  {
-                    label: "Clone",
-                    onClick: () => onClone(environment),
-                    icon: "copy",
-                  },
-                ]}
-              />
-            </div>
-          </RequireScope>
-        </div>
-        <Type small muted className="truncate">
-          {environment.description || "No description provided"}
-        </Type>
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <Badge variant="neutral">
-            {environment.entries.length}{" "}
-            {environment.entries.length === 1 ? "Entry" : "Entries"}
-          </Badge>
-          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-            <span>Open</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+    <CardContextMenu actions={actions}>
+      <routes.environments.environment.Link
+        params={[environment.slug]}
+        className="block h-full hover:no-underline"
+      >
+        <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <Type
+              variant="subheading"
+              as="div"
+              className="text-md group-hover:text-primary flex-1 truncate transition-colors"
+              title={environment.name}
+            >
+              {environment.name}
+            </Type>
+            <RequireScope scope="environment:write" level="component">
+              <div onClick={(e) => e.stopPropagation()}>
+                <MoreActions actions={actions} />
+              </div>
+            </RequireScope>
           </div>
-        </div>
-      </DotCard>
-    </routes.environments.environment.Link>
+          <Type small muted className="truncate">
+            {environment.description || "No description provided"}
+          </Type>
+          <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+            <Badge variant="neutral">
+              {environment.entries.length}{" "}
+              {environment.entries.length === 1 ? "Entry" : "Entries"}
+            </Badge>
+            <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+              <span>Open</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </div>
+          </div>
+        </DotCard>
+      </routes.environments.environment.Link>
+    </CardContextMenu>
   );
 }

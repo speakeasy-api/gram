@@ -3542,6 +3542,7 @@ func marshalPluginsPluginServerToPluginServerResponseBody(v *plugins.PluginServe
 	res := &PluginServerResponseBody{
 		ID:          v.ID,
 		ToolsetID:   v.ToolsetID,
+		McpServerID: v.McpServerID,
 		DisplayName: v.DisplayName,
 		Policy:      v.Policy,
 		SortOrder:   v.SortOrder,

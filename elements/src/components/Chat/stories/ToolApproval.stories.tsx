@@ -93,8 +93,8 @@ const deleteFile = defineFrontendTool<{ fileId: string }, string>(
       fileId: z.string().describe("The ID of the file to delete"),
     }),
     execute: async ({ fileId }) => {
-      alert(`File ${fileId} deleted`);
-      return `File ${fileId} deleted`;
+      alert(`File ${String(fileId)} deleted`);
+      return `File ${String(fileId)} deleted`;
     },
   },
   "deleteFile",

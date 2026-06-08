@@ -26,7 +26,7 @@ export const ShadowRoot = ({
   children,
   hostClassName,
   hostStyle,
-}: ShadowRootProps) => {
+}: ShadowRootProps): React.JSX.Element => {
   const hostRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null);
@@ -66,7 +66,7 @@ export const ShadowRoot = ({
     styleElement.setAttribute("data-gram-elements", "true");
     styleElement.textContent = elementsStyles;
     shadowRoot.prepend(styleElement);
-  }, [shadowRoot, elementsStyles]);
+  }, [shadowRoot]);
 
   return (
     <div

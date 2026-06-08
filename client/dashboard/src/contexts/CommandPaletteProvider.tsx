@@ -8,7 +8,11 @@ import {
 import { CommandPaletteContext } from "./CommandPalette";
 import type { CommandAction } from "./CommandPalette";
 
-export function CommandPaletteProvider({ children }: { children: ReactNode }) {
+export function CommandPaletteProvider({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const [actions, setActionsState] = useState<CommandAction[]>([]);
   const [contextBadge, setContextBadgeState] = useState<string | null>(null);
@@ -28,7 +32,9 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   const addActions = useCallback((newActions: CommandAction[]) => {
     setActionsState((prev) => {
       const existing = new Map(prev.map((a) => [a.id, a]));
-      newActions.forEach((action) => existing.set(action.id, action));
+      newActions.forEach((action) => {
+        void existing.set(action.id, action);
+      });
       return Array.from(existing.values());
     });
   }, []);

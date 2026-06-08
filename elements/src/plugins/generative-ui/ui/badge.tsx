@@ -46,7 +46,7 @@ function Badge({
   content,
   children,
   ...props
-}: BadgeProps) {
+}: BadgeProps): React.JSX.Element {
   const Comp = asChild ? Slot.Root : "span";
 
   return (

@@ -226,15 +226,16 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 		return nil, oops.E(oops.CodeBadRequest, err, "oauth proxy provider client credentials unavailable for clone").Log(ctx, logger)
 	}
 
-	// Confirm the issuer the caller named lives in the same project so a clone
-	// cannot graft a client onto an unrelated tenant's issuer. A NULL
-	// organization_id keeps this lookup strictly project-scoped — cloning a
-	// client onto an organization-level issuer is part of the deferred runtime
-	// work, not this management path.
+	// Confirm the issuer the caller named is reachable from the caller's
+	// project — either an issuer the project owns or an organization-level
+	// issuer inherited from the project's org — so a clone cannot graft a
+	// client onto an unrelated tenant's issuer. The cloned client row is still
+	// owned by the caller's project regardless of the issuer's scope; this
+	// mirrors the reachability gate in CreateRemoteSessionClient.
 	if _, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID: conv.ToPGTextEmpty(""),
+		OrganizationID: conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)

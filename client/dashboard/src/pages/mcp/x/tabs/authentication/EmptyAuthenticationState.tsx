@@ -20,7 +20,7 @@ export function EmptyAuthenticationState({
   hasDiscoveredAuthorizationServer: boolean;
   onUseDiscovered: () => void;
   onStartManual: () => void;
-}) {
+}): JSX.Element {
   const probing = probeStatus === "loading";
   const discoverAvailable =
     probeStatus === "available" && hasDiscoveredAuthorizationServer;

@@ -45,7 +45,14 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, Network, Plus, Server, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  Loader2,
+  Network,
+  Plus,
+  Server,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -84,7 +91,7 @@ function validateRemoteMcpUrl(value: string): string | null {
   return null;
 }
 
-export default function RemoteMCPDetails() {
+export default function RemoteMCPDetails(): JSX.Element {
   const { sourceSlug } = useParams<{ sourceSlug: string }>();
   const routes = useRoutes();
   const idOrSlug = sourceSlug ?? "";
@@ -457,7 +464,7 @@ function McpServersEmptyState({
         <Button
           variant="primary"
           disabled={!remoteMcpServer || link.isPending}
-          onClick={handleAdd}
+          onClick={() => void handleAdd()}
         >
           <Button.LeftIcon>
             {link.isPending ? (
@@ -590,7 +597,7 @@ function NameSection({
             <Button
               variant="primary"
               disabled={saveDisabled}
-              onClick={handleSave}
+              onClick={() => void handleSave()}
             >
               {update.isPending ? (
                 <>
@@ -660,7 +667,7 @@ function UrlSection({
       // to the Sources index. Replace (not push) avoids a dead history entry
       // pointing at the now-stale slug.
       const nextParam = remoteMcpRouteParam(updated);
-      navigate(routes.sources.source.href("remotemcp", nextParam), {
+      void navigate(routes.sources.source.href("remotemcp", nextParam), {
         replace: true,
       });
       // Invalidate every consumer of the remote MCP server: the per-id detail
@@ -698,11 +705,20 @@ function UrlSection({
           }}
           onBlur={() => setTouched(true)}
           placeholder="https://example.com/mcp"
+          aria-invalid={validationError ? true : undefined}
+          aria-describedby={
+            validationError ? "remote-mcp-url-settings-error" : undefined
+          }
         />
         {validationError && (
-          <Alert variant="error" dismissible={false}>
-            {validationError}
-          </Alert>
+          <div
+            id="remote-mcp-url-settings-error"
+            role="alert"
+            className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>{validationError}</span>
+          </div>
         )}
         {update.isError && (
           <Alert variant="error" dismissible={false}>
@@ -722,7 +738,7 @@ function UrlSection({
             <Button
               variant="primary"
               disabled={saveDisabled}
-              onClick={handleSave}
+              onClick={() => void handleSave()}
             >
               {update.isPending ? (
                 <>
@@ -786,7 +802,7 @@ function DangerZoneSection({
             onClose={() => setDeleteDialogOpen(false)}
             onSuccess={() => {
               setDeleteDialogOpen(false);
-              navigate(routes.sources.href());
+              void navigate(routes.sources.href());
             }}
           />
         </Dialog.Content>

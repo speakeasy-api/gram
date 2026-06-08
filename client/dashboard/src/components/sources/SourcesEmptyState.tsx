@@ -20,7 +20,7 @@ import {
   Server,
 } from "lucide-react";
 
-export function SourcesEmptyState() {
+export function SourcesEmptyState(): JSX.Element {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isFunctionsEnabled =

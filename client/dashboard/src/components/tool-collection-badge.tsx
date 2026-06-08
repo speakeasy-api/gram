@@ -1,3 +1,4 @@
+import { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import {
   Badge,
@@ -27,7 +28,7 @@ export const ToolCollectionBadge = ({
    * - ReactNode: render this instead.
    */
   emptyLabel?: React.ReactNode | null;
-}) => {
+}): ReactElement | null => {
   let tooltipContent: React.ReactNode = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
@@ -85,7 +86,7 @@ export const ToolCollectionBadge = ({
   );
 };
 
-export const PoweredBySpeakeasyBadge = () => {
+export const PoweredBySpeakeasyBadge = (): ReactElement => {
   return (
     <Badge variant="neutral" className="bg-card">
       <Badge.Text>Powered by Speakeasy</Badge.Text>

@@ -38,6 +38,7 @@ import (
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -528,6 +529,11 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
 	}
 
+	backend, err := parseServerBackend(payload.ToolsetID, payload.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+
 	// Verify the plugin belongs to this project.
 	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
 	if err != nil {
@@ -537,24 +543,51 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	toolsetID, err := uuid.Parse(payload.ToolsetID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset id").Log(ctx, s.logger)
+	displayName := ""
+	if payload.DisplayName != nil {
+		displayName = strings.TrimSpace(*payload.DisplayName)
 	}
 
-	// Verify the toolset exists and belongs to the same project.
-	toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
-		ID:        toolsetID,
-		ProjectID: *ac.ProjectID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeBadRequest, nil, "toolset not found")
+	if backend.mcpServerID.Valid {
+		// Verify the mcp_server exists in this project and is publishable.
+		server, mcpErr := s.repo.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{
+			McpServerID: backend.mcpServerID.UUID,
+			ProjectID:   *ac.ProjectID,
+		})
+		if mcpErr != nil {
+			if errors.Is(mcpErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeBadRequest, nil, "mcp server not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, mcpErr, "verify mcp server").Log(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "verify toolset").Log(ctx, s.logger)
-	}
-	if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
+		if server.Visibility == mcpservers.VisibilityDisabled || !server.HasEndpoint {
+			return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is disabled or has no published endpoint")
+		}
+		if displayName == "" {
+			// mcpServerDisplayName always returns a non-empty value (name, then
+			// slug, then the UUID id), so display_name is guaranteed set here.
+			displayName = mcpServerDisplayName(server)
+		}
+	} else {
+		// Verify the toolset exists and belongs to the same project.
+		toolset, tErr := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
+			ID:        backend.toolsetID.UUID,
+			ProjectID: *ac.ProjectID,
+		})
+		if tErr != nil {
+			if errors.Is(tErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeBadRequest, nil, "toolset not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, tErr, "verify toolset").Log(ctx, s.logger)
+		}
+		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
+		}
+		if displayName == "" {
+			// toolsets.name is NOT NULL CHECK (name <> ''), so display_name is
+			// guaranteed non-empty here.
+			displayName = toolset.Name
+		}
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -565,19 +598,26 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 
 	row, err := s.repo.WithTx(tx).AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    pluginID,
-		ToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
-		DisplayName: payload.DisplayName,
+		ToolsetID:   backend.toolsetID,
+		McpServerID: backend.mcpServerID,
+		DisplayName: displayName,
 		Policy:      payload.Policy,
 		SortOrder:   payload.SortOrder,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, nil, "a server with this display name already exists in the plugin")
+			switch pgErr.ConstraintName {
+			case "plugin_servers_plugin_id_toolset_id_key", "plugin_servers_plugin_id_mcp_server_id_key":
+				return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
+			default:
+				return nil, oops.E(oops.CodeConflict, nil, "a server with this display name already exists in the plugin")
+			}
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "add plugin server").Log(ctx, s.logger)
 	}
 
+	toolsetURN, mcpServerURN := backend.auditURNs()
 	if err := s.audit.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{
 		OrganizationID:    ac.ActiveOrganizationID,
 		ProjectID:         *ac.ProjectID,
@@ -591,7 +631,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		ServerDisplayName: row.DisplayName,
 		ServerPolicy:      row.Policy,
 		ServerSortOrder:   row.SortOrder,
-		ToolsetURN:        urn.NewToolset(row.ToolsetID.UUID),
+		ToolsetURN:        toolsetURN,
+		McpServerURN:      mcpServerURN,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server add").Log(ctx, s.logger)
 	}
@@ -601,6 +642,63 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 
 	return pluginServerToGen(row), nil
+}
+
+// serverBackend identifies which backend a plugin server targets. Exactly one
+// of toolsetID / mcpServerID is Valid, mirroring the toolset_id XOR
+// mcp_server_id plugin_servers row.
+type serverBackend struct {
+	toolsetID   uuid.NullUUID
+	mcpServerID uuid.NullUUID
+}
+
+// parseServerBackend validates that exactly one of toolset_id / mcp_server_id
+// was supplied and parses the provided id. The XOR is enforced here in the
+// handler because the Goa payload accepts both as optional for wire-compat with
+// existing toolset-only callers.
+func parseServerBackend(toolsetID, mcpServerID *string) (serverBackend, error) {
+	hasToolset := toolsetID != nil && *toolsetID != ""
+	hasMcpServer := mcpServerID != nil && *mcpServerID != ""
+
+	switch {
+	case hasToolset == hasMcpServer:
+		return serverBackend{}, oops.E(oops.CodeBadRequest, nil, "provide exactly one of toolset_id or mcp_server_id")
+	case hasToolset:
+		id, err := uuid.Parse(*toolsetID)
+		if err != nil {
+			return serverBackend{}, oops.E(oops.CodeBadRequest, err, "invalid toolset_id")
+		}
+		return serverBackend{toolsetID: uuid.NullUUID{UUID: id, Valid: true}, mcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
+	default:
+		id, err := uuid.Parse(*mcpServerID)
+		if err != nil {
+			return serverBackend{}, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id")
+		}
+		return serverBackend{toolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID: uuid.NullUUID{UUID: id, Valid: true}}, nil
+	}
+}
+
+// auditURNs returns the subject URN for whichever backend is set, leaving the
+// other nil, for the backend-aware plugin-server audit events.
+func (b serverBackend) auditURNs() (*urn.Toolset, *urn.McpServer) {
+	if b.mcpServerID.Valid {
+		u := urn.NewMcpServer(b.mcpServerID.UUID)
+		return nil, &u
+	}
+	u := urn.NewToolset(b.toolsetID.UUID)
+	return &u, nil
+}
+
+// mcpServerDisplayName derives a default plugin-server display name from an
+// mcp_server, preferring its name, then slug, then id.
+func mcpServerDisplayName(server repo.GetMcpServerForPluginServerRow) string {
+	if name := conv.FromPGText[string](server.Name); name != nil && *name != "" {
+		return *name
+	}
+	if slug := conv.FromPGText[string](server.Slug); slug != nil && *slug != "" {
+		return *slug
+	}
+	return server.ID.String()
 }
 
 func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePluginServerPayload) (*gen.PluginServer, error) {
@@ -709,13 +807,18 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	if err := s.repo.WithTx(tx).RemovePluginServer(ctx, repo.RemovePluginServerParams{
+	row, err := s.repo.WithTx(tx).RemovePluginServer(ctx, repo.RemovePluginServerParams{
 		ID:       serverID,
 		PluginID: pluginID,
-	}); err != nil {
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.C(oops.CodeNotFound)
+		}
 		return oops.E(oops.CodeUnexpected, err, "remove plugin server").Log(ctx, s.logger)
 	}
 
+	toolsetURN, mcpServerURN := serverBackend{toolsetID: row.ToolsetID, mcpServerID: row.McpServerID}.auditURNs()
 	if err := s.audit.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
@@ -726,6 +829,8 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		PluginName:       plugin.Name,
 		PluginSlug:       plugin.Slug,
 		ServerID:         serverID,
+		ToolsetURN:       toolsetURN,
+		McpServerURN:     mcpServerURN,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "audit log plugin server remove").Log(ctx, s.logger)
 	}
@@ -1638,27 +1743,47 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with servers").Log(ctx, s.logger)
 	}
 
+	// Remote MCP-backed (mcp_server) plugin servers are resolved by a separate
+	// query and merged in below. Both backends are supported simultaneously
+	// until the AGE-1902 cutover.
+	mcpRows, err := s.repo.ListPluginsWithMcpServersForProject(ctx, projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").Log(ctx, s.logger)
+	}
+
+	// serverBuild carries the row's sort_order so the merged toolset- and
+	// mcp_server-backed servers can be re-sorted per plugin (the per-query SQL
+	// ordering is lost once the two result sets are combined).
+	type serverBuild struct {
+		info      PluginServerInfo
+		sortOrder int32
+	}
 	type pluginBuild struct {
 		info    PluginInfo
-		servers []PluginServerInfo
+		servers []serverBuild
 	}
 	pluginMap := make(map[uuid.UUID]*pluginBuild)
 	mcpMeta := mcpmetarepo.New(s.db)
 
-	for _, r := range rows {
-		pb, ok := pluginMap[r.PluginID]
+	ensurePlugin := func(id uuid.UUID, name, slug string, description pgtype.Text) *pluginBuild {
+		pb, ok := pluginMap[id]
 		if !ok {
 			pb = &pluginBuild{
 				info: PluginInfo{
-					Name:        r.PluginName,
-					Slug:        r.PluginSlug,
-					Description: conv.FromPGTextOrEmpty[string](r.PluginDescription),
+					Name:        name,
+					Slug:        slug,
+					Description: conv.FromPGTextOrEmpty[string](description),
 					Servers:     nil,
 				},
 				servers: nil,
 			}
-			pluginMap[r.PluginID] = pb
+			pluginMap[id] = pb
 		}
+		return pb
+	}
+
+	for _, r := range rows {
+		pb := ensurePlugin(r.PluginID, r.PluginName, r.PluginSlug, r.PluginDescription)
 
 		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
 			mcpBase := s.serverURL
@@ -1714,13 +1839,53 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				}
 			}
 
-			pb.servers = append(pb.servers, serverInfo)
+			pb.servers = append(pb.servers, serverBuild{info: serverInfo, sortOrder: r.ServerSortOrder})
 		}
+	}
+
+	for _, m := range mcpRows {
+		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
+
+		// Custom-domain endpoints are served from the domain host; platform
+		// endpoints from the Gram server URL. The query already resolved the
+		// single preferred endpoint per server.
+		mcpBase := s.serverURL
+		if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
+			mcpBase = fmt.Sprintf("https://%s", *cd)
+		}
+		// Remote MCP-backed servers authenticate via their user session issuer
+		// (OAuth), so the generated config carries no static Authorization
+		// header (IsOAuth). Environments are not yet wired to mcp_servers, so
+		// there are no public env configs to surface.
+		pb.servers = append(pb.servers, serverBuild{
+			info: PluginServerInfo{
+				DisplayName: m.ServerDisplayName,
+				Policy:      m.ServerPolicy,
+				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug),
+				IsPublic:    false,
+				IsOAuth:     true,
+				EnvConfigs:  nil,
+			},
+			sortOrder: m.ServerSortOrder,
+		})
 	}
 
 	pluginInfos := make([]PluginInfo, 0, len(pluginMap))
 	for _, pb := range pluginMap {
-		pb.info.Servers = pb.servers
+		// Re-sort the merged toolset- and mcp_server-backed servers by
+		// sort_order (then display name for a stable tiebreak) since combining
+		// the two query result sets discards their per-query ordering.
+		sort.SliceStable(pb.servers, func(i, j int) bool {
+			if pb.servers[i].sortOrder != pb.servers[j].sortOrder {
+				return pb.servers[i].sortOrder < pb.servers[j].sortOrder
+			}
+			return pb.servers[i].info.DisplayName < pb.servers[j].info.DisplayName
+		})
+		servers := make([]PluginServerInfo, 0, len(pb.servers))
+		for _, sb := range pb.servers {
+			servers = append(servers, sb.info)
+		}
+		pb.info.Servers = servers
 		pluginInfos = append(pluginInfos, pb.info)
 	}
 	sort.Slice(pluginInfos, func(i, j int) bool {
@@ -1810,14 +1975,25 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 }
 
 func pluginServerToGen(s repo.PluginServer) *gen.PluginServer {
-	return &gen.PluginServer{
+	result := &gen.PluginServer{
 		ID:          s.ID.String(),
-		ToolsetID:   s.ToolsetID.UUID.String(),
+		ToolsetID:   nil,
+		McpServerID: nil,
 		DisplayName: s.DisplayName,
 		Policy:      s.Policy,
 		SortOrder:   s.SortOrder,
 		CreatedAt:   formatTime(s.CreatedAt),
 	}
+	// Exactly one backend is set per row (DB XOR check); populate whichever.
+	if s.ToolsetID.Valid {
+		id := s.ToolsetID.UUID.String()
+		result.ToolsetID = &id
+	}
+	if s.McpServerID.Valid {
+		id := s.McpServerID.UUID.String()
+		result.McpServerID = &id
+	}
+	return result
 }
 
 func pluginAssignmentToGen(a repo.PluginAssignment) *gen.PluginAssignment {

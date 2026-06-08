@@ -12,7 +12,7 @@ type AppInfo = {
 
 type PageState = "loading" | "ready" | "registering" | "complete" | "error";
 
-export default function SlackRegister() {
+export default function SlackRegister(): JSX.Element {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
   const [state, setState] = useState<PageState>("loading");
@@ -135,7 +135,7 @@ export default function SlackRegister() {
                 </div>
               )}
 
-              <Button className="w-full" onClick={register}>
+              <Button className="w-full" onClick={() => void register()}>
                 <Button.Text>Connect</Button.Text>
               </Button>
             </Stack>

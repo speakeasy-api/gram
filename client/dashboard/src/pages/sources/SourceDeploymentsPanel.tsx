@@ -197,7 +197,7 @@ export function SourceDeploymentsPanel({
 }: {
   sourceKind?: string;
   attachmentType?: string;
-}) {
+}): JSX.Element {
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
   const { data: activeDeployment } = useActiveDeployment();

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -334,6 +335,12 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 	var b bytes.Buffer
 	b.WriteString("<message-context>\n")
 	fmt.Fprintf(&b, "EventID: %s\n", event.EventID)
+	// Sourced from the event's immutable created_at, not time.Now(): DecodeTurn
+	// must be byte-stable across retry/replay, or the capture matcher treats the
+	// re-decoded turn as divergent and opens a spurious generation.
+	if !event.CreatedAt.IsZero() {
+		fmt.Fprintf(&b, "Timestamp: %s\n", event.CreatedAt.UTC().Format(time.RFC3339))
+	}
 	if payload.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
 	}

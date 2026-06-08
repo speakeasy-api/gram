@@ -182,9 +182,19 @@ const (
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
-	OAuthErrorKey                        = attribute.Key("gram.oauth.error")
-	OAuthErrorDescriptionKey             = attribute.Key("gram.oauth.error_description")
-	OAuthFailureReasonKey                = attribute.Key("gram.oauth.failure_reason")
+	OAuthErrorKey            = attribute.Key("gram.oauth.error")
+	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
+	OAuthFailureReasonKey    = attribute.Key("gram.oauth.failure_reason")
+	// OAuthFlowIDKey is the stable correlation identifier for a single
+	// user-facing OAuth flow. Minted once at /authorize and threaded through
+	// every handler in the flow (idp_callback, consent, token) so the whole
+	// chain can be reconstructed from one log filter. Distinct from the
+	// AuthnChallengeState cache-key ID, which idp_callback rotates.
+	OAuthFlowIDKey = attribute.Key("gram.oauth.flow_id")
+	// OAuthFlowStageKey is the coarse, low-cardinality stage at which an OAuth
+	// flow terminated (see the oauthFlowStage enum in the mcp package). Used
+	// as a metric dimension on oauth.flow.failed and in failure logs.
+	OAuthFlowStageKey                    = attribute.Key("gram.oauth.flow_stage")
 	OAuthGrantKey                        = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey                       = attribute.Key("gram.oauth.issuer")
 	OAuthPresentedAuthMethodKey          = attribute.Key("gram.oauth.presented_auth_method")
@@ -883,6 +893,12 @@ func SlogOAuthClientSecretGenerated(v bool) slog.Attr {
 
 func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
 func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
+
+func OAuthFlowID(v string) attribute.KeyValue { return OAuthFlowIDKey.String(v) }
+func SlogOAuthFlowID(v string) slog.Attr      { return slog.String(string(OAuthFlowIDKey), v) }
+
+func OAuthFlowStage(v string) attribute.KeyValue { return OAuthFlowStageKey.String(v) }
+func SlogOAuthFlowStage(v string) slog.Attr      { return slog.String(string(OAuthFlowStageKey), v) }
 
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)

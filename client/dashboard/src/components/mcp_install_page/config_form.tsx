@@ -23,7 +23,7 @@ export function InstallPageConfigForm({
   installPageUrl,
   form,
   isLoading,
-}: ConfigFormProps) {
+}: ConfigFormProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
 
   if (!installPageUrl) {
@@ -73,7 +73,9 @@ export function InstallPageConfigForm({
             <div className="inline-block">
               <CompactUpload
                 allowedExtensions={["png", "jpg", "jpeg"]}
-                onUpload={form.logoUploadHandlers.onUpload}
+                onUpload={(file) => {
+                  void form.logoUploadHandlers.onUpload(file);
+                }}
                 renderFilePreview={form.logoUploadHandlers.renderFilePreview}
                 className="max-h-[200px] w-full"
               />

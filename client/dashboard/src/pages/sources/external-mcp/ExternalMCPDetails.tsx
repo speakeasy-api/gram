@@ -20,7 +20,7 @@ import { useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
-export default function ExternalMCPDetails() {
+export default function ExternalMCPDetails(): JSX.Element {
   const { sourceSlug } = useParams<{
     sourceSlug: string;
   }>();
@@ -110,7 +110,7 @@ export default function ExternalMCPDetails() {
       });
       await refetch();
       toast.success("External MCP source deleted successfully");
-      navigate(routes.sources.href());
+      void navigate(routes.sources.href());
     } catch (error) {
       console.error("Failed to delete external MCP source:", error);
       toast.error("Failed to delete external MCP source. Please try again.");

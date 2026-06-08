@@ -12,7 +12,11 @@ export interface AvatarWrapperProps {
 /**
  * Avatar wrapper that takes src, alt, and fallback as props.
  */
-export function AvatarWrapper({ src, alt, fallback }: AvatarWrapperProps) {
+export function AvatarWrapper({
+  src,
+  alt,
+  fallback,
+}: AvatarWrapperProps): React.JSX.Element {
   return (
     <Avatar>
       {src && <AvatarImage src={src} alt={alt} />}

@@ -30,7 +30,7 @@ export function AddToolsDialog({
   onOpenChange,
   toolset,
   onAddTools,
-}: AddToolsDialogProps) {
+}: AddToolsDialogProps): JSX.Element {
   const [search, setSearch] = useState("");
   const [selectedToolUrns, setSelectedToolUrns] = useState<Set<string>>(
     new Set(),

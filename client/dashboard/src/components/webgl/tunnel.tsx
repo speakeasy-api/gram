@@ -3,7 +3,11 @@ import tunnel from "tunnel-rat";
 
 const WebGL = tunnel();
 
-export const WebGLIn = ({ children }: { children: React.ReactNode }) => {
+export const WebGLIn = ({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element => {
   const id = useId();
   return (
     <WebGL.In>

@@ -60,6 +60,15 @@ plog:
   - "go.sum"
   - "plog/**"
 
+infra:
+  - "go.mod"
+  - "go.sum"
+  - "infra/**"
+  - "buf.yaml"
+  - "buf.gen.yaml"
+  - ".mise-tasks/lint/infra.sh"
+  - ".mise-tasks/gen/infra.sh"
+
 webhooks-catalog:
   - "server/internal/outbox/events/catalog_gen.yaml"
 

@@ -8,13 +8,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router";
 import { PromptEditor } from "./PromptEditor";
 
-export default function PromptPage() {
+export default function PromptPage(): JSX.Element {
   const { promptName } = useParams();
   const { data, error, status } = useTemplate({ name: promptName });
   const queryClient = useQueryClient();
   const m = useUpdateTemplateMutation({
     onSettled: () => {
-      invalidateTemplate(queryClient, [{ name: promptName }]);
+      void invalidateTemplate(queryClient, [{ name: promptName }]);
     },
   });
 

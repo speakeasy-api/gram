@@ -1,7 +1,7 @@
 import { useRoutes } from "@/routes";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 
-export function ProjectOnboardingBanner() {
+export function ProjectOnboardingBanner(): JSX.Element {
   const routes = useRoutes();
 
   return (

@@ -12,7 +12,7 @@ export function Heading({
   children: React.ReactNode;
   className?: string;
   tooltip?: string;
-}) {
+}): JSX.Element {
   if (!children) {
     const variantHeight = {
       h1: "h-12",

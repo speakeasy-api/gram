@@ -54,7 +54,7 @@ export function PlaygroundElements({
   model,
   additionalActions,
   playgroundEnvironmentSlug,
-}: PlaygroundElementsProps) {
+}: PlaygroundElementsProps): JSX.Element {
   const session = useSession();
   const project = useProject();
   const createSessionMutation = useChatSessionsCreateMutation();

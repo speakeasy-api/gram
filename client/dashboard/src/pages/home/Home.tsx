@@ -5,7 +5,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { Navigate } from "react-router";
 
-export default function Home() {
+export default function Home(): JSX.Element {
   const { hasAnyScope, isRbacEnabled, isLoading } = useRBAC();
   const routes = useRoutes();
 

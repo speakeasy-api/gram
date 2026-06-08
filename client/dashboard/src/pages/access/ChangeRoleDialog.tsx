@@ -36,7 +36,7 @@ interface ChangeRoleDialogProps {
 export function ChangeRoleDialog({
   member,
   onOpenChange,
-}: ChangeRoleDialogProps) {
+}: ChangeRoleDialogProps): JSX.Element {
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();

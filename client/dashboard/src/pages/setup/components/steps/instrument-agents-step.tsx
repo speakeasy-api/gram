@@ -102,7 +102,7 @@ const PLATFORM_LOGOS: Record<string, string> = {
 export function InstrumentAgentsStep({
   onComplete,
   onBack,
-}: InstrumentAgentsStepProps) {
+}: InstrumentAgentsStepProps): JSX.Element {
   const [drawerPlatformId, setDrawerPlatformId] = useState<string | null>(null);
   const [platformStatus, setPlatformStatus] = useState<
     Record<string, PlatformSetupStatus>
@@ -280,6 +280,7 @@ export function InstrumentAgentsStep({
             <Badge.Text>Not eligible</Badge.Text>
           </Badge>
         );
+      case "not_started":
       default:
         return null;
     }
@@ -355,13 +356,15 @@ export function InstrumentAgentsStep({
             <button
               key={idx}
               type="button"
-              onClick={() =>
-                idx <= currentStepIdx &&
-                setActiveStepIndex((prev) => ({
-                  ...prev,
-                  [activePlatform.id]: idx,
-                }))
-              }
+              onClick={() => {
+                void (
+                  idx <= currentStepIdx &&
+                  setActiveStepIndex((prev) => ({
+                    ...prev,
+                    [activePlatform.id]: idx,
+                  }))
+                );
+              }}
               className={cn(
                 "h-1 rounded-full transition-all",
                 idx === currentStepIdx
@@ -530,12 +533,12 @@ export function InstrumentAgentsStep({
                         </span>
                         <button
                           type="button"
-                          onClick={() =>
-                            copyToClipboard(
+                          onClick={() => {
+                            void copyToClipboard(
                               displayCode,
                               `${activePlatform.id}-${idx}`,
-                            )
-                          }
+                            );
+                          }}
                           className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium tracking-wider text-zinc-300 uppercase transition-colors hover:bg-zinc-800 hover:text-zinc-100"
                         >
                           {copiedField === `${activePlatform.id}-${idx}` ? (

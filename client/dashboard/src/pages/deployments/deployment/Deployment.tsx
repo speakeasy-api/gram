@@ -36,7 +36,7 @@ import {
   useDeploymentSearchParams,
 } from "./use-deployment-search-params";
 
-export default function DeploymentPage() {
+export default function DeploymentPage(): JSX.Element {
   const { deploymentId } = useParams();
 
   if (!isUuidRouteParam(deploymentId)) {
@@ -152,7 +152,9 @@ function DeploymentLogs(props: { deploymentId: string }) {
             failedSources={failedDeployment.failedSources}
             generalErrors={failedDeployment.generalErrors}
             deployment={failedDeployment.deployment}
-            onRemoveSuccess={() => invalidateAllDeployment(queryClient)}
+            onRemoveSuccess={() => {
+              void invalidateAllDeployment(queryClient);
+            }}
           />
         )}
       </section>

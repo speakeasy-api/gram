@@ -41,11 +41,11 @@ import { toast } from "sonner";
 import { PluginCard } from "./PluginCard";
 import { PublishDialog } from "./PublishDialog";
 
-export function PluginsRoot() {
+export function PluginsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Plugins() {
+export default function Plugins(): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [pluginToDelete, setPluginToDelete] = useState<Plugin | null>(null);
@@ -99,13 +99,14 @@ export default function Plugins() {
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
       setIsPublishDialogOpen(false);
-      invalidateAllPublishStatus(queryClient);
+      void invalidateAllPublishStatus(queryClient);
       toast.success("Plugins published to GitHub", {
         description: data.repoUrl,
         action: {
           label: "Open",
-          onClick: () =>
-            window.open(data.repoUrl, "_blank", "noopener,noreferrer"),
+          onClick: () => {
+            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+          },
         },
       });
     },
@@ -130,7 +131,7 @@ export default function Plugins() {
     onSuccess: async (data) => {
       setIsCreateDialogOpen(false);
       await invalidateAllPlugins(queryClient);
-      navigate(routes.plugins.detail.href(data.id));
+      void navigate(routes.plugins.detail.href(data.id));
     },
   });
 
@@ -387,17 +388,23 @@ export default function Plugins() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
-                    onClick={() => handleObservabilityDownload("claude")}
+                    onClick={() => {
+                      void handleObservabilityDownload("claude");
+                    }}
                   >
                     Claude
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => handleObservabilityDownload("cursor")}
+                    onClick={() => {
+                      void handleObservabilityDownload("cursor");
+                    }}
                   >
                     Cursor
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => handleObservabilityDownload("codex")}
+                    onClick={() => {
+                      void handleObservabilityDownload("codex");
+                    }}
                   >
                     Codex
                   </DropdownMenuItem>

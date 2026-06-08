@@ -7,8 +7,9 @@ import { Button, Stack } from "@speakeasy-api/moonshine";
 import { WizardContext } from "./machine";
 import type { ProxyFormKey } from "./machine-types";
 
-export function ProxyMetadataForm() {
-  const send = WizardContext.useActorRef().send;
+export function ProxyMetadataForm(): JSX.Element {
+  const actorRef = WizardContext.useActorRef();
+  const send = actorRef.send.bind(actorRef);
   const proxy = WizardContext.useSelector((s) => s.context.proxy);
   const error = WizardContext.useSelector((s) => s.context.error);
   const discovered = WizardContext.useSelector((s) => s.context.discovered);

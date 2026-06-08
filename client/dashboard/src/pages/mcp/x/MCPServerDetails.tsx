@@ -56,7 +56,7 @@ function isValidTab(value: string): value is TabValue {
   return (VALID_TABS as readonly string[]).includes(value);
 }
 
-export default function MCPServerDetails() {
+export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const routes = useRoutes();
   const telemetry = useTelemetry();

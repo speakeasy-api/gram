@@ -26,7 +26,7 @@ export async function highlightCode(
   code: string,
   language: BundledLanguage,
   showLineNumbers = false,
-) {
+): Promise<[string, string]> {
   const transformers: ShikiTransformer[] = showLineNumbers
     ? [lineNumberTransformer]
     : [];

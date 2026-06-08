@@ -23,7 +23,7 @@ import {
 import { ToolCollectionBadge } from "../tool-collection-badge";
 import { Badge } from "@speakeasy-api/moonshine";
 
-export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
+export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { installPageUrl } = useMcpUrl(toolset);
@@ -48,7 +48,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
 
   const handleClick = () => {
     if (oauthStatus === "required-unconfigured") {
-      navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
+      void navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
     } else {
       routes.mcp.details.goTo(toolset.slug);
     }
@@ -156,7 +156,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   );
 }
 
-export function MCPCardSkeleton() {
+export function MCPCardSkeleton(): JSX.Element {
   return (
     <DotCard>
       <div className="mb-2 flex items-start justify-between gap-2">

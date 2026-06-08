@@ -22,7 +22,7 @@ function storeViewMode(mode: ViewMode) {
   }
 }
 
-export function useViewMode() {
+export function useViewMode(): readonly [ViewMode, (v: ViewMode) => void] {
   const [mode, setMode] = useState(getStoredViewMode);
   return [
     mode,

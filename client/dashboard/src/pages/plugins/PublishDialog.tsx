@@ -66,18 +66,20 @@ export const PublishDialog = memo(function PublishDialog({
       return;
     }
     const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const items = await searchGithubUsers(trimmed, controller.signal);
-        // Filter out anyone already added.
-        setResults(items.filter((it) => !usernames.includes(it.login)));
-        setActiveIndex(0);
-      } catch {
-        // Abort or network error — silently drop; user can still type freely.
-      } finally {
-        setSearchLoading(false);
-      }
+    const timer = setTimeout(() => {
+      void (async () => {
+        setSearchLoading(true);
+        try {
+          const items = await searchGithubUsers(trimmed, controller.signal);
+          // Filter out anyone already added.
+          setResults(items.filter((it) => !usernames.includes(it.login)));
+          setActiveIndex(0);
+        } catch {
+          // Abort or network error — silently drop; user can still type freely.
+        } finally {
+          setSearchLoading(false);
+        }
+      })();
     }, DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);

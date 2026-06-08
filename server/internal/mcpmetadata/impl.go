@@ -176,6 +176,10 @@ type hostedPageData struct {
 	DocsText          string
 	Instructions      string
 	IsPublic          bool
+	// IsOAuth is true when the server authenticates via OAuth (proxy, external,
+	// or user-session issuer). Drives the OAuth-only install steps (e.g. the
+	// Codex `codex mcp login` step).
+	IsOAuth bool
 	// FilteringEnabled gates the scope chip bar and related UI.
 	FilteringEnabled bool
 	// Scopes are the selectable filter tags rendered as chips.
@@ -1285,6 +1289,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 		DocsText:         docsText,
 		Instructions:     instructions,
 		IsPublic:         ic.isPublic(),
+		IsOAuth:          securityMode == securityModeOAuth,
 		OrgName:          ic.organization.Name,
 		FilteringEnabled: filteringEnabled,
 		Scopes:           scopes,
@@ -1343,7 +1348,10 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		DocsText:       docsText,
 		Instructions:   instructions,
 		IsPublic:       ic.isPublic(),
-		OrgName:        ic.organization.Name,
+		// Remote-MCP-backed installs have no toolset, so OAuth is driven solely
+		// by the server's user-session issuer (mirrors resolveSecurityMode).
+		IsOAuth: mcpServer.UserSessionIssuerID.Valid,
+		OrgName: ic.organization.Name,
 		// Remote-MCP-backed installs have no tool list, so no filter scopes.
 		FilteringEnabled: false,
 		Scopes:           nil,
@@ -1364,7 +1372,10 @@ type hostedPageRenderInputs struct {
 	DocsText       string
 	Instructions   string
 	IsPublic       bool
-	OrgName        string
+	// IsOAuth is true when the server authenticates via OAuth (proxy, external,
+	// or user-session issuer).
+	IsOAuth bool
+	OrgName string
 	// FilteringEnabled is true when the install context resolves an explicit
 	// tool-variations group with at least one tag; it gates all scope UI.
 	FilteringEnabled bool
@@ -1465,6 +1476,7 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 		DocsText:          in.DocsText,
 		Instructions:      in.Instructions,
 		IsPublic:          in.IsPublic,
+		IsOAuth:           in.IsOAuth,
 		FilteringEnabled:  in.FilteringEnabled,
 		Scopes:            in.Scopes,
 		ScopeVariantsJSON: scopeVariantsJSON,

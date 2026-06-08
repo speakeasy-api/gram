@@ -27,7 +27,7 @@ export function StatusBadge({
 }: {
   status: string;
   installCount: number;
-}) {
+}): JSX.Element {
   if (status === "active" && installCount > 0) {
     return (
       <Badge variant="default">
@@ -44,7 +44,7 @@ export function StatusBadge({
   return <Badge variant="secondary">{status}</Badge>;
 }
 
-export function SlackAppsRoot() {
+export function SlackAppsRoot(): JSX.Element {
   return <Outlet />;
 }
 
@@ -200,7 +200,9 @@ function CreateSlackAppDialog({
               Icon
             </Type>
             <CompactUpload
-              onUpload={handleIconUpload}
+              onUpload={(file) => {
+                void handleIconUpload(file);
+              }}
               className="h-24 w-24"
               renderFilePreview={() =>
                 iconAssetId ? (
@@ -278,7 +280,7 @@ function CreateSlackAppDialog({
             reason="You don't have permission to create assistants."
           >
             <Button
-              onClick={handleCreate}
+              onClick={() => void handleCreate()}
               disabled={!isValid || createMutation.isPending}
             >
               {createMutation.isPending ? "Creating..." : "Create Assistant"}
@@ -290,7 +292,7 @@ function CreateSlackAppDialog({
   );
 }
 
-export default function SlackAppsIndex() {
+export default function SlackAppsIndex(): JSX.Element {
   return (
     <Page>
       <Page.Header>

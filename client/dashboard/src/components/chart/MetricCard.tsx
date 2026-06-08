@@ -19,7 +19,7 @@ export type MetricCardProps = {
   tooltip?: string;
 };
 
-export function MetricCard(props: MetricCardProps) {
+export function MetricCard(props: MetricCardProps): JSX.Element {
   const {
     title,
     value,
@@ -52,6 +52,7 @@ export function MetricCard(props: MetricCardProps) {
         if (v >= 0.01) return `$${v.toFixed(3)}`;
         if (v > 0) return `$${v.toFixed(4)}`;
         return "$0.00";
+      case "number":
       default:
         return v.toLocaleString();
     }

@@ -21,7 +21,7 @@ function Progress({
   label,
   max = 100,
   ...props
-}: ProgressProps) {
+}: ProgressProps): React.JSX.Element {
   const percentage =
     value != null && max > 0
       ? Math.min(100, Math.max(0, (value / max) * 100))

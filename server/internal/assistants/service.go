@@ -140,6 +140,7 @@ type assistantThreadEventRecord struct {
 	SourcePayloadJSON     []byte
 	Attempts              int
 	LastError             pgtype.Text
+	CreatedAt             time.Time
 }
 
 // assistantToolsetRow is the hydrated view of a row in assistant_toolsets
@@ -2351,6 +2352,7 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 			SourcePayloadJSON:     row.SourcePayloadJson,
 			Attempts:              conv.SafeInt(row.Attempts),
 			LastError:             row.LastError,
+			CreatedAt:             row.CreatedAt.Time,
 		}, true, nil
 	}
 }

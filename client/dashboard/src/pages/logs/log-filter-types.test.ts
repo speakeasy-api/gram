@@ -17,10 +17,10 @@ describe("applyFilterAdd", () => {
       value: "200",
     });
     expect(result).toHaveLength(1);
-    expect(result[0].path).toBe("http.status");
-    expect(result[0].op).toBe(Operator.Eq);
-    expect(result[0].value).toBe("200");
-    expect(result[0].id).toBeDefined();
+    expect(result[0]!.path).toBe("http.status");
+    expect(result[0]!.op).toBe(Operator.Eq);
+    expect(result[0]!.value).toBe("200");
+    expect(result[0]!.id).toBeDefined();
   });
 
   it("replaces eq with eq on same path", () => {
@@ -31,7 +31,7 @@ describe("applyFilterAdd", () => {
       value: "2",
     });
     expect(result).toHaveLength(1);
-    expect(result[0].value).toBe("2");
+    expect(result[0]!.value).toBe("2");
   });
 
   it("replaces in with in on same path", () => {
@@ -42,7 +42,7 @@ describe("applyFilterAdd", () => {
       value: "c,d",
     });
     expect(result).toHaveLength(1);
-    expect(result[0].value).toBe("c,d");
+    expect(result[0]!.value).toBe("c,d");
   });
 
   it("does not replace not_eq when adding eq on same path", () => {
@@ -102,10 +102,10 @@ describe("applyFilterEdit", () => {
       value: "2",
     });
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("a");
-    expect(result[0].path).toBe("x");
-    expect(result[0].op).toBe(Operator.NotEq);
-    expect(result[0].value).toBe("2");
+    expect(result[0]!.id).toBe("a");
+    expect(result[0]!.path).toBe("x");
+    expect(result[0]!.op).toBe(Operator.NotEq);
+    expect(result[0]!.value).toBe("2");
   });
 
   it("preserves position in the list", () => {
@@ -119,8 +119,8 @@ describe("applyFilterEdit", () => {
       value: "yo",
     });
     expect(result.map((f) => f.id)).toEqual(["a", "b", "c"]);
-    expect(result[1].op).toBe(Operator.Contains);
-    expect(result[1].value).toBe("yo");
+    expect(result[1]!.op).toBe(Operator.Contains);
+    expect(result[1]!.value).toBe("yo");
   });
 
   it("removes a colliding eq filter on the same path", () => {
@@ -134,8 +134,8 @@ describe("applyFilterEdit", () => {
       value: "1",
     });
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("b");
-    expect(result[0].op).toBe(Operator.Eq);
+    expect(result[0]!.id).toBe("b");
+    expect(result[0]!.op).toBe(Operator.Eq);
   });
 
   it("does not collide when edit keeps a stacking op (not_eq)", () => {
