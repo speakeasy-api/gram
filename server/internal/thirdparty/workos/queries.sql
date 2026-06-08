@@ -73,6 +73,11 @@ SELECT id
 FROM groups
 WHERE workos_directory_group_id = @workos_directory_group_id;
 
+-- name: GetDirectoryGroupByWorkOSID :one
+SELECT organization_id, name, attributes, deleted
+FROM groups
+WHERE workos_directory_group_id = @workos_directory_group_id;
+
 -- name: DeleteDirectoryGroupByWorkOSID :execrows
 UPDATE groups
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
@@ -111,3 +116,9 @@ WHERE workos_directory_user_id = @workos_directory_user_id
 -- name: CloseUserGroupMembershipsForGroup :execrows
 DELETE FROM user_group_memberships
 WHERE group_id = @group_id;
+
+-- name: CountUserGroupMembershipsByWorkOSIDs :one
+SELECT COUNT(*)
+FROM user_group_memberships
+WHERE workos_directory_group_id = @workos_directory_group_id
+  AND workos_directory_user_id = @workos_directory_user_id;

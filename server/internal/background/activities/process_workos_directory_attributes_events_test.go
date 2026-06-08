@@ -41,27 +41,20 @@ func seedDirectoryAttributesWorkOSOrganization(t *testing.T, ctx context.Context
 func getDirectoryGroupRow(t *testing.T, ctx context.Context, conn workosrepo.DBTX, workosDirectoryGroupID string) (organizationID string, name string, attributes []byte, deleted bool) {
 	t.Helper()
 
-	err := conn.QueryRow(ctx, `
-		SELECT organization_id, name, attributes, deleted
-		FROM groups
-		WHERE workos_directory_group_id = $1
-	`, workosDirectoryGroupID).Scan(&organizationID, &name, &attributes, &deleted)
+	row, err := workosrepo.New(conn).GetDirectoryGroupByWorkOSID(ctx, workosDirectoryGroupID)
 	require.NoError(t, err)
-	return organizationID, name, attributes, deleted
+	return row.OrganizationID, row.Name, row.Attributes, row.Deleted
 }
 
 func countCurrentMemberships(t *testing.T, ctx context.Context, conn workosrepo.DBTX, workosDirectoryGroupID, workosDirectoryUserID string) int {
 	t.Helper()
 
-	var count int
-	err := conn.QueryRow(ctx, `
-		SELECT COUNT(*)
-		FROM user_group_memberships
-		WHERE workos_directory_group_id = $1
-		  AND workos_directory_user_id = $2
-	`, workosDirectoryGroupID, workosDirectoryUserID).Scan(&count)
+	count, err := workosrepo.New(conn).CountUserGroupMembershipsByWorkOSIDs(ctx, workosrepo.CountUserGroupMembershipsByWorkOSIDsParams{
+		WorkosDirectoryGroupID: workosDirectoryGroupID,
+		WorkosDirectoryUserID:  workosDirectoryUserID,
+	})
 	require.NoError(t, err)
-	return count
+	return int(count)
 }
 
 func TestProcessWorkOSDirectoryAttributesEvents_UpsertsGroupAndAdvancesCursor(t *testing.T) {

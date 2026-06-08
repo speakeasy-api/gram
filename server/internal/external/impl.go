@@ -183,9 +183,6 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 	case string(workos.EventKindDirectorySyncGroupCreated),
 		string(workos.EventKindDirectorySyncGroupUpdated),
 		string(workos.EventKindDirectorySyncGroupDeleted):
-		if event.Data.ID == "" {
-			return oops.E(oops.CodeBadRequest, errors.New("missing WorkOS directory group ID"), "missing WorkOS directory group ID").Log(ctx, logger)
-		}
 		if _, err := background.ExecuteProcessWorkOSDirectoryAttributesEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
 			EntityType: bgactivities.WorkOSDirectoryAttributesEntityTypeGroup,
 			EntityID:   event.Data.ID,
@@ -198,9 +195,6 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		string(workos.EventKindDirectorySyncGroupUserRemoved):
 		groupID := event.Data.directoryGroupID()
 		userID := event.Data.directoryUserID()
-		if groupID == "" || userID == "" {
-			return oops.E(oops.CodeBadRequest, errors.New("missing WorkOS directory membership IDs"), "missing WorkOS directory membership IDs").Log(ctx, logger)
-		}
 		if _, err := background.ExecuteProcessWorkOSDirectoryAttributesEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
 			EntityType: bgactivities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
 			EntityID:   bgactivities.DirectoryGroupMembershipSyncEntityID(groupID, userID),

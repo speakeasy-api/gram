@@ -59,8 +59,8 @@ func NewProcessWorkOSDirectoryAttributesEvents(logger *slog.Logger, db *pgxpool.
 
 func (p *ProcessWorkOSDirectoryAttributesEvents) Do(ctx context.Context, params ProcessWorkOSDirectoryAttributesEventsParams) (*ProcessWorkOSDirectoryAttributesEventsResult, error) {
 	logger := p.logger.With(
-		slog.String("workos_directory_attributes_entity_type", params.EntityType),
-		slog.String("workos_directory_attributes_entity_id", params.EntityID),
+		attr.SlogWorkOSDirectoryAttributesEntityType(params.EntityType),
+		attr.SlogWorkOSDirectoryAttributesEntityID(params.EntityID),
 	)
 	if params.EntityType == "" || params.EntityID == "" {
 		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("missing directory attributes sync target"), "missing directory attributes sync target").Log(ctx, logger)

@@ -63,6 +63,25 @@ func (q *Queries) CloseUserGroupMembershipsForGroup(ctx context.Context, groupID
 	return result.RowsAffected(), nil
 }
 
+const countUserGroupMembershipsByWorkOSIDs = `-- name: CountUserGroupMembershipsByWorkOSIDs :one
+SELECT COUNT(*)
+FROM user_group_memberships
+WHERE workos_directory_group_id = $1
+  AND workos_directory_user_id = $2
+`
+
+type CountUserGroupMembershipsByWorkOSIDsParams struct {
+	WorkosDirectoryGroupID string
+	WorkosDirectoryUserID  string
+}
+
+func (q *Queries) CountUserGroupMembershipsByWorkOSIDs(ctx context.Context, arg CountUserGroupMembershipsByWorkOSIDsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserGroupMembershipsByWorkOSIDs, arg.WorkosDirectoryGroupID, arg.WorkosDirectoryUserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteDirectoryGroupByWorkOSID = `-- name: DeleteDirectoryGroupByWorkOSID :execrows
 UPDATE groups
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
@@ -96,6 +115,31 @@ func (q *Queries) GetDirectoryAttributesSyncLastEventID(ctx context.Context, arg
 	var last_event_id string
 	err := row.Scan(&last_event_id)
 	return last_event_id, err
+}
+
+const getDirectoryGroupByWorkOSID = `-- name: GetDirectoryGroupByWorkOSID :one
+SELECT organization_id, name, attributes, deleted
+FROM groups
+WHERE workos_directory_group_id = $1
+`
+
+type GetDirectoryGroupByWorkOSIDRow struct {
+	OrganizationID string
+	Name           string
+	Attributes     []byte
+	Deleted        bool
+}
+
+func (q *Queries) GetDirectoryGroupByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (GetDirectoryGroupByWorkOSIDRow, error) {
+	row := q.db.QueryRow(ctx, getDirectoryGroupByWorkOSID, workosDirectoryGroupID)
+	var i GetDirectoryGroupByWorkOSIDRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Name,
+		&i.Attributes,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getDirectoryGroupIDByWorkOSID = `-- name: GetDirectoryGroupIDByWorkOSID :one
