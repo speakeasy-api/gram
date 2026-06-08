@@ -822,16 +822,18 @@ function PolicyCenterContent() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 className="cursor-pointer"
-                onSelect={() => setTimeout(() => handleEdit(row.policy), 0)}
+                onSelect={() => {
+                  setTimeout(() => handleEdit(row.policy), 0);
+                }}
               >
                 Edit
               </DropdownMenuItem>
               {row.kind === "risk" && (
                 <DropdownMenuItem
                   className="cursor-pointer"
-                  onSelect={() =>
-                    setTimeout(() => setRunPanelPolicy(row.policy), 0)
-                  }
+                  onSelect={() => {
+                    setTimeout(() => setRunPanelPolicy(row.policy), 0);
+                  }}
                 >
                   View Progress
                 </DropdownMenuItem>

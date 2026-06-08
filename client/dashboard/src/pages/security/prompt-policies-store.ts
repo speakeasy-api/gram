@@ -22,7 +22,7 @@ type UpdateInput = Partial<Omit<PromptPolicy, "id" | "createdAt">>;
 
 const STORAGE_KEY = "gram-prompt-policies";
 
-export function usePromptPoliciesStore() {
+function usePromptPoliciesStoreImpl() {
   const [policies, setPolicies] = useLocalStorageState<PromptPolicy[]>(
     STORAGE_KEY,
     [],
@@ -60,4 +60,10 @@ export function usePromptPoliciesStore() {
   );
 
   return { policies, create, update, remove };
+}
+
+export function usePromptPoliciesStore(): ReturnType<
+  typeof usePromptPoliciesStoreImpl
+> {
+  return usePromptPoliciesStoreImpl();
 }
