@@ -6,22 +6,22 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
-export type DeleteCustomDetectionRuleSecurityOption1 = {
+export type DenyRiskPolicyBypassRequestSecurityOption1 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
 
-export type DeleteCustomDetectionRuleSecurityOption2 = {
+export type DenyRiskPolicyBypassRequestSecurityOption2 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
-export type DeleteCustomDetectionRuleSecurity = {
-  option1?: DeleteCustomDetectionRuleSecurityOption1 | undefined;
-  option2?: DeleteCustomDetectionRuleSecurityOption2 | undefined;
+export type DenyRiskPolicyBypassRequestSecurity = {
+  option1?: DenyRiskPolicyBypassRequestSecurityOption1 | undefined;
+  option2?: DenyRiskPolicyBypassRequestSecurityOption2 | undefined;
 };
 
-export type DeleteCustomDetectionRuleRequest = {
+export type DenyRiskPolicyBypassRequestRequest = {
   /**
    * API Key header
    */
@@ -38,16 +38,16 @@ export type DeleteCustomDetectionRuleRequest = {
 };
 
 /** @internal */
-export type DeleteCustomDetectionRuleSecurityOption1$Outbound = {
+export type DenyRiskPolicyBypassRequestSecurityOption1$Outbound = {
   "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
 };
 
 /** @internal */
-export const DeleteCustomDetectionRuleSecurityOption1$outboundSchema:
+export const DenyRiskPolicyBypassRequestSecurityOption1$outboundSchema:
   z.ZodMiniType<
-    DeleteCustomDetectionRuleSecurityOption1$Outbound,
-    DeleteCustomDetectionRuleSecurityOption1
+    DenyRiskPolicyBypassRequestSecurityOption1$Outbound,
+    DenyRiskPolicyBypassRequestSecurityOption1
   > = z.pipe(
     z.object({
       apikeyHeaderGramKey: z.string(),
@@ -61,28 +61,28 @@ export const DeleteCustomDetectionRuleSecurityOption1$outboundSchema:
     }),
   );
 
-export function deleteCustomDetectionRuleSecurityOption1ToJSON(
-  deleteCustomDetectionRuleSecurityOption1:
-    DeleteCustomDetectionRuleSecurityOption1,
+export function denyRiskPolicyBypassRequestSecurityOption1ToJSON(
+  denyRiskPolicyBypassRequestSecurityOption1:
+    DenyRiskPolicyBypassRequestSecurityOption1,
 ): string {
   return JSON.stringify(
-    DeleteCustomDetectionRuleSecurityOption1$outboundSchema.parse(
-      deleteCustomDetectionRuleSecurityOption1,
+    DenyRiskPolicyBypassRequestSecurityOption1$outboundSchema.parse(
+      denyRiskPolicyBypassRequestSecurityOption1,
     ),
   );
 }
 
 /** @internal */
-export type DeleteCustomDetectionRuleSecurityOption2$Outbound = {
+export type DenyRiskPolicyBypassRequestSecurityOption2$Outbound = {
   "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const DeleteCustomDetectionRuleSecurityOption2$outboundSchema:
+export const DenyRiskPolicyBypassRequestSecurityOption2$outboundSchema:
   z.ZodMiniType<
-    DeleteCustomDetectionRuleSecurityOption2$Outbound,
-    DeleteCustomDetectionRuleSecurityOption2
+    DenyRiskPolicyBypassRequestSecurityOption2$Outbound,
+    DenyRiskPolicyBypassRequestSecurityOption2
   > = z.pipe(
     z.object({
       projectSlugHeaderGramProject: z.string(),
@@ -96,34 +96,34 @@ export const DeleteCustomDetectionRuleSecurityOption2$outboundSchema:
     }),
   );
 
-export function deleteCustomDetectionRuleSecurityOption2ToJSON(
-  deleteCustomDetectionRuleSecurityOption2:
-    DeleteCustomDetectionRuleSecurityOption2,
+export function denyRiskPolicyBypassRequestSecurityOption2ToJSON(
+  denyRiskPolicyBypassRequestSecurityOption2:
+    DenyRiskPolicyBypassRequestSecurityOption2,
 ): string {
   return JSON.stringify(
-    DeleteCustomDetectionRuleSecurityOption2$outboundSchema.parse(
-      deleteCustomDetectionRuleSecurityOption2,
+    DenyRiskPolicyBypassRequestSecurityOption2$outboundSchema.parse(
+      denyRiskPolicyBypassRequestSecurityOption2,
     ),
   );
 }
 
 /** @internal */
-export type DeleteCustomDetectionRuleSecurity$Outbound = {
-  Option1?: DeleteCustomDetectionRuleSecurityOption1$Outbound | undefined;
-  Option2?: DeleteCustomDetectionRuleSecurityOption2$Outbound | undefined;
+export type DenyRiskPolicyBypassRequestSecurity$Outbound = {
+  Option1?: DenyRiskPolicyBypassRequestSecurityOption1$Outbound | undefined;
+  Option2?: DenyRiskPolicyBypassRequestSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
-export const DeleteCustomDetectionRuleSecurity$outboundSchema: z.ZodMiniType<
-  DeleteCustomDetectionRuleSecurity$Outbound,
-  DeleteCustomDetectionRuleSecurity
+export const DenyRiskPolicyBypassRequestSecurity$outboundSchema: z.ZodMiniType<
+  DenyRiskPolicyBypassRequestSecurity$Outbound,
+  DenyRiskPolicyBypassRequestSecurity
 > = z.pipe(
   z.object({
     option1: z.optional(
-      z.lazy(() => DeleteCustomDetectionRuleSecurityOption1$outboundSchema),
+      z.lazy(() => DenyRiskPolicyBypassRequestSecurityOption1$outboundSchema),
     ),
     option2: z.optional(
-      z.lazy(() => DeleteCustomDetectionRuleSecurityOption2$outboundSchema),
+      z.lazy(() => DenyRiskPolicyBypassRequestSecurityOption2$outboundSchema),
     ),
   }),
   z.transform((v) => {
@@ -134,18 +134,18 @@ export const DeleteCustomDetectionRuleSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function deleteCustomDetectionRuleSecurityToJSON(
-  deleteCustomDetectionRuleSecurity: DeleteCustomDetectionRuleSecurity,
+export function denyRiskPolicyBypassRequestSecurityToJSON(
+  denyRiskPolicyBypassRequestSecurity: DenyRiskPolicyBypassRequestSecurity,
 ): string {
   return JSON.stringify(
-    DeleteCustomDetectionRuleSecurity$outboundSchema.parse(
-      deleteCustomDetectionRuleSecurity,
+    DenyRiskPolicyBypassRequestSecurity$outboundSchema.parse(
+      denyRiskPolicyBypassRequestSecurity,
     ),
   );
 }
 
 /** @internal */
-export type DeleteCustomDetectionRuleRequest$Outbound = {
+export type DenyRiskPolicyBypassRequestRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -153,9 +153,9 @@ export type DeleteCustomDetectionRuleRequest$Outbound = {
 };
 
 /** @internal */
-export const DeleteCustomDetectionRuleRequest$outboundSchema: z.ZodMiniType<
-  DeleteCustomDetectionRuleRequest$Outbound,
-  DeleteCustomDetectionRuleRequest
+export const DenyRiskPolicyBypassRequestRequest$outboundSchema: z.ZodMiniType<
+  DenyRiskPolicyBypassRequestRequest$Outbound,
+  DenyRiskPolicyBypassRequestRequest
 > = z.pipe(
   z.object({
     gramKey: z.optional(z.string()),
@@ -173,12 +173,12 @@ export const DeleteCustomDetectionRuleRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function deleteCustomDetectionRuleRequestToJSON(
-  deleteCustomDetectionRuleRequest: DeleteCustomDetectionRuleRequest,
+export function denyRiskPolicyBypassRequestRequestToJSON(
+  denyRiskPolicyBypassRequestRequest: DenyRiskPolicyBypassRequestRequest,
 ): string {
   return JSON.stringify(
-    DeleteCustomDetectionRuleRequest$outboundSchema.parse(
-      deleteCustomDetectionRuleRequest,
+    DenyRiskPolicyBypassRequestRequest$outboundSchema.parse(
+      denyRiskPolicyBypassRequestRequest,
     ),
   );
 }
