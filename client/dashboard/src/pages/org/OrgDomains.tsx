@@ -4,6 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
@@ -72,92 +80,102 @@ function validateIPEntry(entry: string): string {
   return "Enter a valid IP address (1.2.3.4) or CIDR range (10.0.0.0/24)";
 }
 
+// Inline editor: each allowlist entry is its own editable field. Entries are
+// validated on blur (and on save, by the parent via `onValidityChange`) rather
+// than gated behind explicit add/remove actions.
 function IPAllowlistEditor({
   ips,
   onIpsChange,
+  onValidityChange,
 }: {
   ips: string[];
   onIpsChange: (ips: string[]) => void;
+  onValidityChange?: (valid: boolean) => void;
 }) {
-  const [input, setInput] = useState("");
-  const [error, setError] = useState("");
+  // Local row state preserves in-progress (possibly invalid or duplicate)
+  // entries while editing; the parent only ever receives cleaned values.
+  const [rows, setRows] = useState<string[]>(() =>
+    ips.length > 0 ? ips : [""],
+  );
+  const [errors, setErrors] = useState<(string | null)[]>(() =>
+    (ips.length > 0 ? ips : [""]).map(() => null),
+  );
 
-  function handleAdd() {
-    const err = validateIPEntry(input);
-    if (err) {
-      setError(err);
-      return;
-    }
-    const trimmed = input.trim();
-    if (!ips.includes(trimmed)) {
-      onIpsChange([...ips, trimmed]);
-    }
-    setInput("");
-    setError("");
+  function commit(next: string[]) {
+    const trimmed = next.map((r) => r.trim());
+    const valid = trimmed.every((r) => r === "" || validateIPEntry(r) === "");
+    const cleaned = Array.from(new Set(trimmed.filter((r) => r !== "")));
+    onIpsChange(cleaned);
+    onValidityChange?.(valid);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleAdd();
+  function handleChange(index: number, value: string) {
+    const next = rows.slice();
+    next[index] = value;
+    setRows(next);
+    if (errors[index]) {
+      const nextErrors = errors.slice();
+      nextErrors[index] = null;
+      setErrors(nextErrors);
     }
+    commit(next);
   }
 
-  function handleRemove(ip: string) {
-    onIpsChange(ips.filter((i) => i !== ip));
+  function handleBlur(index: number) {
+    const value = rows[index]?.trim() ?? "";
+    if (!value) return;
+    const nextErrors = errors.slice();
+    nextErrors[index] = validateIPEntry(value) || null;
+    setErrors(nextErrors);
+  }
+
+  function handleRemove(index: number) {
+    const next = rows.filter((_, i) => i !== index);
+    const nextErrors = errors.filter((_, i) => i !== index);
+    const finalRows = next.length > 0 ? next : [""];
+    const finalErrors = nextErrors.length > 0 ? nextErrors : [null];
+    setRows(finalRows);
+    setErrors(finalErrors);
+    commit(finalRows);
+  }
+
+  function handleAddRow() {
+    setRows([...rows, ""]);
+    setErrors([...errors, null]);
   }
 
   return (
-    <div className="space-y-3">
-      {ips.length > 0 && (
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-1 flex-wrap gap-2">
-            {ips.map((ip) => (
-              <Badge key={ip} variant="secondary" className="font-mono">
-                {ip}
-                <button
-                  type="button"
-                  onClick={() => handleRemove(ip)}
-                  className="text-muted-foreground hover:text-destructive ml-1"
-                  aria-label={`Remove ${ip}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            ))}
+    <div className="space-y-2">
+      {rows.map((row, index) => (
+        <div key={index} className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="1.2.3.4 or 10.0.0.0/24"
+              value={row}
+              onChange={(val) => handleChange(index, val)}
+              onBlur={() => handleBlur(index)}
+              className={cn("font-mono", errors[index] && "border-destructive")}
+            />
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="hover:text-destructive shrink-0"
+              onClick={() => handleRemove(index)}
+              aria-label="Remove entry"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-          <Button
-            variant="tertiary"
-            size="sm"
-            className="hover:text-destructive shrink-0"
-            onClick={() => onIpsChange([])}
-          >
-            Clear all
-          </Button>
-        </div>
-      )}
-      <div className="flex items-start gap-2">
-        <div className="flex-1 space-y-1">
-          <Input
-            placeholder="1.2.3.4 or 10.0.0.0/24"
-            value={input}
-            onChange={(val) => {
-              setInput(val);
-              if (error) setError("");
-            }}
-            onKeyDown={handleKeyDown}
-            className={cn(error && "border-destructive")}
-          />
-          {error && (
+          {errors[index] && (
             <Type variant="body" className="text-destructive text-xs">
-              {error}
+              {errors[index]}
             </Type>
           )}
         </div>
-        <Button variant="secondary" size="sm" onClick={handleAdd}>
-          Add
-        </Button>
-      </div>
+      ))}
+      <Button variant="tertiary" size="sm" onClick={handleAddRow}>
+        + Add IP address
+      </Button>
     </div>
   );
 }
@@ -179,11 +197,13 @@ export function OrgDomainsInner() {
 
   // IP allowlist state for create dialog
   const [pendingIPs, setPendingIPs] = useState<string[]>([]);
+  const [pendingIPsValid, setPendingIPsValid] = useState(true);
   const [isAllowlistExpanded, setIsAllowlistExpanded] = useState(false);
 
-  // Edit allowlist dialog state
+  // Edit allowlist side panel state
   const [isEditAllowlistOpen, setIsEditAllowlistOpen] = useState(false);
   const [editIPs, setEditIPs] = useState<string[]>([]);
+  const [editIPsValid, setEditIPsValid] = useState(true);
   const [updateAllowlistError, setUpdateAllowlistError] = useState("");
 
   const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$/i;
@@ -233,6 +253,7 @@ export function OrgDomainsInner() {
       setDomainInput("");
       setDomainError("");
       setPendingIPs([]);
+      setPendingIPsValid(true);
       setIsAllowlistExpanded(false);
       setTimeout(() => {
         domainRefetch();
@@ -375,6 +396,7 @@ export function OrgDomainsInner() {
                   size="sm"
                   onClick={() => {
                     setEditIPs(domain.ipAllowlist);
+                    setEditIPsValid(true);
                     setUpdateAllowlistError("");
                     setIsEditAllowlistOpen(true);
                   }}
@@ -519,6 +541,7 @@ export function OrgDomainsInner() {
           setIsAddDomainDialogOpen(open);
           if (!open) {
             setPendingIPs([]);
+            setPendingIPsValid(true);
             setIsAllowlistExpanded(false);
           }
         }}
@@ -639,6 +662,7 @@ export function OrgDomainsInner() {
                   <IPAllowlistEditor
                     ips={pendingIPs}
                     onIpsChange={setPendingIPs}
+                    onValidityChange={setPendingIPsValid}
                   />
                 </div>
               )}
@@ -650,6 +674,7 @@ export function OrgDomainsInner() {
                   disabled={
                     !domainInput.trim() ||
                     !!domainError ||
+                    !pendingIPsValid ||
                     registerDomainMutation.isPending
                   }
                 >
@@ -665,46 +690,50 @@ export function OrgDomainsInner() {
         </Dialog.Content>
       </Dialog>
 
-      <Dialog open={isEditAllowlistOpen} onOpenChange={setIsEditAllowlistOpen}>
-        <Dialog.Content className="max-w-md">
-          <Dialog.Header>
-            <Dialog.Title>Edit IP allowlist</Dialog.Title>
-          </Dialog.Header>
-          <div className="space-y-4 py-4">
-            <Type variant="body" className="text-muted-foreground text-sm">
+      <Sheet open={isEditAllowlistOpen} onOpenChange={setIsEditAllowlistOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Edit IP allowlist</SheetTitle>
+            <SheetDescription>
               Restrict access to{" "}
               <span className="font-mono">{domain?.domain}</span> to specific IP
               addresses or CIDR ranges. Leave empty to allow all traffic.
-            </Type>
-            <IPAllowlistEditor ips={editIPs} onIpsChange={setEditIPs} />
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 space-y-4 overflow-y-auto px-4">
+            <IPAllowlistEditor
+              ips={editIPs}
+              onIpsChange={setEditIPs}
+              onValidityChange={setEditIPsValid}
+            />
             {updateAllowlistError && (
               <Type variant="body" className="text-destructive text-sm">
                 {updateAllowlistError}
               </Type>
             )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setIsEditAllowlistOpen(false);
-                  setUpdateAllowlistError("");
-                }}
-                disabled={updateDomainMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  onClick={handleSaveAllowlist}
-                  disabled={updateDomainMutation.isPending}
-                >
-                  {updateDomainMutation.isPending ? "Saving..." : "Save"}
-                </Button>
-              </RequireScope>
-            </div>
           </div>
-        </Dialog.Content>
-      </Dialog>
+          <SheetFooter className="flex-row justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsEditAllowlistOpen(false);
+                setUpdateAllowlistError("");
+              }}
+              disabled={updateDomainMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <RequireScope scope="org:admin" level="component">
+              <Button
+                onClick={handleSaveAllowlist}
+                disabled={!editIPsValid || updateDomainMutation.isPending}
+              >
+                {updateDomainMutation.isPending ? "Saving..." : "Save"}
+              </Button>
+            </RequireScope>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
