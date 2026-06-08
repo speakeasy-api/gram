@@ -1,5 +1,15 @@
 # @gram-ai/elements
 
+## 1.35.0
+
+### Minor Changes
+
+- fb3f0ca: Add an optional `history.transformChatMessage` hook to `ElementsConfig`. It runs against every message loaded from `chat.load` before rendering: return a (possibly rewritten) message to render it, or `null` to omit it. This lets consumers keep product- or backend-specific transcript conventions (e.g. stripping a server-injected framing block, or hiding system events) out of the shared library — Elements itself stays agnostic to any such convention.
+- 7acfbee: Add two welcome/composer affordances:
+
+  - `WelcomeConfig.logo` — an optional logo image URL rendered above the title on the empty-thread welcome screen.
+  - A composer tool-mention picker button (next to the attachment button) that opens a list of the available tools and inserts an `@mention` for the chosen one — a discoverable counterpart to the existing type-`@` autocomplete. Hidden when tool mentions are disabled or there are no tools.
+
 ## 1.34.0
 
 ### Minor Changes
