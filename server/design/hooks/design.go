@@ -23,6 +23,7 @@ var ClaudeHookPayload = Type("ClaudeHookPayload", func() {
 	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption (PostToolUseFailure only)")
 	// Common fields
 	Attribute("session_id", String, "The Claude Code session ID")
+	Attribute("user_email", String, "Email of the authenticated user from the Speakeasy device agent, if available")
 	Attribute("cwd", String, "The working directory when the event fired")
 	Attribute("transcript_path", String, "Path to the conversation transcript file")
 	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
