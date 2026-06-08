@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
-
-export type PolicyAction = "flag" | "block";
+import type { PolicyAction } from "./policy-data";
 
 export type PromptPolicy = {
   id: string;
